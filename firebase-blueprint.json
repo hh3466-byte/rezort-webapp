@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "Booking": {
+      "collection": "bookings",
+      "fields": {
+        "dogName": { "type": "string", "required": true },
+        "dogBreed": { "type": "string", "required": false },
+        "ownerName": { "type": "string", "required": true },
+        "ownerPhone": { "type": "string", "required": true },
+        "serviceType": { "type": "string", "required": true },
+        "startDate": { "type": "string", "required": true },
+        "endDate": { "type": "string", "required": true },
+        "totalPrice": { "type": "number", "required": true },
+        "depositAmount": { "type": "number", "required": true },
+        "paymentStatus": { "type": "string", "required": true },
+        "paymentMethod": { "type": "string", "required": false },
+        "notes": { "type": "string", "required": false },
+        "createdAt": { "type": "string", "required": false },
+        "updatedAt": { "type": "string", "required": false }
+      }
+    },
+    "ResortSettings": {
+      "collection": "settings",
+      "fields": {
+        "resortName": { "type": "string", "required": true },
+        "managerName": { "type": "string", "required": true },
+        "managerPhone": { "type": "string", "required": false },
+        "maxCapacity": { "type": "number", "required": true },
+        "defaultDailyRateBoarding": { "type": "number", "required": true },
+        "defaultDailyRateTraining": { "type": "number", "required": true },
+        "defaultDailyRateCombined": { "type": "number", "required": true },
+        "defaultDailyRateDaycare": { "type": "number", "required": true },
+        "bitPaymentLink": { "type": "string", "required": false },
+        "payboxPaymentLink": { "type": "string", "required": false },
+        "whatsappBookingConfirmationTemplate": { "type": "string", "required": true },
+        "whatsappPaymentReminderTemplate": { "type": "string", "required": true }
+      }
+    }
+  }
+}

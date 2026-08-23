@@ -1,0 +1,17 @@
+{
+  "name": "הריזורט לכלב - פנסיון ואילוף",
+  "short_name": "הריזורט לכלב",
+  "description": "מערכת ויומן ניהול מקצועי לריזורט, פנסיון ומרכז אילוף כלבים",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6d4c2b",
+  "icons": [
+    {
+      "src": "/resort-logo.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

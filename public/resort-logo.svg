@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <!-- Circular background badge with sophisticated warm border -->
+  <circle cx="250" cy="250" r="238" fill="#FFFFFF" stroke="#a08a5b" stroke-width="8" />
+  <circle cx="250" cy="250" r="226" fill="none" stroke="#d5c192" stroke-width="2" />
+  
+  <!-- Bamboo Ring / Hoop Archetype -->
+  <path d="M 125 310 A 150 150 0 1 1 375 310" fill="none" stroke="#c8a666" stroke-width="12" stroke-linecap="round" />
+  <!-- Bamboo nodes accents -->
+  <line x1="145" y1="185" x2="160" y2="190" stroke="#87682f" stroke-width="4" stroke-linecap="round" />
+  <line x1="242" y1="100" x2="258" y2="100" stroke="#87682f" stroke-width="4" stroke-linecap="round" />
+  <line x1="340" y1="185" x2="355" y2="190" stroke="#87682f" stroke-width="4" stroke-linecap="round" />
+
+  <!-- Heart-Shaped Paw Main Pad (Green Line) -->
+  <path d="M 250 288 C 220 260 195 240 195 208 C 195 186 212 170 234 170 C 243 170 248 174 250 178 C 252 174 257 170 266 170 C 288 170 305 186 305 208 C 305 240 280 260 250 288 Z" 
+        fill="none" stroke="#2d6a4f" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" />
+
+  <!-- 4 Paw Toe Ovals (Green Outline) -->
+  <!-- Left Outer Toe -->
+  <ellipse cx="188" cy="180" rx="18" ry="24" transform="rotate(-25 188 180)" fill="none" stroke="#2d6a4f" stroke-width="6" />
+  <!-- Left Inner Toe -->
+  <ellipse cx="228" cy="145" rx="18" ry="25" transform="rotate(-10 228 145)" fill="none" stroke="#2d6a4f" stroke-width="6" />
+  <!-- Right Inner Toe -->
+  <ellipse cx="272" cy="145" rx="18" ry="25" transform="rotate(10 272 145)" fill="none" stroke="#2d6a4f" stroke-width="6" />
+  <!-- Right Outer Toe -->
+  <ellipse cx="312" cy="180" rx="18" ry="24" transform="rotate(25 312 180)" fill="none" stroke="#2d6a4f" stroke-width="6" />
+
+  <!-- Typography: הריזורט לכלב -->
+  <text x="250" y="348" text-anchor="middle" font-family="'Assistant', 'Heebo', 'Segoe UI', system-ui, sans-serif" font-size="36" font-weight="900" fill="#6d4c2b" letter-spacing="4">
+    הריזורט לכלב
+  </text>
+
+  <!-- Subtitle: פנסיון • אילוף • שיקום התנהגותי -->
+  <text x="250" y="380" text-anchor="middle" font-family="'Assistant', 'Heebo', 'Segoe UI', system-ui, sans-serif" font-size="18" font-weight="700" fill="#7d6349" letter-spacing="1">
+    פנסיון  •  אילוף  •  שיקום התנהגותי
+  </text>
+</svg>

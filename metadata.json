@@ -1,0 +1,10 @@
+{
+  "name": "אפליקציית ניהול הריזורט לכלב",
+  "description": "יומן ניהול מקצועי לריזורט, פנסיון ומרכז אילוף כלבים: סוכן קולי חכם, ניהול תפוסה ומניעת אובר-בוקינג, מעקב תשלומים, ווטסאפ וכרטיסי לקוח.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
