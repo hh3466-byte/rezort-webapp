@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 
 import { Booking, ResortSettings, AgentActionProposal, PaymentMethod } from './types';
+import { initialBookings, defaultSettings } from './data/initialData';
 import { loadStoredBookings, loadStoredSettings } from './utils/storage';
 import { 
   subscribeToBookings, 
@@ -366,14 +367,18 @@ export default function App() {
 
   // Reset to Demo Data
   const handleResetToDemo = async () => {
+    setBookings(initialBookings);
+    setSettings(defaultSettings);
     await resetDbToDemo();
     showToast('🔄 הנתונים אופסו בענן לנתוני הדמו');
   };
 
   // Clear all bookings
   const handleClearAllData = async () => {
-    await clearAllBookingsFromDb();
     setBookings([]);
+    setSelectedDateForDetails(null);
+    setBookingFormModal({ isOpen: false, initialData: null });
+    await clearAllBookingsFromDb();
     showToast('🧹 כל הנתונים נמחקו - היומן נקי לחלוטין!');
   };
 

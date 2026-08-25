@@ -235,7 +235,17 @@ export const subscribeToBookings = (
         return;
       }
 
-      if (data && data.length > 0) {
+      if (data) {
+        if (data.length === 0) {
+          // Table in Supabase is intentionally empty (calendar cleared)
+          try {
+            localStorage.setItem('dog_resort_bookings', JSON.stringify([]));
+            localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify([]));
+          } catch (e) {}
+          if (isSubscribed) onData([]);
+          return;
+        }
+
         let didMigrateBruno = false;
         const bookings: Booking[] = data.map((row: any) => {
           let b: Booking;
@@ -669,14 +679,20 @@ export const batchRestoreToDb = async (
 // Clear all bookings from database
 export const clearAllBookingsFromDb = async (): Promise<void> => {
   try {
-    localStorage.removeItem('dog_resort_bookings');
-    localStorage.removeItem('shmulik_dog_resort_bookings_v2');
-    localStorage.removeItem('shmulik_dog_resort_bookings_v1');
+    localStorage.setItem('dog_resort_bookings', JSON.stringify([]));
+    localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify([]));
+    localStorage.setItem('shmulik_dog_resort_bookings_v1', JSON.stringify([]));
+    localStorage.setItem('shmulik_dog_resort_is_cleared', 'true');
+    for (const b of initialBookings) {
+      markBookingAsDeleted(b.id);
+    }
   } catch (e) {}
 
   try {
-    await supabase.from(BOOKINGS_TABLE).delete().neq('id', '___none___');
-    await supabase.from(CUSTOMERS_TABLE).delete().neq('id', '___none___');
+    const { error: err1 } = await supabase.from(BOOKINGS_TABLE).delete().neq('id', '___none___');
+    if (err1) console.warn('Supabase delete bookings warning:', err1.message);
+    const { error: err2 } = await supabase.from(CUSTOMERS_TABLE).delete().neq('id', '___none___');
+    if (err2) console.warn('Supabase delete customers warning:', err2.message);
   } catch (err: any) {
     console.warn('Supabase clear all warning:', err?.message || err);
   }
@@ -684,5 +700,9 @@ export const clearAllBookingsFromDb = async (): Promise<void> => {
 
 // Reset database to demo data
 export const resetDbToDemo = async (): Promise<void> => {
+  try {
+    localStorage.removeItem('shmulik_dog_resort_is_cleared');
+    localStorage.removeItem('shmulik_dog_resort_deleted_ids');
+  } catch (e) {}
   await batchRestoreToDb(initialBookings, defaultSettings);
 };
