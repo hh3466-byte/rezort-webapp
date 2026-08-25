@@ -27,6 +27,7 @@ import { BookingFormModal } from './components/BookingFormModal';
 import { SimpleBookingWizard } from './components/SimpleBookingWizard';
 import { PaymentModal } from './components/PaymentModal';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
+import { ManagerAuthModal } from './components/ManagerAuthModal';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
@@ -57,6 +58,24 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isReportsOpen, setIsReportsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+
+  // Manager Authentication State (Passcode 3466)
+  const [isManagerAuthOpen, setIsManagerAuthOpen] = useState(false);
+  const [managerAuthContext, setManagerAuthContext] = useState<{
+    actionType: 'open_settings' | 'clear_all' | 'reset_demo';
+    title?: string;
+    description?: string;
+    onSuccess?: () => void;
+  }>({ actionType: 'open_settings' });
+
+  const handleOpenSettingsWithAuth = () => {
+    setManagerAuthContext({
+      actionType: 'open_settings',
+      title: 'אישור מנהל נדרש 🔒',
+      description: 'לפתיחת הגדרות הריזורט, תעריפי השירותים וגיבויים, הזן קוד מנהל (3466):'
+    });
+    setIsManagerAuthOpen(true);
+  };
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -206,9 +225,25 @@ export default function App() {
         showToast('לא נמצאה הזמנה מתאימה לביטול');
       }
     } else if (intent === 'clear_all_data') {
-      await handleClearAllData();
+      setManagerAuthContext({
+        actionType: 'clear_all',
+        title: 'אישור מנהל למחיקת כל הנתונים 🔒',
+        description: 'הסוכן זיהה בקשה למחיקת היומן. הזן קוד מנהל (3466) לאישור המחיקה:',
+        onSuccess: async () => {
+          await handleClearAllData();
+        }
+      });
+      setIsManagerAuthOpen(true);
     } else if (intent === 'reset_to_demo') {
-      await handleResetToDemo();
+      setManagerAuthContext({
+        actionType: 'reset_demo',
+        title: 'אישור מנהל לאיפוס המערכת לדמו 🔒',
+        description: 'הסוכן זיהה בקשה לאיפוס המערכת לדמו. הזן קוד מנהל (3466) לאישור:',
+        onSuccess: async () => {
+          await handleResetToDemo();
+        }
+      });
+      setIsManagerAuthOpen(true);
     } else if (intent === 'backup_data') {
       // Trigger backup export
       const dataStr = JSON.stringify({ bookings, settings, exportDate: new Date().toISOString() }, null, 2);
@@ -228,7 +263,7 @@ export default function App() {
       } else if (targetTab === 'reports') {
         setIsReportsOpen(true);
       } else if (targetTab === 'backup') {
-        setIsSettingsOpen(true);
+        handleOpenSettingsWithAuth();
       }
       showToast('🧭 עברת למסך המבוקש');
     }
@@ -363,10 +398,10 @@ export default function App() {
             </div>
 
             <button
-              onClick={() => setIsSettingsOpen(true)}
+              onClick={handleOpenSettingsWithAuth}
               id="btn-settings-top"
               className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-              title="הגדרות תפוסה, תעריפים, ביט וגיבוי"
+              title="הגדרות תפוסה, תעריפים, ביט וגיבוי (דורש אישור מנהל 3466)"
             >
               <SettingsIcon className="w-4 h-4 text-emerald-700" />
               <span>⚙️ הגדרות ותעריפים</span>
@@ -454,7 +489,7 @@ export default function App() {
             
             {/* Tab: גיבוי & הגדרות */}
             <button
-              onClick={() => setIsSettingsOpen(true)}
+              onClick={handleOpenSettingsWithAuth}
               className="bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
             >
               <span>💾</span>
@@ -739,6 +774,22 @@ export default function App() {
         confirmText={appExtremeModal.confirmText}
         onConfirm={appExtremeModal.onConfirm}
         onCancel={() => setAppExtremeModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Manager Authentication Modal (PIN 3466) */}
+      <ManagerAuthModal
+        isOpen={isManagerAuthOpen}
+        title={managerAuthContext.title}
+        description={managerAuthContext.description}
+        onSuccess={() => {
+          setIsManagerAuthOpen(false);
+          if (managerAuthContext.onSuccess) {
+            managerAuthContext.onSuccess();
+          } else if (managerAuthContext.actionType === 'open_settings') {
+            setIsSettingsOpen(true);
+          }
+        }}
+        onClose={() => setIsManagerAuthOpen(false)}
       />
 
     </div>

@@ -17,6 +17,7 @@ import {
 import { ResortSettings, Booking } from '../types';
 import { exportDataAsJSON, importDataFromJSON } from '../utils/exportUtils';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './ExtremeChangeModal';
+import { ManagerAuthModal } from './ManagerAuthModal';
 
 interface SettingsModalProps {
   settings: ResortSettings;
@@ -78,6 +79,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     description: '',
     impacts: [],
     onConfirm: () => {}
+  });
+
+  const [managerAuthAction, setManagerAuthAction] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    onSuccess: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    onSuccess: () => {}
   });
 
   const executeSave = (newSettings: ResortSettings) => {
@@ -502,11 +515,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }
                       ],
                       severity: 'danger',
-                      confirmText: 'כן, מחק את כל ההזמנות',
+                      confirmText: 'המשך לאישור מנהל (3466)',
                       onConfirm: () => {
                         setExtremeAlert(prev => ({ ...prev, isOpen: false }));
-                        if (onClearAllData) onClearAllData();
-                        onClose();
+                        setManagerAuthAction({
+                          isOpen: true,
+                          title: 'אישור מנהל למחיקת היומן 🔒',
+                          description: 'פעולה רגישה: הזן קוד מנהל (3466) לאישור מחיקה מלאה של היומן:',
+                          onSuccess: () => {
+                            setManagerAuthAction(prev => ({ ...prev, isOpen: false }));
+                            if (onClearAllData) onClearAllData();
+                            onClose();
+                          }
+                        });
                       }
                     });
                   }}
@@ -539,11 +560,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }
                       ],
                       severity: 'danger',
-                      confirmText: 'כן, אפס לדמו',
+                      confirmText: 'המשך לאישור מנהל (3466)',
                       onConfirm: () => {
                         setExtremeAlert(prev => ({ ...prev, isOpen: false }));
-                        onResetToDemo();
-                        onClose();
+                        setManagerAuthAction({
+                          isOpen: true,
+                          title: 'אישור מנהל לאיפוס לדמו 🔒',
+                          description: 'הזן קוד מנהל (3466) לאישור החזרת המערכת לנתוני הדמו:',
+                          onSuccess: () => {
+                            setManagerAuthAction(prev => ({ ...prev, isOpen: false }));
+                            onResetToDemo();
+                            onClose();
+                          }
+                        });
                       }
                     });
                   }}
@@ -598,6 +627,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         cancelText={extremeAlert.cancelText}
         onConfirm={extremeAlert.onConfirm}
         onCancel={() => setExtremeAlert(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Manager Authentication Modal for Critical Actions */}
+      <ManagerAuthModal
+        isOpen={managerAuthAction.isOpen}
+        title={managerAuthAction.title}
+        description={managerAuthAction.description}
+        onSuccess={managerAuthAction.onSuccess}
+        onClose={() => setManagerAuthAction(prev => ({ ...prev, isOpen: false }))}
       />
     </div>
   );
