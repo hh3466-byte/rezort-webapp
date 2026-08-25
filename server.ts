@@ -53,7 +53,6 @@ app.post('/api/agent/parse', async (req, res) => {
    - "cancel_booking": ביטול / מחיקת הזמנה
    - "clear_all_data": מחיקת כל הנתונים
    - "backup_data": גיבוי נתונים
-   - "reset_to_demo": איפוס לדמו
    - "navigate_tab": מעבר לשונית
    - "query": שאלה
 
