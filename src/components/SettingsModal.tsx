@@ -515,13 +515,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }
                       ],
                       severity: 'danger',
-                      confirmText: 'המשך לאישור מנהל (3466)',
+                      confirmText: 'המשך לאישור מנהל',
                       onConfirm: () => {
                         setExtremeAlert(prev => ({ ...prev, isOpen: false }));
                         setManagerAuthAction({
                           isOpen: true,
                           title: 'אישור מנהל למחיקת היומן 🔒',
-                          description: 'פעולה רגישה: הזן קוד מנהל (3466) לאישור מחיקה מלאה של היומן:',
+                          description: 'פעולה רגישה: אנא הזן קוד מנהל לאישור מחיקה מלאה של היומן:',
                           onSuccess: () => {
                             setManagerAuthAction(prev => ({ ...prev, isOpen: false }));
                             if (onClearAllData) onClearAllData();
@@ -560,13 +560,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }
                       ],
                       severity: 'danger',
-                      confirmText: 'המשך לאישור מנהל (3466)',
+                      confirmText: 'המשך לאישור מנהל',
                       onConfirm: () => {
                         setExtremeAlert(prev => ({ ...prev, isOpen: false }));
                         setManagerAuthAction({
                           isOpen: true,
                           title: 'אישור מנהל לאיפוס לדמו 🔒',
-                          description: 'הזן קוד מנהל (3466) לאישור החזרת המערכת לנתוני הדמו:',
+                          description: 'אנא הזן קוד מנהל לאישור החזרת המערכת לנתוני הדמו:',
                           onSuccess: () => {
                             setManagerAuthAction(prev => ({ ...prev, isOpen: false }));
                             onResetToDemo();

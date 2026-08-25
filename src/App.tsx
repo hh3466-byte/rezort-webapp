@@ -72,7 +72,7 @@ export default function App() {
     setManagerAuthContext({
       actionType: 'open_settings',
       title: 'אישור מנהל נדרש 🔒',
-      description: 'לפתיחת הגדרות הריזורט, תעריפי השירותים וגיבויים, הזן קוד מנהל (3466):'
+      description: 'לפתיחת הגדרות הריזורט, תעריפי השירותים וגיבויים, אנא הזן קוד מנהל:'
     });
     setIsManagerAuthOpen(true);
   };
@@ -230,7 +230,7 @@ export default function App() {
       setManagerAuthContext({
         actionType: 'clear_all',
         title: 'אישור מנהל למחיקת כל הנתונים 🔒',
-        description: 'הסוכן זיהה בקשה למחיקת היומן. הזן קוד מנהל (3466) לאישור המחיקה:',
+        description: 'הסוכן זיהה בקשה למחיקת היומן. אנא הזן קוד מנהל לאישור המחיקה:',
         onSuccess: async () => {
           await handleClearAllData();
         }
@@ -240,7 +240,7 @@ export default function App() {
       setManagerAuthContext({
         actionType: 'reset_demo',
         title: 'אישור מנהל לאיפוס המערכת לדמו 🔒',
-        description: 'הסוכן זיהה בקשה לאיפוס המערכת לדמו. הזן קוד מנהל (3466) לאישור:',
+        description: 'הסוכן זיהה בקשה לאיפוס המערכת לדמו. אנא הזן קוד מנהל לאישור:',
         onSuccess: async () => {
           await handleResetToDemo();
         }
@@ -403,7 +403,7 @@ export default function App() {
               onClick={handleOpenSettingsWithAuth}
               id="btn-settings-top"
               className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-              title="הגדרות תפוסה, תעריפים, ביט וגיבוי (דורש אישור מנהל 3466)"
+              title="הגדרות תפוסה, תעריפים, ביט וגיבוי (אישור מנהל)"
             >
               <SettingsIcon className="w-4 h-4 text-emerald-700" />
               <span>⚙️ הגדרות ותעריפים</span>
