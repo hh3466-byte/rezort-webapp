@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Settings, 
@@ -36,7 +36,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onResetToDemo,
   onClearAllData,
 }) => {
-  const [formData, setFormData] = useState<ResortSettings>({ ...settings });
+  const [formData, setFormData] = useState<ResortSettings>(() => {
+    const s = { ...settings };
+    if (!s.defaultDailyRateTraining || Number(s.defaultDailyRateTraining) < 1000) {
+      s.defaultDailyRateTraining = 6500;
+    }
+    if (!s.defaultDailyRateDayTraining || Number(s.defaultDailyRateDayTraining) <= 0) {
+      s.defaultDailyRateDayTraining = 250;
+    }
+    return s;
+  });
+
+  useEffect(() => {
+    setFormData(prev => {
+      const s = { ...prev, ...settings };
+      if (!s.defaultDailyRateTraining || Number(s.defaultDailyRateTraining) < 1000) {
+        s.defaultDailyRateTraining = 6500;
+      }
+      if (!s.defaultDailyRateDayTraining || Number(s.defaultDailyRateDayTraining) <= 0) {
+        s.defaultDailyRateDayTraining = 250;
+      }
+      return s;
+    });
+  }, [settings]);
   const [activeTab, setActiveTab] = useState<'general' | 'rates' | 'whatsapp' | 'backup'>('general');
   const [saveSuccess, setSaveSuccess] = useState(false);
 

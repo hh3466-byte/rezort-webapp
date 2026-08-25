@@ -51,7 +51,11 @@ export const getLocalSettings = (): ResortSettings => {
     try {
       const saved = localStorage.getItem(key);
       if (saved) {
-        return { ...defaultSettings, ...JSON.parse(saved) };
+        const parsed = JSON.parse(saved);
+        if (parsed.defaultDailyRateTraining && Number(parsed.defaultDailyRateTraining) < 1000) {
+          parsed.defaultDailyRateTraining = 6500;
+        }
+        return { ...defaultSettings, ...parsed };
       }
     } catch (e) {}
   }
@@ -284,20 +288,27 @@ export const subscribeToSettings = (
       }
 
       if (data) {
-        const settingsData = data.data || {
+        const rawTraining = data.default_daily_rate_training ?? data.defaultDailyRateTraining ?? data.data?.defaultDailyRateTraining;
+        const validTrainingRate = (rawTraining && Number(rawTraining) >= 1000) ? Number(rawTraining) : 6500;
+
+        const settingsData: ResortSettings = data.data || {
           resortName: data.resort_name || data.resortName,
           managerName: data.manager_name || data.managerName,
           managerPhone: data.manager_phone || data.managerPhone,
           maxCapacity: data.max_capacity ?? data.maxCapacity,
           defaultDailyRateBoarding: data.default_daily_rate_boarding ?? data.defaultDailyRateBoarding ?? data.data?.defaultDailyRateBoarding,
-          defaultDailyRateTraining: data.default_daily_rate_training ?? data.defaultDailyRateTraining ?? data.data?.defaultDailyRateTraining,
-          defaultDailyRateDayTraining: data.default_daily_rate_day_training ?? data.defaultDailyRateDayTraining ?? data.data?.defaultDailyRateDayTraining,
+          defaultDailyRateTraining: validTrainingRate,
+          defaultDailyRateDayTraining: data.default_daily_rate_day_training ?? data.defaultDailyRateDayTraining ?? data.data?.defaultDailyRateDayTraining ?? 250,
           defaultDailyRateDaycare: data.default_daily_rate_daycare ?? data.defaultDailyRateDaycare ?? data.data?.defaultDailyRateDaycare,
           bitNumber: data.bit_number || data.bitNumber,
           payboxLink: data.paybox_link || data.payboxLink,
           bankDetails: data.bank_details || data.bankDetails,
           autoCheckVaccination: data.auto_check_vaccination ?? data.autoCheckVaccination,
         };
+
+        if (!settingsData.defaultDailyRateTraining || Number(settingsData.defaultDailyRateTraining) < 1000) {
+          settingsData.defaultDailyRateTraining = 6500;
+        }
 
         const merged = { ...defaultSettings, ...settingsData };
         try {
@@ -502,27 +513,34 @@ export const deleteBookingFromDb = async (bookingId: string): Promise<void> => {
 
 // Update Resort Settings in Supabase
 export const saveSettingsToDb = async (settings: ResortSettings): Promise<void> => {
+  const sanitizedSettings: ResortSettings = {
+    ...settings,
+    defaultDailyRateTraining: Number(settings.defaultDailyRateTraining) || 6500,
+    defaultDailyRateDayTraining: Number(settings.defaultDailyRateDayTraining) || 250,
+  };
+
   try {
-    localStorage.setItem('dog_resort_settings', JSON.stringify(settings));
-    localStorage.setItem('shmulik_dog_resort_settings_v2', JSON.stringify(settings));
+    localStorage.setItem('dog_resort_settings', JSON.stringify(sanitizedSettings));
+    localStorage.setItem('shmulik_dog_resort_settings_v2', JSON.stringify(sanitizedSettings));
   } catch (e) {}
 
   try {
     const payload = {
       id: SETTINGS_DOC_ID,
-      resort_name: settings.resortName,
-      manager_name: settings.managerName,
-      manager_phone: settings.managerPhone,
-      max_capacity: settings.maxCapacity,
-      default_daily_rate_boarding: settings.defaultDailyRateBoarding,
-      default_daily_rate_training: settings.defaultDailyRateTraining,
-      default_daily_rate_combined: settings.defaultDailyRateCombined,
-      default_daily_rate_daycare: settings.defaultDailyRateDaycare,
-      bit_number: settings.bitNumber,
-      paybox_link: settings.payboxLink,
-      bank_details: settings.bankDetails,
-      auto_check_vaccination: settings.autoCheckVaccination,
-      data: settings,
+      resort_name: sanitizedSettings.resortName,
+      manager_name: sanitizedSettings.managerName,
+      manager_phone: sanitizedSettings.managerPhone,
+      max_capacity: sanitizedSettings.maxCapacity,
+      default_daily_rate_boarding: sanitizedSettings.defaultDailyRateBoarding,
+      default_daily_rate_training: sanitizedSettings.defaultDailyRateTraining,
+      default_daily_rate_day_training: sanitizedSettings.defaultDailyRateDayTraining,
+      default_daily_rate_combined: sanitizedSettings.defaultDailyRateCombined || 0,
+      default_daily_rate_daycare: sanitizedSettings.defaultDailyRateDaycare,
+      bit_number: sanitizedSettings.bitNumber,
+      paybox_link: sanitizedSettings.payboxLink,
+      bank_details: sanitizedSettings.bankDetails,
+      auto_check_vaccination: sanitizedSettings.autoCheckVaccination,
+      data: sanitizedSettings,
       updated_at: new Date().toISOString()
     };
 
