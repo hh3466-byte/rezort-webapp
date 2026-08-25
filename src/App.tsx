@@ -26,6 +26,7 @@ import { AgentActionModal } from './components/AgentActionModal';
 import { BookingFormModal } from './components/BookingFormModal';
 import { SimpleBookingWizard } from './components/SimpleBookingWizard';
 import { PaymentModal } from './components/PaymentModal';
+import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
@@ -59,6 +60,23 @@ export default function App() {
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Extreme Change Confirmation Modal State
+  const [appExtremeModal, setAppExtremeModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    impacts: ExtremeChangeImpact[];
+    severity?: 'warning' | 'danger';
+    confirmText?: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    impacts: [],
+    onConfirm: () => {}
+  });
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -266,10 +284,28 @@ export default function App() {
     showToast(`💾 ההזמנה של ${booking.dogName} נשמרה וסונכרנה בענן`);
   };
 
-  // Delete / Cancel Booking
+  // Delete / Cancel Booking with ExtremeChange confirmation
   const handleDeleteBooking = async (bookingId: string) => {
-    await deleteBookingFromDb(bookingId);
-    showToast('🗑️ ההזמנה הוסרה מהענן');
+    const booking = bookings.find(b => b.id === bookingId);
+    if (!booking) return;
+
+    setAppExtremeModal({
+      isOpen: true,
+      title: '🗑️ אישור מחיקת הזמנה מהמערכת',
+      description: `האם אתה בטוח שברצונך למחוק את ההזמנה של הכלב "${booking.dogName}" (הבעלים: ${booking.ownerName})? פעולה זו תמחק את ההזמנה מיומן הריזורט ומהענן.`,
+      impacts: [
+        { label: 'שם הכלב והבעלים', newValue: `🐾 ${booking.dogName} (${booking.ownerName})` },
+        { label: 'תאריכי שהות', newValue: `${booking.startDate} עד ${booking.endDate}` },
+        { label: 'סכום העסקה', newValue: `₪${booking.totalPrice.toLocaleString()}` }
+      ],
+      severity: 'danger',
+      confirmText: 'כן, מחק הזמנה זו',
+      onConfirm: async () => {
+        setAppExtremeModal(prev => ({ ...prev, isOpen: false }));
+        await deleteBookingFromDb(bookingId);
+        showToast(`🗑️ ההזמנה של ${booking.dogName} הוסרה מהענן`);
+      }
+    });
   };
 
   // Toggle Stay Status (Check-in / Check-out)
@@ -692,6 +728,18 @@ export default function App() {
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Global Extreme Change Alert Modal */}
+      <ExtremeChangeModal
+        isOpen={appExtremeModal.isOpen}
+        title={appExtremeModal.title}
+        description={appExtremeModal.description}
+        impacts={appExtremeModal.impacts}
+        severity={appExtremeModal.severity}
+        confirmText={appExtremeModal.confirmText}
+        onConfirm={appExtremeModal.onConfirm}
+        onCancel={() => setAppExtremeModal(prev => ({ ...prev, isOpen: false }))}
+      />
 
     </div>
   );

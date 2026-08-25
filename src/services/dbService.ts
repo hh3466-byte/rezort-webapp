@@ -32,6 +32,12 @@ export const getAllExistingLocalBookings = (): Booking[] => {
         if (Array.isArray(parsed)) {
           for (const b of parsed) {
             if (b && b.id) {
+              if ((b.id === 'b-103' || b.dogName === 'ברונו') && (b.serviceType === 'boarding' || (b as any).serviceType === 'combined')) {
+                b.serviceType = 'day_training';
+                b.stayStatus = 'checked_in';
+                b.totalPrice = 1750;
+                b.notes = 'אילוף ביומיות ללא לינה - חיזוקים חיוביים';
+              }
               combinedMap.set(b.id, { ...combinedMap.get(b.id), ...b });
             }
           }
@@ -202,31 +208,54 @@ export const subscribeToBookings = (
       }
 
       if (data && data.length > 0) {
+        let didMigrateBruno = false;
         const bookings: Booking[] = data.map((row: any) => {
+          let b: Booking;
           if (row.data && typeof row.data === 'object') {
-            return { ...row.data, id: row.id || row.data.id };
+            b = { ...row.data, id: row.id || row.data.id };
+          } else {
+            b = {
+              id: row.id,
+              dogName: row.dog_name || row.dogName,
+              dogBreed: row.dog_breed || row.dogBreed || '',
+              ownerName: row.owner_name || row.ownerName,
+              ownerPhone: row.owner_phone || row.ownerPhone,
+              ownerEmail: row.owner_email || row.ownerEmail || '',
+              serviceType: row.service_type || row.serviceType || 'boarding',
+              startDate: row.start_date || row.startDate,
+              endDate: row.end_date || row.endDate,
+              totalPrice: Number(row.total_price ?? row.totalPrice ?? 0),
+              depositAmount: Number(row.deposit_amount ?? row.depositAmount ?? 0),
+              paymentStatus: row.payment_status || row.paymentStatus || 'unpaid',
+              paymentMethod: row.payment_method || row.paymentMethod || 'bit',
+              stayStatus: row.stay_status || row.stayStatus || 'booked',
+              notes: row.notes || '',
+              vaccinationValid: Boolean(row.vaccination_valid ?? row.vaccinationValid ?? true),
+              createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+              updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
+            } as Booking;
           }
-          return {
-            id: row.id,
-            dogName: row.dog_name || row.dogName,
-            dogBreed: row.dog_breed || row.dogBreed || '',
-            ownerName: row.owner_name || row.ownerName,
-            ownerPhone: row.owner_phone || row.ownerPhone,
-            ownerEmail: row.owner_email || row.ownerEmail || '',
-            serviceType: row.service_type || row.serviceType || 'boarding',
-            startDate: row.start_date || row.startDate,
-            endDate: row.end_date || row.endDate,
-            totalPrice: Number(row.total_price ?? row.totalPrice ?? 0),
-            depositAmount: Number(row.deposit_amount ?? row.depositAmount ?? 0),
-            paymentStatus: row.payment_status || row.paymentStatus || 'unpaid',
-            paymentMethod: row.payment_method || row.paymentMethod || 'bit',
-            stayStatus: row.stay_status || row.stayStatus || 'booked',
-            notes: row.notes || '',
-            vaccinationValid: Boolean(row.vaccination_valid ?? row.vaccinationValid ?? true),
-            createdAt: row.created_at || row.createdAt || new Date().toISOString(),
-            updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
-          } as Booking;
+
+          // Auto-migrate Bruno to day_training if he was still saved as boarding / combined
+          if (b.id === 'b-103' || b.dogName === 'ברונו') {
+            if (b.serviceType === 'boarding' || (b as any).serviceType === 'combined') {
+              b.serviceType = 'day_training';
+              b.stayStatus = 'checked_in';
+              b.totalPrice = 1750;
+              b.notes = 'אילוף ביומיות ללא לינה - חיזוקים חיוביים';
+              didMigrateBruno = true;
+            }
+          }
+
+          return b;
         });
+
+        if (didMigrateBruno) {
+          const bruno = bookings.find(b => b.id === 'b-103' || b.dogName === 'ברונו');
+          if (bruno) {
+            saveBookingToDb(bruno).catch(() => {});
+          }
+        }
 
         bookings.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
         

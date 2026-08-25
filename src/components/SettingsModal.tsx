@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ResortSettings, Booking } from '../types';
 import { exportDataAsJSON, importDataFromJSON } from '../utils/exportUtils';
+import { ExtremeChangeModal, ExtremeChangeImpact } from './ExtremeChangeModal';
 
 interface SettingsModalProps {
   settings: ResortSettings;
@@ -62,14 +63,97 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<'general' | 'rates' | 'whatsapp' | 'backup'>('general');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSaveSettings(formData);
+  const [extremeAlert, setExtremeAlert] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    impacts: ExtremeChangeImpact[];
+    severity?: 'warning' | 'danger';
+    confirmText?: string;
+    cancelText?: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    impacts: [],
+    onConfirm: () => {}
+  });
+
+  const executeSave = (newSettings: ResortSettings) => {
+    onSaveSettings(newSettings);
     setSaveSuccess(true);
     setTimeout(() => {
       setSaveSuccess(false);
       onClose();
     }, 800);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const impacts: ExtremeChangeImpact[] = [];
+
+    // 1. Training rate change
+    const oldTraining = settings.defaultDailyRateTraining || 6500;
+    const newTraining = Number(formData.defaultDailyRateTraining) || 6500;
+    if (newTraining !== oldTraining && (newTraining < 2000 || newTraining > 20000 || Math.abs(newTraining - oldTraining) >= 2000)) {
+      impacts.push({
+        label: '🎓 מחיר תהליך אילוף (70 יום)',
+        oldValue: `₪${oldTraining.toLocaleString()}`,
+        newValue: `₪${newTraining.toLocaleString()}`
+      });
+    }
+
+    // 2. Boarding rate change (> 50% change or < 50 or > 1000)
+    const oldBoarding = settings.defaultDailyRateBoarding || 180;
+    const newBoarding = Number(formData.defaultDailyRateBoarding) || 180;
+    if (newBoarding !== oldBoarding && (newBoarding < 50 || newBoarding > 1000 || Math.abs(newBoarding - oldBoarding) >= 70)) {
+      impacts.push({
+        label: '🏨 מחיר יומי לפנסיון לינה',
+        oldValue: `₪${oldBoarding}`,
+        newValue: `₪${newBoarding}`
+      });
+    }
+
+    // 3. Day Training rate change
+    const oldDayTraining = settings.defaultDailyRateDayTraining || 250;
+    const newDayTraining = Number(formData.defaultDailyRateDayTraining) || 250;
+    if (newDayTraining !== oldDayTraining && (newDayTraining < 50 || newDayTraining > 1500 || Math.abs(newDayTraining - oldDayTraining) >= 100)) {
+      impacts.push({
+        label: '🦮 מחיר אילוף ביומיות (ללא לינה)',
+        oldValue: `₪${oldDayTraining}`,
+        newValue: `₪${newDayTraining}`
+      });
+    }
+
+    // 4. Capacity change
+    const oldCapacity = settings.maxCapacity || 12;
+    const newCapacity = Number(formData.maxCapacity) || 12;
+    if (newCapacity !== oldCapacity && (newCapacity < 4 || newCapacity > 60 || Math.abs(newCapacity - oldCapacity) >= 6)) {
+      impacts.push({
+        label: '🏢 תפוסת שיא בריזורט (מספר כלבים מקסימלי)',
+        oldValue: `${oldCapacity} כלבים`,
+        newValue: `${newCapacity} כלבים`
+      });
+    }
+
+    if (impacts.length > 0) {
+      setExtremeAlert({
+        isOpen: true,
+        title: '⚠️ שים לב: זוהה שינוי תעריפים / הגדרות משמעותי',
+        description: 'המערכת זיהתה שהערכים שהזנת שונים באופן ניכר מתעריפי ברירת המחדל הקודמים. אנא ודא שהמספרים מדויקים לפני השמירה.',
+        impacts,
+        severity: 'warning',
+        onConfirm: () => {
+          setExtremeAlert(prev => ({ ...prev, isOpen: false }));
+          executeSave(formData);
+        }
+      });
+      return;
+    }
+
+    executeSave(formData);
   };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -406,10 +490,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm('האם אתה בטוח שברצונך למחוק את כל ההזמנות ולהתחיל יומן נקי?')) {
-                      if (onClearAllData) onClearAllData();
-                      onClose();
-                    }
+                    setExtremeAlert({
+                      isOpen: true,
+                      title: '🚨 אזהרה: מחיקת כל הנתונים ביומן',
+                      description: 'פעולה זו תמחק לצמיתות את כל ההזמנות הקיימות בריזורט. פעולה זו אינה ניתנת לביטול לאחר ביצועה.',
+                      impacts: [
+                        {
+                          label: 'הזמנות קיימות ביומן',
+                          oldValue: `${bookings.length} הזמנות פעילות`,
+                          newValue: '0 (יומן ריק ונקי)'
+                        }
+                      ],
+                      severity: 'danger',
+                      confirmText: 'כן, מחק את כל ההזמנות',
+                      onConfirm: () => {
+                        setExtremeAlert(prev => ({ ...prev, isOpen: false }));
+                        if (onClearAllData) onClearAllData();
+                        onClose();
+                      }
+                    });
                   }}
                   className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
                 >
@@ -428,10 +527,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (confirm('האם אתה בטוח שברצונך לאפס לנתוני הדמו?')) {
-                      onResetToDemo();
-                      onClose();
-                    }
+                    setExtremeAlert({
+                      isOpen: true,
+                      title: '🔄 איפוס נתוני המערכת לדמו',
+                      description: 'כל השינויים האחרונים יימחקו והמערכת תחזור לנתוני ההדגמה הראשוניים.',
+                      impacts: [
+                        {
+                          label: 'מצב נתוני המערכת',
+                          oldValue: 'הזמנות והגדרות נוכחיות',
+                          newValue: 'נתוני הדגמה ראשוניים'
+                        }
+                      ],
+                      severity: 'danger',
+                      confirmText: 'כן, אפס לדמו',
+                      onConfirm: () => {
+                        setExtremeAlert(prev => ({ ...prev, isOpen: false }));
+                        onResetToDemo();
+                        onClose();
+                      }
+                    });
                   }}
                   className="bg-red-100 hover:bg-red-200 text-red-800 text-xs font-bold px-4 py-2 rounded-xl border border-red-300 transition-colors cursor-pointer"
                 >
@@ -472,6 +586,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </form>
 
       </div>
+
+      {/* Extreme Change Confirmation Dialog */}
+      <ExtremeChangeModal
+        isOpen={extremeAlert.isOpen}
+        title={extremeAlert.title}
+        description={extremeAlert.description}
+        impacts={extremeAlert.impacts}
+        severity={extremeAlert.severity}
+        confirmText={extremeAlert.confirmText}
+        cancelText={extremeAlert.cancelText}
+        onConfirm={extremeAlert.onConfirm}
+        onCancel={() => setExtremeAlert(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };
