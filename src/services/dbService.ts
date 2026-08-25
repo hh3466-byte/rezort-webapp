@@ -7,16 +7,32 @@ const BOOKINGS_TABLE = 'bookings';
 const SETTINGS_TABLE = 'settings';
 const CUSTOMERS_TABLE = 'customers';
 const SETTINGS_DOC_ID = 'resort_config';
+const DELETED_BOOKINGS_KEY = 'shmulik_dog_resort_deleted_ids';
 
 type Unsubscribe = () => void;
+
+export const getDeletedBookingIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(DELETED_BOOKINGS_KEY);
+    if (raw) {
+      return new Set(JSON.parse(raw));
+    }
+  } catch (e) {}
+  return new Set();
+};
+
+export const markBookingAsDeleted = (id: string) => {
+  const set = getDeletedBookingIds();
+  set.add(id);
+  try {
+    localStorage.setItem(DELETED_BOOKINGS_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {}
+};
 
 // Helper to gather all existing bookings across local storage keys + initial data
 export const getAllExistingLocalBookings = (): Booking[] => {
   const combinedMap = new Map<string, Booking>();
-
-  for (const b of initialBookings) {
-    combinedMap.set(b.id, b);
-  }
+  const deletedIds = getDeletedBookingIds();
 
   const keysToInspect = [
     'dog_resort_bookings',
@@ -24,14 +40,17 @@ export const getAllExistingLocalBookings = (): Booking[] => {
     'shmulik_dog_resort_bookings_v1'
   ];
 
+  let hasLocalData = false;
+
   for (const key of keysToInspect) {
     try {
       const raw = localStorage.getItem(key);
       if (raw) {
         const parsed: Booking[] = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          hasLocalData = true;
           for (const b of parsed) {
-            if (b && b.id) {
+            if (b && b.id && !deletedIds.has(b.id)) {
               if ((b.id === 'b-103' || b.dogName === 'ברונו') && (b.serviceType === 'boarding' || (b as any).serviceType === 'combined')) {
                 b.serviceType = 'day_training';
                 b.stayStatus = 'checked_in';
@@ -45,6 +64,15 @@ export const getAllExistingLocalBookings = (): Booking[] => {
       }
     } catch (e) {
       console.warn(`Error reading localStorage key ${key}:`, e);
+    }
+  }
+
+  // Only inject initialBookings if user has completely empty localStorage
+  if (!hasLocalData) {
+    for (const b of initialBookings) {
+      if (!deletedIds.has(b.id)) {
+        combinedMap.set(b.id, b);
+      }
     }
   }
 
@@ -522,10 +550,13 @@ export const saveBookingToDb = async (booking: Booking): Promise<void> => {
 
 // Delete a Booking from Supabase
 export const deleteBookingFromDb = async (bookingId: string): Promise<void> => {
+  markBookingAsDeleted(bookingId);
+
   try {
     const local = getAllExistingLocalBookings().filter(b => b.id !== bookingId);
     localStorage.setItem('dog_resort_bookings', JSON.stringify(local));
     localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify(local));
+    localStorage.setItem('shmulik_dog_resort_bookings_v1', JSON.stringify(local));
   } catch (e) {}
 
   try {

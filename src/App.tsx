@@ -328,19 +328,22 @@ export default function App() {
 
     setAppExtremeModal({
       isOpen: true,
-      title: '🗑️ אישור מחיקת הזמנה מהמערכת',
-      description: `האם אתה בטוח שברצונך למחוק את ההזמנה של הכלב "${booking.dogName}" (הבעלים: ${booking.ownerName})? פעולה זו תמחק את ההזמנה מיומן הריזורט ומהענן.`,
+      title: '🗑️ אישור מחיקת כל ההזמנה מכל הימים',
+      description: `האם אתה בטוח שברצונך למחוק את כל ההזמנה של הכלב "${booking.dogName}" (הבעלים: ${booking.ownerName})? פעולה זו תמחק לחלוטין את השהות מכל הימים ביומן (${booking.startDate} עד ${booking.endDate}) ומהענן.`,
       impacts: [
         { label: 'שם הכלב והבעלים', newValue: `🐾 ${booking.dogName} (${booking.ownerName})` },
-        { label: 'תאריכי שהות', newValue: `${booking.startDate} עד ${booking.endDate}` },
-        { label: 'סכום העסקה', newValue: `₪${booking.totalPrice.toLocaleString()}` }
+        { label: 'תאריכים שנמחקים מכל היומן', newValue: `📅 ${booking.startDate} עד ${booking.endDate}` },
+        { label: 'סכום העסקה שמתבטל', newValue: `₪${booking.totalPrice.toLocaleString()}` }
       ],
       severity: 'danger',
-      confirmText: 'כן, מחק הזמנה זו',
+      confirmText: 'כן, מחק את כל ההזמנה',
       onConfirm: async () => {
         setAppExtremeModal(prev => ({ ...prev, isOpen: false }));
+        setBookings(prev => prev.filter(b => b.id !== bookingId));
+        setSelectedDateForDetails(null);
+        setBookingFormModal({ isOpen: false, initialData: null });
         await deleteBookingFromDb(bookingId);
-        showToast(`🗑️ ההזמנה של ${booking.dogName} הוסרה מהענן`);
+        showToast(`🗑️ כל ההזמנה של ${booking.dogName} נמחקה מכל הימים ביומן ומהענן`);
       }
     });
   };

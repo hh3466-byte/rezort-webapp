@@ -507,47 +507,108 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
           </div>
 
           {/* Section 4: Stay Status & Dates */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="text-xs text-slate-700 font-bold block mb-1">
-                מצב שהות נוכחי
-              </label>
-              <select
-                value={stayStatus}
-                onChange={(e) => setStayStatus(e.target.value as StayStatus)}
-                className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none cursor-pointer font-semibold"
-              >
-                <option value="booked">📅 שוריין / עתידי</option>
-                <option value="checked_in">🐕 שוהה כעת בפנסיון</option>
-                <option value="checked_out">🏁 הסתיים ושוחרר</option>
-                <option value="cancelled">❌ מבוטל</option>
-              </select>
+          <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-slate-700 font-bold block mb-1">
+                  מצב שהות נוכחי
+                </label>
+                <select
+                  value={stayStatus}
+                  onChange={(e) => setStayStatus(e.target.value as StayStatus)}
+                  className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none cursor-pointer font-semibold"
+                >
+                  <option value="booked">📅 שוריין / עתידי</option>
+                  <option value="checked_in">🐕 שוהה כעת בפנסיון</option>
+                  <option value="checked_out">🏁 הסתיים ושוחרר</option>
+                  <option value="cancelled">❌ מבוטל</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-700 font-bold block mb-1">
+                  תאריך כניסה
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={startDate}
+                  onChange={(e) => {
+                    const newStart = e.target.value;
+                    setStartDate(newStart);
+                    if (newStart > endDate) {
+                      setEndDate(addDays(newStart, 1));
+                    }
+                  }}
+                  className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-700 font-bold block mb-1">
+                  תאריך יציאה ({daysCount} {daysCount === 1 ? 'יום' : 'ימים'})
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono font-semibold"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="text-xs text-slate-700 font-bold block mb-1">
-                תאריך כניסה
-              </label>
-              <input
-                type="date"
-                required
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
-              />
-            </div>
+            {/* Quick Days Selector & Stepper */}
+            <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1 text-xs">
+                <span className="text-slate-500 font-medium ml-1">עדכון כמות ימים:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (daysCount > 1) setEndDate(addDays(startDate, daysCount - 2));
+                  }}
+                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-black flex items-center justify-center cursor-pointer transition-colors"
+                  title="הפחת יום"
+                >
+                  -
+                </button>
+                <span className="font-extrabold text-slate-900 bg-slate-100 px-3 py-1 rounded-lg text-xs min-w-[50px] text-center">
+                  {daysCount} ימים
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setEndDate(addDays(startDate, daysCount))}
+                  className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-black flex items-center justify-center cursor-pointer transition-colors"
+                  title="הוסף יום"
+                >
+                  +
+                </button>
+              </div>
 
-            <div>
-              <label className="text-xs text-slate-700 font-bold block mb-1">
-                תאריך יציאה ({daysCount} ימים)
-              </label>
-              <input
-                type="date"
-                required
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
-              />
+              {/* Quick Preset Buttons */}
+              <div className="flex flex-wrap items-center gap-1 text-xs">
+                {[
+                  { label: 'יום 1', days: 1 },
+                  { label: '3 ימים', days: 3 },
+                  { label: 'שבוע (7)', days: 7 },
+                  { label: 'שבועיים (14)', days: 14 },
+                  { label: 'חודש (30)', days: 30 },
+                  { label: '70 יום 🎓', days: 70 }
+                ].map(p => (
+                  <button
+                    key={p.days}
+                    type="button"
+                    onClick={() => setEndDate(addDays(startDate, p.days - 1))}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      daysCount === p.days
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
