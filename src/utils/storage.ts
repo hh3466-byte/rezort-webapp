@@ -15,6 +15,8 @@ export function loadStoredBookings(): Booking[] {
 
 export function resetToDemoData(): { bookings: Booking[]; settings: ResortSettings } {
   try {
+    localStorage.removeItem('shmulik_dog_resort_is_cleared');
+    localStorage.removeItem('shmulik_dog_resort_deleted_ids');
     localStorage.setItem('dog_resort_bookings', JSON.stringify(initialBookings));
     localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify(initialBookings));
     localStorage.setItem('dog_resort_settings', JSON.stringify(defaultSettings));
@@ -23,6 +25,15 @@ export function resetToDemoData(): { bookings: Booking[]; settings: ResortSettin
     console.error('Error resetting demo data:', err);
   }
   return { bookings: initialBookings, settings: defaultSettings };
+}
+
+export function clearAllStoredBookings(): void {
+  try {
+    localStorage.setItem('dog_resort_bookings', JSON.stringify([]));
+    localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify([]));
+    localStorage.setItem('shmulik_dog_resort_bookings_v1', JSON.stringify([]));
+    localStorage.setItem('shmulik_dog_resort_is_cleared', 'true');
+  } catch (e) {}
 }
 
 export function saveStoredBookings(bookings: Booking[]): boolean {
