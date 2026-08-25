@@ -285,23 +285,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Max Capacity Setting */}
-              <div className="p-4 bg-green-50 border border-green-200 rounded-xl space-y-1.5">
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs text-green-900 font-extrabold flex items-center gap-1.5">
-                    <ShieldAlert className="w-4 h-4 text-green-600" />
+                  <label className="text-xs text-emerald-950 font-extrabold flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4 text-emerald-600" />
                     קיבולת מקסימלית (מספר כלבים בו-זמנית בריזורט)
                   </label>
-                  <span className="text-base font-black text-green-900">{formData.maxCapacity} כלבים</span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="2"
+                      max="60"
+                      value={formData.maxCapacity}
+                      onChange={(e) => setFormData({ ...formData, maxCapacity: Math.max(1, Number(e.target.value)) })}
+                      className="w-16 text-center font-black text-emerald-950 bg-white border-2 border-emerald-500 rounded-xl py-1 text-base shadow-2xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    />
+                    <span className="text-xs font-bold text-emerald-900">כלבים</span>
+                  </div>
                 </div>
+
+                {/* Quick Presets */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[11px] text-emerald-800 font-semibold ml-1">בחירה מהירה:</span>
+                  {[10, 12, 14, 16, 18, 20, 25].map(cap => (
+                    <button
+                      key={cap}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, maxCapacity: cap })}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                        formData.maxCapacity === cap
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-white text-emerald-900 border border-emerald-300 hover:bg-emerald-100'
+                      }`}
+                    >
+                      {cap}
+                    </button>
+                  ))}
+                </div>
+
                 <input
                   type="range"
                   min="2"
-                  max="30"
+                  max="40"
                   value={formData.maxCapacity}
                   onChange={(e) => setFormData({ ...formData, maxCapacity: Number(e.target.value) })}
-                  className="w-full accent-green-600 cursor-pointer"
+                  className="w-full accent-emerald-600 cursor-pointer"
                 />
-                <p className="text-[11px] text-green-800">
+                <p className="text-[11px] text-emerald-800">
                   כל ניסיון שריון מעבר למספר זה יציג התראת אובר-בוקינג אדומה ביומן ובתחזית.
                 </p>
               </div>

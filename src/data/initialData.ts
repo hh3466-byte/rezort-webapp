@@ -4,7 +4,7 @@ export const defaultSettings: ResortSettings = {
   resortName: 'ריזורט הכלבים והאילוף של שמוליק',
   managerName: 'שמוליק',
   managerPhone: '054-8889900',
-  maxCapacity: 12,
+  maxCapacity: 16,
   defaultDailyRateBoarding: 180,
   defaultDailyRateTraining: 6500, // תהליך אילוף מלא (70 יום)
   defaultDailyRateDayTraining: 250, // אילוף ביומיות (ללא לינה - מחיר ליום)

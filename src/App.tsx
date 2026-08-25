@@ -770,6 +770,7 @@ export default function App() {
           bookings={bookings}
           onClose={() => setIsSettingsOpen(false)}
           onSaveSettings={async (newSettings) => {
+            setSettings(newSettings);
             await saveSettingsToDb(newSettings);
             showToast('⚙️ הגדרות הריזורט עודכנו וסונכרנו בענן');
           }}

@@ -319,20 +319,22 @@ export const subscribeToSettings = (
       if (data) {
         const rawTraining = data.default_daily_rate_training ?? data.defaultDailyRateTraining ?? data.data?.defaultDailyRateTraining;
         const validTrainingRate = (rawTraining && Number(rawTraining) >= 1000) ? Number(rawTraining) : 6500;
+        const maxCap = data.max_capacity ?? data.maxCapacity ?? data.data?.maxCapacity ?? defaultSettings.maxCapacity;
 
-        const settingsData: ResortSettings = data.data || {
-          resortName: data.resort_name || data.resortName,
-          managerName: data.manager_name || data.managerName,
-          managerPhone: data.manager_phone || data.managerPhone,
-          maxCapacity: data.max_capacity ?? data.maxCapacity,
-          defaultDailyRateBoarding: data.default_daily_rate_boarding ?? data.defaultDailyRateBoarding ?? data.data?.defaultDailyRateBoarding,
+        const settingsData: ResortSettings = {
+          resortName: data.resort_name || data.resortName || data.data?.resortName || defaultSettings.resortName,
+          managerName: data.manager_name || data.managerName || data.data?.managerName || defaultSettings.managerName,
+          managerPhone: data.manager_phone || data.managerPhone || data.data?.managerPhone || defaultSettings.managerPhone,
+          maxCapacity: Number(maxCap) || defaultSettings.maxCapacity,
+          defaultDailyRateBoarding: Number(data.default_daily_rate_boarding ?? data.defaultDailyRateBoarding ?? data.data?.defaultDailyRateBoarding) || defaultSettings.defaultDailyRateBoarding,
           defaultDailyRateTraining: validTrainingRate,
-          defaultDailyRateDayTraining: data.default_daily_rate_day_training ?? data.defaultDailyRateDayTraining ?? data.data?.defaultDailyRateDayTraining ?? 250,
-          defaultDailyRateDaycare: data.default_daily_rate_daycare ?? data.defaultDailyRateDaycare ?? data.data?.defaultDailyRateDaycare,
-          bitNumber: data.bit_number || data.bitNumber,
-          payboxLink: data.paybox_link || data.payboxLink,
-          bankDetails: data.bank_details || data.bankDetails,
-          autoCheckVaccination: data.auto_check_vaccination ?? data.autoCheckVaccination,
+          defaultDailyRateDayTraining: Number(data.default_daily_rate_day_training ?? data.defaultDailyRateDayTraining ?? data.data?.defaultDailyRateDayTraining) || 250,
+          defaultDailyRateCombined: 0,
+          defaultDailyRateDaycare: Number(data.default_daily_rate_daycare ?? data.defaultDailyRateDaycare ?? data.data?.defaultDailyRateDaycare) || defaultSettings.defaultDailyRateDaycare,
+          bitNumber: data.bit_number || data.bitNumber || data.data?.bitNumber || defaultSettings.bitNumber,
+          payboxLink: data.paybox_link || data.payboxLink || data.data?.payboxLink || defaultSettings.payboxLink,
+          bankDetails: data.bank_details || data.bankDetails || data.data?.bankDetails || defaultSettings.bankDetails,
+          autoCheckVaccination: data.auto_check_vaccination ?? data.autoCheckVaccination ?? data.data?.autoCheckVaccination ?? defaultSettings.autoCheckVaccination,
         };
 
         if (!settingsData.defaultDailyRateTraining || Number(settingsData.defaultDailyRateTraining) < 1000) {
@@ -562,7 +564,6 @@ export const saveSettingsToDb = async (settings: ResortSettings): Promise<void> 
       max_capacity: sanitizedSettings.maxCapacity,
       default_daily_rate_boarding: sanitizedSettings.defaultDailyRateBoarding,
       default_daily_rate_training: sanitizedSettings.defaultDailyRateTraining,
-      default_daily_rate_day_training: sanitizedSettings.defaultDailyRateDayTraining,
       default_daily_rate_combined: sanitizedSettings.defaultDailyRateCombined || 0,
       default_daily_rate_daycare: sanitizedSettings.defaultDailyRateDaycare,
       bit_number: sanitizedSettings.bitNumber,
