@@ -629,8 +629,17 @@ export function parseWithClientHeuristic(
   let totalPrice = 0;
   let depositAmount = 0;
 
+  // Remove phone number, dates, and 70-day mentions from text before extracting monetary prices
+  let textForPrices = text;
+  if (ownerPhone) {
+    textForPrices = textForPrices.replace(ownerPhone, '');
+  }
+  textForPrices = textForPrices.replace(/\b\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\b/g, '');
+  textForPrices = textForPrices.replace(/05\d-?\d{7}|05\d{8}/g, '');
+  textForPrices = textForPrices.replace(/70\s*(?:יום|ימים)/g, '');
+
   // Extract numbers with ₪ or שקל or סכום
-  const priceMatches = [...text.matchAll(/(\d{2,5})\s*(?:ש"ח|שח|שקל|שקלים|₪)?/g)];
+  const priceMatches = [...textForPrices.matchAll(/(\d{2,5})\s*(?:ש"ח|שח|שקל|שקלים|₪)?/g)];
   if (priceMatches.length > 0) {
     const numbers = priceMatches.map(m => parseInt(m[1], 10)).filter(n => n >= 50);
     if (numbers.length >= 2) {
