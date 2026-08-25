@@ -355,22 +355,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   {/* Bookings inside the day cell */}
                   <div className="space-y-1 mt-1 flex-1 overflow-y-auto max-h-[58px] no-scrollbar pointer-events-none">
                     {dateBookings.slice(0, 2).map((b) => {
+                      const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                       const isPaid = b.paymentStatus === 'fully_paid';
                       const isDeposit = b.paymentStatus === 'deposit_paid';
+
+                      let chipStyle = 'bg-red-500 text-white';
+                      if (isEnded) {
+                        chipStyle = 'bg-slate-200 text-slate-700 border border-slate-300 font-medium';
+                      } else if (isPaid) {
+                        chipStyle = 'bg-emerald-600 text-white';
+                      } else if (isDeposit) {
+                        chipStyle = 'bg-emerald-50 text-emerald-900 border border-dashed border-emerald-500';
+                      }
 
                       return (
                         <div
                           key={b.id}
-                          className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate ${
-                            isPaid
-                              ? 'bg-emerald-600 text-white'
-                              : isDeposit
-                              ? 'bg-emerald-50 text-emerald-900 border border-dashed border-emerald-500'
-                              : 'bg-red-500 text-white'
-                          }`}
-                          title={`${b.dogName} (${getServiceTypeHebrew(b.serviceType)})`}
+                          className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between ${chipStyle}`}
+                          title={`${b.dogName} (${getServiceTypeHebrew(b.serviceType)})${isEnded ? ' - הסתיים' : ''}`}
                         >
-                          {b.dogName}
+                          <span className="truncate">{b.dogName}</span>
+                          {isEnded && <span className="text-[9px] opacity-70 shrink-0">🏁</span>}
                         </div>
                       );
                     })}
@@ -470,6 +475,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       </div>
                     ) : (
                       dayBookings.map((b) => {
+                        const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                         const isPaid = b.paymentStatus === 'fully_paid';
                         const isDeposit = b.paymentStatus === 'deposit_paid';
                         const isArrival = b.startDate === day.dateStr;
@@ -479,33 +485,39 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           <div
                             key={b.id}
                             onClick={() => onSelectBooking(b)}
-                            className="bg-white hover:bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs transition-colors cursor-pointer shadow-2xs"
+                            className={`border rounded-xl p-2 text-xs transition-colors cursor-pointer shadow-2xs ${
+                              isEnded
+                                ? 'bg-slate-100/80 border-slate-200 text-slate-500 opacity-80'
+                                : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-900'
+                            }`}
                           >
-                            <div className="flex items-center justify-between font-bold text-slate-900">
+                            <div className="flex items-center justify-between font-bold">
                               <span className="flex items-center gap-1">
-                                <Dog className="w-3 h-3 text-emerald-600 shrink-0" />
+                                <Dog className={`w-3 h-3 shrink-0 ${isEnded ? 'text-slate-400' : 'text-emerald-600'}`} />
                                 <span className="truncate">{b.dogName}</span>
                               </span>
-                              <span className="text-[10px] text-slate-500 font-normal">
-                                {getServiceTypeHebrew(b.serviceType)}
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                {isEnded ? '🏁 הסתיים' : getServiceTypeHebrew(b.serviceType)}
                               </span>
                             </div>
 
                             <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
                               <span>{b.ownerName}</span>
-                              {isArrival && <span className="text-emerald-700 font-bold">📥 כניסה</span>}
-                              {isDeparture && <span className="text-amber-700 font-bold">📤 יציאה</span>}
+                              {!isEnded && isArrival && <span className="text-emerald-700 font-bold">📥 כניסה</span>}
+                              {!isEnded && isDeparture && <span className="text-amber-700 font-bold">📤 יציאה</span>}
                             </div>
 
                             <div className="mt-1 flex items-center justify-between text-[10px] pt-1 border-t border-slate-100">
                               <span className={`px-1.5 py-0.2 rounded-md font-bold ${
-                                isPaid
+                                isEnded
+                                  ? 'bg-slate-200 text-slate-600'
+                                  : isPaid
                                   ? 'bg-emerald-100 text-emerald-800'
                                   : isDeposit
                                   ? 'bg-amber-100 text-amber-800'
                                   : 'bg-red-100 text-red-800'
                               }`}>
-                                {isPaid ? 'שולם מלא' : isDeposit ? `מקדמה ₪${b.depositAmount}` : 'חוב פתוח'}
+                                {isEnded ? 'הסתיים ושוחרר' : isPaid ? 'שולם מלא' : isDeposit ? `מקדמה ₪${b.depositAmount}` : 'חוב פתוח'}
                               </span>
                             </div>
                           </div>

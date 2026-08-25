@@ -15,7 +15,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   FileText,
-  HeartPulse
+  HeartPulse,
+  Trash2
 } from 'lucide-react';
 import { Booking, ResortSettings, ServiceType, PaymentStatus, StayStatus, PaymentMethod } from '../types';
 import { calculateDaysCount, checkRangeOccupancy, getTodayStr, addDays, formatDateIL } from '../utils/dateUtils';
@@ -27,6 +28,7 @@ interface BookingFormModalProps {
   settings: ResortSettings;
   onClose: () => void;
   onSave: (booking: Booking) => void;
+  onDeleteBooking?: (bookingId: string) => void;
 }
 
 export const BookingFormModal: React.FC<BookingFormModalProps> = ({
@@ -35,6 +37,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   settings,
   onClose,
   onSave,
+  onDeleteBooking,
 }) => {
   const todayStr = getTodayStr();
 
@@ -772,22 +775,41 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
           </div>
 
           {/* Form Action Buttons */}
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-slate-500 hover:text-slate-800 font-semibold text-xs transition-colors cursor-pointer"
-            >
-              בטל
-            </button>
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+            {/* Delete button if editing existing booking */}
+            {initialData?.id && onDeleteBooking ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteBooking(initialData.id!);
+                  onClose();
+                }}
+                className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer border border-rose-200"
+              >
+                <Trash2 className="w-4 h-4 text-rose-600" />
+                <span>מחק הזמנה</span>
+              </button>
+            ) : (
+              <div></div>
+            )}
 
-            <button
-              type="submit"
-              className="bg-green-600 hover:bg-green-700 active:scale-98 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <CheckCircle2 className="w-4 h-4 stroke-[3]" />
-              <span>שמור והוסף ליומן</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 rounded-xl text-slate-500 hover:text-slate-800 font-semibold text-xs transition-colors cursor-pointer"
+              >
+                בטל
+              </button>
+
+              <button
+                type="submit"
+                className="bg-green-600 hover:bg-green-700 active:scale-98 text-white font-bold text-sm px-6 py-2.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4 stroke-[3]" />
+                <span>שמור והוסף ליומן</span>
+              </button>
+            </div>
           </div>
 
         </form>

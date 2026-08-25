@@ -703,6 +703,7 @@ export default function App() {
             });
           }}
           onMarkAsPaid={handleMarkAsPaid}
+          onDeleteBooking={handleDeleteBooking}
           onOpenPaymentModal={(b) => {
             setSelectedDateForDetails(null);
             setPaymentModalBooking(b);
@@ -747,6 +748,7 @@ export default function App() {
           settings={settings}
           onClose={() => setBookingFormModal({ isOpen: false, initialData: null })}
           onSave={handleSaveBookingForm}
+          onDeleteBooking={handleDeleteBooking}
         />
       )}
 

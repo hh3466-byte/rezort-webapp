@@ -267,16 +267,21 @@ export const BookingsList: React.FC<BookingsListProps> = ({
               );
             }
 
+            const todayStr = new Date().toISOString().split('T')[0];
+            const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
+
             return (
               <div
                 key={b.id}
                 onClick={() => onSelectBooking(b)}
-                className={`bg-white border rounded-2xl p-4 sm:p-5 transition-all hover:shadow-md cursor-pointer shadow-xs ${
-                  b.paymentStatus === 'unpaid' && b.stayStatus !== 'cancelled'
-                    ? 'border-red-300 ring-1 ring-red-100'
+                className={`border rounded-2xl p-4 sm:p-5 transition-all hover:shadow-md cursor-pointer shadow-xs ${
+                  isEnded
+                    ? 'bg-slate-50/80 border-slate-200 opacity-80'
+                    : b.paymentStatus === 'unpaid' && b.stayStatus !== 'cancelled'
+                    ? 'bg-white border-red-300 ring-1 ring-red-100'
                     : b.paymentStatus === 'deposit_paid'
-                    ? 'border-green-300 ring-1 ring-green-100'
-                    : 'border-slate-200'
+                    ? 'bg-white border-green-300 ring-1 ring-green-100'
+                    : 'bg-white border-slate-200'
                 }`}
               >
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -284,7 +289,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                   {/* Left Column: Dog & Service Details */}
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2.5">
-                      <span className="font-extrabold text-lg sm:text-xl text-slate-900">
+                      <span className={`font-extrabold text-lg sm:text-xl ${isEnded ? 'text-slate-700' : 'text-slate-900'}`}>
                         {b.dogName}
                       </span>
                       {b.dogBreed && (
@@ -303,19 +308,21 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                       </span>
 
                       {/* Stay Status Tag */}
-                      {b.stayStatus === 'checked_in' && (
+                      {isEnded ? (
+                        <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-md font-semibold">
+                          🏁 הסתיים ושוחרר
+                        </span>
+                      ) : b.stayStatus === 'checked_in' ? (
                         <span className="text-xs bg-sky-50 text-sky-700 border border-sky-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
                           <ArrowDownLeft className="w-3 h-3" /> שוהה כעת
                         </span>
-                      )}
-                      {b.stayStatus === 'checked_out' && (
-                        <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md">
-                          הסתיים
-                        </span>
-                      )}
-                      {b.stayStatus === 'cancelled' && (
+                      ) : b.stayStatus === 'cancelled' ? (
                         <span className="text-xs bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-md">
                           בוטל
+                        </span>
+                      ) : (
+                        <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-semibold">
+                          📅 שוריין
                         </span>
                       )}
                     </div>

@@ -1,45 +1,24 @@
 import { Booking, Customer, ResortSettings } from '../types';
 import { defaultSettings, initialBookings } from '../data/initialData';
+import { getAllExistingLocalBookings, getLocalSettings } from '../services/dbService';
 
 const STORAGE_KEYS = {
-  BOOKINGS: 'shmulik_dog_resort_bookings_v2',
-  LEGACY_BOOKINGS: 'shmulik_dog_resort_bookings_v1',
-  SETTINGS: 'shmulik_dog_resort_settings_v2',
+  BOOKINGS: 'dog_resort_bookings',
+  LEGACY_BOOKINGS: 'shmulik_dog_resort_bookings_v2',
+  SETTINGS: 'dog_resort_settings',
   TUTORIAL_SEEN: 'shmulik_dog_resort_tutorial_seen'
 };
 
 export function loadStoredBookings(): Booking[] {
-  let loadedBookings: Booking[] = [];
-
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.BOOKINGS);
-    if (raw) {
-      loadedBookings = JSON.parse(raw);
-    } else {
-      // Check legacy store if exists
-      const legacyRaw = localStorage.getItem(STORAGE_KEYS.LEGACY_BOOKINGS);
-      if (legacyRaw) {
-        const legacyBookings: Booking[] = JSON.parse(legacyRaw);
-        loadedBookings = legacyBookings;
-        localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(loadedBookings));
-      } else {
-        // First time initialization
-        loadedBookings = initialBookings;
-        localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(loadedBookings));
-      }
-    }
-  } catch (err) {
-    console.error('Error loading stored bookings:', err);
-    loadedBookings = initialBookings;
-  }
-
-  return loadedBookings;
+  return getAllExistingLocalBookings();
 }
 
 export function resetToDemoData(): { bookings: Booking[]; settings: ResortSettings } {
   try {
-    localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(initialBookings));
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(defaultSettings));
+    localStorage.setItem('dog_resort_bookings', JSON.stringify(initialBookings));
+    localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify(initialBookings));
+    localStorage.setItem('dog_resort_settings', JSON.stringify(defaultSettings));
+    localStorage.setItem('shmulik_dog_resort_settings_v2', JSON.stringify(defaultSettings));
   } catch (err) {
     console.error('Error resetting demo data:', err);
   }
@@ -48,7 +27,8 @@ export function resetToDemoData(): { bookings: Booking[]; settings: ResortSettin
 
 export function saveStoredBookings(bookings: Booking[]): boolean {
   try {
-    localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(bookings));
+    localStorage.setItem('dog_resort_bookings', JSON.stringify(bookings));
+    localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify(bookings));
     return true;
   } catch (err) {
     console.error('Error saving bookings to localStorage:', err);
@@ -57,20 +37,13 @@ export function saveStoredBookings(bookings: Booking[]): boolean {
 }
 
 export function loadStoredSettings(): ResortSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    if (raw) {
-      return { ...defaultSettings, ...JSON.parse(raw) };
-    }
-  } catch (err) {
-    console.error('Error loading stored settings:', err);
-  }
-  return defaultSettings;
+  return getLocalSettings();
 }
 
 export function saveStoredSettings(settings: ResortSettings): boolean {
   try {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    localStorage.setItem('dog_resort_settings', JSON.stringify(settings));
+    localStorage.setItem('shmulik_dog_resort_settings_v2', JSON.stringify(settings));
     return true;
   } catch (err) {
     console.error('Error saving settings:', err);

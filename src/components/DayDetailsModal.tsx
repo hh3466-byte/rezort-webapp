@@ -15,10 +15,11 @@ import {
   AlertCircle,
   Clock,
   ShieldAlert,
-  Edit2
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
-import { formatFullHebrewDate, getDailyBreakdown, formatDateIL } from '../utils/dateUtils';
+import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage } from '../utils/whatsappUtils';
 
 interface DayDetailsModalProps {
@@ -28,6 +29,7 @@ interface DayDetailsModalProps {
   onClose: () => void;
   onSelectBooking: (booking: Booking) => void;
   onNewBookingForDate: (dateStr: string) => void;
+  onDeleteBooking?: (bookingId: string) => void;
   onMarkAsPaid: (bookingId: string) => void;
   onOpenPaymentModal: (booking: Booking) => void;
   onToggleStayStatus: (bookingId: string, newStatus: Booking['stayStatus']) => void;
@@ -40,6 +42,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   onClose,
   onSelectBooking,
   onNewBookingForDate,
+  onDeleteBooking,
   onMarkAsPaid,
   onOpenPaymentModal,
   onToggleStayStatus,
@@ -130,6 +133,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     booking={b}
                     settings={settings}
                     onSelect={() => onSelectBooking(b)}
+                    onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     onCheckIn={() => onToggleStayStatus(b.id, 'checked_in')}
@@ -161,6 +165,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     booking={b}
                     settings={settings}
                     onSelect={() => onSelectBooking(b)}
+                    onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     actionType="staying"
@@ -191,6 +196,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     booking={b}
                     settings={settings}
                     onSelect={() => onSelectBooking(b)}
+                    onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     onCheckOut={() => onToggleStayStatus(b.id, 'checked_out')}
@@ -212,6 +218,7 @@ interface DogBookingCardProps {
   booking: Booking;
   settings: ResortSettings;
   onSelect: () => void;
+  onDelete?: () => void;
   onMarkPaid: () => void;
   onOpenPayment: () => void;
   onCheckIn?: () => void;
@@ -223,38 +230,50 @@ const DogBookingCard: React.FC<DogBookingCardProps> = ({
   booking,
   settings,
   onSelect,
+  onDelete,
   onMarkPaid,
   onOpenPayment,
   onCheckIn,
   onCheckOut,
   actionType,
 }) => {
+  const todayStr = getTodayStr();
+  const isEnded = booking.stayStatus === 'checked_out' || (booking.endDate < todayStr);
   const remainingDebt = Math.max(0, Math.round(booking.totalPrice - booking.depositAmount));
   const roundedTotal = Math.round(booking.totalPrice || 0);
   const roundedDeposit = Math.round(booking.depositAmount || 0);
 
   // Status color styles matching design
-  let paymentBorder = 'border-red-300 bg-red-50/40';
-  let paymentTag = (
+  let paymentBorder = isEnded 
+    ? 'border-slate-200 bg-slate-50/70 text-slate-600 opacity-80' 
+    : 'border-red-300 bg-red-50/40';
+
+  let paymentTag = isEnded ? (
+    <span className="text-[11px] bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
+      <span>🏁 הסתיים ושוחרר</span>
+    </span>
+  ) : (
     <span className="text-[11px] bg-red-500 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-xs whitespace-nowrap">
       <span>לא שולם (חוב ₪{remainingDebt.toLocaleString('he-IL')})</span>
     </span>
   );
 
-  if (booking.paymentStatus === 'fully_paid' || (remainingDebt === 0 && roundedTotal > 0)) {
-    paymentBorder = 'border-green-300 bg-green-50/40';
-    paymentTag = (
-      <span className="text-[11px] bg-green-600 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-xs whitespace-nowrap">
-        <span>שולם מלא (₪{roundedTotal.toLocaleString('he-IL')})</span>
-      </span>
-    );
-  } else if (booking.paymentStatus === 'deposit_paid' || roundedDeposit > 0) {
-    paymentBorder = 'border-dashed border-green-400 bg-green-50/20';
-    paymentTag = (
-      <span className="text-[11px] border-2 border-dashed border-green-600 bg-green-50 text-green-900 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 whitespace-nowrap">
-        <span>מקדמה ₪{roundedDeposit.toLocaleString('he-IL')} (יתרה ₪{remainingDebt.toLocaleString('he-IL')})</span>
-      </span>
-    );
+  if (!isEnded) {
+    if (booking.paymentStatus === 'fully_paid' || (remainingDebt === 0 && roundedTotal > 0)) {
+      paymentBorder = 'border-green-300 bg-green-50/40';
+      paymentTag = (
+        <span className="text-[11px] bg-green-600 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-xs whitespace-nowrap">
+          <span>שולם מלא (₪{roundedTotal.toLocaleString('he-IL')})</span>
+        </span>
+      );
+    } else if (booking.paymentStatus === 'deposit_paid' || roundedDeposit > 0) {
+      paymentBorder = 'border-dashed border-green-400 bg-green-50/20';
+      paymentTag = (
+        <span className="text-[11px] border-2 border-dashed border-green-600 bg-green-50 text-green-900 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 whitespace-nowrap">
+          <span>מקדמה ₪{roundedDeposit.toLocaleString('he-IL')} (יתרה ₪{remainingDebt.toLocaleString('he-IL')})</span>
+        </span>
+      );
+    }
   }
 
   const handleSendWhatsApp = (e: React.MouseEvent) => {
@@ -273,13 +292,18 @@ const DogBookingCard: React.FC<DogBookingCardProps> = ({
         {/* Dog & Owner Info */}
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="font-extrabold text-base text-slate-900">{booking.dogName}</span>
+            <span className={`font-extrabold text-base ${isEnded ? 'text-slate-700' : 'text-slate-900'}`}>{booking.dogName}</span>
             {booking.dogBreed && (
               <span className="text-xs text-slate-500 font-normal">({booking.dogBreed})</span>
             )}
             <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium border border-slate-200">
               {getServiceTypeHebrew(booking.serviceType)}
             </span>
+            {isEnded && (
+              <span className="text-[10px] bg-slate-200/80 text-slate-600 px-2 py-0.5 rounded-full font-bold">
+                הסתיים
+              </span>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
@@ -317,11 +341,27 @@ const DogBookingCard: React.FC<DogBookingCardProps> = ({
             className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200"
           >
             <Edit2 className="w-3.5 h-3.5 text-amber-600" />
-            <span>ערוך פרטים</span>
+            <span>ערוך</span>
           </button>
 
+          {/* Direct Delete Button */}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              title="מחק הזמנה זו מהיומן ומהענן"
+              className="bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 text-xs px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200 hover:border-rose-200"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+              <span>מחק</span>
+            </button>
+          )}
+
           {/* Quick Pay Action */}
-          {remainingDebt > 0 && (
+          {remainingDebt > 0 && !isEnded && (
             <>
               <button
                 type="button"
