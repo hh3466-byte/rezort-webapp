@@ -68,8 +68,8 @@ export interface ResortSettings {
   managerPhone: string;
   maxCapacity: number;
   defaultDailyRateBoarding: number;
-  defaultDailyRateTraining: number;
-  defaultDailyRateCombined: number;
+  defaultDailyRateTraining: number; // Process price (6,500 NIS for 70 days)
+  defaultDailyRateCombined?: number;
   defaultDailyRateDaycare: number;
   bitNumber: string;
   payboxLink: string;

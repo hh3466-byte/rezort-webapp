@@ -1,5 +1,5 @@
 import { AgentActionProposal, Booking, ResortSettings } from '../types';
-import { addDays, checkRangeOccupancy, getTodayStr } from '../utils/dateUtils';
+import { addDays, calculateDaysCount, checkRangeOccupancy, getTodayStr } from '../utils/dateUtils';
 
 export interface ParseAgentOptions {
   text: string;
@@ -97,20 +97,18 @@ export function getClarificationQuestions(
     rawLower.includes('יום כיף');
 
   const currentServiceLabel = booking.serviceType === 'training'
-    ? 'אילוף'
-    : booking.serviceType === 'combined'
-    ? 'משולב (פנסיון+אילוף)'
+    ? 'תהליך אילוף (70 יום)'
     : booking.serviceType === 'daycare'
-    ? 'יום כיף'
+    ? 'יום כיף / שהות יומית'
     : 'פנסיון (לינה)';
 
   questions.push({
     id: 'service',
-    title: 'פנסיון או אילוף?',
-    question: 'האם מדובר על פנסיון (לינה) או אילוף כלבים?',
+    title: 'פנסיון או תהליך אילוף?',
+    question: 'האם מדובר על פנסיון (לינה), תהליך אילוף (70 יום) או יום כיף?',
     description: serviceMentioned
       ? `נבחר שירות: ${currentServiceLabel}`
-      : 'בחר האם הכלב מגיע לפנסיון (לינה), אילוף, משולב או יום כיף.',
+      : 'בחר האם הכלב מגיע לפנסיון (לינה), תהליך אילוף מלא (70 יום), או יום כיף.',
     iconType: 'service',
     currentValueDisplay: currentServiceLabel,
     isComplete: serviceMentioned,
@@ -282,27 +280,22 @@ export function applyClarificationAnswer(
   if (questionId === 'service') {
     if (clean.includes('אילוף') || clean.includes('אימון') || clean.includes('משמעת')) {
       updated.serviceType = 'training';
-    } else if (clean.includes('משולב')) {
-      updated.serviceType = 'combined';
+      const sDate = updated.startDate || referenceDate;
+      updated.endDate = addDays(sDate, 70);
+      updated.totalPrice = settings.defaultDailyRateTraining || 6500;
     } else if (clean.includes('דייקר') || clean.includes('כיף') || clean.includes('יומי')) {
       updated.serviceType = 'daycare';
+      const sDate = updated.startDate || referenceDate;
+      const eDate = updated.endDate || sDate;
+      const calculatedDays = Math.max(1, calculateDaysCount(sDate, eDate));
+      updated.totalPrice = calculatedDays * (settings.defaultDailyRateDaycare || 90);
     } else {
       updated.serviceType = 'boarding';
+      const sDate = updated.startDate || referenceDate;
+      const eDate = updated.endDate || addDays(sDate, 3);
+      const calculatedDays = Math.max(1, calculateDaysCount(sDate, eDate));
+      updated.totalPrice = calculatedDays * (settings.defaultDailyRateBoarding || 180);
     }
-
-    // Recalculate price with new service default rate if duration exists
-    const sDate = updated.startDate || referenceDate;
-    const eDate = updated.endDate || addDays(sDate, 3);
-    const sObj = new Date(sDate + 'T00:00:00').getTime();
-    const eObj = new Date(eDate + 'T00:00:00').getTime();
-    const calculatedDays = Math.max(1, Math.round((eObj - sObj) / (1000 * 60 * 60 * 24)));
-    
-    let rate = settings.defaultDailyRateBoarding;
-    if (updated.serviceType === 'training') rate = settings.defaultDailyRateTraining;
-    if (updated.serviceType === 'combined') rate = settings.defaultDailyRateCombined;
-    if (updated.serviceType === 'daycare') rate = settings.defaultDailyRateDaycare;
-
-    updated.totalPrice = calculatedDays * rate;
   } else if (questionId === 'pricing_mode') {
     const priceMatches = [...clean.matchAll(/(\d{2,5})/g)];
     if (priceMatches.length > 0) {
@@ -548,10 +541,8 @@ export function parseWithClientHeuristic(
   }
 
   // 2. Service Type
-  let serviceType: 'boarding' | 'training' | 'combined' | 'daycare' = 'boarding';
-  if (clean.includes('משולב') || (clean.includes('פנסיון') && clean.includes('אילוף'))) {
-    serviceType = 'combined';
-  } else if (clean.includes('אילוף')) {
+  let serviceType: 'boarding' | 'training' | 'daycare' = 'boarding';
+  if (clean.includes('אילוף') || clean.includes('אימון') || clean.includes('משמעת')) {
     serviceType = 'training';
   } else if (clean.includes('יום כיף') || clean.includes('יומי') || clean.includes('דייקר')) {
     serviceType = 'daycare';
@@ -561,7 +552,11 @@ export function parseWithClientHeuristic(
 
   // 3. Extract Dates
   let startDate = referenceDate;
-  let endDate = addDays(referenceDate, 3); // default 3 days for general bookings
+  let endDate = serviceType === 'training' 
+    ? addDays(referenceDate, 70) 
+    : serviceType === 'daycare' 
+    ? referenceDate 
+    : addDays(referenceDate, 3); // default 3 days for general boarding
 
   // Check Hebrew relative date keywords and durations
   if (clean.includes('כמה ימים') || clean.includes('מספר ימים')) {
@@ -657,18 +652,20 @@ export function parseWithClientHeuristic(
     }
   }
 
-  // If no price extracted, compute from default daily rates
+  // If no price extracted, compute from default rates
   if (totalPrice === 0) {
-    const startObj = new Date(startDate + 'T00:00:00').getTime();
-    const endObj = new Date(endDate + 'T00:00:00').getTime();
-    const days = Math.max(1, Math.round((endObj - startObj) / (1000 * 60 * 60 * 24)));
-    
-    let rate = settings.defaultDailyRateBoarding;
-    if (serviceType === 'training') rate = settings.defaultDailyRateTraining;
-    if (serviceType === 'combined') rate = settings.defaultDailyRateCombined;
-    if (serviceType === 'daycare') rate = settings.defaultDailyRateDaycare;
+    if (serviceType === 'training') {
+      totalPrice = settings.defaultDailyRateTraining || 6500;
+    } else {
+      const startObj = new Date(startDate + 'T00:00:00').getTime();
+      const endObj = new Date(endDate + 'T00:00:00').getTime();
+      const days = Math.max(1, Math.round((endObj - startObj) / (1000 * 60 * 60 * 24)));
+      
+      let rate = settings.defaultDailyRateBoarding;
+      if (serviceType === 'daycare') rate = settings.defaultDailyRateDaycare;
 
-    totalPrice = days * rate;
+      totalPrice = days * rate;
+    }
   }
 
   let paymentStatus: Booking['paymentStatus'] = 'unpaid';

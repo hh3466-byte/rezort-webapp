@@ -120,15 +120,18 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
       // Auto re-calc price if dates or service changes and user didn't lock custom price
       if (field === 'startDate' || field === 'endDate' || field === 'serviceType') {
         const s = field === 'startDate' ? value : updated.startDate;
-        const e = field === 'endDate' ? value : updated.endDate;
         const srv = field === 'serviceType' ? value : updated.serviceType;
-        if (s && e && s <= e) {
-          const days = calculateDaysCount(s, e);
-          let rate = settings.defaultDailyRateBoarding;
-          if (srv === 'training') rate = settings.defaultDailyRateTraining;
-          if (srv === 'combined') rate = settings.defaultDailyRateCombined;
-          if (srv === 'daycare') rate = settings.defaultDailyRateDaycare;
-          updated.totalPrice = days * rate;
+        if (srv === 'training') {
+          if (s) updated.endDate = addDays(s, 70);
+          updated.totalPrice = settings.defaultDailyRateTraining || 6500;
+        } else {
+          const e = field === 'endDate' ? value : updated.endDate;
+          if (s && e && s <= e) {
+            const days = calculateDaysCount(s, e);
+            let rate = settings.defaultDailyRateBoarding;
+            if (srv === 'daycare') rate = settings.defaultDailyRateDaycare;
+            updated.totalPrice = days * rate;
+          }
         }
       }
       return updated;
@@ -412,10 +415,9 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
                       onChange={(e) => handleFieldChange('serviceType', e.target.value as ServiceType)}
                       className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-900 focus:border-indigo-500 focus:outline-hidden"
                     >
-                      <option value="boarding">פנסיון לילה (₪{settings.defaultDailyRateBoarding}/יום)</option>
-                      <option value="training">אילוף (₪{settings.defaultDailyRateTraining}/יום)</option>
-                      <option value="combined">משולב פנסיון+אילוף (₪{settings.defaultDailyRateCombined}/יום)</option>
-                      <option value="daycare">יום כיף/דייקר (₪{settings.defaultDailyRateDaycare}/יום)</option>
+                      <option value="boarding">🏨 פנסיון לילה (₪{settings.defaultDailyRateBoarding}/יום)</option>
+                      <option value="training">🎓 תהליך אילוף (70 יום - ₪{settings.defaultDailyRateTraining || 6500})</option>
+                      <option value="daycare">✂️ יום כיף / שהות יומית (₪{settings.defaultDailyRateDaycare}/יום)</option>
                     </select>
                   </div>
                 </div>

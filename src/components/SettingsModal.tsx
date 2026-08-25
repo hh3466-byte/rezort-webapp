@@ -220,12 +220,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Tab 2: Service Rates */}
           {activeTab === 'rates' && (
             <div className="space-y-3">
-              <p className="text-xs text-slate-500">
-                תעריפי ברירת מחדל ליום לחישוב אוטומטי בעת יצירת שריון:
+              <p className="text-xs text-slate-500 font-medium">
+                תעריפי ברירת מחדל לחישוב אוטומטי בעת יצירת שריון:
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                   <label className="text-xs text-sky-700 font-bold block mb-1">
                     🏨 פנסיון (מחיר ליום)
                   </label>
@@ -239,41 +239,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="w-full bg-white text-slate-900 font-black text-sm p-2 rounded-lg border border-slate-200"
                     />
                   </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">חישוב לפי מספר ימי שהות</span>
                 </div>
 
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <label className="text-xs text-amber-700 font-bold block mb-1">
-                    🎓 אילוף (מחיר ליום)
+                <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200">
+                  <label className="text-xs text-amber-900 font-bold block mb-1">
+                    🎓 תהליך אילוף (70 יום)
                   </label>
                   <div className="flex items-center gap-1">
-                    <span className="text-sm font-bold text-slate-500">₪</span>
+                    <span className="text-sm font-bold text-amber-600">₪</span>
                     <input
                       type="number"
                       min="0"
                       value={formData.defaultDailyRateTraining}
                       onChange={(e) => setFormData({ ...formData, defaultDailyRateTraining: Number(e.target.value) })}
-                      className="w-full bg-white text-slate-900 font-black text-sm p-2 rounded-lg border border-slate-200"
+                      className="w-full bg-white text-slate-900 font-black text-sm p-2 rounded-lg border border-amber-300 focus:border-amber-500"
                     />
                   </div>
+                  <span className="text-[10px] text-amber-800 font-semibold mt-1 block">מחיר קבוע לתהליך מלא (70 יום)</span>
                 </div>
 
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                  <label className="text-xs text-purple-700 font-bold block mb-1">
-                    🔄 משולב (פנסיון + אילוף)
-                  </label>
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm font-bold text-slate-500">₪</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={formData.defaultDailyRateCombined}
-                      onChange={(e) => setFormData({ ...formData, defaultDailyRateCombined: Number(e.target.value) })}
-                      className="w-full bg-white text-slate-900 font-black text-sm p-2 rounded-lg border border-slate-200"
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                   <label className="text-xs text-green-700 font-bold block mb-1">
                     ✂️ יום כיף / שהות יומית
                   </label>
@@ -287,6 +273,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="w-full bg-white text-slate-900 font-black text-sm p-2 rounded-lg border border-slate-200"
                     />
                   </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">מחיר ליום ללא לינה</span>
                 </div>
               </div>
             </div>

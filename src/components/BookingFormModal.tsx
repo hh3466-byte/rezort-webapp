@@ -51,8 +51,6 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   // Pricing mode: Per Day vs Fixed Period
   const [pricingMode, setPricingMode] = useState<'daily' | 'period'>('daily');
   const [dailyRate, setDailyRate] = useState<number>(() => {
-    if (initialData?.serviceType === 'training') return settings.defaultDailyRateTraining;
-    if (initialData?.serviceType === 'combined') return settings.defaultDailyRateCombined;
     if (initialData?.serviceType === 'daycare') return settings.defaultDailyRateDaycare;
     return settings.defaultDailyRateBoarding;
   });
@@ -73,28 +71,34 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
 
   const recognitionRef = useRef<any>(null);
 
-  // Update default daily rate when serviceType changes
+  // Update default rate & dates when serviceType changes
   const handleServiceTypeChange = (newType: ServiceType) => {
     setServiceType(newType);
-    let rate = settings.defaultDailyRateBoarding;
-    if (newType === 'training') rate = settings.defaultDailyRateTraining;
-    if (newType === 'combined') rate = settings.defaultDailyRateCombined;
-    if (newType === 'daycare') rate = settings.defaultDailyRateDaycare;
-    setDailyRate(rate);
+    if (newType === 'training') {
+      const newEndDate = addDays(startDate, 70);
+      setEndDate(newEndDate);
+      setPricingMode('period');
+      setTotalPrice(settings.defaultDailyRateTraining || 6500);
+    } else {
+      setPricingMode('daily');
+      let rate = settings.defaultDailyRateBoarding;
+      if (newType === 'daycare') rate = settings.defaultDailyRateDaycare;
+      setDailyRate(rate);
 
-    if (pricingMode === 'daily') {
       const days = calculateDaysCount(startDate, endDate);
       setTotalPrice(days * rate);
     }
   };
 
-  // Recompute total price if in 'daily' pricing mode
+  // Recompute total price
   useEffect(() => {
-    if (pricingMode === 'daily') {
+    if (serviceType === 'training') {
+      setTotalPrice(settings.defaultDailyRateTraining || 6500);
+    } else if (pricingMode === 'daily') {
       const days = calculateDaysCount(startDate, endDate);
       setTotalPrice(days * dailyRate);
     }
-  }, [startDate, endDate, dailyRate, pricingMode]);
+  }, [startDate, endDate, dailyRate, pricingMode, serviceType, settings.defaultDailyRateTraining]);
 
   // If initialData had custom price not matching days * rate, default to matching or keep
   useEffect(() => {
@@ -426,7 +430,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
             <label className="text-xs text-slate-700 font-bold block">
               סוג השירות המבוקש *
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               <button
                 type="button"
                 onClick={() => handleServiceTypeChange('boarding')}
@@ -438,10 +442,10 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               >
                 <div className="flex items-center justify-between">
                   <span className="text-base">🏨</span>
-                  <span className="text-[10px] font-normal text-slate-500">₪{settings.defaultDailyRateBoarding}/יום</span>
+                  <span className="text-[10px] font-bold text-slate-500">₪{settings.defaultDailyRateBoarding}/יום</span>
                 </div>
                 <div className="text-xs font-bold mt-1">פנסיון (לינה)</div>
-                <div className="text-[10px] text-slate-500 font-normal">אירוח וטיפול מלא</div>
+                <div className="text-[10px] text-slate-500 font-normal">אירוח וטיפול מלא לפי יום</div>
               </button>
 
               <button
@@ -449,33 +453,16 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                 onClick={() => handleServiceTypeChange('training')}
                 className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
                   serviceType === 'training'
-                    ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-950 font-bold shadow-xs'
+                    ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20 text-amber-950 font-bold shadow-xs'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-base">🎓</span>
-                  <span className="text-[10px] font-normal text-slate-500">₪{settings.defaultDailyRateTraining}/יום</span>
+                  <span className="text-[10px] font-bold text-amber-700">₪{settings.defaultDailyRateTraining || 6500} לתהליך</span>
                 </div>
-                <div className="text-xs font-bold mt-1">אילוף כלבים</div>
-                <div className="text-[10px] text-slate-500 font-normal">משמעת וחינוך גורים</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleServiceTypeChange('combined')}
-                className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
-                  serviceType === 'combined'
-                    ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-500/20 text-purple-950 font-bold shadow-xs'
-                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-base">🌟</span>
-                  <span className="text-[10px] font-normal text-slate-500">₪{settings.defaultDailyRateCombined}/יום</span>
-                </div>
-                <div className="text-xs font-bold mt-1">משולב (פנסיון+אילוף)</div>
-                <div className="text-[10px] text-slate-500 font-normal">חבילה משולבת</div>
+                <div className="text-xs font-bold mt-1">תהליך אילוף (70 יום)</div>
+                <div className="text-[10px] text-slate-500 font-normal">תכנית אילוף מלאה של 70 יום</div>
               </button>
 
               <button
@@ -483,16 +470,16 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                 onClick={() => handleServiceTypeChange('daycare')}
                 className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
                   serviceType === 'daycare'
-                    ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20 text-amber-950 font-bold shadow-xs'
+                    ? 'bg-sky-50 border-sky-500 ring-2 ring-sky-500/20 text-sky-950 font-bold shadow-xs'
                     : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-base">☀️</span>
-                  <span className="text-[10px] font-normal text-slate-500">₪{settings.defaultDailyRateDaycare}/יום</span>
+                  <span className="text-base">✂️</span>
+                  <span className="text-[10px] font-bold text-slate-500">₪{settings.defaultDailyRateDaycare}/יום</span>
                 </div>
-                <div className="text-xs font-bold mt-1">יום כיף (דייקר)</div>
-                <div className="text-[10px] text-slate-500 font-normal">שהות יומית ללא לינה</div>
+                <div className="text-xs font-bold mt-1">יום כיף / שהות יומית</div>
+                <div className="text-[10px] text-slate-500 font-normal">ללא לינת לילה</div>
               </button>
             </div>
           </div>

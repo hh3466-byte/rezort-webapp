@@ -88,8 +88,8 @@ export default function App() {
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
   const todayBookings = getBookingsForDate(activeBookings, todayStr);
 
-  const boardingToday = todayBookings.filter(b => b.serviceType === 'boarding' || b.serviceType === 'combined').length;
-  const trainingToday = todayBookings.filter(b => b.serviceType === 'training' || b.serviceType === 'combined').length;
+  const boardingToday = todayBookings.filter(b => b.serviceType === 'boarding' || b.serviceType === 'daycare').length;
+  const trainingToday = todayBookings.filter(b => b.serviceType === 'training').length;
   const freeSlots = Math.max(0, settings.maxCapacity - boardingToday);
 
   const totalCollected = activeBookings.reduce((acc, b) => acc + b.depositAmount, 0);

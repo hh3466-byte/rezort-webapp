@@ -78,9 +78,8 @@ export const ReportsModal: React.FC<ReportsModalProps> = ({
           <div className="space-y-2">
             {[
               { label: '🏨 פנסיון לילה', items: serviceStats.boarding, color: 'bg-emerald-500' },
-              { label: '🎓 אילוף מקצועי', items: serviceStats.training, color: 'bg-purple-500' },
-              { label: '🔄 שירות משולב', items: serviceStats.combined, color: 'bg-indigo-500' },
-              { label: '✂️ יום כיף ומשפחתון', items: serviceStats.daycare, color: 'bg-amber-500' },
+              { label: '🎓 תהליך אילוף (70 יום)', items: serviceStats.training, color: 'bg-purple-500' },
+              { label: '✂️ יום כיף / שהות יומית', items: serviceStats.daycare, color: 'bg-amber-500' },
             ].map((srv) => {
               const srvRevenue = srv.items.reduce((s, b) => s + b.totalPrice, 0);
               const percentage = totalRevenue > 0 ? Math.round((srvRevenue / totalRevenue) * 100) : 0;

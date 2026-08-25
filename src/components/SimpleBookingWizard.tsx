@@ -121,8 +121,6 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   
   // Daily rate
   const [dailyRate, setDailyRate] = useState<number>(() => {
-    if (initialData?.serviceType === 'training') return settings.defaultDailyRateTraining;
-    if (initialData?.serviceType === 'combined') return settings.defaultDailyRateCombined;
     if (initialData?.serviceType === 'daycare') return settings.defaultDailyRateDaycare;
     return settings.defaultDailyRateBoarding;
   });
@@ -304,14 +302,20 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     }
   }, [ownerPhone, existingBookings]);
 
-  // Update daily rate default when service type changes
+  // Update service type & rate default when service type changes
   const handleServiceTypeSelect = (type: ServiceType) => {
     setServiceType(type);
-    let rate = settings.defaultDailyRateBoarding;
-    if (type === 'training') rate = settings.defaultDailyRateTraining;
-    if (type === 'combined') rate = settings.defaultDailyRateCombined;
-    if (type === 'daycare') rate = settings.defaultDailyRateDaycare;
-    setDailyRate(rate);
+    if (type === 'training') {
+      const newEndDate = addDays(startDate, 70);
+      setEndDate(newEndDate);
+      setPricingMode('period');
+      setTotalPrice((settings.defaultDailyRateTraining || 6500) + extrasTotal);
+    } else {
+      setPricingMode('daily');
+      let rate = settings.defaultDailyRateBoarding;
+      if (type === 'daycare') rate = settings.defaultDailyRateDaycare;
+      setDailyRate(rate);
+    }
   };
 
   // Re-calculate Total Price
@@ -319,11 +323,13 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const extrasTotal = extraServices.filter(s => s.selected).reduce((sum, s) => sum + s.price, 0);
 
   useEffect(() => {
-    if (pricingMode === 'daily') {
+    if (serviceType === 'training') {
+      setTotalPrice((settings.defaultDailyRateTraining || 6500) + extrasTotal);
+    } else if (pricingMode === 'daily') {
       const base = daysCount * dailyRate;
       setTotalPrice(base + extrasTotal);
     }
-  }, [startDate, endDate, dailyRate, pricingMode, extraServices, daysCount, extrasTotal]);
+  }, [startDate, endDate, dailyRate, pricingMode, extraServices, daysCount, extrasTotal, serviceType, settings.defaultDailyRateTraining]);
 
   // If initialData exists and has a total price, initialize accordingly
   useEffect(() => {
@@ -1199,22 +1205,22 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 <label className="text-xs font-bold text-slate-800 block">
                   סוג השירות המבוקש *
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <button
                     type="button"
                     onClick={() => handleServiceTypeSelect('boarding')}
                     className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
                       serviceType === 'boarding'
-                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 font-bold'
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 font-bold shadow-xs'
                         : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-lg">🏨</span>
-                      <span className="text-[10px] text-slate-500">₪{settings.defaultDailyRateBoarding}/יום</span>
+                      <span className="text-[10px] text-slate-500 font-bold">₪{settings.defaultDailyRateBoarding}/יום</span>
                     </div>
                     <div className="text-xs font-bold mt-1">פנסיון (לינה)</div>
-                    <div className="text-[10px] text-slate-500 font-normal">אירוח וטיפול מלא</div>
+                    <div className="text-[10px] text-slate-500 font-normal">אירוח וטיפול מלא לפי יום</div>
                   </button>
 
                   <button
@@ -1222,33 +1228,16 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     onClick={() => handleServiceTypeSelect('training')}
                     className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
                       serviceType === 'training'
-                        ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-950 font-bold'
+                        ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20 text-amber-950 font-bold shadow-xs'
                         : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-lg">🎓</span>
-                      <span className="text-[10px] text-slate-500">₪{settings.defaultDailyRateTraining}/יום</span>
+                      <span className="text-[10px] font-bold text-amber-700">₪{settings.defaultDailyRateTraining || 6500} לתהליך</span>
                     </div>
-                    <div className="text-xs font-bold mt-1">אילוף כלבים</div>
-                    <div className="text-[10px] text-slate-500 font-normal">משמעת וחינוך</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleServiceTypeSelect('combined')}
-                    className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
-                      serviceType === 'combined'
-                        ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-500/20 text-purple-950 font-bold'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-lg">🌟</span>
-                      <span className="text-[10px] text-slate-500">₪{settings.defaultDailyRateCombined}/יום</span>
-                    </div>
-                    <div className="text-xs font-bold mt-1">משולב</div>
-                    <div className="text-[10px] text-slate-500 font-normal">פנסיון + אילוף</div>
+                    <div className="text-xs font-bold mt-1">תהליך אילוף (70 יום)</div>
+                    <div className="text-[10px] text-slate-500 font-normal">תכנית אילוף מלאה של 70 יום</div>
                   </button>
 
                   <button
@@ -1256,16 +1245,16 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     onClick={() => handleServiceTypeSelect('daycare')}
                     className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
                       serviceType === 'daycare'
-                        ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20 text-amber-950 font-bold'
+                        ? 'bg-sky-50 border-sky-500 ring-2 ring-sky-500/20 text-sky-950 font-bold shadow-xs'
                         : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-lg">☀️</span>
-                      <span className="text-[10px] text-slate-500">₪{settings.defaultDailyRateDaycare}/יום</span>
+                      <span className="text-lg">✂️</span>
+                      <span className="text-[10px] text-slate-500 font-bold">₪{settings.defaultDailyRateDaycare}/יום</span>
                     </div>
-                    <div className="text-xs font-bold mt-1">יום כיף</div>
-                    <div className="text-[10px] text-slate-500 font-normal">ללא לינה</div>
+                    <div className="text-xs font-bold mt-1">יום כיף / שהות יומית</div>
+                    <div className="text-[10px] text-slate-500 font-normal">ללא לינת לילה</div>
                   </button>
                 </div>
               </div>
@@ -1491,7 +1480,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     <span>סיכום ההזמנה</span>
                   </h4>
                   <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
-                    {serviceType === 'training' ? 'אילוף' : serviceType === 'combined' ? 'משולב' : serviceType === 'daycare' ? 'יום כיף' : 'פנסיון לינה'}
+                    {serviceType === 'training' ? 'תהליך אילוף (70 יום)' : serviceType === 'daycare' ? 'יום כיף / שהות יומית' : 'פנסיון לינה'}
                   </span>
                 </div>
 
