@@ -126,7 +126,9 @@ export default function App() {
   const todayBookings = getBookingsForDate(activeBookings, todayStr);
 
   const boardingToday = todayBookings.filter(b => b.serviceType === 'boarding' || b.serviceType === 'daycare').length;
-  const trainingToday = todayBookings.filter(b => b.serviceType === 'training' || b.serviceType === 'day_training').length;
+  const fullTrainingToday = todayBookings.filter(b => b.serviceType === 'training').length;
+  const dayTrainingToday = todayBookings.filter(b => b.serviceType === 'day_training').length;
+  const trainingToday = fullTrainingToday + dayTrainingToday;
   const freeSlots = Math.max(0, settings.maxCapacity - boardingToday);
 
   const totalCollected = activeBookings.reduce((acc, b) => acc + b.depositAmount, 0);
@@ -435,14 +437,54 @@ export default function App() {
             </div>
           </div>
 
-          {/* Card 2: באילוף היום */}
+          {/* Card 2: באילוף היום (מחולק ל-2: תהליך אילוף | אילוף ביומיות) */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-            <div className="text-xs font-bold text-slate-500 text-right">באילוף היום</div>
-            <div className="text-3xl sm:text-4xl font-black text-purple-600 my-1 text-right">
-              {trainingToday}
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-500 text-right">באילוף היום</div>
+              <span className="text-[11px] font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                סה״כ {trainingToday}
+              </span>
             </div>
-            <div className="text-[11px] font-medium text-slate-400 text-right">
-              כלבים בתהליך אילוף
+
+            {/* 2-Column Split: Process vs Day Training */}
+            <div className="grid grid-cols-2 gap-2 my-1 pt-0.5 divide-x divide-x-reverse divide-slate-100">
+              
+              {/* Right Side: תהליך אילוף (70 יום) */}
+              <div className="text-right pr-0.5">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl sm:text-3xl font-black text-purple-600">
+                    {fullTrainingToday}
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-400">כלבים</span>
+                </div>
+                <div className="text-[11px] font-bold text-slate-700 truncate mt-0.5">
+                  🎓 תהליך אילוף
+                </div>
+                <div className="text-[10px] text-slate-400 font-medium">
+                  (70 יום)
+                </div>
+              </div>
+
+              {/* Left Side: אילוף ביומיות */}
+              <div className="text-right pr-2">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl sm:text-3xl font-black text-indigo-600">
+                    {dayTrainingToday}
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-400">כלבים</span>
+                </div>
+                <div className="text-[11px] font-bold text-slate-700 truncate mt-0.5">
+                  🦮 אילוף ביומיות
+                </div>
+                <div className="text-[10px] text-slate-400 font-medium">
+                  (ללא לינה)
+                </div>
+              </div>
+
+            </div>
+
+            <div className="text-[11px] font-medium text-slate-400 text-right pt-1 border-t border-slate-100">
+              {fullTrainingToday} בתהליך מלא · {dayTrainingToday} ביומיות
             </div>
           </div>
 
