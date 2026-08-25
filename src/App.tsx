@@ -26,6 +26,7 @@ import { AgentActionModal } from './components/AgentActionModal';
 import { BookingFormModal } from './components/BookingFormModal';
 import { SimpleBookingWizard } from './components/SimpleBookingWizard';
 import { PaymentModal } from './components/PaymentModal';
+import { Settings as SettingsIcon } from 'lucide-react';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
 import { Guide } from './components/Guide';
@@ -324,6 +325,16 @@ export default function App() {
               <span>🔮</span>
               <span>משותף</span>
             </div>
+
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              id="btn-settings-top"
+              className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="הגדרות תפוסה, תעריפים, ביט וגיבוי"
+            >
+              <SettingsIcon className="w-4 h-4 text-emerald-700" />
+              <span>⚙️ הגדרות ותעריפים</span>
+            </button>
           </div>
 
           {/* Right Brand Title & Subtitle in RTL (top right) */}
