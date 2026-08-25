@@ -13,19 +13,7 @@ export function loadStoredBookings(): Booking[] {
   return getAllExistingLocalBookings();
 }
 
-export function resetToDemoData(): { bookings: Booking[]; settings: ResortSettings } {
-  try {
-    localStorage.removeItem('shmulik_dog_resort_is_cleared');
-    localStorage.removeItem('shmulik_dog_resort_deleted_ids');
-    localStorage.setItem('dog_resort_bookings', JSON.stringify(initialBookings));
-    localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify(initialBookings));
-    localStorage.setItem('dog_resort_settings', JSON.stringify(defaultSettings));
-    localStorage.setItem('shmulik_dog_resort_settings_v2', JSON.stringify(defaultSettings));
-  } catch (err) {
-    console.error('Error resetting demo data:', err);
-  }
-  return { bookings: initialBookings, settings: defaultSettings };
-}
+
 
 export function clearAllStoredBookings(): void {
   try {

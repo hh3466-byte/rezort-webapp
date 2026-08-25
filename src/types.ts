@@ -88,8 +88,7 @@ export type AgentIntent =
   | 'cancel_booking' 
   | 'clear_all_data' 
   | 'backup_data' 
-  | 'reset_to_demo'
-  | 'navigate_tab'
+  | 'navigate_tab' 
   | 'query';
 
 export interface AgentActionProposal {

@@ -25,7 +25,6 @@ interface SettingsModalProps {
   onClose: () => void;
   onSaveSettings: (newSettings: ResortSettings) => void;
   onRestoreBookings: (importedBookings: Booking[]) => void;
-  onResetToDemo: () => void;
   onClearAllData?: () => void;
 }
 
@@ -35,7 +34,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   onSaveSettings,
   onRestoreBookings,
-  onResetToDemo,
   onClearAllData,
 }) => {
   const [formData, setFormData] = useState<ResortSettings>(() => {
@@ -564,51 +562,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
                 >
                   נקה את כל היומן עכשיו
-                </button>
-              </div>
-
-              <div className="p-4 bg-red-50 rounded-xl border border-red-200 space-y-2">
-                <h4 className="text-sm font-bold text-red-900 flex items-center gap-2">
-                  <RotateCcw className="w-4 h-4 text-red-600" />
-                  איפוס לנתוני הדגמה ראשוניים
-                </h4>
-                <p className="text-xs text-red-700">
-                  פעולה זו תמחק את השינויים ותחזיר את נתוני הדמו של הריזורט.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setExtremeAlert({
-                      isOpen: true,
-                      title: '🔄 איפוס נתוני המערכת לדמו',
-                      description: 'כל השינויים האחרונים יימחקו והמערכת תחזור לנתוני ההדגמה הראשוניים.',
-                      impacts: [
-                        {
-                          label: 'מצב נתוני המערכת',
-                          oldValue: 'הזמנות והגדרות נוכחיות',
-                          newValue: 'נתוני הדגמה ראשוניים'
-                        }
-                      ],
-                      severity: 'danger',
-                      confirmText: 'המשך לאישור מנהל',
-                      onConfirm: () => {
-                        setExtremeAlert(prev => ({ ...prev, isOpen: false }));
-                        setManagerAuthAction({
-                          isOpen: true,
-                          title: 'אישור מנהל לאיפוס לדמו 🔒',
-                          description: 'אנא הזן קוד מנהל לאישור החזרת המערכת לנתוני הדמו:',
-                          onSuccess: () => {
-                            setManagerAuthAction(prev => ({ ...prev, isOpen: false }));
-                            onResetToDemo();
-                            onClose();
-                          }
-                        });
-                      }
-                    });
-                  }}
-                  className="bg-red-100 hover:bg-red-200 text-red-800 text-xs font-bold px-4 py-2 rounded-xl border border-red-300 transition-colors cursor-pointer"
-                >
-                  אפס לנתוני הדגמה
                 </button>
               </div>
             </div>

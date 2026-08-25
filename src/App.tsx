@@ -11,7 +11,6 @@ import {
   deleteBookingFromDb, 
   saveSettingsToDb, 
   batchRestoreToDb, 
-  resetDbToDemo,
   clearAllBookingsFromDb
 } from './services/dbService';
 import { parseVoiceOrWhatsAppText } from './services/agentService';
@@ -63,7 +62,7 @@ export default function App() {
   // Manager Authentication State (Passcode 3466)
   const [isManagerAuthOpen, setIsManagerAuthOpen] = useState(false);
   const [managerAuthContext, setManagerAuthContext] = useState<{
-    actionType: 'open_settings' | 'clear_all' | 'reset_demo';
+    actionType: 'open_settings' | 'clear_all';
     title?: string;
     description?: string;
     onSuccess?: () => void;
@@ -237,16 +236,6 @@ export default function App() {
         }
       });
       setIsManagerAuthOpen(true);
-    } else if (intent === 'reset_to_demo') {
-      setManagerAuthContext({
-        actionType: 'reset_demo',
-        title: 'אישור מנהל לאיפוס המערכת לדמו 🔒',
-        description: 'הסוכן זיהה בקשה לאיפוס המערכת לדמו. אנא הזן קוד מנהל לאישור:',
-        onSuccess: async () => {
-          await handleResetToDemo();
-        }
-      });
-      setIsManagerAuthOpen(true);
     } else if (intent === 'backup_data') {
       // Trigger backup export
       const dataStr = JSON.stringify({ bookings, settings, exportDate: new Date().toISOString() }, null, 2);
@@ -363,14 +352,6 @@ export default function App() {
       if (newStatus === 'checked_in') showToast('🐾 נקלט בהצלחה בריזורט');
       if (newStatus === 'checked_out') showToast('🏡 שוחרר הביתה בהצלחה');
     }
-  };
-
-  // Reset to Demo Data
-  const handleResetToDemo = async () => {
-    setBookings(initialBookings);
-    setSettings(defaultSettings);
-    await resetDbToDemo();
-    showToast('🔄 הנתונים אופסו בענן לנתוני הדמו');
   };
 
   // Clear all bookings
@@ -786,7 +767,6 @@ export default function App() {
             await batchRestoreToDb(imported);
             showToast('💾 הנתונים שוחזרו וסונכרנו בענן');
           }}
-          onResetToDemo={handleResetToDemo}
           onClearAllData={handleClearAllData}
         />
       )}

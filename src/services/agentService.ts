@@ -440,8 +440,6 @@ export function parseWithClientHeuristic(
     intent = 'clear_all_data';
   } else if (clean.includes('גיבוי') || clean.includes('לגבות') || clean.includes('הורד גיבוי') || clean.includes('שמור גיבוי')) {
     intent = 'backup_data';
-  } else if (clean.includes('נתוני דמו') || clean.includes('איפוס לדמו') || clean.includes('שחזר דמו') || clean.includes('דוגמה')) {
-    intent = 'reset_to_demo';
   } else if (clean.includes('עבור ליומן') || clean.includes('פתח יומן') || clean.includes('לשונית יומן')) {
     intent = 'navigate_tab';
     targetTab = 'calendar';
@@ -527,15 +525,7 @@ export function parseWithClientHeuristic(
     };
   }
 
-  if (intent === 'reset_to_demo') {
-    return {
-      intent: 'reset_to_demo',
-      confidence: 0.99,
-      rawText: text,
-      explanation: 'זוהתה בקשה לאיפוס המערכת לנתוני דמו לדוגמה.',
-      parsedBooking: {}
-    };
-  }
+
 
   if (intent === 'navigate_tab') {
     return {

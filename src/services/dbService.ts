@@ -683,9 +683,6 @@ export const clearAllBookingsFromDb = async (): Promise<void> => {
     localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify([]));
     localStorage.setItem('shmulik_dog_resort_bookings_v1', JSON.stringify([]));
     localStorage.setItem('shmulik_dog_resort_is_cleared', 'true');
-    for (const b of initialBookings) {
-      markBookingAsDeleted(b.id);
-    }
   } catch (e) {}
 
   try {
@@ -696,13 +693,4 @@ export const clearAllBookingsFromDb = async (): Promise<void> => {
   } catch (err: any) {
     console.warn('Supabase clear all warning:', err?.message || err);
   }
-};
-
-// Reset database to demo data
-export const resetDbToDemo = async (): Promise<void> => {
-  try {
-    localStorage.removeItem('shmulik_dog_resort_is_cleared');
-    localStorage.removeItem('shmulik_dog_resort_deleted_ids');
-  } catch (e) {}
-  await batchRestoreToDb(initialBookings, defaultSettings);
 };

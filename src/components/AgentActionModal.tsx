@@ -199,8 +199,6 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
         return <span className="bg-red-600 text-white text-xs px-2.5 py-1 rounded-full font-bold">🧹 מחיקת כל הנתונים</span>;
       case 'backup_data':
         return <span className="bg-purple-100 text-purple-800 border border-purple-300 text-xs px-2.5 py-1 rounded-full font-bold">💾 הורדת גיבוי</span>;
-      case 'reset_to_demo':
-        return <span className="bg-amber-100 text-amber-800 border border-amber-300 text-xs px-2.5 py-1 rounded-full font-bold">🔄 איפוס לדמו</span>;
       case 'navigate_tab':
         return <span className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs px-2.5 py-1 rounded-full font-bold">🧭 ניווט</span>;
       default:
@@ -576,18 +574,16 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
         ) : (
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-center space-y-3">
             <div className="text-3xl">
-              {intent === 'clear_all_data' ? '🧹' : intent === 'backup_data' ? '💾' : intent === 'reset_to_demo' ? '🔄' : '🧭'}
+              {intent === 'clear_all_data' ? '🧹' : intent === 'backup_data' ? '💾' : '🧭'}
             </div>
             <p className="font-bold text-slate-900 text-base">
               {intent === 'clear_all_data' && 'מחיקת כל הנתונים וההזמנות מהענן'}
               {intent === 'backup_data' && 'יצירת קובץ גיבוי מלא של הריזורט'}
-              {intent === 'reset_to_demo' && 'איפוס כל הנתונים לנתוני דמו'}
               {intent === 'navigate_tab' && 'מעבר ישיר למסך המבוקש'}
             </p>
             <p className="text-xs text-slate-500">
               {intent === 'clear_all_data' && 'פעולה זו תמחק את כל ההזמנות הקיימות ותנקה את היומן לחלוטין.'}
               {intent === 'backup_data' && 'קובץ JSON מאובטח יורד מיד למכשירך.'}
-              {intent === 'reset_to_demo' && 'הנתונים ישוחזרו למצב ההתחלתי.'}
             </p>
           </div>
         )}
@@ -607,7 +603,6 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
             <span>
               {intent === 'clear_all_data' && '🧹 אשר מחיקה מלאה'}
               {intent === 'backup_data' && '💾 הורד גיבוי עכשיו'}
-              {intent === 'reset_to_demo' && '🔄 אשר איפוס לדמו'}
               {intent === 'cancel_booking' && '🗑️ אשר ביטול הזמנה'}
               {intent === 'payment_update' && '💳 אשר עדכון תשלום'}
               {intent === 'new_booking' && '➕ אשר והוסף ליומן'}
