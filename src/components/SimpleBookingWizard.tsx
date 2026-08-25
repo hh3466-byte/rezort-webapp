@@ -121,6 +121,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   
   // Daily rate
   const [dailyRate, setDailyRate] = useState<number>(() => {
+    if (initialData?.serviceType === 'day_training') return settings.defaultDailyRateDayTraining || 250;
     if (initialData?.serviceType === 'daycare') return settings.defaultDailyRateDaycare;
     return settings.defaultDailyRateBoarding;
   });
@@ -313,6 +314,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     } else {
       setPricingMode('daily');
       let rate = settings.defaultDailyRateBoarding;
+      if (type === 'day_training') rate = settings.defaultDailyRateDayTraining || 250;
       if (type === 'daycare') rate = settings.defaultDailyRateDaycare;
       setDailyRate(rate);
     }
@@ -1205,7 +1207,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 <label className="text-xs font-bold text-slate-800 block">
                   סוג השירות המבוקש *
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => handleServiceTypeSelect('boarding')}
@@ -1220,7 +1222,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       <span className="text-[10px] text-slate-500 font-bold">₪{settings.defaultDailyRateBoarding}/יום</span>
                     </div>
                     <div className="text-xs font-bold mt-1">פנסיון (לינה)</div>
-                    <div className="text-[10px] text-slate-500 font-normal">אירוח וטיפול מלא לפי יום</div>
+                    <div className="text-[10px] text-slate-500 font-normal">אירוח וטיפול מלא</div>
                   </button>
 
                   <button
@@ -1234,10 +1236,27 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-lg">🎓</span>
-                      <span className="text-[10px] font-bold text-amber-700">₪{settings.defaultDailyRateTraining || 6500} לתהליך</span>
+                      <span className="text-[10px] font-bold text-amber-700">₪{settings.defaultDailyRateTraining || 6500}</span>
                     </div>
                     <div className="text-xs font-bold mt-1">תהליך אילוף (70 יום)</div>
-                    <div className="text-[10px] text-slate-500 font-normal">תכנית אילוף מלאה של 70 יום</div>
+                    <div className="text-[10px] text-slate-500 font-normal">תכנית מלאה ל-70 יום</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleServiceTypeSelect('day_training')}
+                    className={`p-3 rounded-xl border text-right transition-all cursor-pointer ${
+                      serviceType === 'day_training'
+                        ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-500/20 text-purple-950 font-bold shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg">🦮</span>
+                      <span className="text-[10px] text-purple-700 font-bold">₪{settings.defaultDailyRateDayTraining || 250}/יום</span>
+                    </div>
+                    <div className="text-xs font-bold mt-1">אילוף ביומיות</div>
+                    <div className="text-[10px] text-slate-500 font-normal">אילוף יומי ללא לינה</div>
                   </button>
 
                   <button
@@ -1480,7 +1499,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     <span>סיכום ההזמנה</span>
                   </h4>
                   <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
-                    {serviceType === 'training' ? 'תהליך אילוף (70 יום)' : serviceType === 'daycare' ? 'יום כיף / שהות יומית' : 'פנסיון לינה'}
+                    {serviceType === 'training' ? 'תהליך אילוף (70 יום)' : serviceType === 'day_training' ? 'אילוף ביומיות (ללא לינה)' : serviceType === 'daycare' ? 'יום כיף / שהות יומית' : 'פנסיון לינה'}
                   </span>
                 </div>
 

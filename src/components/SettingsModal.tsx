@@ -224,7 +224,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 תעריפי ברירת מחדל לחישוב אוטומטי בעת יצירת שריון:
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
                   <label className="text-xs text-sky-700 font-bold block mb-1">
                     🏨 פנסיון (מחיר ליום)
@@ -239,7 +239,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="w-full bg-white text-slate-900 font-black text-sm p-2 rounded-lg border border-slate-200"
                     />
                   </div>
-                  <span className="text-[10px] text-slate-400 mt-1 block">חישוב לפי מספר ימי שהות</span>
+                  <span className="text-[10px] text-slate-400 mt-1 block">אירוח מלא ולינה לפי מספר ימים</span>
                 </div>
 
                 <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200">
@@ -257,6 +257,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                   </div>
                   <span className="text-[10px] text-amber-800 font-semibold mt-1 block">מחיר קבוע לתהליך מלא (70 יום)</span>
+                </div>
+
+                <div className="bg-purple-50/70 p-3.5 rounded-xl border border-purple-200">
+                  <label className="text-xs text-purple-900 font-bold block mb-1">
+                    🦮 אילוף ביומיות (ללא לינה)
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm font-bold text-purple-600">₪</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.defaultDailyRateDayTraining || 250}
+                      onChange={(e) => setFormData({ ...formData, defaultDailyRateDayTraining: Number(e.target.value) })}
+                      className="w-full bg-white text-slate-900 font-black text-sm p-2 rounded-lg border border-purple-300 focus:border-purple-500"
+                    />
+                  </div>
+                  <span className="text-[10px] text-purple-800 font-semibold mt-1 block">מחיר ליום אילוף (הגעה בבוקר וחזרה)</span>
                 </div>
 
                 <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">

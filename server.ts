@@ -59,7 +59,8 @@ app.post('/api/agent/parse', async (req, res) => {
 
 2. תאריכים ומשך שהות (קריטי ביותר!):
    - שים לב היטב למשך השהות ולסוג השירות!
-   - אילוף (training): תהליך אילוף הוא תמיד תהליך מלא של 70 יום! הגדר תמיד endDate לתאריך startDate + 70 ימים!
+   - תהליך אילוף מלא (training): תהליך אילוף מלא הוא תמיד 70 יום! הגדר תמיד endDate לתאריך startDate + 70 ימים!
+   - אילוף ביומיות / ללא לינה (day_training): אילוף יומי שבו הכלב מגיע בבוקר וחוזר הביתה. חשב תאריכים לפי מספר הימים שצוינו.
    - פנסיון (boarding): "כמה ימים" = לפחות 3 ימים (למשל מ-${refDate} עד ${refDate} + 3 ימים). "שבוע" = 7 ימים. "סופש" = מחמישי או שישי עד שבת. "ממחר" = התחלה מחר.
    - יום כיף (daycare): יום בודד (startDate = endDate).
 
@@ -67,12 +68,13 @@ app.post('/api/agent/parse', async (req, res) => {
    - כל המחירים (totalPrice, depositAmount) חייבים להיות מספרים שלמים ומעוגלים.
    - חלץ נכון מה סך כל העסקה ומה המקדמה.
    - אם לא נאמר מחיר:
-     * תהליך אילוף (training) = 6500 ₪ מחיר קבוע לתהליך מלא של 70 יום!
+     * תהליך אילוף מלא (training) = 6500 ₪ מחיר קבוע לתהליך מלא של 70 יום!
+     * אילוף ביומיות ללא לינה (day_training) = 250 ₪ ליום. הכפל במספר הימים ועגל!
      * פנסיון (boarding) = 180 ₪ ליום. הכפל במספר הימים ועגל למספר שלם!
      * יום כיף (daycare) = 90 ₪ ליום.
 
 4. שמות ופרטים:
-   - חלץ את שם הכלב, שם הבעלים, טלפון, וסוג שירות ('boarding' | 'training' | 'daycare').
+   - חלץ את שם הכלב, שם הבעלים, טלפון, וסוג שירות ('boarding' | 'training' | 'day_training' | 'daycare').
    - אם מדובר בכלב קיים (ביטול/תשלום), ציין את ה-id שלו.
 
 הזמנות קיימות:
@@ -108,7 +110,7 @@ ${JSON.stringify(existingBookingsSummary || [])}`;
                     dogBreed: { type: Type.STRING },
                     ownerName: { type: Type.STRING },
                     ownerPhone: { type: Type.STRING },
-                    serviceType: { type: Type.STRING, description: 'boarding | training | daycare' },
+                    serviceType: { type: Type.STRING, description: 'boarding | training | day_training | daycare' },
                     startDate: { type: Type.STRING, description: 'YYYY-MM-DD' },
                     endDate: { type: Type.STRING, description: 'YYYY-MM-DD' },
                     totalPrice: { type: Type.NUMBER },

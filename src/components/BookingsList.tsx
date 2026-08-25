@@ -202,7 +202,8 @@ export const BookingsList: React.FC<BookingsListProps> = ({
           >
             <option value="all">כל השירותים</option>
             <option value="boarding">🏨 פנסיון</option>
-            <option value="training">🎓 תהליך אילוף</option>
+            <option value="training">🎓 תהליך אילוף (70 יום)</option>
+            <option value="day_training">🦮 אילוף ביומיות</option>
             <option value="daycare">✂️ יום כיף</option>
           </select>
 
@@ -295,8 +296,9 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                       {/* Service Tag */}
                       <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200 font-semibold flex items-center gap-1">
                         {b.serviceType === 'training' && <GraduationCap className="w-3.5 h-3.5 text-amber-600" />}
+                        {b.serviceType === 'day_training' && <GraduationCap className="w-3.5 h-3.5 text-purple-600" />}
                         {b.serviceType === 'boarding' && <Building2 className="w-3.5 h-3.5 text-sky-600" />}
-                        {b.serviceType === 'combined' && <Sparkles className="w-3.5 h-3.5 text-purple-600" />}
+                        {b.serviceType === 'daycare' && <Sparkles className="w-3.5 h-3.5 text-emerald-600" />}
                         <span>{getServiceTypeHebrew(b.serviceType)}</span>
                       </span>
 

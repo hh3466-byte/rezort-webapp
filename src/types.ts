@@ -1,4 +1,4 @@
-export type ServiceType = 'boarding' | 'training' | 'combined' | 'daycare';
+export type ServiceType = 'boarding' | 'training' | 'day_training' | 'daycare' | 'combined';
 
 export type PaymentStatus = 'unpaid' | 'deposit_paid' | 'fully_paid';
 
@@ -69,6 +69,7 @@ export interface ResortSettings {
   maxCapacity: number;
   defaultDailyRateBoarding: number;
   defaultDailyRateTraining: number; // Process price (6,500 NIS for 70 days)
+  defaultDailyRateDayTraining: number; // אילוף ביומיות (ללא לינה - מחיר ליום)
   defaultDailyRateCombined?: number;
   defaultDailyRateDaycare: number;
   bitNumber: string;

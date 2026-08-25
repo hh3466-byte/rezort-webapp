@@ -129,6 +129,7 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
           if (s && e && s <= e) {
             const days = calculateDaysCount(s, e);
             let rate = settings.defaultDailyRateBoarding;
+            if (srv === 'day_training') rate = settings.defaultDailyRateDayTraining || 250;
             if (srv === 'daycare') rate = settings.defaultDailyRateDaycare;
             updated.totalPrice = days * rate;
           }
@@ -417,6 +418,7 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
                     >
                       <option value="boarding">🏨 פנסיון לילה (₪{settings.defaultDailyRateBoarding}/יום)</option>
                       <option value="training">🎓 תהליך אילוף (70 יום - ₪{settings.defaultDailyRateTraining || 6500})</option>
+                      <option value="day_training">🦮 אילוף ביומיות (₪{settings.defaultDailyRateDayTraining || 250}/יום)</option>
                       <option value="daycare">✂️ יום כיף / שהות יומית (₪{settings.defaultDailyRateDaycare}/יום)</option>
                     </select>
                   </div>

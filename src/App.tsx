@@ -89,7 +89,7 @@ export default function App() {
   const todayBookings = getBookingsForDate(activeBookings, todayStr);
 
   const boardingToday = todayBookings.filter(b => b.serviceType === 'boarding' || b.serviceType === 'daycare').length;
-  const trainingToday = todayBookings.filter(b => b.serviceType === 'training').length;
+  const trainingToday = todayBookings.filter(b => b.serviceType === 'training' || b.serviceType === 'day_training').length;
   const freeSlots = Math.max(0, settings.maxCapacity - boardingToday);
 
   const totalCollected = activeBookings.reduce((acc, b) => acc + b.depositAmount, 0);

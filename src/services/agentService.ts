@@ -98,6 +98,8 @@ export function getClarificationQuestions(
 
   const currentServiceLabel = booking.serviceType === 'training'
     ? 'תהליך אילוף (70 יום)'
+    : booking.serviceType === 'day_training'
+    ? 'אילוף ביומיות (ללא לינה)'
     : booking.serviceType === 'daycare'
     ? 'יום כיף / שהות יומית'
     : 'פנסיון (לינה)';
@@ -105,18 +107,18 @@ export function getClarificationQuestions(
   questions.push({
     id: 'service',
     title: 'פנסיון או תהליך אילוף?',
-    question: 'האם מדובר על פנסיון (לינה), תהליך אילוף (70 יום) או יום כיף?',
+    question: 'האם מדובר על פנסיון (לינה), תהליך אילוף מלא (70 יום), אילוף ביומיות או יום כיף?',
     description: serviceMentioned
       ? `נבחר שירות: ${currentServiceLabel}`
-      : 'בחר האם הכלב מגיע לפנסיון (לינה), תהליך אילוף מלא (70 יום), או יום כיף.',
+      : 'בחר האם הכלב מגיע לפנסיון (לינה), תהליך אילוף מלא (70 יום), אילוף ביומיות ללא לינה, או יום כיף.',
     iconType: 'service',
     currentValueDisplay: currentServiceLabel,
     isComplete: serviceMentioned,
     quickOptions: [
       { label: '🏨 פנסיון (לינה)', voiceSample: 'זה לפנסיון לינה' },
-      { label: '🎓 אילוף כלבים', voiceSample: 'זה לאילוף כלבים' },
-      { label: '🌟 משולב (פנסיון+אילוף)', voiceSample: 'זה משולב פנסיון ואילוף' },
-      { label: '☀️ יום כיף (דייקר)', voiceSample: 'זה יום כיף ללא לינה' }
+      { label: '🎓 תהליך אילוף (70 יום)', voiceSample: 'זה תהליך אילוף מלא של 70 יום' },
+      { label: '🦮 אילוף ביומיות (ללא לינה)', voiceSample: 'זה אילוף ביומיות ללא לינה' },
+      { label: '✂️ יום כיף (דייקר)', voiceSample: 'זה יום כיף ללא לינה' }
     ]
   });
 
@@ -278,7 +280,13 @@ export function applyClarificationAnswer(
   const clean = answerText.toLowerCase();
 
   if (questionId === 'service') {
-    if (clean.includes('אילוף') || clean.includes('אימון') || clean.includes('משמעת')) {
+    if (clean.includes('יומיות') || clean.includes('ביומיות') || (clean.includes('אילוף') && (clean.includes('יומי') || clean.includes('ללא לינה') || clean.includes('בלי לינה')))) {
+      updated.serviceType = 'day_training';
+      const sDate = updated.startDate || referenceDate;
+      const eDate = updated.endDate || addDays(sDate, 3);
+      const calculatedDays = Math.max(1, calculateDaysCount(sDate, eDate));
+      updated.totalPrice = calculatedDays * (settings.defaultDailyRateDayTraining || 250);
+    } else if (clean.includes('אילוף') || clean.includes('אימון') || clean.includes('משמעת')) {
       updated.serviceType = 'training';
       const sDate = updated.startDate || referenceDate;
       updated.endDate = addDays(sDate, 70);
@@ -541,8 +549,10 @@ export function parseWithClientHeuristic(
   }
 
   // 2. Service Type
-  let serviceType: 'boarding' | 'training' | 'daycare' = 'boarding';
-  if (clean.includes('אילוף') || clean.includes('אימון') || clean.includes('משמעת')) {
+  let serviceType: 'boarding' | 'training' | 'day_training' | 'daycare' = 'boarding';
+  if (clean.includes('יומיות') || clean.includes('ביומיות') || (clean.includes('אילוף') && (clean.includes('יומי') || clean.includes('ללא לינה') || clean.includes('בלי לינה')))) {
+    serviceType = 'day_training';
+  } else if (clean.includes('אילוף') || clean.includes('אימון') || clean.includes('משמעת')) {
     serviceType = 'training';
   } else if (clean.includes('יום כיף') || clean.includes('יומי') || clean.includes('דייקר')) {
     serviceType = 'daycare';
@@ -556,7 +566,7 @@ export function parseWithClientHeuristic(
     ? addDays(referenceDate, 70) 
     : serviceType === 'daycare' 
     ? referenceDate 
-    : addDays(referenceDate, 3); // default 3 days for general boarding
+    : addDays(referenceDate, 3); // default 3 days for boarding/day_training
 
   // Check Hebrew relative date keywords and durations
   if (clean.includes('כמה ימים') || clean.includes('מספר ימים')) {
@@ -662,6 +672,7 @@ export function parseWithClientHeuristic(
       const days = Math.max(1, Math.round((endObj - startObj) / (1000 * 60 * 60 * 24)));
       
       let rate = settings.defaultDailyRateBoarding;
+      if (serviceType === 'day_training') rate = settings.defaultDailyRateDayTraining || 250;
       if (serviceType === 'daycare') rate = settings.defaultDailyRateDaycare;
 
       totalPrice = days * rate;
