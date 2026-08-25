@@ -165,11 +165,11 @@ export const VoiceAgentBar: React.FC<VoiceAgentBarProps> = ({
         </button>
         <button
           type="button"
-          onClick={() => handleExecute('שחזר נתוני דמו לדוגמה')}
+          onClick={() => handleExecute('רשום תהליך אילוף 70 יום לכלב')}
           disabled={isProcessing}
           className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-lg shrink-0 font-medium cursor-pointer transition-colors"
         >
-          🔄 איפוס לדמו
+          🎓 תהליך אילוף (70 יום)
         </button>
         <button
           type="button"
