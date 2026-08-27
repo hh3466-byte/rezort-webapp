@@ -428,6 +428,20 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                 className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
               />
             </div>
+
+            <div className="sm:col-span-2">
+              <label className="text-xs text-slate-700 font-bold block mb-1">
+                כתובת אימייל (אופציונלי / לקבלות)
+              </label>
+              <input
+                type="email"
+                value={ownerEmail}
+                onChange={(e) => setOwnerEmail(e.target.value)}
+                placeholder="yourname@gmail.com"
+                className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none text-left"
+                dir="ltr"
+              />
+            </div>
           </div>
 
           {/* Section 3: Service Type Selection (Boarding vs Training vs Combined vs Daycare) */}

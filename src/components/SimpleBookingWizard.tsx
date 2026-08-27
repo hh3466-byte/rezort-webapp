@@ -4,6 +4,7 @@ import {
   Dog, 
   Phone, 
   User, 
+  Mail,
   Calendar as CalendarIcon, 
   Check, 
   ChevronRight, 
@@ -757,20 +758,37 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   </div>
                 )}
 
-                {/* Owner Name field if new customer */}
+                {/* Owner Name & Email fields if new customer */}
                 {!matchedExistingCustomer && (
-                  <div className="space-y-1.5 pt-2">
-                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-slate-500" />
-                      <span>שם בעל הכלב *</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={ownerName}
-                      onChange={(e) => setOwnerName(e.target.value)}
-                      placeholder="שם מלא (לדוגמה: שחר כהן)"
-                      className="w-full bg-white text-sm text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none"
-                    />
+                  <div className="space-y-3 pt-2">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-slate-500" />
+                        <span>שם בעל הכלב *</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={ownerName}
+                        onChange={(e) => setOwnerName(e.target.value)}
+                        placeholder="שם מלא (לדוגמה: שחר כהן)"
+                        className="w-full bg-white text-sm text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-slate-500" />
+                        <span>כתובת אימייל (אופציונלי / לקבלות)</span>
+                      </label>
+                      <input
+                        type="email"
+                        value={ownerEmail}
+                        onChange={(e) => setOwnerEmail(e.target.value)}
+                        placeholder="yourname@gmail.com"
+                        className="w-full bg-white text-sm text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-left"
+                        dir="ltr"
+                      />
+                    </div>
                   </div>
                 )}
               </div>

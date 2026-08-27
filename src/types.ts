@@ -62,6 +62,20 @@ export interface Customer {
   notes?: string;
 }
 
+export interface GrowIncomingPayment {
+  id: string;
+  reference_id: string;
+  customer_name: string;
+  customer_phone: string;
+  customer_email?: string;
+  amount: number;
+  payment_method: string;
+  raw_email_snippet?: string;
+  status: 'pending' | 'completed' | 'dismissed';
+  created_at: string;
+  updated_at?: string;
+}
+
 export interface ResortSettings {
   resortName: string;
   managerName: string;

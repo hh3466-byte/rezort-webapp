@@ -1,11 +1,12 @@
 import { supabase } from '../utils/supabase';
-import { Booking, Customer, ResortSettings } from '../types';
+import { Booking, Customer, ResortSettings, GrowIncomingPayment } from '../types';
 import { initialBookings, defaultSettings } from '../data/initialData';
 import { extractCustomers } from '../utils/storage';
 
 const BOOKINGS_TABLE = 'bookings';
 const SETTINGS_TABLE = 'settings';
 const CUSTOMERS_TABLE = 'customers';
+const GROW_PAYMENTS_TABLE = 'grow_incoming_payments';
 const SETTINGS_DOC_ID = 'resort_config';
 const DELETED_BOOKINGS_KEY = 'shmulik_dog_resort_deleted_ids';
 
@@ -706,3 +707,81 @@ export const clearAllBookingsFromDb = async (): Promise<void> => {
     console.warn('Supabase clear all warning:', err?.message || err);
   }
 };
+
+// =========================================================================
+// Real-time Grow Incoming Payments & Drafts Handlers
+// =========================================================================
+
+export const subscribeToGrowPayments = (
+  callback: (payments: GrowIncomingPayment[]) => void
+): Unsubscribe => {
+  const fetchPending = async () => {
+    try {
+      const { data, error } = await supabase
+        .from(GROW_PAYMENTS_TABLE)
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.warn('Error fetching Grow payments:', error.message);
+        return;
+      }
+
+      if (data) {
+        const mapped: GrowIncomingPayment[] = data.map((row: any) => ({
+          id: row.id,
+          reference_id: row.reference_id,
+          customer_name: row.customer_name,
+          customer_phone: row.customer_phone,
+          customer_email: row.customer_email || '',
+          amount: Number(row.amount) || 0,
+          payment_method: row.payment_method || 'Bit',
+          raw_email_snippet: row.raw_email_snippet || '',
+          status: row.status,
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        }));
+        callback(mapped);
+      }
+    } catch (e) {
+      console.warn('Grow payments fetch exception:', e);
+    }
+  };
+
+  fetchPending();
+
+  const channel = supabase
+    .channel('public:grow_incoming_payments')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: GROW_PAYMENTS_TABLE },
+      () => {
+        fetchPending();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
+export const updateGrowPaymentStatus = async (
+  id: string,
+  status: 'completed' | 'dismissed'
+): Promise<void> => {
+  try {
+    const { error } = await supabase
+      .from(GROW_PAYMENTS_TABLE)
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) {
+      console.warn('Error updating Grow payment status:', error.message);
+    }
+  } catch (e) {
+    console.warn('Grow payment update exception:', e);
+  }
+};
+

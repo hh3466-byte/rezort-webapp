@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 
-import { Booking, ResortSettings, AgentActionProposal, PaymentMethod } from './types';
+import { Booking, ResortSettings, AgentActionProposal, PaymentMethod, GrowIncomingPayment } from './types';
 import { initialBookings, defaultSettings } from './data/initialData';
 import { loadStoredBookings, loadStoredSettings } from './utils/storage';
 import { 
   subscribeToBookings, 
   subscribeToSettings, 
+  subscribeToGrowPayments,
+  updateGrowPaymentStatus,
   saveBookingToDb, 
   deleteBookingFromDb, 
   saveSettingsToDb, 
@@ -25,6 +27,7 @@ import { DayDetailsModal } from './components/DayDetailsModal';
 import { AgentActionModal } from './components/AgentActionModal';
 import { BookingFormModal } from './components/BookingFormModal';
 import { SimpleBookingWizard } from './components/SimpleBookingWizard';
+import { GrowPaymentsModal } from './components/GrowPaymentsModal';
 import { PaymentModal } from './components/PaymentModal';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
@@ -58,6 +61,10 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isReportsOpen, setIsReportsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+
+  // Incoming Grow Payments from Gmail sync
+  const [pendingGrowPayments, setPendingGrowPayments] = useState<GrowIncomingPayment[]>([]);
+  const [activeGrowPayment, setActiveGrowPayment] = useState<GrowIncomingPayment | null>(null);
 
   // Manager Authentication State (Passcode 3466)
   const [isManagerAuthOpen, setIsManagerAuthOpen] = useState(false);
@@ -122,9 +129,14 @@ export default function App() {
       setSettings(updatedSettings);
     });
 
+    const unsubGrowPayments = subscribeToGrowPayments((payments) => {
+      setPendingGrowPayments(payments);
+    });
+
     return () => {
       unsubBookings();
       unsubSettings();
+      unsubGrowPayments();
     };
   }, []);
 
@@ -335,6 +347,38 @@ export default function App() {
       showToast('🟢 ההזמנה סומנה כשולמה במלואו וסונכרנה');
       await saveBookingToDb(updatedBooking);
     }
+  };
+
+  // Grow Payments Acceptance Handler
+  const handleAcceptGrowPayment = (payment: GrowIncomingPayment) => {
+    setActiveGrowPayment(payment);
+    const methodStr = (payment.payment_method || '').toLowerCase();
+    const payMethod: PaymentMethod = methodStr.includes('bit') 
+      ? 'bit' 
+      : methodStr.includes('paybox') 
+      ? 'paybox' 
+      : 'credit';
+
+    setBookingWizardOpen({
+      isOpen: true,
+      initialData: {
+        ownerName: payment.customer_name,
+        ownerPhone: payment.customer_phone,
+        ownerEmail: payment.customer_email || '',
+        depositAmount: payment.amount,
+        totalPrice: payment.amount,
+        paymentStatus: 'deposit_paid',
+        paymentMethod: payMethod,
+        notes: `עסקת Grow (אסמכתא: ${payment.reference_id})`,
+      }
+    });
+  };
+
+  // Grow Payment Dismissal
+  const handleDismissGrowPayment = async (payment: GrowIncomingPayment) => {
+    await updateGrowPaymentStatus(payment.id, 'dismissed');
+    setPendingGrowPayments(prev => prev.filter(p => p.id !== payment.id));
+    showToast('תשלום הוסר מההמתנה');
   };
 
   // Record partial / custom payment
@@ -827,6 +871,15 @@ export default function App() {
         />
       )}
 
+      {/* Grow Incoming Payments Popup / Notification for Shmulik */}
+      {!bookingWizardOpen.isOpen && pendingGrowPayments.length > 0 && (
+        <GrowPaymentsModal
+          pendingPayments={pendingGrowPayments}
+          onAccept={handleAcceptGrowPayment}
+          onDismiss={handleDismissGrowPayment}
+        />
+      )}
+
       {/* 4-Step Intuitive Booking Wizard matching the video */}
       {bookingWizardOpen.isOpen && (
         <SimpleBookingWizard
@@ -834,7 +887,10 @@ export default function App() {
           initialData={bookingWizardOpen.initialData}
           existingBookings={bookings}
           settings={settings}
-          onClose={() => setBookingWizardOpen({ isOpen: false, initialData: null })}
+          onClose={() => {
+            setBookingWizardOpen({ isOpen: false, initialData: null });
+            setActiveGrowPayment(null);
+          }}
           onSave={async (newBooking) => {
             setBookings(prev => {
               const exists = prev.some(b => b.id === newBooking.id);
@@ -843,6 +899,14 @@ export default function App() {
               }
               return [...prev, newBooking];
             });
+
+            // If this booking came from a Grow payment, mark the payment completed
+            if (activeGrowPayment) {
+              await updateGrowPaymentStatus(activeGrowPayment.id, 'completed');
+              setPendingGrowPayments(prev => prev.filter(p => p.id !== activeGrowPayment.id));
+              setActiveGrowPayment(null);
+            }
+
             showToast(`💾 ההזמנה של ${newBooking.dogName} נשמרה וסונכרנה בענן`);
             await saveBookingToDb(newBooking);
           }}
