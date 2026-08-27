@@ -139,6 +139,12 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const [totalPrice, setTotalPrice] = useState<number>(initialData?.totalPrice || 0);
   const [depositAmount, setDepositAmount] = useState<number>(initialData?.depositAmount || 0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialData?.paymentMethod || 'bit');
+  const [paymentType, setPaymentType] = useState<'full' | 'deposit' | 'unpaid'>(() => {
+    if (initialData?.paymentStatus === 'fully_paid') return 'full';
+    if (initialData?.depositAmount && initialData?.totalPrice && initialData.depositAmount >= initialData.totalPrice) return 'full';
+    if (initialData?.depositAmount && initialData.depositAmount > 0) return 'deposit';
+    return 'deposit';
+  });
   const [agreedToTerms, setAgreedToTerms] = useState(true);
   const [signatureDataUrl, setSignatureDataUrl] = useState<string>(initialData?.signatureDataUrl || '');
   const [savedBookingResult, setSavedBookingResult] = useState<Booking | null>(null);
@@ -1099,36 +1105,176 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 </div>
               </div>
 
-              {/* Pricing & Deposit Summary */}
-              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-4">
-                  <div>
-                    <span className="text-[10px] text-slate-500 block">סה״כ לתשלום:</span>
-                    <span className="text-lg font-black text-slate-900">₪{totalPrice.toLocaleString()}</span>
+              {/* ======================================================== */}
+              {/* PRICING & PAYMENT MODE: DAILY RATE CALCULATION & DEPOSIT  */}
+              {/* ======================================================== */}
+              <div className="bg-slate-50 border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-4">
+                
+                {/* 1. Daily Rate & Total Price Calculation */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                      <DollarSign className="w-4 h-4 text-emerald-600" />
+                      <span>חישוב מחיר ותעריף ליום</span>
+                    </span>
+                    <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                      🧮 {daysCount} {daysCount === 1 ? 'יום' : 'ימים'} × ₪{dailyRate} = ₪{(daysCount * dailyRate).toLocaleString()}
+                    </span>
                   </div>
-                  <div className="h-8 w-px bg-slate-200" />
-                  <div>
-                    <span className="text-[10px] text-slate-500 block">סכום ששולם / מקדמה:</span>
-                    <input
-                      type="number"
-                      value={depositAmount || ''}
-                      onChange={(e) => setDepositAmount(Number(e.target.value) || 0)}
-                      placeholder="0"
-                      className="w-24 bg-white text-sm font-black text-emerald-700 px-2 py-1 rounded-lg border border-slate-300 focus:border-emerald-500 focus:outline-none"
-                    />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {/* Daily Rate Input */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-600 block">
+                        מחיר ליום (₪)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={dailyRate || ''}
+                          onChange={(e) => {
+                            const newRate = Number(e.target.value) || 0;
+                            setDailyRate(newRate);
+                            setPricingMode('daily');
+                            setTotalPrice(daysCount * newRate + extrasTotal);
+                            if (paymentType === 'full') {
+                              setDepositAmount(daysCount * newRate + extrasTotal);
+                            }
+                          }}
+                          placeholder="180"
+                          className="w-full bg-white text-sm font-black text-slate-900 px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none"
+                        />
+                        <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">₪ / יום</span>
+                      </div>
+                    </div>
+
+                    {/* Total Price Input */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-600 block">
+                        סה״כ לתשלום (₪)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={totalPrice || ''}
+                          onChange={(e) => {
+                            const newTotal = Number(e.target.value) || 0;
+                            setTotalPrice(newTotal);
+                            if (daysCount > 0) {
+                              setDailyRate(Math.max(0, Math.round((newTotal - extrasTotal) / daysCount)));
+                            }
+                            if (paymentType === 'full') {
+                              setDepositAmount(newTotal);
+                            }
+                          }}
+                          placeholder="0"
+                          className="w-full bg-white text-base font-black text-slate-900 px-3 py-2 rounded-xl border-2 border-indigo-200 focus:border-indigo-600 focus:outline-none"
+                        />
+                        <span className="absolute left-3 top-2.5 text-xs text-indigo-600 font-extrabold">₪ סה״כ</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="text-left">
-                  <span className={`text-xs font-extrabold px-3 py-1 rounded-full ${
-                    depositAmount >= totalPrice && totalPrice > 0
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : depositAmount > 0
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-slate-200 text-slate-700'
-                  }`}>
-                    {depositAmount >= totalPrice && totalPrice > 0 ? '✓ שולם במלואו' : depositAmount > 0 ? '✓ שולמה מקדמה' : 'טרם שולם'}
-                  </span>
+                {/* 2. Payment Type Selection: Full Payment vs Deposit vs Unpaid */}
+                <div className="space-y-2 pt-2 border-t border-slate-200/80">
+                  <label className="text-xs font-black text-slate-900 block">
+                    מצב תשלום: מקדמה מול תשלום מלא *
+                  </label>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {/* Full Payment Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentType('full');
+                        setDepositAmount(totalPrice);
+                      }}
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                        paymentType === 'full'
+                          ? 'bg-emerald-600 text-white font-black shadow-sm ring-2 ring-emerald-400/40'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="text-xs font-extrabold">✓ תשלום מלא</div>
+                      <div className={`text-[10px] ${paymentType === 'full' ? 'text-emerald-100' : 'text-slate-400'}`}>
+                        ₪{totalPrice.toLocaleString()}
+                      </div>
+                    </button>
+
+                    {/* Deposit Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentType('deposit');
+                        if (depositAmount === 0 || depositAmount === totalPrice) {
+                          setDepositAmount(Math.round(totalPrice * 0.3) || 200);
+                        }
+                      }}
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                        paymentType === 'deposit'
+                          ? 'bg-amber-500 text-white font-black shadow-sm ring-2 ring-amber-400/40'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="text-xs font-extrabold">💳 מקדמה בלבד</div>
+                      <div className={`text-[10px] ${paymentType === 'deposit' ? 'text-amber-100' : 'text-slate-400'}`}>
+                        שולם חלקית
+                      </div>
+                    </button>
+
+                    {/* Unpaid Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPaymentType('unpaid');
+                        setDepositAmount(0);
+                      }}
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                        paymentType === 'unpaid'
+                          ? 'bg-slate-700 text-white font-black shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="text-xs font-extrabold">⏳ טרם שולם</div>
+                      <div className={`text-[10px] ${paymentType === 'unpaid' ? 'text-slate-200' : 'text-slate-400'}`}>
+                        לתשלום בהגעה
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Deposit Amount Input (If deposit mode) */}
+                  {paymentType === 'deposit' && (
+                    <div className="bg-amber-50/80 border border-amber-200 p-3 rounded-xl flex items-center justify-between gap-3 animate-in fade-in">
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-bold text-amber-950 block">סכום המקדמה ששולם בפועל:</span>
+                        <span className="text-[11px] text-amber-800 font-semibold">
+                          יתרה לגבייה בצ'ק-אין: <strong>₪{Math.max(0, totalPrice - depositAmount).toLocaleString()}</strong>
+                        </span>
+                      </div>
+                      <div className="relative w-32">
+                        <input
+                          type="number"
+                          value={depositAmount || ''}
+                          onChange={(e) => setDepositAmount(Number(e.target.value) || 0)}
+                          placeholder="סכום"
+                          className="w-full bg-white text-sm font-black text-amber-900 px-3 py-1.5 rounded-lg border border-amber-300 focus:border-amber-500 focus:outline-none"
+                        />
+                        <span className="absolute left-2.5 top-1.5 text-xs text-amber-700 font-bold">₪</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary row */}
+                  <div className="flex items-center justify-between text-xs pt-1 px-1 text-slate-600">
+                    <span className="flex items-center gap-1 font-semibold">
+                      <span>אמצעי תשלום:</span>
+                      <strong className="text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-200">{paymentMethod.toUpperCase()}</strong>
+                    </span>
+                    <span className={`font-bold ${paymentType === 'full' ? 'text-emerald-700' : paymentType === 'deposit' ? 'text-amber-700' : 'text-slate-500'}`}>
+                      {paymentType === 'full' ? '✓ שולם במלואו (יתרה: ₪0)' : paymentType === 'deposit' ? `יתרה: ₪${Math.max(0, totalPrice - depositAmount)}` : 'ייגבה במלואו בצ\'ק-אין'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
