@@ -472,6 +472,36 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     });
   };
 
+  // Auto-sync calendar month when startDate changes
+  useEffect(() => {
+    if (startDate) {
+      const parts = startDate.split('-');
+      if (parts.length === 3) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1;
+        if (!isNaN(y) && !isNaN(m)) {
+          setCalYear(y);
+          setCalMonth(m);
+        }
+      }
+    }
+  }, [startDate]);
+
+  // Click on calendar day to set dates
+  const handleCalendarDayClick = (dateStr: string) => {
+    if (dateStr < todayStr) return; // Ignore past dates
+    if (!startDate || dateStr < startDate) {
+      setStartDate(dateStr);
+      if (endDate <= dateStr) {
+        setEndDate(addDays(dateStr, serviceType === 'training' ? 70 : 3));
+      }
+    } else if (dateStr > startDate) {
+      setEndDate(dateStr);
+    } else {
+      setStartDate(dateStr);
+    }
+  };
+
   // Month navigation for live occupancy mini-calendar
   const monthNames = [
     'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
@@ -688,208 +718,422 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
           )}
 
           {/* ======================================================== */}
-          {/* STEP 1: Identification & Live Occupancy Calendar         */}
+          {/* STEP 1: Quick Booking with Immediate Dates & Live Calendar */}
           {/* ======================================================== */}
           {currentStep === 1 && (
-            <div className="space-y-6 animate-in fade-in">
-              <div className="bg-slate-50 border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-4">
-                <label className="text-sm font-bold text-slate-800 flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-indigo-600" />
-                  <span>מספר טלפון לזיהוי מהיר *</span>
-                </label>
+            <div className="space-y-5 animate-in fade-in">
 
-                <div className="relative">
-                  <input
-                    type="tel"
-                    value={ownerPhone}
-                    onChange={(e) => setOwnerPhone(e.target.value)}
-                    placeholder="050-1234567"
-                    className="w-full bg-white text-xl font-bold text-slate-900 px-4 py-3.5 rounded-xl border-2 border-indigo-200 focus:border-indigo-600 focus:outline-none tracking-wider text-left"
-                    dir="ltr"
-                    autoFocus
-                  />
-                  <span className="text-xs text-slate-500 mt-1 block">
-                    הזינו את מספר הנייד שלכם לזיהוי מהיר וקבלת אישור בוואטסאפ
+              {/* Top: Customer & Dog Details Card */}
+              <div className="bg-slate-50 border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                    <User className="w-4 h-4 text-indigo-600" />
+                    <span>פרטי לקוח וכלב</span>
                   </span>
+                  {depositAmount > 0 && (
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">
+                      💳 שולם: ₪{depositAmount.toLocaleString()} ({paymentMethod.toUpperCase()})
+                    </span>
+                  )}
                 </div>
 
-                {/* If Customer Identified with Existing Dogs */}
-                {matchedExistingCustomer && (
-                  <div className="bg-indigo-50/80 border border-indigo-200 p-4 rounded-xl space-y-2.5 animate-in fade-in">
-                    <div className="flex items-center justify-between text-xs text-indigo-900 font-bold">
-                      <span>✨ מצאנו את הכלבים שלך! בחר כלב:</span>
-                      <span className="text-indigo-600 font-normal">שלום, {matchedExistingCustomer.name}</span>
-                    </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Phone */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 block">מספר טלפון *</label>
+                    <input
+                      type="tel"
+                      value={ownerPhone}
+                      onChange={(e) => setOwnerPhone(e.target.value)}
+                      placeholder="050-0000000"
+                      className="w-full bg-white text-sm font-semibold text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none"
+                      dir="ltr"
+                    />
+                  </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {/* Owner Name */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 block">שם בעל הכלב *</label>
+                    <input
+                      type="text"
+                      value={ownerName}
+                      onChange={(e) => setOwnerName(e.target.value)}
+                      placeholder="שם הלקוח"
+                      className="w-full bg-white text-sm font-semibold text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Dog Name */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-indigo-700 flex items-center gap-1 block">
+                      <Dog className="w-3.5 h-3.5" />
+                      <span>שם הכלב *</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={dogName}
+                      onChange={(e) => setDogName(e.target.value)}
+                      placeholder="שם הכלב (לדוגמה: בלו, מקס, רוקי)"
+                      className="w-full bg-indigo-50/50 text-sm font-bold text-indigo-950 px-3.5 py-2.5 rounded-xl border-2 border-indigo-300 focus:border-indigo-600 focus:outline-none placeholder:text-slate-400"
+                      autoFocus={!dogName}
+                    />
+                  </div>
+
+                  {/* Email */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1 block">
+                      <Mail className="w-3.5 h-3.5 text-slate-400" />
+                      <span>אימייל הלקוח</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={ownerEmail}
+                      onChange={(e) => setOwnerEmail(e.target.value)}
+                      placeholder="client@gmail.com"
+                      className="w-full bg-white text-sm text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-left"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                {/* If existing customer recognized with dogs */}
+                {matchedExistingCustomer && matchedExistingCustomer.dogs.length > 0 && !dogName && (
+                  <div className="pt-2 border-t border-slate-200/60">
+                    <span className="text-[11px] font-bold text-indigo-900 block mb-1.5">🐶 כלבים רשומים של הלקוח:</span>
+                    <div className="flex flex-wrap gap-2">
                       {matchedExistingCustomer.dogs.map((dog, idx) => (
                         <button
                           key={idx}
                           type="button"
                           onClick={() => handleSelectExistingDog(dog)}
-                          className="flex items-center justify-between p-3 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-xl text-right transition-all group cursor-pointer shadow-2xs"
+                          className="px-3 py-1.5 bg-indigo-100/80 hover:bg-indigo-200 text-indigo-900 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
                         >
-                          <div className="flex items-center gap-2.5">
-                            <span className="text-2xl">🐕</span>
-                            <div>
-                              <div className="text-sm font-bold text-slate-900 group-hover:text-indigo-700">{dog.name}</div>
-                              <div className="text-xs text-slate-500">{dog.breed || 'כלב רשום במערכת'}</div>
-                            </div>
-                          </div>
-                          <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">
-                            בחר ←
-                          </span>
+                          <span>🐾 {dog.name}</span>
+                          <span className="text-[10px] text-indigo-700">({dog.breed || 'מעורב'})</span>
                         </button>
                       ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
+              {/* Service Type Selector */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-800 block">
+                  סוג השירות המבוקש *
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleServiceTypeSelect('boarding')}
+                    className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                      serviceType === 'boarding'
+                        ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 font-bold shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-base">🏨</span>
+                      <span className="text-[10px] text-slate-500 font-bold">₪{settings.defaultDailyRateBoarding}/יום</span>
+                    </div>
+                    <div className="text-xs font-bold mt-1">פנסיון (לינה)</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleServiceTypeSelect('training')}
+                    className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                      serviceType === 'training'
+                        ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20 text-amber-950 font-bold shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-base">🎓</span>
+                      <span className="text-[10px] font-bold text-amber-700">₪{settings.defaultDailyRateTraining || 6500}</span>
+                    </div>
+                    <div className="text-xs font-bold mt-1">תהליך אילוף (70 יום)</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleServiceTypeSelect('day_training')}
+                    className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                      serviceType === 'day_training'
+                        ? 'bg-purple-50 border-purple-500 ring-2 ring-purple-500/20 text-purple-950 font-bold shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-base">🦮</span>
+                      <span className="text-[10px] text-purple-700 font-bold">₪{settings.defaultDailyRateDayTraining || 250}/יום</span>
+                    </div>
+                    <div className="text-xs font-bold mt-1">אילוף ביומיות</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleServiceTypeSelect('daycare')}
+                    className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                      serviceType === 'daycare'
+                        ? 'bg-sky-50 border-sky-500 ring-2 ring-sky-500/20 text-sky-950 font-bold shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-base">✂️</span>
+                      <span className="text-[10px] text-slate-500 font-bold">₪{settings.defaultDailyRateDaycare}/יום</span>
+                    </div>
+                    <div className="text-xs font-bold mt-1">שהות יומית</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* DATES SELECTION BLOCK & DURATION QUICK BUTTONS */}
+              <div className="bg-indigo-50/60 border border-indigo-200/80 p-4 sm:p-5 rounded-2xl space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-black text-indigo-950 flex items-center gap-1.5">
+                    <CalendarIcon className="w-4 h-4 text-indigo-600" />
+                    <span>קביעת תאריכי השהות *</span>
+                  </label>
+                  <span className="text-xs font-extrabold text-indigo-700 bg-white px-3 py-1 rounded-full border border-indigo-200 shadow-2xs">
+                    סה״כ {daysCount} {daysCount === 1 ? 'יום' : 'ימים'} ({daysCount > 1 ? `${daysCount - 1} לילות` : 'ללא לינה'})
+                  </span>
+                </div>
+
+                {/* Date Inputs Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                      <span>תאריך כניסה 🏨</span>
+                      <span className="text-[11px] text-indigo-600 font-medium">
+                        {startDate ? `${getDayNameHebrew(startDate)}, ${formatDateDisplay(startDate)}` : ''}
+                      </span>
+                    </label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full bg-white text-sm font-bold text-slate-900 px-3.5 py-2.5 rounded-xl border border-indigo-200 focus:border-indigo-600 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                      <span>תאריך יציאה 🚗</span>
+                      <span className="text-[11px] text-indigo-600 font-medium">
+                        {endDate ? `${getDayNameHebrew(endDate)}, ${formatDateDisplay(endDate)}` : ''}
+                      </span>
+                    </label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      min={startDate}
+                      className="w-full bg-white text-sm font-bold text-slate-900 px-3.5 py-2.5 rounded-xl border border-indigo-200 focus:border-indigo-600 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Duration Buttons */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[11px] font-bold text-slate-500 ml-1">משך מהיר:</span>
+                  <button
+                    type="button"
+                    onClick={() => setEndDate(addDays(startDate, 1))}
+                    className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                  >
+                    לילה 1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEndDate(addDays(startDate, 3))}
+                    className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                  >
+                    3 לילות
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEndDate(addDays(startDate, 7))}
+                    className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                  >
+                    שבוע
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEndDate(addDays(startDate, 14))}
+                    className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                  >
+                    שבועיים
+                  </button>
+                  {serviceType === 'training' && (
+                    <button
+                      type="button"
+                      onClick={() => setEndDate(addDays(startDate, 70))}
+                      className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg text-xs font-bold text-amber-900 transition-colors cursor-pointer"
+                    >
+                      תהליך 70 יום ⭐
+                    </button>
+                  )}
+                </div>
+
+                {/* ======================================================== */}
+                {/* LIVE OCCUPANCY CALENDAR - DIRECTLY UNDER DATE SELECTION */}
+                {/* ======================================================== */}
+                <div className="bg-white border border-indigo-200 rounded-2xl p-3.5 sm:p-4 shadow-2xs space-y-2.5 mt-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black text-indigo-950">לוח תפוסה וזמינות לחודש {monthNames[calMonth]} {calYear}</span>
+                      <span className="text-[10px] text-slate-400 font-normal">(לחץ על יום לבחירה מהירה)</span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => {
-                          setDogName('');
-                          setDogBreed('');
-                          setCurrentStep(2);
-                        }}
-                        className="flex items-center justify-center gap-2 p-3 bg-white hover:bg-slate-50 border border-dashed border-slate-300 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+                        onClick={handlePrevCalMonth}
+                        className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
+                        title="חודש קודם"
                       >
-                        <Plus className="w-4 h-4 text-indigo-600" />
-                        <span>+ כלב חדש</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                      <span className="text-xs font-bold text-slate-800 min-w-[75px] text-center">
+                        {monthNames[calMonth]} {calYear}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleNextCalMonth}
+                        className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
+                        title="חודש הבא"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                )}
 
-                {/* Owner Name & Email fields if new customer */}
-                {!matchedExistingCustomer && (
-                  <div className="space-y-3 pt-2">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5 text-slate-500" />
-                        <span>שם בעל הכלב *</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={ownerName}
-                        onChange={(e) => setOwnerName(e.target.value)}
-                        placeholder="שם מלא (לדוגמה: שחר כהן)"
-                        className="w-full bg-white text-sm text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <Mail className="w-3.5 h-3.5 text-slate-500" />
-                        <span>כתובת אימייל (אופציונלי / לקבלות)</span>
-                      </label>
-                      <input
-                        type="email"
-                        value={ownerEmail}
-                        onChange={(e) => setOwnerEmail(e.target.value)}
-                        placeholder="yourname@gmail.com"
-                        className="w-full bg-white text-sm text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none text-left"
-                        dir="ltr"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Live Occupancy Mini-Calendar */}
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CalendarIcon className="w-4 h-4 text-indigo-600" />
-                    <h3 className="text-sm font-bold text-slate-900">זמינות הפנסיון</h3>
+                  {/* Day of week headers */}
+                  <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 pb-1 border-b border-slate-100">
+                    <span>א׳</span>
+                    <span>ב׳</span>
+                    <span>ג׳</span>
+                    <span>ד׳</span>
+                    <span>ה׳</span>
+                    <span>ו׳</span>
+                    <span>ש׳</span>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handlePrevCalMonth}
-                      className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                    <span className="text-xs font-bold text-slate-800">
-                      {monthNames[calMonth]} {calYear}
+                  {/* Days Grid with Range Highlight & Day Clicks */}
+                  <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+                    {Array.from({ length: firstDayIndex }).map((_, i) => (
+                      <div key={`empty-${i}`} className="h-10 rounded-lg bg-slate-50/40" />
+                    ))}
+
+                    {Array.from({ length: daysInCalMonth }).map((_, i) => {
+                      const dayNum = i + 1;
+                      const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                      const dayBookings = getBookingsForDate(existingBookings, dateStr);
+                      const occupied = dayBookings.filter(b => b.stayStatus !== 'cancelled').length;
+                      const maxCap = settings.maxCapacity || 10;
+                      const isFull = occupied >= maxCap;
+                      const isAlmostFull = occupied >= maxCap - 2 && !isFull;
+                      const isPast = dateStr < todayStr;
+
+                      // Range check
+                      const isStart = dateStr === startDate;
+                      const isEnd = dateStr === endDate;
+                      const isInRange = Boolean(startDate && endDate && dateStr > startDate && dateStr < endDate);
+
+                      let rangeStyle = '';
+                      if (isStart) {
+                        rangeStyle = 'ring-2 ring-emerald-600 bg-emerald-600 text-white font-extrabold shadow-sm scale-102 z-10';
+                      } else if (isEnd) {
+                        rangeStyle = 'ring-2 ring-indigo-600 bg-indigo-600 text-white font-extrabold shadow-sm scale-102 z-10';
+                      } else if (isInRange) {
+                        rangeStyle = 'bg-indigo-100/90 border-indigo-300 text-indigo-950 font-bold';
+                      } else if (isPast) {
+                        rangeStyle = 'bg-slate-50 border-slate-100 text-slate-300 opacity-60 cursor-not-allowed';
+                      } else if (isFull) {
+                        rangeStyle = 'bg-red-50 border-red-200 text-red-700 font-bold hover:bg-red-100 cursor-pointer';
+                      } else if (isAlmostFull) {
+                        rangeStyle = 'bg-amber-50 border-amber-200 text-amber-800 font-bold hover:bg-amber-100 cursor-pointer';
+                      } else {
+                        rangeStyle = 'bg-emerald-50/60 border-emerald-200 text-emerald-800 hover:bg-emerald-100 cursor-pointer';
+                      }
+
+                      return (
+                        <button
+                          key={dayNum}
+                          type="button"
+                          onClick={() => handleCalendarDayClick(dateStr)}
+                          disabled={isPast}
+                          className={`h-10 sm:h-11 rounded-lg p-0.5 sm:p-1 flex flex-col items-center justify-between border text-[10px] transition-all ${rangeStyle}`}
+                        >
+                          <span className="font-bold text-xs">{dayNum}</span>
+                          <span className="text-[8px] font-mono leading-none">
+                            {isStart ? 'כניסה' : isEnd ? 'יציאה' : isFull ? 'מלא' : `${occupied}/${maxCap}`}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Calendar Legend */}
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1.5 border-t border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        פנוי
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-500" />
+                        כמעט מלא
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-red-500" />
+                        מלא
+                      </span>
+                    </div>
+                    <span className="text-indigo-600 font-bold text-[10px]">
+                      🎯 ימים נבחרים מסומנים בכחול וירוק
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleNextCalMonth}
-                      className="p-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Day of week headers */}
-                <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-slate-400 pb-1 border-b border-slate-100">
-                  <span>א׳</span>
-                  <span>ב׳</span>
-                  <span>ג׳</span>
-                  <span>ד׳</span>
-                  <span>ה׳</span>
-                  <span>ו׳</span>
-                  <span>ש׳</span>
-                </div>
-
-                {/* Days Grid with Live Occupancy Color Indicators */}
-                <div className="grid grid-cols-7 gap-1.5">
-                  {Array.from({ length: firstDayIndex }).map((_, i) => (
-                    <div key={`empty-${i}`} className="h-11 rounded-lg bg-slate-50/40" />
-                  ))}
-
-                  {Array.from({ length: daysInCalMonth }).map((_, i) => {
-                    const dayNum = i + 1;
-                    const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                    const dayBookings = getBookingsForDate(existingBookings, dateStr);
-                    const occupied = dayBookings.filter(b => b.stayStatus !== 'cancelled').length;
-                    const maxCap = settings.maxCapacity || 10;
-                    const isFull = occupied >= maxCap;
-                    const isAlmostFull = occupied >= maxCap - 2 && !isFull;
-                    const isPast = dateStr < todayStr;
-
-                    return (
-                      <div
-                        key={dayNum}
-                        className={`h-11 rounded-lg p-1 flex flex-col items-center justify-between border text-[10px] transition-all ${
-                          isPast 
-                            ? 'bg-slate-50 border-slate-100 text-slate-300 opacity-60'
-                            : isFull
-                            ? 'bg-red-50 border-red-200 text-red-700 font-bold'
-                            : isAlmostFull
-                            ? 'bg-amber-50 border-amber-200 text-amber-800 font-bold'
-                            : 'bg-emerald-50/70 border-emerald-200 text-emerald-800'
-                        }`}
-                      >
-                        <span className="font-semibold text-xs">{dayNum}</span>
-                        <span className="text-[9px] font-mono">
-                          {isFull ? 'מלא' : `${occupied}/${maxCap}`}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Legend */}
-                <div className="flex items-center justify-center gap-4 text-[11px] text-slate-500 pt-2 border-t border-slate-100">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                    <span>פנוי</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                    <span>כמעט מלא</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                    <span>מלא</span>
                   </div>
                 </div>
               </div>
 
-              {/* Step 1 Action Button */}
-              <div className="flex justify-end pt-2">
+              {/* Pricing & Deposit Summary */}
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-4">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">סה״כ לתשלום:</span>
+                    <span className="text-lg font-black text-slate-900">₪{totalPrice.toLocaleString()}</span>
+                  </div>
+                  <div className="h-8 w-px bg-slate-200" />
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">סכום ששולם / מקדמה:</span>
+                    <input
+                      type="number"
+                      value={depositAmount || ''}
+                      onChange={(e) => setDepositAmount(Number(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-24 bg-white text-sm font-black text-emerald-700 px-2 py-1 rounded-lg border border-slate-300 focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-left">
+                  <span className={`text-xs font-extrabold px-3 py-1 rounded-full ${
+                    depositAmount >= totalPrice && totalPrice > 0
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : depositAmount > 0
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {depositAmount >= totalPrice && totalPrice > 0 ? '✓ שולם במלואו' : depositAmount > 0 ? '✓ שולמה מקדמה' : 'טרם שולם'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons: Instant Save vs Advanced Details */}
+              <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -897,12 +1141,35 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       alert('אנא הזינו מספר טלפון להמשך');
                       return;
                     }
+                    if (!dogName.trim()) {
+                      alert('אנא הזינו את שם הכלב');
+                      return;
+                    }
                     setCurrentStep(2);
                   }}
-                  className="w-full sm:w-auto px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full sm:w-auto px-5 py-3 border border-indigo-200 hover:bg-indigo-50 text-indigo-800 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <span>אישור והמשך</span>
+                  <span>פרטים נוספים (חיסונים, שעות, חתימה)</span>
                   <ChevronLeft className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!ownerPhone) {
+                      alert('אנא הזינו מספר טלפון להמשך');
+                      return;
+                    }
+                    if (!dogName.trim()) {
+                      alert('אנא הזינו את שם הכלב');
+                      return;
+                    }
+                    handleFinalSave();
+                  }}
+                  className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-sm rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer transform active:scale-98"
+                >
+                  <span>💾 שמור הזמנה עכשיו</span>
+                  <Check className="w-5 h-5" />
                 </button>
               </div>
             </div>
