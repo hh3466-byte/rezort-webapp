@@ -598,7 +598,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     4
                   </div>
                   <span className={`text-[11px] mt-1.5 font-semibold ${currentStep === 4 ? 'text-white' : 'text-indigo-200'}`}>
-                    סיכום וחתימה
+                    סיכום ותשלום
                   </span>
                 </div>
               </div>
@@ -1317,8 +1317,9 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     <span className="text-xs text-slate-600">מחיר ליום:</span>
                     <input
                       type="number"
-                      value={dailyRate}
-                      onChange={(e) => setDailyRate(Number(e.target.value) || 0)}
+                      value={dailyRate === 0 ? '' : dailyRate}
+                      onChange={(e) => setDailyRate(e.target.value === '' ? 0 : Number(e.target.value) || 0)}
+                      placeholder="0"
                       className="w-24 bg-white text-slate-900 font-bold text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 focus:outline-none"
                     />
                     <span className="text-xs font-semibold text-emerald-700">
@@ -1330,10 +1331,10 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     <span className="text-xs text-slate-600">מחיר פיקס לכל התקופה:</span>
                     <input
                       type="number"
-                      value={totalPrice}
-                      onChange={(e) => setTotalPrice(Number(e.target.value) || 0)}
+                      value={totalPrice === 0 ? '' : totalPrice}
+                      onChange={(e) => setTotalPrice(e.target.value === '' ? 0 : Number(e.target.value) || 0)}
                       className="w-28 bg-white text-indigo-950 font-extrabold text-xs px-2.5 py-1.5 rounded-lg border border-indigo-300 focus:outline-none"
-                      placeholder="למשל: 900"
+                      placeholder="0"
                     />
                     <span className="text-xs text-slate-500">₪ סה״כ לכל השהות</span>
                   </div>
@@ -1479,7 +1480,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   onClick={() => setCurrentStep(4)}
                   className="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
                 >
-                  <span>המשך לסיכום וחתימה</span>
+                  <span>המשך לסיכום ותשלום</span>
                   <ChevronLeft className="w-4 h-4" />
                 </button>
               </div>
@@ -1487,7 +1488,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
           )}
 
           {/* ======================================================== */}
-          {/* STEP 4: Summary, Terms, Digital Signature & Payment       */}
+          {/* STEP 4: Summary, Pricing & Payment (No Signature Needed)  */}
           {/* ======================================================== */}
           {currentStep === 4 && (
             <div className="space-y-5 animate-in fade-in">
@@ -1546,22 +1547,72 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 </div>
               </div>
 
-              {/* Deposit & Payment Method */}
-              <div className="bg-white border border-slate-200 p-4 rounded-2xl space-y-3 shadow-2xs">
-                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4 text-emerald-600" />
-                  <span>תשלום ומקדמה</span>
-                </label>
+              {/* Deposit, Quick Buttons & Payment Method */}
+              <div className="bg-white border border-slate-200 p-4 rounded-2xl space-y-3.5 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-emerald-600" />
+                    <span>תשלום ומקדמה</span>
+                  </label>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
+                    depositAmount >= totalPrice && totalPrice > 0
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : depositAmount > 0
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-red-100 text-red-700'
+                  }`}>
+                    {depositAmount >= totalPrice && totalPrice > 0 ? '✓ שולם במלואו' : depositAmount > 0 ? `מקדמה ₪${depositAmount}` : 'חוב פתוח'}
+                  </span>
+                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 3 Quick Action Buttons */}
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setDepositAmount(totalPrice)}
+                    className={`p-2 text-center rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                      depositAmount >= totalPrice && totalPrice > 0
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-slate-50 hover:bg-emerald-50 text-slate-700 border-slate-200 hover:border-emerald-300'
+                    }`}
+                  >
+                    <span>🟢 שולם הכל במלואו</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDepositAmount(depositAmount > 0 ? depositAmount : Math.round(totalPrice / 2) || 150)}
+                    className={`p-2 text-center rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                      depositAmount > 0 && depositAmount < totalPrice
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                        : 'bg-slate-50 hover:bg-amber-50 text-slate-700 border-slate-200 hover:border-amber-300'
+                    }`}
+                  >
+                    <span>🟡 שולמה מקדמה</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setDepositAmount(0)}
+                    className={`p-2 text-center rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                      depositAmount === 0
+                        ? 'bg-red-500 text-white border-red-500 shadow-xs'
+                        : 'bg-slate-50 hover:bg-red-50 text-slate-700 border-slate-200 hover:border-red-300'
+                    }`}
+                  >
+                    <span>🔴 טרם שולם</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
-                    <span className="text-[11px] text-slate-500 block mb-1">מקדמה ששולמה כעת (₪)</span>
+                    <span className="text-[11px] text-slate-500 block mb-1">סכום ששולם בפועל כעת (₪)</span>
                     <input
                       type="number"
                       min="0"
                       max={totalPrice}
-                      value={depositAmount}
-                      onChange={(e) => setDepositAmount(Number(e.target.value) || 0)}
+                      value={depositAmount === 0 ? '' : depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value === '' ? 0 : Number(e.target.value) || 0)}
                       placeholder="0"
                       className="w-full bg-slate-50 text-emerald-700 font-extrabold text-sm p-2.5 rounded-xl border border-slate-200 focus:outline-none"
                     />
@@ -1585,62 +1636,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 </div>
 
                 <div className="text-xs flex justify-between pt-1 text-slate-600 font-medium">
-                  <span>יתרה לתשלום בעזיבה:</span>
+                  <span>יתרה לגבייה בעזיבה:</span>
                   <span className={totalPrice - depositAmount > 0 ? 'text-red-600 font-bold' : 'text-emerald-600 font-bold'}>
                     ₪{Math.max(0, totalPrice - depositAmount)} {totalPrice - depositAmount === 0 ? '(שולם במלואו ✓)' : ''}
                   </span>
                 </div>
-              </div>
-
-              {/* Digital Signature on Resort Agreement */}
-              <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <PenTool className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>חתימה דיגיטלית על חוזה הפנסיון *</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={clearSignature}
-                    className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>נקה חתימה</span>
-                  </button>
-                </div>
-
-                <p className="text-[11px] text-slate-500">
-                  יש לחתום בתוך המסגרת בעזרת האצבע או העכבר:
-                </p>
-
-                {/* HTML5 Canvas Signature Pad */}
-                <div className="border-2 border-dashed border-slate-300 rounded-xl overflow-hidden bg-white touch-none">
-                  <canvas
-                    ref={canvasRef}
-                    width={500}
-                    height={120}
-                    onMouseDown={startDrawing}
-                    onMouseMove={draw}
-                    onMouseUp={stopDrawing}
-                    onMouseLeave={stopDrawing}
-                    onTouchStart={startDrawing}
-                    onTouchMove={draw}
-                    onTouchEnd={stopDrawing}
-                    className="w-full h-28 cursor-crosshair block"
-                  />
-                </div>
-
-                <label className="flex items-center gap-2 cursor-pointer pt-1">
-                  <input
-                    type="checkbox"
-                    checked={agreedToTerms}
-                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                    className="w-4 h-4 text-indigo-600 rounded-sm border-slate-300 focus:ring-indigo-500"
-                  />
-                  <span className="text-xs text-slate-700 font-medium">
-                    אני מאשר/ת שקראתי ואני מסכים/ה לתנאי השימוש ונוהל הפנסיון
-                  </span>
-                </label>
               </div>
 
               {/* Step 4 Action Buttons */}
@@ -1660,7 +1660,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   className="px-9 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>שמור הזמנה ✓</span>
+                  <span>שמור הזמנה ביומן ✓</span>
                 </button>
               </div>
             </div>

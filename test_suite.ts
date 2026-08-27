@@ -49,6 +49,7 @@ async function runQA() {
     dummyBookings.push({
       id: `dog-${i}`,
       dogName: `Dog ${i}`,
+      dogBreed: 'מעורב',
       ownerName: `Owner ${i}`,
       ownerPhone: `050-000000${i}`,
       serviceType: 'boarding',
@@ -58,6 +59,7 @@ async function runQA() {
       depositAmount: 500,
       paymentStatus: 'deposit_paid',
       stayStatus: 'checked_in',
+      vaccinationValid: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -71,6 +73,7 @@ async function runQA() {
   dummyBookings.push({
     id: `dog-16`,
     dogName: `Dog 16`,
+    dogBreed: 'מעורב',
     ownerName: `Owner 16`,
     ownerPhone: `050-00000016`,
     serviceType: 'boarding',
@@ -80,6 +83,7 @@ async function runQA() {
     depositAmount: 500,
     paymentStatus: 'deposit_paid',
     stayStatus: 'checked_in',
+    vaccinationValid: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   });

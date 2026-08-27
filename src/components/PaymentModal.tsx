@@ -119,8 +119,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               type="number"
               min="1"
               max={currentDebt > 0 ? currentDebt : booking.totalPrice}
-              value={payAmount}
-              onChange={(e) => setPayAmount(Number(e.target.value))}
+              value={payAmount === 0 ? '' : payAmount}
+              onChange={(e) => setPayAmount(e.target.value === '' ? 0 : Number(e.target.value) || 0)}
+              placeholder="0"
               className="w-full bg-white text-slate-900 font-extrabold text-base px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none"
             />
           </div>

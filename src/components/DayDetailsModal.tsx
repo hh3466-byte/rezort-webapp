@@ -54,7 +54,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-2xl w-full p-5 sm:p-6 text-slate-900 max-h-[90vh] overflow-y-auto">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-3xl lg:max-w-4xl w-full p-5 sm:p-6 text-slate-900 max-h-[90vh] overflow-y-auto">
         
         {/* Header with Full Hebrew Date & Capacity */}
         <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
@@ -70,7 +70,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
             <div className="flex items-center gap-2 mt-2">
               <div className={`text-xs px-2.5 py-1 rounded-full font-bold border flex items-center gap-1.5 ${
                 isOverbooked 
-                  ? 'bg-red-100 text-red-700 border-red-300 animate-pulse'
+                  ? 'bg-red-100 text-red-700 border-red-300'
                   : breakdown.total >= settings.maxCapacity
                   ? 'bg-amber-100 text-amber-800 border-amber-300'
                   : 'bg-green-100 text-green-800 border-green-300'
@@ -109,7 +109,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
           </div>
         </div>
 
-        {/* 3 Columns / Tabs for: Arrivals, Stayers, Departures */}
+        {/* 3 Sections: Arrivals, Stayers, Departures */}
         <div className="my-5 space-y-5">
           
           {/* 1. מגיעים היום (Arrivals) */}
@@ -123,10 +123,10 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
 
             {breakdown.arrivals.length === 0 ? (
               <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
-                אין הגעות מתוכננות ליום זה
+                אין כניסות מתוכננות ליום זה
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {breakdown.arrivals.map(b => (
                   <DogBookingCard
                     key={b.id}
@@ -136,7 +136,6 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
-                    onCheckIn={() => onToggleStayStatus(b.id, 'checked_in')}
                     actionType="arrival"
                   />
                 ))}
@@ -144,7 +143,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
             )}
           </div>
 
-          {/* 2. שוהים בריזורט (Staying) */}
+          {/* 2. שוהים בריזורט (Stayers) */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-extrabold text-indigo-700 flex items-center gap-1.5">
@@ -158,7 +157,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                 אין כלבים נוספים השוהים ביום זה
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {breakdown.staying.map(b => (
                   <DogBookingCard
                     key={b.id}
@@ -189,7 +188,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                 אין יציאות מתוכננות ליום זה
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {breakdown.departures.map(b => (
                   <DogBookingCard
                     key={b.id}
@@ -199,7 +198,6 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
-                    onCheckOut={() => onToggleStayStatus(b.id, 'checked_out')}
                     actionType="departure"
                   />
                 ))}
@@ -221,21 +219,16 @@ interface DogBookingCardProps {
   onDelete?: () => void;
   onMarkPaid: () => void;
   onOpenPayment: () => void;
-  onCheckIn?: () => void;
-  onCheckOut?: () => void;
   actionType: 'arrival' | 'staying' | 'departure';
 }
 
-const DogBookingCard: React.FC<DogBookingCardProps> = ({
+const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   booking,
   settings,
   onSelect,
   onDelete,
   onMarkPaid,
   onOpenPayment,
-  onCheckIn,
-  onCheckOut,
-  actionType,
 }) => {
   const todayStr = getTodayStr();
   const isEnded = booking.stayStatus === 'checked_out' || (booking.endDate < todayStr);
@@ -285,18 +278,18 @@ const DogBookingCard: React.FC<DogBookingCardProps> = ({
   return (
     <div
       onClick={onSelect}
-      className={`p-3 rounded-xl border transition-all hover:shadow-sm cursor-pointer ${paymentBorder}`}
+      className={`p-3.5 rounded-2xl border transition-all hover:shadow-xs cursor-pointer ${paymentBorder}`}
     >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         
         {/* Dog & Owner Info */}
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
+        <div className="space-y-1 flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
             <span className={`font-extrabold text-base ${isEnded ? 'text-slate-700' : 'text-slate-900'}`}>{booking.dogName}</span>
             {booking.dogBreed && (
               <span className="text-xs text-slate-500 font-normal">({booking.dogBreed})</span>
             )}
-            <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium border border-slate-200">
+            <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium border border-slate-200">
               {getServiceTypeHebrew(booking.serviceType)}
             </span>
             {isEnded && (
@@ -308,13 +301,13 @@ const DogBookingCard: React.FC<DogBookingCardProps> = ({
 
           <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
             <span className="flex items-center gap-1 font-medium">
-              <User className="w-3 h-3 text-indigo-500" /> {booking.ownerName}
+              <User className="w-3.5 h-3.5 text-indigo-500" /> {booking.ownerName}
             </span>
             <span className="flex items-center gap-1 font-mono text-slate-700 font-semibold" dir="ltr">
-              <Phone className="w-3 h-3 text-green-600" /> {booking.ownerPhone}
+              <Phone className="w-3.5 h-3.5 text-green-600" /> {booking.ownerPhone}
             </span>
             <span className="flex items-center gap-1 font-medium text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
-              <Calendar className="w-3 h-3 text-amber-600" />
+              <Calendar className="w-3.5 h-3.5 text-amber-600" />
               <span>{formatDateIL(booking.startDate)} עד {formatDateIL(booking.endDate)}</span>
             </span>
           </div>
@@ -327,10 +320,10 @@ const DogBookingCard: React.FC<DogBookingCardProps> = ({
         </div>
 
         {/* Payment & Actions */}
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 justify-start md:justify-end shrink-0">
           {paymentTag}
 
-          {/* Direct Edit Button */}
+          {/* Primary Edit Button */}
           <button
             type="button"
             onClick={(e) => {
@@ -338,27 +331,11 @@ const DogBookingCard: React.FC<DogBookingCardProps> = ({
               onSelect();
             }}
             title="ערוך פרטי הזמנה, תאריכים, מחיר או דרישות מיוחדות"
-            className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200"
+            className="bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-700 text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-indigo-200 shadow-2xs"
           >
-            <Edit2 className="w-3.5 h-3.5 text-amber-600" />
+            <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
             <span>ערוך</span>
           </button>
-
-          {/* Direct Delete Button */}
-          {onDelete && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              title="מחק הזמנה זו מהיומן ומהענן"
-              className="bg-slate-100 hover:bg-rose-50 text-slate-500 hover:text-rose-600 text-xs px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 transition-colors cursor-pointer border border-slate-200 hover:border-rose-200"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-              <span>מחק</span>
-            </button>
-          )}
 
           {/* Quick Pay Action */}
           {remainingDebt > 0 && !isEnded && (
@@ -370,7 +347,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = ({
                   onMarkPaid();
                 }}
                 title="סמן כעת כשולם הכל במלואו"
-                className="bg-green-600 hover:bg-green-700 text-white text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                className="bg-green-600 hover:bg-green-700 active:scale-95 text-white text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
               >
                 <CheckCircle className="w-3.5 h-3.5" />
                 <span>סמן כשולם</span>
@@ -380,7 +357,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = ({
                 type="button"
                 onClick={handleSendWhatsApp}
                 title="שלח תזכורת תשלום בוואטסאפ ללקוח"
-                className="bg-green-500 hover:bg-green-600 text-white text-xs px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                className="bg-green-500 hover:bg-green-600 active:scale-95 text-white text-xs px-2.5 py-1.5 rounded-lg font-semibold flex items-center gap-1 transition-all cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
                 <span>וואטסאפ</span>
@@ -388,36 +365,23 @@ const DogBookingCard: React.FC<DogBookingCardProps> = ({
             </>
           )}
 
-          {/* Check-In / Check-Out buttons */}
-          {actionType === 'arrival' && booking.stayStatus === 'booked' && onCheckIn && (
+          {/* Direct Delete Button */}
+          {onDelete && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onCheckIn();
+                onDelete();
               }}
-              className="bg-sky-600 hover:bg-sky-700 text-white text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition-colors cursor-pointer"
+              title="מחק הזמנה זו מהיומן ומהענן"
+              className="bg-slate-100 hover:bg-rose-50 active:scale-95 text-slate-500 hover:text-rose-600 text-xs px-2.5 py-1.5 rounded-lg font-semibold flex items-center gap-1 transition-all cursor-pointer border border-slate-200 hover:border-rose-200"
             >
-              <ArrowDownLeft className="w-3.5 h-3.5" />
-              <span>אישור הגעה</span>
-            </button>
-          )}
-
-          {actionType === 'departure' && booking.stayStatus === 'checked_in' && onCheckOut && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCheckOut();
-              }}
-              className="bg-amber-600 hover:bg-amber-700 text-white text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              <span>שחרור ויציאה</span>
+              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+              <span>מחק</span>
             </button>
           )}
         </div>
       </div>
     </div>
   );
-};
+});

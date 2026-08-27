@@ -72,6 +72,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const weekDays = getWeekDays(focusedDate);
   const dayBreakdown = getDailyBreakdown(activeBookings, focusedDate);
 
+  const monthStart = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
+  const lastDayInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const monthEnd = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(lastDayInMonth).padStart(2, '0')}`;
+  const monthActiveBookings = activeBookings.filter(b => b.startDate <= monthEnd && b.endDate >= monthStart);
+  const monthUniqueDogs = new Set(monthActiveBookings.map(b => b.dogName)).size;
+
+  const weekStart = weekDays[0].dateStr;
+  const weekEnd = weekDays[6].dateStr;
+  const weekActiveBookings = activeBookings.filter(b => b.startDate <= weekEnd && b.endDate >= weekStart);
+  const weekUniqueDogs = new Set(weekActiveBookings.map(b => b.dogName)).size;
+
   const handlePrevWeek = () => {
     setFocusedDate(prev => addDays(prev, -7));
   };
@@ -284,6 +295,57 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <CalendarDays className="w-3.5 h-3.5" />
             <span>יום בודד</span>
           </button>
+        </div>
+      </div>
+
+      {/* Dynamic Period Header Banner */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-l from-emerald-50/70 via-slate-50 to-emerald-50/30 p-3 sm:p-4 rounded-2xl border border-emerald-100/80 mb-5 shadow-2xs">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2.5 bg-emerald-700 text-white rounded-xl shadow-2xs">
+            <CalendarIcon className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
+              {displayMode === 'month' && (
+                <span>חודש {HEBREW_MONTHS[currentMonth]} {currentYear}</span>
+              )}
+              {displayMode === 'week' && (
+                <span>שבוע {formatDateIL(weekDays[0].dateStr)} עד {formatDateIL(weekDays[6].dateStr)}</span>
+              )}
+              {displayMode === 'day' && (
+                <span>{formatFullHebrewDate(focusedDate)}</span>
+              )}
+            </h2>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              {displayMode === 'month' && (
+                <span>סה״כ {monthActiveBookings.length} הזמנות פעילות בחודש זה ({monthUniqueDogs} כלבים שונים)</span>
+              )}
+              {displayMode === 'week' && (
+                <span>סה״כ {weekActiveBookings.length} הזמנות פעילות בשבוע זה ({weekUniqueDogs} כלבים שונים)</span>
+              )}
+              {displayMode === 'day' && (
+                <span>תפוסה ביום זה: {dayBreakdown.total} / {settings.maxCapacity} כלבים ({Math.max(0, settings.maxCapacity - dayBreakdown.total)} מקומות פנויים)</span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {displayMode === 'month' && (
+            <span className="text-xs font-bold text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
+              🐾 {monthActiveBookings.length} שהויות בחודש
+            </span>
+          )}
+          {displayMode === 'week' && (
+            <span className="text-xs font-bold text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
+              🐾 {weekActiveBookings.length} שהויות בשבוע
+            </span>
+          )}
+          {displayMode === 'day' && (
+            <span className="text-xs font-bold text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
+              🐾 {dayBreakdown.total} כלבים ביום
+            </span>
+          )}
         </div>
       </div>
 

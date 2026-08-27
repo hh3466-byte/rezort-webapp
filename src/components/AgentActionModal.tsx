@@ -448,8 +448,9 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
                     <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">סה״כ לתשלום (₪)</label>
                     <input
                       type="number"
-                      value={editedBooking.totalPrice ?? 0}
-                      onChange={(e) => handleFieldChange('totalPrice', Number(e.target.value) || 0)}
+                      value={editedBooking.totalPrice === 0 ? '' : (editedBooking.totalPrice ?? '')}
+                      onChange={(e) => handleFieldChange('totalPrice', e.target.value === '' ? 0 : Number(e.target.value) || 0)}
+                      placeholder="0"
                       className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:border-indigo-500 focus:outline-hidden"
                     />
                   </div>
@@ -457,8 +458,9 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
                     <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">שולם כמקדמה (₪)</label>
                     <input
                       type="number"
-                      value={editedBooking.depositAmount ?? 0}
-                      onChange={(e) => handleFieldChange('depositAmount', Number(e.target.value) || 0)}
+                      value={editedBooking.depositAmount === 0 ? '' : (editedBooking.depositAmount ?? '')}
+                      onChange={(e) => handleFieldChange('depositAmount', e.target.value === '' ? 0 : Number(e.target.value) || 0)}
+                      placeholder="0"
                       className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-green-700 focus:border-indigo-500 focus:outline-hidden"
                     />
                   </div>
@@ -525,41 +527,118 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
                   </div>
                 </div>
 
-                {/* Pricing & Payments with Color Coding */}
-                <div className="bg-white p-3 rounded-lg border border-slate-200">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="text-slate-500">סה״כ לתשלום:</span>
-                    <span className="font-bold text-slate-900 text-sm">₪{roundedTotal.toLocaleString('he-IL')}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="text-slate-500">שולם כמקדמה:</span>
-                    <span className="font-semibold text-green-600">₪{roundedDeposit.toLocaleString('he-IL')}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
-                    <span className="text-slate-700 font-medium">יתרה לתשלום:</span>
-                    <span className={`font-bold text-sm ${remainingDebt > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                      {remainingDebt > 0 ? `₪${remainingDebt.toLocaleString('he-IL')} (חוב פתוח)` : 'שולם במלואו 🎉'}
+                {/* Pricing & Payments with Live Direct Entry & Verification */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                      <DollarSign className="w-4 h-4 text-emerald-600" />
+                      <span>תשלום ומקדמה שנקלטו:</span>
+                    </span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
+                      remainingDebt === 0 && roundedTotal > 0
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : roundedDeposit > 0
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-red-100 text-red-700'
+                    }`}>
+                      {remainingDebt === 0 && roundedTotal > 0 ? '✓ שולם במלואו' : roundedDeposit > 0 ? `מקדמה ₪${roundedDeposit}` : 'חוב פתוח'}
                     </span>
                   </div>
 
-                  {/* Visual Color Status Tag */}
-                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span className="text-slate-500">סטטוס ביומן:</span>
-                    {remainingDebt === 0 && roundedTotal > 0 ? (
-                      <span className="bg-green-600 text-white px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1 shadow-xs">
-                        <span>ירוק מלא (שולם הכל)</span>
-                      </span>
-                    ) : roundedDeposit > 0 ? (
-                      <span className="border-2 border-dashed border-green-600 bg-green-50 text-green-900 px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1">
-                        <span>ירוק מקווקו (שולמה מקדמה)</span>
-                      </span>
-                    ) : (
-                      <span className="bg-red-500 text-white px-2.5 py-0.5 rounded-lg font-bold flex items-center gap-1 shadow-xs">
-                        <span>אדום (הזמין וטרם שילם)</span>
-                      </span>
-                    )}
+                  {/* 3 Quick Action Buttons */}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleFieldChange('depositAmount', roundedTotal);
+                        handleFieldChange('paymentStatus', 'fully_paid');
+                      }}
+                      className={`p-1.5 text-center rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                        remainingDebt === 0 && roundedTotal > 0
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-slate-50 hover:bg-emerald-50 text-slate-700 border-slate-200 hover:border-emerald-300'
+                      }`}
+                    >
+                      <span>🟢 שולם הכל במלואו</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const half = Math.round(roundedTotal / 2);
+                        handleFieldChange('depositAmount', roundedDeposit > 0 ? roundedDeposit : (half || 150));
+                        handleFieldChange('paymentStatus', 'deposit_paid');
+                      }}
+                      className={`p-1.5 text-center rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                        roundedDeposit > 0 && remainingDebt > 0
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                          : 'bg-slate-50 hover:bg-amber-50 text-slate-700 border-slate-200 hover:border-amber-300'
+                      }`}
+                    >
+                      <span>🟡 שולמה מקדמה</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleFieldChange('depositAmount', 0);
+                        handleFieldChange('paymentStatus', 'unpaid');
+                      }}
+                      className={`p-1.5 text-center rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                        roundedDeposit === 0
+                          ? 'bg-red-500 text-white border-red-500 shadow-xs'
+                          : 'bg-slate-50 hover:bg-red-50 text-slate-700 border-slate-200 hover:border-red-300'
+                      }`}
+                    >
+                      <span>🔴 טרם שולם</span>
+                    </button>
+                  </div>
+
+                  {/* Direct Payment Fields */}
+                  <div className="grid grid-cols-2 gap-2.5 pt-1">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                        סה״כ סכום ההזמנה (₪):
+                      </label>
+                      <input
+                        type="number"
+                        value={editedBooking.totalPrice === 0 ? '' : (editedBooking.totalPrice ?? '')}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? 0 : Number(e.target.value) || 0;
+                          handleFieldChange('totalPrice', val);
+                          if (editedBooking.paymentStatus === 'fully_paid') {
+                            handleFieldChange('depositAmount', val);
+                          }
+                        }}
+                        placeholder="0"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-black text-slate-900 focus:border-indigo-500 focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                        סכום ששולם בפועל (₪):
+                      </label>
+                      <input
+                        type="number"
+                        value={editedBooking.depositAmount === 0 ? '' : (editedBooking.depositAmount ?? '')}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? 0 : Number(e.target.value) || 0;
+                          handleFieldChange('depositAmount', val);
+                          handleFieldChange('paymentStatus', (val >= roundedTotal && roundedTotal > 0) ? 'fully_paid' : val > 0 ? 'deposit_paid' : 'unpaid');
+                        }}
+                        placeholder="0"
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-black text-emerald-700 focus:border-indigo-500 focus:bg-white focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Balance / Remaining Debt Status */}
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
+                    <span className="text-slate-600 font-medium">יתרה לגבייה בעזיבה:</span>
+                    <span className={`font-black text-sm ${remainingDebt > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {remainingDebt > 0 ? `₪${remainingDebt.toLocaleString('he-IL')} (חוב פתוח)` : '₪0 (שולם במלואו ✓)'}
+                    </span>
                   </div>
                 </div>
 

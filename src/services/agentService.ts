@@ -678,8 +678,21 @@ export function parseWithClientHeuristic(
     }
   }
 
+  const isFullyPaidMentioned = clean.includes('שולם במלואו') || 
+    clean.includes('שילם במלואו') || 
+    clean.includes('שולם הכל') || 
+    clean.includes('שילם הכל') || 
+    clean.includes('הכל שולם') || 
+    clean.includes('שולם מלא') || 
+    clean.includes('שילם מלא') || 
+    clean.includes('שולם מראש') || 
+    clean.includes('שילם מראש');
+
   let paymentStatus: Booking['paymentStatus'] = 'unpaid';
-  if (depositAmount >= totalPrice && totalPrice > 0) {
+  if (isFullyPaidMentioned) {
+    paymentStatus = 'fully_paid';
+    depositAmount = totalPrice;
+  } else if (depositAmount >= totalPrice && totalPrice > 0) {
     paymentStatus = 'fully_paid';
   } else if (depositAmount > 0) {
     paymentStatus = 'deposit_paid';

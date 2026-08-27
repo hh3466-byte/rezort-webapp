@@ -213,6 +213,9 @@ export const syncAllDataToSupabase = async (): Promise<{ bookingsSynced: number;
   return { bookingsSynced, settingsSynced, customersSynced };
 };
 
+let hasPerformedInitialSync = false;
+let lastBookingsSignature = '';
+
 // Real-time listener for Bookings via Supabase
 export const subscribeToBookings = (
   onData: (bookings: Booking[]) => void,
@@ -220,9 +223,12 @@ export const subscribeToBookings = (
 ): Unsubscribe => {
   let isSubscribed = true;
 
-  const fetchAndSyncBookings = async () => {
+  const fetchBookings = async (isInitial = false) => {
     try {
-      await syncAllDataToSupabase();
+      if (isInitial && !hasPerformedInitialSync) {
+        hasPerformedInitialSync = true;
+        await syncAllDataToSupabase();
+      }
 
       const { data, error } = await supabase
         .from(BOOKINGS_TABLE)
@@ -242,11 +248,11 @@ export const subscribeToBookings = (
             localStorage.setItem('dog_resort_bookings', JSON.stringify([]));
             localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify([]));
           } catch (e) {}
+          lastBookingsSignature = '[]';
           if (isSubscribed) onData([]);
           return;
         }
 
-        let didMigrateBruno = false;
         const bookings: Booking[] = data.map((row: any) => {
           let b: Booking;
           if (row.data && typeof row.data === 'object') {
@@ -274,29 +280,36 @@ export const subscribeToBookings = (
             } as Booking;
           }
 
-          // Auto-migrate Bruno to day_training if he was still saved as boarding / combined
           if (b.id === 'b-103' || b.dogName === 'ברונו') {
             if (b.serviceType === 'boarding' || (b as any).serviceType === 'combined') {
               b.serviceType = 'day_training';
               b.stayStatus = 'checked_in';
               b.totalPrice = 1750;
               b.notes = 'אילוף ביומיות ללא לינה - חיזוקים חיוביים';
-              didMigrateBruno = true;
             }
           }
 
           return b;
         });
 
-        if (didMigrateBruno) {
-          const bruno = bookings.find(b => b.id === 'b-103' || b.dogName === 'ברונו');
-          if (bruno) {
-            saveBookingToDb(bruno).catch(() => {});
-          }
-        }
-
         bookings.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
         
+        const currentSignature = JSON.stringify(bookings.map(b => ({
+          id: b.id,
+          p: b.paymentStatus,
+          d: b.depositAmount,
+          t: b.totalPrice,
+          s: b.stayStatus,
+          sd: b.startDate,
+          ed: b.endDate,
+        })));
+
+        if (currentSignature === lastBookingsSignature && !isInitial) {
+          return; // No real data change, avoid unnecessary state dispatch
+        }
+
+        lastBookingsSignature = currentSignature;
+
         try {
           localStorage.setItem('dog_resort_bookings', JSON.stringify(bookings));
           localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify(bookings));
@@ -313,7 +326,7 @@ export const subscribeToBookings = (
     }
   };
 
-  fetchAndSyncBookings();
+  fetchBookings(true);
 
   const channel = supabase
     .channel('public:bookings')
@@ -321,7 +334,7 @@ export const subscribeToBookings = (
       'postgres_changes',
       { event: '*', schema: 'public', table: BOOKINGS_TABLE },
       () => {
-        fetchAndSyncBookings();
+        fetchBookings(false);
       }
     )
     .subscribe();
@@ -388,7 +401,6 @@ export const subscribeToSettings = (
       } else {
         const local = getLocalSettings();
         if (isSubscribed) onData(local);
-        saveSettingsToDb(local).catch(() => {});
       }
     } catch (err: any) {
       console.warn('Failed to fetch settings from Supabase:', err?.message || err);

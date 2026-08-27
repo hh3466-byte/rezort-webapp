@@ -65,10 +65,14 @@ app.post('/api/agent/parse', async (req, res) => {
 
 3. מחירים ותשלומים (מספרים שלמים בלבד!):
    - כל המחירים (totalPrice, depositAmount) חייבים להיות מספרים שלמים ומעוגלים.
-   - חלץ נכון מה סך כל העסקה ומה המקדמה.
+   - אם נאמר "שולם במלואו", "שילם הכל", "שולם הכל", "הכל שולם", "שולם מלא", "שילם מלא", "שולם מראש" או כל ביטוי דומה:
+     * הגדר תמיד: paymentStatus: 'fully_paid'
+     * הגדר תמיד: depositAmount שווה במדויק ל-totalPrice! (לדוגמה אם totalPrice=900 אז depositAmount=900).
+   - אם נאמרה מקדמה חלקית (למשל: "שילם מקדמה 200"), הגדר paymentStatus: 'deposit_paid' ו-depositAmount: 200.
+   - אם לא שולם: הגדר depositAmount: 0 ו-paymentStatus: 'unpaid'.
    - אם לא נאמר מחיר:
      * תהליך אילוף מלא (training) = 6500 ₪ מחיר קבוע לתהליך מלא של 70 יום!
-     * אילוף ביומיות ללא לינה (day_training) = 250 ₪ ליום. הכפל במספר הימים ועגל!
+     * אילוף ביומיות ללא לינה (day_training) = 250 ₪ ליום.
      * פנסיון (boarding) = 180 ₪ ליום. הכפל במספר הימים ועגל למספר שלם!
      * יום כיף (daycare) = 90 ₪ ליום.
 
@@ -135,6 +139,23 @@ ${JSON.stringify(existingBookingsSummary || [])}`;
           }
           if (pb.depositAmount !== undefined && pb.depositAmount !== null) {
             pb.depositAmount = Math.round(Number(pb.depositAmount));
+          }
+
+          const cleanLower = text.toLowerCase();
+          const isFullyPaidMentioned = cleanLower.includes('שולם במלואו') || 
+            cleanLower.includes('שילם במלואו') || 
+            cleanLower.includes('שולם הכל') || 
+            cleanLower.includes('שילם הכל') || 
+            cleanLower.includes('הכל שולם') || 
+            cleanLower.includes('שולם מלא') || 
+            cleanLower.includes('שילם מלא') || 
+            cleanLower.includes('שולם מראש');
+
+          if (isFullyPaidMentioned || pb.paymentStatus === 'fully_paid') {
+            pb.paymentStatus = 'fully_paid';
+            if (pb.totalPrice && pb.totalPrice > 0) {
+              pb.depositAmount = pb.totalPrice;
+            }
           }
 
           return res.json({

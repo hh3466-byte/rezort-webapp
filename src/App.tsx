@@ -104,10 +104,18 @@ export default function App() {
     }, 4000);
   };
 
-  // Real-time Cloud Sync from Firestore
+  // Real-time Cloud Sync from Firestore / Supabase
   useEffect(() => {
-    const unsubBookings = subscribeToBookings((updatedBookings) => {
-      setBookings(updatedBookings);
+    const unsubBookings = subscribeToBookings((incomingBookings) => {
+      setBookings(prev => {
+        // Structural comparison to avoid unnecessary React re-renders and flickering
+        if (prev.length === incomingBookings.length) {
+          const prevSig = prev.map(b => `${b.id}-${b.paymentStatus}-${b.depositAmount}-${b.totalPrice}-${b.stayStatus}`).join('|');
+          const nextSig = incomingBookings.map(b => `${b.id}-${b.paymentStatus}-${b.depositAmount}-${b.totalPrice}-${b.stayStatus}`).join('|');
+          if (prevSig === nextSig) return prev;
+        }
+        return incomingBookings;
+      });
     });
 
     const unsubSettings = subscribeToSettings((updatedSettings) => {
@@ -125,15 +133,31 @@ export default function App() {
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
   const todayBookings = getBookingsForDate(activeBookings, todayStr);
 
+  const totalDogsToday = todayBookings.length;
   const boardingToday = todayBookings.filter(b => b.serviceType === 'boarding' || b.serviceType === 'daycare').length;
   const fullTrainingToday = todayBookings.filter(b => b.serviceType === 'training').length;
   const dayTrainingToday = todayBookings.filter(b => b.serviceType === 'day_training').length;
   const trainingToday = fullTrainingToday + dayTrainingToday;
-  const freeSlots = Math.max(0, settings.maxCapacity - boardingToday);
+  const freeSlots = Math.max(0, settings.maxCapacity - totalDogsToday);
 
-  const totalCollected = activeBookings.reduce((acc, b) => acc + b.depositAmount, 0);
-  const openDebtTotal = activeBookings.reduce((acc, b) => acc + Math.max(0, b.totalPrice - b.depositAmount), 0);
-  const unpaidCount = activeBookings.filter(b => b.paymentStatus === 'unpaid').length;
+  // Accurate real-time money calculation across all bookings
+  const totalCollected = activeBookings.reduce((acc, b) => {
+    if (b.paymentStatus === 'fully_paid') {
+      return acc + (Number(b.totalPrice) || 0);
+    }
+    return acc + (Number(b.depositAmount) || 0);
+  }, 0);
+
+  const openDebtTotal = activeBookings.reduce((acc, b) => {
+    if (b.paymentStatus === 'fully_paid') return acc;
+    const debt = Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0));
+    return acc + debt;
+  }, 0);
+
+  const unpaidBookings = activeBookings.filter(b => 
+    b.paymentStatus !== 'fully_paid' && ((Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0) > 0)
+  );
+  const unpaidCount = unpaidBookings.length;
 
   // Jump to today
   const handleJumpToToday = () => {
@@ -174,22 +198,43 @@ export default function App() {
 
   // Agent proposal confirmed by user
   const handleConfirmProposal = async (proposal: AgentActionProposal) => {
-    const { intent, parsedBooking, targetTab, existingBookingId } = proposal;
+    const { intent, parsedBooking, targetTab, existingBookingId, rawText } = proposal;
 
     if (intent === 'new_booking') {
+      const rawLower = (rawText || '').toLowerCase();
+      const isFullyPaid = parsedBooking.paymentStatus === 'fully_paid' ||
+        (Boolean(parsedBooking.depositAmount) && Boolean(parsedBooking.totalPrice) && (parsedBooking.depositAmount || 0) >= (parsedBooking.totalPrice || 0)) ||
+        rawLower.includes('שולם במלואו') ||
+        rawLower.includes('שילם במלואו') ||
+        rawLower.includes('שולם הכל') ||
+        rawLower.includes('שילם הכל') ||
+        rawLower.includes('הכל שולם') ||
+        rawLower.includes('שולם מלא') ||
+        rawLower.includes('שילם מלא') ||
+        rawLower.includes('שולם מראש');
+
+      const totalPrice = parsedBooking.totalPrice || 0;
+      const depositAmount = isFullyPaid 
+        ? totalPrice 
+        : (parsedBooking.depositAmount || 0);
+
+      const paymentStatus = isFullyPaid 
+        ? 'fully_paid' 
+        : (depositAmount > 0 ? 'deposit_paid' : 'unpaid');
+
       const newBooking: Booking = {
         id: `b-${Date.now()}`,
         dogName: parsedBooking.dogName || 'כלב',
-        dogBreed: parsedBooking.dogBreed || '',
+        dogBreed: parsedBooking.dogBreed || 'מעורב',
         ownerName: parsedBooking.ownerName || 'לקוח',
         ownerPhone: parsedBooking.ownerPhone || '050-0000000',
         ownerEmail: parsedBooking.ownerEmail || '',
         serviceType: parsedBooking.serviceType || 'boarding',
         startDate: parsedBooking.startDate || new Date().toISOString().split('T')[0],
         endDate: parsedBooking.endDate || new Date().toISOString().split('T')[0],
-        totalPrice: parsedBooking.totalPrice || 0,
-        depositAmount: parsedBooking.depositAmount || 0,
-        paymentStatus: parsedBooking.paymentStatus || (parsedBooking.depositAmount ? 'deposit_paid' : 'unpaid'),
+        totalPrice,
+        depositAmount,
+        paymentStatus,
         paymentMethod: parsedBooking.paymentMethod || 'bit',
         stayStatus: 'booked',
         notes: parsedBooking.notes || '',
@@ -198,8 +243,9 @@ export default function App() {
         updatedAt: new Date().toISOString(),
       };
 
-      await saveBookingToDb(newBooking);
+      setBookings(prev => [...prev, newBooking]);
       showToast(`✨ שריון ל${newBooking.dogName} נוסף וסונכרן לענן!`);
+      await saveBookingToDb(newBooking);
       
       if (newBooking.paymentStatus === 'fully_paid') {
         confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } });
@@ -211,7 +257,6 @@ export default function App() {
 
       if (target) {
         await handleSavePayment(target.id, parsedBooking.depositAmount || 0, parsedBooking.paymentMethod || 'bit');
-        showToast(`💳 עודכן תשלום עבור ${target.dogName}`);
       } else {
         showToast('לא נמצאה הזמנה מתאימה לעדכון תשלום');
       }
@@ -222,7 +267,6 @@ export default function App() {
 
       if (target) {
         await handleDeleteBooking(target.id);
-        showToast(`🗑️ ההזמנה של ${target.dogName} בוטלה ונמחקה מהענן`);
       } else {
         showToast('לא נמצאה הזמנה מתאימה לביטול');
       }
@@ -265,16 +309,23 @@ export default function App() {
 
   // Fast 1-click Mark as Paid
   const handleMarkAsPaid = async (bookingId: string) => {
-    const booking = bookings.find(b => b.id === bookingId);
-    if (booking) {
-      const updated: Booking = {
-        ...booking,
-        depositAmount: booking.totalPrice,
+    let updatedBooking: Booking | null = null;
+
+    setBookings(prev => {
+      const match = prev.find(b => String(b.id) === String(bookingId));
+      if (!match) return prev;
+
+      updatedBooking = {
+        ...match,
+        depositAmount: match.totalPrice,
         paymentStatus: 'fully_paid',
         updatedAt: new Date().toISOString(),
       };
-      await saveBookingToDb(updated);
 
+      return prev.map(b => String(b.id) === String(bookingId) ? updatedBooking! : b);
+    });
+
+    if (updatedBooking) {
       confetti({
         particleCount: 70,
         spread: 60,
@@ -282,33 +333,52 @@ export default function App() {
       });
 
       showToast('🟢 ההזמנה סומנה כשולמה במלואו וסונכרנה');
+      await saveBookingToDb(updatedBooking);
     }
   };
 
   // Record partial / custom payment
   const handleSavePayment = async (bookingId: string, addedAmount: number, method: PaymentMethod, notes?: string) => {
-    const booking = bookings.find(b => b.id === bookingId);
-    if (booking) {
-      const newDeposit = booking.depositAmount + addedAmount;
-      const isFull = newDeposit >= booking.totalPrice;
-      const updated: Booking = {
-        ...booking,
+    let updatedBooking: Booking | null = null;
+
+    setBookings(prev => {
+      const match = prev.find(b => String(b.id) === String(bookingId));
+      if (!match) return prev;
+
+      const newDeposit = match.depositAmount + addedAmount;
+      const isFull = newDeposit >= match.totalPrice;
+
+      updatedBooking = {
+        ...match,
         depositAmount: newDeposit,
         paymentStatus: isFull ? 'fully_paid' : 'deposit_paid',
         paymentMethod: method,
-        notes: notes ? `${booking.notes ? booking.notes + ' | ' : ''}תשלום ₪${addedAmount} (${method})` : booking.notes,
+        notes: notes ? `${match.notes ? match.notes + ' | ' : ''}תשלום ₪${addedAmount} (${method})` : match.notes,
         updatedAt: new Date().toISOString(),
       };
-      await saveBookingToDb(updated);
+
+      return prev.map(b => String(b.id) === String(bookingId) ? updatedBooking! : b);
+    });
+
+    if (updatedBooking) {
       showToast(`💳 תשלום ע״ס ₪${addedAmount} נרשם וסונכרן לענן`);
+      await saveBookingToDb(updatedBooking);
     }
   };
 
   // Save from BookingFormModal (Add / Edit)
   const handleSaveBookingForm = async (booking: Booking) => {
-    await saveBookingToDb(booking);
+    // Instant optimistic state update
+    setBookings(prev => {
+      const exists = prev.some(b => b.id === booking.id);
+      if (exists) {
+        return prev.map(b => b.id === booking.id ? booking : b);
+      }
+      return [...prev, booking];
+    });
     setBookingFormModal({ isOpen: false, initialData: null });
     showToast(`💾 ההזמנה של ${booking.dogName} נשמרה וסונכרנה בענן`);
+    await saveBookingToDb(booking);
   };
 
   // Delete / Cancel Booking with ExtremeChange confirmation
@@ -347,10 +417,14 @@ export default function App() {
         stayStatus: newStatus,
         updatedAt: new Date().toISOString()
       };
-      await saveBookingToDb(updated);
+
+      // Instant optimistic state update
+      setBookings(prev => prev.map(b => b.id === bookingId ? updated : b));
 
       if (newStatus === 'checked_in') showToast('🐾 נקלט בהצלחה בריזורט');
       if (newStatus === 'checked_out') showToast('🏡 שוחרר הביתה בהצלחה');
+
+      await saveBookingToDb(updated);
     }
   };
 
@@ -412,89 +486,128 @@ export default function App() {
 
         </header>
 
-        {/* 4 Metric Stat Cards (in a single row matching image) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* 5 Metric Stat Cards: תפוסה כללית | פנסיון | אילוף | חוב פתוח | נגבה עד כה */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           
-          {/* Card 1 (Right in RTL): בפנסיון היום */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-            <div className="text-xs font-bold text-slate-500 text-right">בפנסיון היום</div>
-            <div className="text-3xl sm:text-4xl font-black text-slate-900 my-1 text-right">
-              {boardingToday}
+          {/* Card 1 (Right in RTL): תפוסה כללית */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-emerald-200 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-500 text-right">תפוסה כללית</div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                totalDogsToday >= settings.maxCapacity 
+                  ? 'bg-red-50 text-red-700 border-red-200' 
+                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              }`}>
+                {Math.round((totalDogsToday / Math.max(1, settings.maxCapacity)) * 100)}% תפוסה
+              </span>
             </div>
-            <div className="text-[11px] font-medium text-slate-400 text-right">
-              בריזורט: {boardingToday}/{settings.maxCapacity} · פנויים: {freeSlots}
+            <div className="text-2xl sm:text-3xl font-black text-slate-900 my-1 text-right">
+              {totalDogsToday} <span className="text-xs font-semibold text-slate-400">/ {settings.maxCapacity}</span>
+            </div>
+            <div className="text-[11px] font-medium text-slate-500 text-right truncate">
+              {freeSlots > 0 ? `${freeSlots} מקומות פנויים היום` : 'הריזורט בתפוסה מלאה'}
             </div>
           </div>
 
-          {/* Card 2: באילוף היום (מחולק ל-2: תהליך אילוף | אילוף ביומיות) */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
+          {/* Card 2: פנסיון */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-emerald-200 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-500 text-right">פנסיון</div>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                🏨 לינת לילה
+              </span>
+            </div>
+            <div className="text-2xl sm:text-3xl font-black text-slate-900 my-1 text-right">
+              {boardingToday} <span className="text-xs font-semibold text-slate-400">כלבים</span>
+            </div>
+            <div className="text-[11px] font-medium text-slate-500 text-right truncate">
+              {boardingToday === 0 ? 'אין כלבים בלינה היום' : boardingToday === 1 ? 'כלב 1 שוהה בפנסיון' : `${boardingToday} כלבים שוהים בפנסיון`}
+            </div>
+          </div>
+
+          {/* Card 3: אילוף (מחולק ל: תהליך אילוף 70 יום | אילוף ביומיות) */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-purple-200 transition-colors col-span-2 sm:col-span-1">
             <div className="flex items-center justify-between">
               <div className="text-xs font-bold text-slate-500 text-right">באילוף היום</div>
-              <span className="text-[11px] font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+              <span className="text-[10px] font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
                 סה״כ {trainingToday}
               </span>
             </div>
 
-            {/* 2-Column Split: Process vs Day Training */}
-            <div className="grid grid-cols-2 gap-2 my-1 pt-0.5 divide-x divide-x-reverse divide-slate-100">
+            {/* Split: תהליך אילוף (70 יום) vs אילוף ביומיות */}
+            <div className="grid grid-cols-2 gap-1.5 my-1 pt-0.5 divide-x divide-x-reverse divide-slate-100">
               
-              {/* Right Side: תהליך אילוף (70 יום) */}
+              {/* Right Side: תהליך אילוף מלא */}
               <div className="text-right pr-0.5">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-2xl sm:text-3xl font-black text-purple-600">
+                  <span className="text-xl sm:text-2xl font-black text-purple-600">
                     {fullTrainingToday}
                   </span>
-                  <span className="text-[11px] font-bold text-slate-400">כלבים</span>
+                  <span className="text-[10px] font-bold text-slate-400">כלבים</span>
                 </div>
-                <div className="text-[11px] font-bold text-slate-700 truncate mt-0.5">
+                <div className="text-[10px] font-bold text-slate-700 truncate">
                   🎓 תהליך אילוף
                 </div>
-                <div className="text-[10px] text-slate-400 font-medium">
+                <div className="text-[9px] text-slate-400 font-medium">
                   (70 יום)
                 </div>
               </div>
 
               {/* Left Side: אילוף ביומיות */}
-              <div className="text-right pr-2">
+              <div className="text-right pr-1.5">
                 <div className="flex items-baseline gap-1">
-                  <span className="text-2xl sm:text-3xl font-black text-indigo-600">
+                  <span className="text-xl sm:text-2xl font-black text-indigo-600">
                     {dayTrainingToday}
                   </span>
-                  <span className="text-[11px] font-bold text-slate-400">כלבים</span>
+                  <span className="text-[10px] font-bold text-slate-400">כלבים</span>
                 </div>
-                <div className="text-[11px] font-bold text-slate-700 truncate mt-0.5">
+                <div className="text-[10px] font-bold text-slate-700 truncate">
                   🦮 אילוף ביומיות
                 </div>
-                <div className="text-[10px] text-slate-400 font-medium">
+                <div className="text-[9px] text-slate-400 font-medium">
                   (ללא לינה)
                 </div>
               </div>
 
             </div>
 
-            <div className="text-[11px] font-medium text-slate-400 text-right pt-1 border-t border-slate-100">
+            <div className="text-[10px] font-medium text-slate-400 text-right pt-0.5 border-t border-slate-100 truncate">
               {fullTrainingToday} בתהליך מלא · {dayTrainingToday} ביומיות
             </div>
           </div>
 
-          {/* Card 3: חוב פתוח */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-            <div className="text-xs font-bold text-slate-500 text-right">חוב פתוח</div>
-            <div className="text-3xl sm:text-4xl font-black text-[#0f766e] my-1 text-right">
-              ₪{openDebtTotal.toLocaleString()}
+          {/* Card 4: חוב פתוח */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-red-200 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-500 text-right">חוב פתוח</div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                openDebtTotal === 0
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : 'bg-red-50 text-red-700 border-red-200'
+              }`}>
+                {openDebtTotal === 0 ? '🟢 הכול שולם' : `🔴 ${unpaidCount} ממתינות`}
+              </span>
             </div>
-            <div className="text-[11px] font-medium text-slate-400 text-right">
-              {openDebtTotal === 0 ? 'הכול שולם 🥳' : `${unpaidCount} הזמנות ממתינות`}
+            <div className="text-2xl sm:text-3xl font-black text-[#0f766e] my-1 text-right">
+              ₪{openDebtTotal.toLocaleString('he-IL')}
+            </div>
+            <div className="text-[11px] font-medium text-slate-400 text-right truncate">
+              {openDebtTotal === 0 ? 'הכול שולם 🥳' : `${unpaidCount} הזמנות עם יתרת חוב`}
             </div>
           </div>
 
-          {/* Card 4 (Left in RTL): נגבה עד כה */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between">
-            <div className="text-xs font-bold text-slate-500 text-right">נגבה עד כה</div>
-            <div className="text-3xl sm:text-4xl font-black text-[#0f766e] my-1 text-right">
-              ₪{totalCollected.toLocaleString()}
+          {/* Card 5 (Left in RTL): נגבה עד כה */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-emerald-200 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-500 text-right">נגבה עד כה</div>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                💳 סה״כ הכנסות
+              </span>
             </div>
-            <div className="text-[11px] font-medium text-slate-400 text-right">
+            <div className="text-2xl sm:text-3xl font-black text-[#0f766e] my-1 text-right">
+              ₪{totalCollected.toLocaleString('he-IL')}
+            </div>
+            <div className="text-[11px] font-medium text-slate-400 text-right truncate">
               סה״כ מקדמות ותשלומים
             </div>
           </div>
@@ -723,8 +836,15 @@ export default function App() {
           settings={settings}
           onClose={() => setBookingWizardOpen({ isOpen: false, initialData: null })}
           onSave={async (newBooking) => {
-            await saveBookingToDb(newBooking);
+            setBookings(prev => {
+              const exists = prev.some(b => b.id === newBooking.id);
+              if (exists) {
+                return prev.map(b => b.id === newBooking.id ? newBooking : b);
+              }
+              return [...prev, newBooking];
+            });
             showToast(`💾 ההזמנה של ${newBooking.dogName} נשמרה וסונכרנה בענן`);
+            await saveBookingToDb(newBooking);
           }}
         />
       )}
