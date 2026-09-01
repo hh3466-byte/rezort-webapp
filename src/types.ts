@@ -117,6 +117,8 @@ export interface ResortSettings {
   growPaymentLink?: string;
   whatsappNotificationPhone?: string;
   callmebotApiKey?: string;
+  greenApiIdInstance?: string;
+  greenApiToken?: string;
   bitPaymentLink?: string;
   payboxPaymentLink?: string;
   bankDetails: string;

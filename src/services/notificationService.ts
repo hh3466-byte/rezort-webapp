@@ -86,7 +86,26 @@ export async function sendResortWhatsAppNotification(
   const encodedText = encodeURIComponent(message);
   const directUrl = `https://wa.me/${intlPhone}?text=${encodedText}`;
 
-  // If CallMeBot API key is configured, send silently in the background
+  // 1. If Green-API is configured (recommended, dedicated instance), send via Green-API
+  if (settings.greenApiIdInstance && settings.greenApiToken) {
+    try {
+      const greenApiUrl = `https://api.green-api.com/waInstance${settings.greenApiIdInstance.trim()}/sendMessage/${settings.greenApiToken.trim()}`;
+      const chatId = `${intlPhone}@c.us`;
+      
+      fetch(greenApiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, message })
+      }).catch(err => {
+        console.warn('Green-API notification background error:', err);
+      });
+      return { success: true, directUrl };
+    } catch (err) {
+      console.warn('Green-API send error:', err);
+    }
+  }
+
+  // 2. If CallMeBot API key is configured, send via CallMeBot
   if (settings.callmebotApiKey && settings.callmebotApiKey.trim()) {
     try {
       const callmebotUrl = `https://api.callmebot.com/whatsapp.php?phone=+${intlPhone}&text=${encodedText}&apikey=${encodeURIComponent(settings.callmebotApiKey.trim())}`;

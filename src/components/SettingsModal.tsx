@@ -371,15 +371,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div>
                   <label className="text-xs text-slate-700 font-bold block mb-1">
-                    🔑 מפתח CallMeBot (שליחת וואטסאפ אוטומטית ברקע)
+                    🔑 מפתח CallMeBot (אופציונלי)
                   </label>
                   <input
                     type="text"
                     value={formData.callmebotApiKey || ''}
                     onChange={(e) => setFormData({ ...formData, callmebotApiKey: e.target.value })}
-                    placeholder="הזן API Key של CallMeBot (אופציונלי)"
+                    placeholder="API Key של CallMeBot"
                     className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
                   />
+                </div>
+
+                <div className="sm:col-span-2 p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
+                  <div className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                    <span>🟢 Green-API (חיבור וואטסאפ רשמי ישיר מהמספר של הריזורט)</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] text-slate-700 font-bold block mb-1">
+                        Instance ID (מזהה מופע)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.greenApiIdInstance || ''}
+                        onChange={(e) => setFormData({ ...formData, greenApiIdInstance: e.target.value })}
+                        placeholder="למשל: 1101823456"
+                        className="w-full bg-white text-slate-900 text-xs px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-slate-700 font-bold block mb-1">
+                        ApiTokenInstance (טוקן אבטחה)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.greenApiToken || ''}
+                        onChange={(e) => setFormData({ ...formData, greenApiToken: e.target.value })}
+                        placeholder="למשל: d75b11234..."
+                        className="w-full bg-white text-slate-900 text-xs px-3 py-1.5 rounded-lg border border-slate-200 focus:outline-none font-mono"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div>
