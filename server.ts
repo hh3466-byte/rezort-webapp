@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 
 app.use(express.json());
 
@@ -191,7 +191,10 @@ ${JSON.stringify(existingBookingsSummary || [])}`;
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { 
+        middlewareMode: true,
+        hmr: { port: 24680 },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

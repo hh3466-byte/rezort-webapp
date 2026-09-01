@@ -31,10 +31,12 @@ import { GrowPaymentsModal } from './components/GrowPaymentsModal';
 import { PaymentModal } from './components/PaymentModal';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
-import { Settings as SettingsIcon } from 'lucide-react';
+import { Settings as SettingsIcon, Star } from 'lucide-react';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
 import { Guide } from './components/Guide';
+import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricModal';
+import { ReviewRequestModal } from './components/ReviewRequestModal';
 
 export default function App() {
   // Core application state with live Cloud synchronization
@@ -170,6 +172,41 @@ export default function App() {
     b.paymentStatus !== 'fully_paid' && ((Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0) > 0)
   );
   const unpaidCount = unpaidBookings.length;
+
+  // Header metric drill-down / edit modal state (occupancy, boarding, training, debt, revenue)
+  const [activeHeaderMetric, setActiveHeaderMetric] = useState<HeaderMetricType | null>(null);
+
+  // Review requests for dogs checked out yesterday
+  const yesterdayStr = addDays(todayStr, -1);
+  const [handledReviewIds, setHandledReviewIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('shmulik_handled_review_requests');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isReviewModalDismissed, setIsReviewModalDismissed] = useState(false);
+
+  // Identify dogs checked out yesterday that haven't been handled yet
+  const pendingReviewBookings = bookings.filter(b => {
+    if (b.stayStatus === 'cancelled') return false;
+    if (handledReviewIds.includes(b.id)) return false;
+    const isCheckoutYesterday = b.stayStatus === 'checked_out' && b.endDate === yesterdayStr;
+    const isEndedYesterday = b.endDate === yesterdayStr;
+    return isCheckoutYesterday || isEndedYesterday;
+  });
+
+  const handleReviewHandled = (bookingId: string) => {
+    setHandledReviewIds(prev => {
+      const next = prev.includes(bookingId) ? prev : [...prev, bookingId];
+      try {
+        localStorage.setItem('shmulik_handled_review_requests', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+    showToast('⭐ בקשת חוות הדעת עודכנה בהצלחה');
+  };
 
   // Jump to today
   const handleJumpToToday = () => {
@@ -321,32 +358,29 @@ export default function App() {
 
   // Fast 1-click Mark as Paid
   const handleMarkAsPaid = async (bookingId: string) => {
-    let updatedBooking: Booking | null = null;
+    const match = bookings.find(b => String(b.id) === String(bookingId));
+    if (!match) return;
 
-    setBookings(prev => {
-      const match = prev.find(b => String(b.id) === String(bookingId));
-      if (!match) return prev;
+    const total = Number(match.totalPrice) || 0;
+    const updatedBooking: Booking = {
+      ...match,
+      totalPrice: total,
+      depositAmount: total,
+      paymentStatus: 'fully_paid',
+      updatedAt: new Date().toISOString(),
+    };
 
-      updatedBooking = {
-        ...match,
-        depositAmount: match.totalPrice,
-        paymentStatus: 'fully_paid',
-        updatedAt: new Date().toISOString(),
-      };
+    // Optimistically update state immediately
+    setBookings(prev => prev.map(b => String(b.id) === String(bookingId) ? updatedBooking : b));
 
-      return prev.map(b => String(b.id) === String(bookingId) ? updatedBooking! : b);
+    confetti({
+      particleCount: 70,
+      spread: 60,
+      origin: { y: 0.6 }
     });
 
-    if (updatedBooking) {
-      confetti({
-        particleCount: 70,
-        spread: 60,
-        origin: { y: 0.6 }
-      });
-
-      showToast('🟢 ההזמנה סומנה כשולמה במלואו וסונכרנה');
-      await saveBookingToDb(updatedBooking);
-    }
+    showToast(`🟢 ההזמנה של ${updatedBooking.dogName} סומנה כשולמה במלואו וסונכרנה`);
+    await saveBookingToDb(updatedBooking);
   };
 
   // Grow Payments Acceptance Handler
@@ -383,31 +417,37 @@ export default function App() {
 
   // Record partial / custom payment
   const handleSavePayment = async (bookingId: string, addedAmount: number, method: PaymentMethod, notes?: string) => {
-    let updatedBooking: Booking | null = null;
+    const match = bookings.find(b => String(b.id) === String(bookingId));
+    if (!match) return;
 
-    setBookings(prev => {
-      const match = prev.find(b => String(b.id) === String(bookingId));
-      if (!match) return prev;
+    const currentDeposit = Number(match.depositAmount) || 0;
+    const totalPrice = Number(match.totalPrice) || 0;
+    const newDeposit = currentDeposit + addedAmount;
+    const isFull = newDeposit >= totalPrice;
 
-      const newDeposit = match.depositAmount + addedAmount;
-      const isFull = newDeposit >= match.totalPrice;
+    const updatedBooking: Booking = {
+      ...match,
+      depositAmount: newDeposit,
+      paymentStatus: isFull ? 'fully_paid' : 'deposit_paid',
+      paymentMethod: method,
+      notes: notes ? `${match.notes ? match.notes + ' | ' : ''}תשלום ₪${addedAmount} (${method})` : match.notes,
+      updatedAt: new Date().toISOString(),
+    };
 
-      updatedBooking = {
-        ...match,
-        depositAmount: newDeposit,
-        paymentStatus: isFull ? 'fully_paid' : 'deposit_paid',
-        paymentMethod: method,
-        notes: notes ? `${match.notes ? match.notes + ' | ' : ''}תשלום ₪${addedAmount} (${method})` : match.notes,
-        updatedAt: new Date().toISOString(),
-      };
+    setBookings(prev => prev.map(b => String(b.id) === String(bookingId) ? updatedBooking : b));
 
-      return prev.map(b => String(b.id) === String(bookingId) ? updatedBooking! : b);
-    });
-
-    if (updatedBooking) {
+    if (isFull) {
+      confetti({
+        particleCount: 70,
+        spread: 60,
+        origin: { y: 0.6 }
+      });
+      showToast(`🟢 יתרת החוב של ${updatedBooking.dogName} שולמה במלואה!`);
+    } else {
       showToast(`💳 תשלום ע״ס ₪${addedAmount} נרשם וסונכרן לענן`);
-      await saveBookingToDb(updatedBooking);
     }
+
+    await saveBookingToDb(updatedBooking);
   };
 
   // Save from BookingFormModal (Add / Edit)
@@ -490,8 +530,8 @@ export default function App() {
         {/* Top Header Row */}
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1 pb-1">
           
-          {/* Left Buttons in RTL (top left): + הזמנה חדשה & משותף */}
-          <div className="flex items-center gap-3 order-2 sm:order-1">
+          {/* Left Buttons in RTL (top left): + הזמנה חדשה, חוות דעת ממתינות, משותף, הגדרות */}
+          <div className="flex flex-wrap items-center gap-2.5 order-2 sm:order-1">
             <button
               onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
               id="btn-new-booking-top"
@@ -500,6 +540,19 @@ export default function App() {
               <span>+</span>
               <span>הזמנה חדשה</span>
             </button>
+
+            {/* Notification button for pending review requests (dogs checked out yesterday) */}
+            {pendingReviewBookings.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsReviewModalDismissed(false)}
+                className="bg-amber-50 hover:bg-amber-100 active:scale-98 border border-amber-300 text-amber-900 font-bold px-3 py-1.5 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer animate-pulse"
+                title="לחץ לפתיחת בקשת חוות דעת לכלבים שהשתחררו אתמול"
+              >
+                <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
+                <span>⭐ {pendingReviewBookings.length} חוות דעת</span>
+              </button>
+            )}
 
             <div className="flex items-center gap-1.5 bg-[#eff6ff] border border-blue-100 text-blue-700 px-3 py-1.5 rounded-full text-xs font-semibold shadow-2xs">
               <span>🔮</span>
@@ -517,26 +570,42 @@ export default function App() {
             </button>
           </div>
 
-          {/* Right Brand Title & Subtitle in RTL (top right) */}
-          <div className="text-right order-1 sm:order-2">
-            <h1 className="text-2xl sm:text-3xl font-black text-[#0f4c3a] tracking-tight flex items-center justify-end gap-2">
-              <span>יומן הריזורט לכלב</span>
-              <span>🐕</span>
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
-              דבר אליי — ואני אנהל את היומן: הזמנות, תשלומים ותפוסה
-            </p>
+          {/* Right Brand Title & Subtitle with Official Resort Logo in RTL */}
+          <div className="text-right order-1 sm:order-2 flex items-center justify-end gap-3">
+            {/* Official Resort Logo placed to the left in continuation to the line */}
+            <img 
+              src="/resort-logo.svg" 
+              alt="לוגו הריזורט לכלב" 
+              className="w-11 h-11 sm:w-13 sm:h-13 object-contain drop-shadow-xs hover:scale-105 transition-transform shrink-0" 
+            />
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-[#0f4c3a] tracking-tight flex items-center justify-end gap-2">
+                <span>יומן הריזורט לכלב</span>
+                <span>🐕</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+                דבר אליי — ואני אנהל את היומן: הזמנות, תשלומים ותפוסה
+              </p>
+            </div>
           </div>
 
         </header>
 
-        {/* 5 Metric Stat Cards: תפוסה כללית | פנסיון | אילוף | חוב פתוח | נגבה עד כה */}
+        {/* 5 Metric Stat Cards: תפוסה כללית | פנסיון | אילוף | חוב פתוח | נגבה עד כה (כולן לחיצות לעיון ועריכה) */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           
           {/* Card 1 (Right in RTL): תפוסה כללית */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-emerald-200 transition-colors">
+          <div 
+            onClick={() => setActiveHeaderMetric('occupancy')}
+            role="button"
+            tabIndex={0}
+            className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all active:scale-[0.99] group"
+            title="לחץ לעיון ועריכת כלבי התפוסה הכללית היום"
+          >
             <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-slate-500 text-right">תפוסה כללית</div>
+              <div className="text-xs font-bold text-slate-500 text-right group-hover:text-emerald-700 transition-colors">
+                תפוסה כללית
+              </div>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                 totalDogsToday >= settings.maxCapacity 
                   ? 'bg-red-50 text-red-700 border-red-200' 
@@ -548,37 +617,59 @@ export default function App() {
             <div className="text-2xl sm:text-3xl font-black text-slate-900 my-1 text-right">
               {totalDogsToday} <span className="text-xs font-semibold text-slate-400">/ {settings.maxCapacity}</span>
             </div>
-            <div className="text-[11px] font-medium text-slate-500 text-right truncate">
-              {freeSlots > 0 ? `${freeSlots} מקומות פנויים היום` : 'הריזורט בתפוסה מלאה'}
+            <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 pt-1 border-t border-slate-50">
+              <span className="truncate">{freeSlots > 0 ? `${freeSlots} מקומות פנויים` : 'בתפוסה מלאה'}</span>
+              <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100 flex items-center gap-0.5">
+                עיון ועריכה 🔍
+              </span>
             </div>
           </div>
 
           {/* Card 2: פנסיון */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-emerald-200 transition-colors">
+          <div 
+            onClick={() => setActiveHeaderMetric('boarding')}
+            role="button"
+            tabIndex={0}
+            className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-sky-400 hover:shadow-md cursor-pointer transition-all active:scale-[0.99] group"
+            title="לחץ לעיון ועריכת כלבי הפנסיון והדייקר היום"
+          >
             <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-slate-500 text-right">פנסיון</div>
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              <div className="text-xs font-bold text-slate-500 text-right group-hover:text-sky-700 transition-colors">
+                פנסיון ומשפחתון
+              </div>
+              <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200">
                 🏨 לינת לילה
               </span>
             </div>
             <div className="text-2xl sm:text-3xl font-black text-slate-900 my-1 text-right">
               {boardingToday} <span className="text-xs font-semibold text-slate-400">כלבים</span>
             </div>
-            <div className="text-[11px] font-medium text-slate-500 text-right truncate">
-              {boardingToday === 0 ? 'אין כלבים בלינה היום' : boardingToday === 1 ? 'כלב 1 שוהה בפנסיון' : `${boardingToday} כלבים שוהים בפנסיון`}
+            <div className="flex items-center justify-between text-[11px] font-medium text-slate-500 pt-1 border-t border-slate-50">
+              <span className="truncate">{boardingToday === 0 ? 'אין כלבים בלינה' : `${boardingToday} בפנסיון היום`}</span>
+              <span className="text-[10px] text-sky-700 font-bold opacity-80 group-hover:opacity-100 flex items-center gap-0.5">
+                עיון ועריכה 🔍
+              </span>
             </div>
           </div>
 
-          {/* Card 3: אילוף (מחולק ל: תהליך אילוף 70 יום | אילוף ביומיות) */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-purple-200 transition-colors col-span-2 sm:col-span-1">
+          {/* Card 3: אילוף (מחולק ל: תהליך אילוף 50 יום | אילוף ביומיות) */}
+          <div 
+            onClick={() => setActiveHeaderMetric('training')}
+            role="button"
+            tabIndex={0}
+            className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-purple-400 hover:shadow-md cursor-pointer transition-all active:scale-[0.99] group col-span-2 sm:col-span-1"
+            title="לחץ לעיון ועריכת כלבי האילוף היום"
+          >
             <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-slate-500 text-right">באילוף היום</div>
+              <div className="text-xs font-bold text-slate-500 text-right group-hover:text-purple-700 transition-colors">
+                באילוף היום
+              </div>
               <span className="text-[10px] font-black text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
                 סה״כ {trainingToday}
               </span>
             </div>
 
-            {/* Split: תהליך אילוף (70 יום) vs אילוף ביומיות */}
+            {/* Split: תהליך אילוף (50 יום) vs אילוף ביומיות */}
             <div className="grid grid-cols-2 gap-1.5 my-1 pt-0.5 divide-x divide-x-reverse divide-slate-100">
               
               {/* Right Side: תהליך אילוף מלא */}
@@ -593,7 +684,7 @@ export default function App() {
                   🎓 תהליך אילוף
                 </div>
                 <div className="text-[9px] text-slate-400 font-medium">
-                  (70 יום)
+                  (50 יום)
                 </div>
               </div>
 
@@ -615,15 +706,26 @@ export default function App() {
 
             </div>
 
-            <div className="text-[10px] font-medium text-slate-400 text-right pt-0.5 border-t border-slate-100 truncate">
-              {fullTrainingToday} בתהליך מלא · {dayTrainingToday} ביומיות
+            <div className="flex items-center justify-between text-[10px] font-medium text-slate-400 pt-1 border-t border-slate-100">
+              <span className="truncate">{fullTrainingToday} מלא · {dayTrainingToday} ביומיות</span>
+              <span className="text-[10px] text-purple-700 font-bold opacity-80 group-hover:opacity-100 flex items-center gap-0.5">
+                עיון ועריכה 🔍
+              </span>
             </div>
           </div>
 
           {/* Card 4: חוב פתוח */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-red-200 transition-colors">
+          <div 
+            onClick={() => setActiveHeaderMetric('debt')}
+            role="button"
+            tabIndex={0}
+            className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-red-400 hover:shadow-md cursor-pointer transition-all active:scale-[0.99] group"
+            title="לחץ לעיון ועריכת ההזמנות עם יתרת חוב פתוח"
+          >
             <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-slate-500 text-right">חוב פתוח</div>
+              <div className="text-xs font-bold text-slate-500 text-right group-hover:text-red-700 transition-colors">
+                חוב פתוח
+              </div>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                 openDebtTotal === 0
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
@@ -635,24 +737,38 @@ export default function App() {
             <div className="text-2xl sm:text-3xl font-black text-[#0f766e] my-1 text-right">
               ₪{openDebtTotal.toLocaleString('he-IL')}
             </div>
-            <div className="text-[11px] font-medium text-slate-400 text-right truncate">
-              {openDebtTotal === 0 ? 'הכול שולם 🥳' : `${unpaidCount} הזמנות עם יתרת חוב`}
+            <div className="flex items-center justify-between text-[11px] font-medium text-slate-400 pt-1 border-t border-slate-50">
+              <span className="truncate">{openDebtTotal === 0 ? 'הכול שולם 🥳' : `${unpaidCount} הזמנות עם יתרה`}</span>
+              <span className="text-[10px] text-red-600 font-bold opacity-80 group-hover:opacity-100 flex items-center gap-0.5">
+                עיון ועריכה 🔍
+              </span>
             </div>
           </div>
 
           {/* Card 5 (Left in RTL): נגבה עד כה */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-emerald-200 transition-colors">
+          <div 
+            onClick={() => setActiveHeaderMetric('revenue')}
+            role="button"
+            tabIndex={0}
+            className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all active:scale-[0.99] group"
+            title="לחץ לעיון בכל התקבולים וההכנסות שנגבו"
+          >
             <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-slate-500 text-right">נגבה עד כה</div>
+              <div className="text-xs font-bold text-slate-500 text-right group-hover:text-emerald-700 transition-colors">
+                נגבה עד כה
+              </div>
               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                💳 סה״כ הכנסות
+                💳 הכנסות
               </span>
             </div>
             <div className="text-2xl sm:text-3xl font-black text-[#0f766e] my-1 text-right">
               ₪{totalCollected.toLocaleString('he-IL')}
             </div>
-            <div className="text-[11px] font-medium text-slate-400 text-right truncate">
-              סה״כ מקדמות ותשלומים
+            <div className="flex items-center justify-between text-[11px] font-medium text-slate-400 pt-1 border-t border-slate-50">
+              <span className="truncate">סה״כ מקדמות ותשלומים</span>
+              <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100 flex items-center gap-0.5">
+                עיון ועריכה 🔍
+              </span>
             </div>
           </div>
 
@@ -971,6 +1087,35 @@ export default function App() {
             setIsGuideOpen(false);
             handleAgentProcess(promptText);
           }}
+        />
+      )}
+
+      {/* Review Request Modal (The day after a dog is checked out) */}
+      {!isReviewModalDismissed && pendingReviewBookings.length > 0 && (
+        <ReviewRequestModal
+          pendingBookings={pendingReviewBookings}
+          onClose={() => setIsReviewModalDismissed(true)}
+          onHandled={handleReviewHandled}
+        />
+      )}
+
+      {/* Header Metric Drill-down & Edit Modal */}
+      {activeHeaderMetric && (
+        <HeaderMetricModal
+          metricType={activeHeaderMetric}
+          bookings={bookings}
+          settings={settings}
+          onClose={() => setActiveHeaderMetric(null)}
+          onEditBooking={(booking) => {
+            setActiveHeaderMetric(null);
+            setBookingFormModal({ isOpen: true, initialData: booking });
+          }}
+          onMarkAsPaid={handleMarkAsPaid}
+          onOpenPaymentModal={(booking) => {
+            setActiveHeaderMetric(null);
+            setPaymentModalBooking(booking);
+          }}
+          onToggleStayStatus={handleToggleStayStatus}
         />
       )}
 

@@ -54,7 +54,13 @@ export const BookingsList: React.FC<BookingsListProps> = ({
 
   // Filter list
   const filtered = bookings.filter(b => {
-    if (paymentFilter !== 'all' && b.paymentStatus !== paymentFilter) return false;
+    const remainingDebt = Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0));
+    if (paymentFilter === 'unpaid') {
+      // "חוב פתוח" filter matches any active booking with debt
+      if (b.stayStatus === 'cancelled' || b.paymentStatus === 'fully_paid' || remainingDebt <= 0) return false;
+    } else if (paymentFilter !== 'all' && b.paymentStatus !== paymentFilter) {
+      return false;
+    }
     if (serviceFilter !== 'all' && b.serviceType !== serviceFilter) return false;
     if (stayFilter !== 'all' && b.stayStatus !== stayFilter) return false;
     if (searchQuery.trim()) {
@@ -69,10 +75,14 @@ export const BookingsList: React.FC<BookingsListProps> = ({
   });
 
   // Calculate totals
-  const totalRevenue = bookings.filter(b => b.stayStatus !== 'cancelled').reduce((acc, b) => acc + b.totalPrice, 0);
-  const totalCollected = bookings.filter(b => b.stayStatus !== 'cancelled').reduce((acc, b) => acc + b.depositAmount, 0);
+  const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
+  const totalRevenue = activeBookings.reduce((acc, b) => acc + (Number(b.totalPrice) || 0), 0);
+  const totalCollected = activeBookings.reduce((acc, b) => {
+    if (b.paymentStatus === 'fully_paid') return acc + (Number(b.totalPrice) || 0);
+    return acc + (Number(b.depositAmount) || 0);
+  }, 0);
   const totalDebt = Math.max(0, totalRevenue - totalCollected);
-  const unpaidCount = bookings.filter(b => b.stayStatus !== 'cancelled' && b.paymentStatus === 'unpaid').length;
+  const unpaidCount = activeBookings.filter(b => b.paymentStatus !== 'fully_paid' && ((Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0) > 0)).length;
 
   const handleSendWhatsAppReminder = (booking: Booking, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -172,7 +182,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-red-500"></span>
-              <span>חוב פתוח ({bookings.filter(b => b.paymentStatus === 'unpaid' && b.stayStatus !== 'cancelled').length})</span>
+              <span>חוב פתוח ({unpaidCount})</span>
             </button>
             <button
               onClick={() => setPaymentFilter('deposit_paid')}
@@ -202,7 +212,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
           >
             <option value="all">כל השירותים</option>
             <option value="boarding">🏨 פנסיון</option>
-            <option value="training">🎓 תהליך אילוף (70 יום)</option>
+            <option value="training">🎓 תהליך אילוף (50 יום)</option>
             <option value="day_training">🦮 אילוף ביומיות</option>
             <option value="daycare">✂️ יום כיף</option>
           </select>

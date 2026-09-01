@@ -97,7 +97,7 @@ export function getClarificationQuestions(
     rawLower.includes('יום כיף');
 
   const currentServiceLabel = booking.serviceType === 'training'
-    ? 'תהליך אילוף (70 יום)'
+    ? 'תהליך אילוף (50 יום)'
     : booking.serviceType === 'day_training'
     ? 'אילוף ביומיות (ללא לינה)'
     : booking.serviceType === 'daycare'
@@ -107,16 +107,16 @@ export function getClarificationQuestions(
   questions.push({
     id: 'service',
     title: 'פנסיון או תהליך אילוף?',
-    question: 'האם מדובר על פנסיון (לינה), תהליך אילוף מלא (70 יום), אילוף ביומיות או יום כיף?',
+    question: 'האם מדובר על פנסיון (לינה), תהליך אילוף מלא (50 יום), אילוף ביומיות או יום כיף?',
     description: serviceMentioned
       ? `נבחר שירות: ${currentServiceLabel}`
-      : 'בחר האם הכלב מגיע לפנסיון (לינה), תהליך אילוף מלא (70 יום), אילוף ביומיות ללא לינה, או יום כיף.',
+      : 'בחר האם הכלב מגיע לפנסיון (לינה), תהליך אילוף מלא (50 יום), אילוף ביומיות ללא לינה, או יום כיף.',
     iconType: 'service',
     currentValueDisplay: currentServiceLabel,
     isComplete: serviceMentioned,
     quickOptions: [
       { label: '🏨 פנסיון (לינה)', voiceSample: 'זה לפנסיון לינה' },
-      { label: '🎓 תהליך אילוף (70 יום)', voiceSample: 'זה תהליך אילוף מלא של 70 יום' },
+      { label: '🎓 תהליך אילוף (50 יום)', voiceSample: 'זה תהליך אילוף מלא של 50 יום' },
       { label: '🦮 אילוף ביומיות (ללא לינה)', voiceSample: 'זה אילוף ביומיות ללא לינה' },
       { label: '✂️ יום כיף (דייקר)', voiceSample: 'זה יום כיף ללא לינה' }
     ]
@@ -289,7 +289,7 @@ export function applyClarificationAnswer(
     } else if (clean.includes('אילוף') || clean.includes('אימון') || clean.includes('משמעת')) {
       updated.serviceType = 'training';
       const sDate = updated.startDate || referenceDate;
-      updated.endDate = addDays(sDate, 70);
+      updated.endDate = addDays(sDate, 50);
       updated.totalPrice = settings.defaultDailyRateTraining || 6500;
     } else if (clean.includes('דייקר') || clean.includes('כיף') || clean.includes('יומי')) {
       updated.serviceType = 'daycare';
@@ -553,7 +553,7 @@ export function parseWithClientHeuristic(
   // 3. Extract Dates
   let startDate = referenceDate;
   let endDate = serviceType === 'training' 
-    ? addDays(referenceDate, 70) 
+    ? addDays(referenceDate, 50) 
     : serviceType === 'daycare' 
     ? referenceDate 
     : addDays(referenceDate, 3); // default 3 days for boarding/day_training
@@ -629,14 +629,14 @@ export function parseWithClientHeuristic(
   let totalPrice = 0;
   let depositAmount = 0;
 
-  // Remove phone number, dates, and 70-day mentions from text before extracting monetary prices
+  // Remove phone number, dates, and 50/70-day mentions from text before extracting monetary prices
   let textForPrices = text;
   if (ownerPhone) {
     textForPrices = textForPrices.replace(ownerPhone, '');
   }
   textForPrices = textForPrices.replace(/\b\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\b/g, '');
   textForPrices = textForPrices.replace(/05\d-?\d{7}|05\d{8}/g, '');
-  textForPrices = textForPrices.replace(/70\s*(?:יום|ימים)/g, '');
+  textForPrices = textForPrices.replace(/(?:50|70)\s*(?:יום|ימים)/g, '');
 
   // Extract numbers with ₪ or שקל or סכום
   const priceMatches = [...textForPrices.matchAll(/(\d{2,5})\s*(?:ש"ח|שח|שקל|שקלים|₪)?/g)];

@@ -122,7 +122,7 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
         const s = field === 'startDate' ? value : updated.startDate;
         const srv = field === 'serviceType' ? value : updated.serviceType;
         if (srv === 'training') {
-          if (s) updated.endDate = addDays(s, 70);
+          if (s) updated.endDate = addDays(s, 50);
           updated.totalPrice = settings.defaultDailyRateTraining || 6500;
         } else {
           const e = field === 'endDate' ? value : updated.endDate;
@@ -415,7 +415,7 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
                       className="w-full bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-900 focus:border-indigo-500 focus:outline-hidden"
                     >
                       <option value="boarding">🏨 פנסיון לילה (₪{settings.defaultDailyRateBoarding}/יום)</option>
-                      <option value="training">🎓 תהליך אילוף (70 יום - ₪{settings.defaultDailyRateTraining || 6500})</option>
+                      <option value="training">🎓 תהליך אילוף (50 יום - ₪{settings.defaultDailyRateTraining || 6500})</option>
                       <option value="day_training">🦮 אילוף ביומיות (₪{settings.defaultDailyRateDayTraining || 250}/יום)</option>
                       <option value="daycare">✂️ יום כיף / שהות יומית (₪{settings.defaultDailyRateDaycare}/יום)</option>
                     </select>

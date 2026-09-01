@@ -314,7 +314,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const handleServiceTypeSelect = (type: ServiceType) => {
     setServiceType(type);
     if (type === 'training') {
-      const newEndDate = addDays(startDate, 70);
+      const newEndDate = addDays(startDate, 50);
       setEndDate(newEndDate);
       setPricingMode('period');
       setTotalPrice((settings.defaultDailyRateTraining || 6500) + extrasTotal);
@@ -499,7 +499,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     if (!startDate || dateStr < startDate) {
       setStartDate(dateStr);
       if (endDate <= dateStr) {
-        setEndDate(addDays(dateStr, serviceType === 'training' ? 70 : 3));
+        setEndDate(addDays(dateStr, serviceType === 'training' ? 50 : 3));
       }
     } else if (dateStr > startDate) {
       setEndDate(dateStr);
@@ -858,7 +858,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       <span className="text-base">🎓</span>
                       <span className="text-[10px] font-bold text-amber-700">₪{settings.defaultDailyRateTraining || 6500}</span>
                     </div>
-                    <div className="text-xs font-bold mt-1">תהליך אילוף (70 יום)</div>
+                    <div className="text-xs font-bold mt-1">תהליך אילוף (50 יום)</div>
                   </button>
 
                   <button
@@ -973,15 +973,109 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     שבועיים
                   </button>
                   {serviceType === 'training' && (
-                    <button
-                      type="button"
-                      onClick={() => setEndDate(addDays(startDate, 70))}
-                      className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg text-xs font-bold text-amber-900 transition-colors cursor-pointer"
-                    >
-                      תהליך 70 יום ⭐
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setEndDate(addDays(startDate, 50))}
+                        className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg text-xs font-bold text-amber-900 transition-colors cursor-pointer"
+                      >
+                        תהליך 50 יום ⭐
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEndDate(addDays(startDate, 40))}
+                        className="px-2.5 py-1 bg-white hover:bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-800 transition-colors cursor-pointer"
+                      >
+                        40 יום
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEndDate(addDays(startDate, 60))}
+                        className="px-2.5 py-1 bg-white hover:bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-800 transition-colors cursor-pointer"
+                      >
+                        60 יום
+                      </button>
+                    </>
                   )}
                 </div>
+
+                {/* Flexible Training Period Selector */}
+                {serviceType === 'training' && (
+                  <div className="w-full bg-amber-50/80 border border-amber-200 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-2 shadow-2xs">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 font-black text-amber-950 text-xs sm:text-sm">
+                        <span>🎓 תקופת תהליך האילוף (בימים)</span>
+                        <span className="bg-amber-200 text-amber-900 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                          ברירת מחדל: 50 יום
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-800/80">
+                        שנה את התקופה בקלות — תאריך הסיום יתעדכן אוטומטית לפי מספר הימים שתבחר:
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 self-end sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newDays = Math.max(1, daysCount - 5);
+                          setEndDate(addDays(startDate, newDays));
+                        }}
+                        className="w-8 h-8 rounded-xl bg-white hover:bg-amber-100 border border-amber-300 font-black text-amber-900 flex items-center justify-center cursor-pointer shadow-2xs text-xs"
+                        title="הפחת 5 ימים"
+                      >
+                        -5
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newDays = Math.max(1, daysCount - 1);
+                          setEndDate(addDays(startDate, newDays));
+                        }}
+                        className="w-8 h-8 rounded-xl bg-white hover:bg-amber-100 border border-amber-300 font-black text-amber-900 flex items-center justify-center cursor-pointer shadow-2xs text-xs"
+                        title="הפחת יום 1"
+                      >
+                        -1
+                      </button>
+                      <div className="flex items-center gap-1 bg-white px-3 py-1.5 rounded-xl border border-amber-300 shadow-2xs">
+                        <input
+                          type="number"
+                          min="1"
+                          max="365"
+                          value={daysCount}
+                          onChange={(e) => {
+                            const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                            setEndDate(addDays(startDate, val));
+                          }}
+                          className="w-12 text-center font-black text-base text-amber-950 focus:outline-none"
+                        />
+                        <span className="text-xs font-bold text-amber-800">ימים</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newDays = daysCount + 1;
+                          setEndDate(addDays(startDate, newDays));
+                        }}
+                        className="w-8 h-8 rounded-xl bg-white hover:bg-amber-100 border border-amber-300 font-black text-amber-900 flex items-center justify-center cursor-pointer shadow-2xs text-xs"
+                        title="הוסף יום 1"
+                      >
+                        +1
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newDays = daysCount + 5;
+                          setEndDate(addDays(startDate, newDays));
+                        }}
+                        className="w-8 h-8 rounded-xl bg-white hover:bg-amber-100 border border-amber-300 font-black text-amber-900 flex items-center justify-center cursor-pointer shadow-2xs text-xs"
+                        title="הוסף 5 ימים"
+                      >
+                        +5
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* ======================================================== */}
                 {/* LIVE OCCUPANCY CALENDAR - DIRECTLY UNDER DATE SELECTION */}

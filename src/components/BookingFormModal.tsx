@@ -79,7 +79,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   const handleServiceTypeChange = (newType: ServiceType) => {
     setServiceType(newType);
     if (newType === 'training') {
-      const newEndDate = addDays(startDate, 70);
+      const newEndDate = addDays(startDate, 50);
       setEndDate(newEndDate);
       setPricingMode('period');
       setTotalPrice(settings.defaultDailyRateTraining || 6500);
@@ -480,8 +480,8 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                   <span className="text-base">🎓</span>
                   <span className="text-[10px] font-bold text-amber-700">₪{settings.defaultDailyRateTraining || 6500}</span>
                 </div>
-                <div className="text-xs font-bold mt-1">תהליך אילוף (70 יום)</div>
-                <div className="text-[10px] text-slate-500 font-normal">תכנית מלאה ל-70 יום</div>
+                <div className="text-xs font-bold mt-1">תהליך אילוף (50 יום)</div>
+                <div className="text-[10px] text-slate-500 font-normal">תכנית מלאה ל-50 יום</div>
               </button>
 
               <button
@@ -607,7 +607,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                   { label: 'שבוע (7)', days: 7 },
                   { label: 'שבועיים (14)', days: 14 },
                   { label: 'חודש (30)', days: 30 },
-                  { label: '70 יום 🎓', days: 70 }
+                  { label: '50 יום 🎓', days: 50 }
                 ].map(p => (
                   <button
                     key={p.days}

@@ -37,9 +37,13 @@ export const getAllExistingLocalBookings = (): Booking[] => {
 
   const keysToInspect = [
     'dog_resort_bookings',
-    'shmulik_dog_resort_bookings_v2',
-    'shmulik_dog_resort_bookings_v1'
+    'shmulik_dog_resort_bookings_v2'
   ];
+
+  // Safely cleanup legacy key if found
+  try {
+    localStorage.removeItem('shmulik_dog_resort_bookings_v1');
+  } catch (e) {}
 
   let hasLocalData = false;
 
@@ -58,7 +62,16 @@ export const getAllExistingLocalBookings = (): Booking[] => {
                 b.totalPrice = 1750;
                 b.notes = 'אילוף ביומיות ללא לינה - חיזוקים חיוביים';
               }
-              combinedMap.set(b.id, { ...combinedMap.get(b.id), ...b });
+              const existing = combinedMap.get(b.id);
+              if (existing) {
+                // Compare updated timestamps - preserve the newer version
+                const existingTime = new Date(existing.updatedAt || 0).getTime();
+                const newTime = new Date(b.updatedAt || 0).getTime();
+                if (existingTime >= newTime && existing.paymentStatus === 'fully_paid') {
+                  continue; // Don't overwrite fully paid with older version
+                }
+              }
+              combinedMap.set(b.id, { ...existing, ...b });
             }
           }
         }
@@ -511,28 +524,30 @@ export const saveBookingToDb = async (booking: Booking): Promise<void> => {
     } else {
       local.push(updatedBooking);
     }
-    localStorage.setItem('dog_resort_bookings', JSON.stringify(local));
-    localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify(local));
+    const json = JSON.stringify(local);
+    localStorage.setItem('dog_resort_bookings', json);
+    localStorage.setItem('shmulik_dog_resort_bookings_v2', json);
+    localStorage.removeItem('shmulik_dog_resort_bookings_v1');
   } catch (e) {}
 
   try {
     const payload = {
-      id: booking.id,
-      dog_name: booking.dogName,
-      dog_breed: booking.dogBreed || '',
-      owner_name: booking.ownerName,
-      owner_phone: booking.ownerPhone,
-      owner_email: booking.ownerEmail || '',
-      service_type: booking.serviceType,
-      start_date: booking.startDate,
-      end_date: booking.endDate,
-      total_price: booking.totalPrice,
-      deposit_amount: booking.depositAmount,
-      payment_status: booking.paymentStatus,
-      payment_method: booking.paymentMethod || 'bit',
-      stay_status: booking.stayStatus,
-      notes: booking.notes || '',
-      vaccination_valid: booking.vaccinationValid ?? true,
+      id: updatedBooking.id,
+      dog_name: updatedBooking.dogName,
+      dog_breed: updatedBooking.dogBreed || '',
+      owner_name: updatedBooking.ownerName,
+      owner_phone: updatedBooking.ownerPhone,
+      owner_email: updatedBooking.ownerEmail || '',
+      service_type: updatedBooking.serviceType,
+      start_date: updatedBooking.startDate,
+      end_date: updatedBooking.endDate,
+      total_price: Number(updatedBooking.totalPrice) || 0,
+      deposit_amount: Number(updatedBooking.depositAmount) || 0,
+      payment_status: updatedBooking.paymentStatus,
+      payment_method: updatedBooking.paymentMethod || 'bit',
+      stay_status: updatedBooking.stayStatus,
+      notes: updatedBooking.notes || '',
+      vaccination_valid: updatedBooking.vaccinationValid ?? true,
       data: updatedBooking,
       updated_at: new Date().toISOString()
     };
