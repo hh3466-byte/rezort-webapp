@@ -114,7 +114,7 @@ export const GrowPaymentsModal: React.FC<GrowPaymentsModalProps> = ({
           </div>
 
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 text-center leading-relaxed">
-            💡 <strong>לשמוליק נשאר רק:</strong> להזין שם כלב, לבחור תאריכים וסוג שירות (פנסיון / אילוף).
+            💡 <strong>נשאר רק:</strong> להזין שם כלב, לבחור תאריכים וסוג שירות (פנסיון / אילוף).
           </div>
         </div>
 

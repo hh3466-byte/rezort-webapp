@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 
-import { Booking, ResortSettings, AgentActionProposal, PaymentMethod, GrowIncomingPayment } from './types';
+import { Booking, ResortSettings, AgentActionProposal, PaymentMethod, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus } from './types';
 import { initialBookings, defaultSettings } from './data/initialData';
 import { loadStoredBookings, loadStoredSettings } from './utils/storage';
 import { 
@@ -9,6 +9,10 @@ import {
   subscribeToSettings, 
   subscribeToGrowPayments,
   updateGrowPaymentStatus,
+  subscribeToIntakeRequests,
+  updateIntakeRequestStatusInDb,
+  deleteIntakeRequestFromDb,
+  loadStoredIntakeRequests,
   saveBookingToDb, 
   deleteBookingFromDb, 
   saveSettingsToDb, 
@@ -37,6 +41,8 @@ import { ReportsModal } from './components/ReportsModal';
 import { Guide } from './components/Guide';
 import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricModal';
 import { ReviewRequestModal } from './components/ReviewRequestModal';
+import { IntakeRequestsModal } from './components/IntakeRequestsModal';
+import { PublicIntakePage } from './components/PublicIntakePage';
 
 export default function App() {
   // Core application state with live Cloud synchronization
@@ -67,6 +73,18 @@ export default function App() {
   // Incoming Grow Payments from Gmail sync
   const [pendingGrowPayments, setPendingGrowPayments] = useState<GrowIncomingPayment[]>([]);
   const [activeGrowPayment, setActiveGrowPayment] = useState<GrowIncomingPayment | null>(null);
+
+  // Client Intake Requests State
+  const isIntakeParam = typeof window !== 'undefined' && (
+    window.location.search.includes('request') ||
+    window.location.search.includes('intake') ||
+    window.location.hash.includes('request') ||
+    window.location.hash.includes('intake')
+  );
+  const [showPublicIntake, setShowPublicIntake] = useState(isIntakeParam);
+  const [intakeRequests, setIntakeRequests] = useState<IntakeRequest[]>(() => loadStoredIntakeRequests());
+  const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false);
+  const pendingIntakeCount = intakeRequests.filter(r => r.status === 'pending').length;
 
   // Manager Authentication State (Passcode 3466)
   const [isManagerAuthOpen, setIsManagerAuthOpen] = useState(false);
@@ -135,10 +153,15 @@ export default function App() {
       setPendingGrowPayments(payments);
     });
 
+    const unsubIntake = subscribeToIntakeRequests((requests) => {
+      setIntakeRequests(requests);
+    });
+
     return () => {
       unsubBookings();
       unsubSettings();
       unsubGrowPayments();
+      unsubIntake();
     };
   }, []);
 
@@ -521,6 +544,16 @@ export default function App() {
     showToast('🧹 כל הנתונים נמחקו - היומן נקי לחלוטין!');
   };
 
+  // If the client opened the public intake form link (?request=true) or manager opened preview
+  if (showPublicIntake) {
+    return (
+      <PublicIntakePage
+        settings={settings}
+        onBackToApp={() => setShowPublicIntake(false)}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 font-sans p-3 sm:p-6 pb-24 selection:bg-emerald-200">
       
@@ -530,7 +563,7 @@ export default function App() {
         {/* Top Header Row */}
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1 pb-1">
           
-          {/* Left Buttons in RTL (top left): + הזמנה חדשה, חוות דעת ממתינות, משותף, הגדרות */}
+          {/* Left Buttons in RTL (top left): + הזמנה חדשה, בקשות קליטה, חוות דעת, משותף, הגדרות */}
           <div className="flex flex-wrap items-center gap-2.5 order-2 sm:order-1">
             <button
               onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
@@ -539,6 +572,32 @@ export default function App() {
             >
               <span>+</span>
               <span>הזמנה חדשה</span>
+            </button>
+
+            {/* Intake Requests Modal Button */}
+            <button
+              type="button"
+              onClick={() => setIsIntakeModalOpen(true)}
+              id="btn-intake-requests-top"
+              className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 hover:border-emerald-300 text-slate-800 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer relative"
+              title="צפייה בבקשות קליטה חדשות מלקוחות, חיוג לתיאום, ושליחת קישור לתשלום"
+            >
+              <span>📥 בקשות קליטה</span>
+              {pendingIntakeCount > 0 && (
+                <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full animate-pulse">
+                  {pendingIntakeCount}
+                </span>
+              )}
+            </button>
+
+            {/* Public Intake Link Button */}
+            <button
+              type="button"
+              onClick={() => setShowPublicIntake(true)}
+              className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 text-slate-600 hover:text-emerald-700 font-semibold px-2.5 py-2 rounded-xl text-xs shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
+              title="פתיחת שאלון הקליטה המקוון (אותו שולחים ללקוחות פונים בוואטסאפ)"
+            >
+              <span>🔗 שאלון קליטה</span>
             </button>
 
             {/* Notification button for pending review requests (dogs checked out yesterday) */}
@@ -1116,6 +1175,45 @@ export default function App() {
             setPaymentModalBooking(booking);
           }}
           onToggleStayStatus={handleToggleStayStatus}
+        />
+      )}
+
+      {/* Intake Requests Modal (Client Online Inquiries) */}
+      {isIntakeModalOpen && (
+        <IntakeRequestsModal
+          requests={intakeRequests}
+          settings={settings}
+          onClose={() => setIsIntakeModalOpen(false)}
+          onUpdateStatus={async (id, status, notes) => {
+            await updateIntakeRequestStatusInDb(id, status, notes);
+            showToast('סטטוס בקשת הקליטה עודכן');
+          }}
+          onApproveAndBook={async (req) => {
+            setBookingWizardOpen({
+              isOpen: true,
+              initialData: {
+                dogName: req.dogName,
+                dogBreed: req.dogBreed,
+                ownerName: req.ownerName,
+                ownerPhone: req.ownerPhone,
+                ownerEmail: req.ownerEmail,
+                serviceType: req.serviceType,
+                startDate: req.startDate,
+                endDate: req.endDate,
+                vaccinationValid: req.isVaccinated,
+                notes: [req.specialNeeds, req.notes].filter(Boolean).join(' | '),
+                depositAmount: req.depositRequested || 0,
+                paymentStatus: req.depositRequested ? 'deposit_paid' : 'fully_paid',
+                stayStatus: 'booked'
+              }
+            });
+            await updateIntakeRequestStatusInDb(req.id, 'approved');
+            setIsIntakeModalOpen(false);
+          }}
+          onDeleteRequest={async (id) => {
+            await deleteIntakeRequestFromDb(id);
+            showToast('בקשת הקליטה הוסרה');
+          }}
         />
       )}
 

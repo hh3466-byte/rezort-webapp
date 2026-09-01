@@ -1,6 +1,11 @@
 import { Booking, ResortSettings } from '../types';
 import { formatDateIL } from './dateUtils';
 
+export function cleanPhoneNumber(phone: string): string {
+  if (!phone) return '';
+  return phone.replace(/\D/g, '');
+}
+
 /**
  * Format Israeli phone number for WhatsApp international URL (e.g., 0541234567 -> 972541234567)
  */
@@ -35,7 +40,7 @@ export function generatePaymentReminderMessage(booking: Booking, settings: Resor
   const serviceHebrew = getServiceTypeHebrew(booking.serviceType);
   const datesText = `${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}`;
 
-  let msg = `שלום ${booking.ownerName}, כאן ${settings.managerName} מ${settings.resortName} 🐾\n\n`;
+  let msg = `שלום ${booking.ownerName}, כאן צוות הריזורט לכלב 🐾\n\n`;
   msg += `תזכורת ידידותית לגבי השהות של *${booking.dogName}* אצלנו:\n`;
   msg += `📌 *סוג שירות:* ${serviceHebrew}\n`;
   msg += `📅 *תאריכים:* ${datesText}\n`;
@@ -90,7 +95,7 @@ export function generateBookingConfirmationMessage(booking: Booking, settings: R
   }
 
   msg += `\nאנא וודאו כי פנקס החיסונים בתוקף וציידו את ${booking.dogName} במזון הרגיל ובמידת הצורך בציוד אישי.\n`;
-  msg += `מחכים לכם! ${settings.managerName} (${settings.managerPhone})`;
+  msg += `מחכים לכם! צוות הריזורט לכלב 🐾 (${settings.managerPhone})`;
 
   return msg;
 }

@@ -271,7 +271,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div>
                   <label className="text-xs text-slate-700 font-bold block mb-1">
-                    שם מנהל / מאלף (שמוליק)
+                    שם מנהל / צוות הריזורט
                   </label>
                   <input
                     type="text"
@@ -334,17 +334,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </p>
               </div>
 
+              {/* Payment Links & Notification Phone */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
+                <div className="sm:col-span-2">
                   <label className="text-xs text-slate-700 font-bold block mb-1">
-                    קישור לתשלום בביט (Bit)
+                    🔗 קישור ראשי לתשלום מקדמה מ-Grow (או PayBox)
                   </label>
                   <input
                     type="text"
-                    value={formData.bitPaymentLink || ''}
-                    onChange={(e) => setFormData({ ...formData, bitPaymentLink: e.target.value })}
-                    placeholder="https://bit.pay/..."
-                    className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none"
+                    value={formData.growPaymentLink || formData.payboxLink || ''}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      growPaymentLink: e.target.value,
+                      payboxLink: e.target.value 
+                    })}
+                    placeholder="https://pay.grow.link/..."
+                    className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    קישור זה יישלח ללקוח בלחיצה על "שלח קישור לתשלום בוואטסאפ" במסך בקשות הקליטה.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-700 font-bold block mb-1">
+                    📱 טלפון לקבלת התראות וואטסאפ של הריזורט
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.whatsappNotificationPhone || formData.managerPhone || ''}
+                    onChange={(e) => setFormData({ ...formData, whatsappNotificationPhone: e.target.value })}
+                    placeholder="054-8889900"
+                    className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-700 font-bold block mb-1">
+                    🔑 מפתח CallMeBot (שליחת וואטסאפ אוטומטית ברקע)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.callmebotApiKey || ''}
+                    onChange={(e) => setFormData({ ...formData, callmebotApiKey: e.target.value })}
+                    placeholder="הזן API Key של CallMeBot (אופציונלי)"
+                    className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
                   />
                 </div>
 

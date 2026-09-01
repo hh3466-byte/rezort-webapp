@@ -1,8 +1,8 @@
 import { Booking, ResortSettings } from '../types';
 
 export const defaultSettings: ResortSettings = {
-  resortName: 'ריזורט הכלבים והאילוף של שמוליק',
-  managerName: 'שמוליק',
+  resortName: 'הריזורט לכלב - פנסיון, אילוף ושיקום התנהגותי',
+  managerName: 'צוות הריזורט לכלב',
   managerPhone: '054-8889900',
   maxCapacity: 16,
   defaultDailyRateBoarding: 180,
@@ -11,8 +11,10 @@ export const defaultSettings: ResortSettings = {
   defaultDailyRateCombined: 0,
   defaultDailyRateDaycare: 90,
   bitNumber: '054-8889900',
-  payboxLink: 'https://paybox.me/shmulikdogresort',
-  bankDetails: 'בנק הפועלים (12), סניף 600, ח-ן 123456 על שם שמוליק',
+  payboxLink: 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg',
+  growPaymentLink: 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg',
+  whatsappNotificationPhone: '054-8889900',
+  bankDetails: 'בנק הפועלים (12), סניף 600, ח-ן 123456 על שם הריזורט לכלב',
   autoCheckVaccination: true,
 };
 

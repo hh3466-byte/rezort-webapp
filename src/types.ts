@@ -76,18 +76,47 @@ export interface GrowIncomingPayment {
   updated_at?: string;
 }
 
+export type IntakeRequestStatus = 'pending' | 'payment_requested' | 'approved' | 'rejected';
+
+export interface IntakeRequest {
+  id: string;
+  createdAt: string;
+  status: IntakeRequestStatus;
+  ownerName: string;
+  ownerPhone: string;
+  ownerEmail?: string;
+  dogName: string;
+  dogBreed: string;
+  dogAge?: string;
+  dogSize?: 'small' | 'medium' | 'large' | 'giant';
+  serviceType: ServiceType;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  isFriendlyWithDogs: 'yes' | 'no' | 'depends';
+  isNeutered: boolean;
+  isVaccinated: boolean;
+  specialNeeds?: string;
+  notes?: string;
+  calculatedPrice?: number;
+  depositRequested?: number;
+  internalNotes?: string;
+}
+
 export interface ResortSettings {
   resortName: string;
   managerName: string;
   managerPhone: string;
   maxCapacity: number;
   defaultDailyRateBoarding: number;
-  defaultDailyRateTraining: number; // Process price (6,500 NIS for 70 days)
+  defaultDailyRateTraining: number; // Process price (6,500 NIS for 50 days)
   defaultDailyRateDayTraining: number; // אילוף ביומיות (ללא לינה - מחיר ליום)
   defaultDailyRateCombined?: number;
   defaultDailyRateDaycare: number;
   bitNumber: string;
   payboxLink: string;
+  growPaymentLink?: string;
+  whatsappNotificationPhone?: string;
+  callmebotApiKey?: string;
   bitPaymentLink?: string;
   payboxPaymentLink?: string;
   bankDetails: string;

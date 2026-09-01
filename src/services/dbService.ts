@@ -1,5 +1,5 @@
 import { supabase } from '../utils/supabase';
-import { Booking, Customer, ResortSettings, GrowIncomingPayment } from '../types';
+import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus } from '../types';
 import { initialBookings, defaultSettings } from '../data/initialData';
 import { extractCustomers } from '../utils/storage';
 
@@ -7,6 +7,8 @@ const BOOKINGS_TABLE = 'bookings';
 const SETTINGS_TABLE = 'settings';
 const CUSTOMERS_TABLE = 'customers';
 const GROW_PAYMENTS_TABLE = 'grow_incoming_payments';
+const INTAKE_REQUESTS_TABLE = 'intake_requests';
+const LOCAL_INTAKE_REQUESTS_KEY = 'dog_resort_intake_requests';
 const SETTINGS_DOC_ID = 'resort_config';
 const DELETED_BOOKINGS_KEY = 'shmulik_dog_resort_deleted_ids';
 
@@ -799,4 +801,199 @@ export const updateGrowPaymentStatus = async (
     console.warn('Grow payment update exception:', e);
   }
 };
+
+/**
+ * Load intake requests from local storage
+ */
+export const loadStoredIntakeRequests = (): IntakeRequest[] => {
+  try {
+    const raw = localStorage.getItem(LOCAL_INTAKE_REQUESTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+/**
+ * Save a new intake request to Supabase and LocalStorage
+ */
+export const saveIntakeRequestToDb = async (request: IntakeRequest): Promise<void> => {
+  try {
+    // 1. Update local storage
+    const current = loadStoredIntakeRequests();
+    const updated = [request, ...current.filter(r => r.id !== request.id)];
+    localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(updated));
+
+    // 2. Upsert to Supabase
+    const { error } = await supabase
+      .from(INTAKE_REQUESTS_TABLE)
+      .upsert({
+        id: request.id,
+        created_at: request.createdAt,
+        status: request.status,
+        owner_name: request.ownerName,
+        owner_phone: request.ownerPhone,
+        owner_email: request.ownerEmail || '',
+        dog_name: request.dogName,
+        dog_breed: request.dogBreed || '',
+        dog_age: request.dogAge || '',
+        dog_size: request.dogSize || 'medium',
+        service_type: request.serviceType,
+        start_date: request.startDate,
+        end_date: request.endDate,
+        is_friendly_with_dogs: request.isFriendlyWithDogs,
+        is_neutered: request.isNeutered,
+        is_vaccinated: request.isVaccinated,
+        special_needs: request.specialNeeds || '',
+        notes: request.notes || '',
+        calculated_price: request.calculatedPrice || 0,
+        deposit_requested: request.depositRequested || 0,
+        internal_notes: request.internalNotes || '',
+        data: request
+      });
+
+    if (error) {
+      console.warn('Supabase save intake request warning (stored locally):', error.message);
+    }
+  } catch (e) {
+    console.warn('saveIntakeRequestToDb error:', e);
+  }
+};
+
+/**
+ * Update the status of an intake request
+ */
+export const updateIntakeRequestStatusInDb = async (
+  id: string,
+  status: IntakeRequestStatus,
+  internalNotes?: string
+): Promise<void> => {
+  try {
+    // 1. Update local storage
+    const current = loadStoredIntakeRequests();
+    const updated = current.map(r => {
+      if (r.id === id) {
+        return {
+          ...r,
+          status,
+          internalNotes: internalNotes !== undefined ? internalNotes : r.internalNotes
+        };
+      }
+      return r;
+    });
+    localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(updated));
+
+    // 2. Update in Supabase
+    const updatePayload: any = { status };
+    if (internalNotes !== undefined) updatePayload.internal_notes = internalNotes;
+
+    const { error } = await supabase
+      .from(INTAKE_REQUESTS_TABLE)
+      .update(updatePayload)
+      .eq('id', id);
+
+    if (error) {
+      console.warn('Supabase update intake status warning:', error.message);
+    }
+  } catch (e) {
+    console.warn('updateIntakeRequestStatusInDb error:', e);
+  }
+};
+
+/**
+ * Delete an intake request
+ */
+export const deleteIntakeRequestFromDb = async (id: string): Promise<void> => {
+  try {
+    const current = loadStoredIntakeRequests();
+    const updated = current.filter(r => r.id !== id);
+    localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(updated));
+
+    await supabase
+      .from(INTAKE_REQUESTS_TABLE)
+      .delete()
+      .eq('id', id);
+  } catch (e) {
+    console.warn('deleteIntakeRequestFromDb error:', e);
+  }
+};
+
+/**
+ * Real-time subscription to intake requests
+ */
+export const subscribeToIntakeRequests = (
+  callback: (requests: IntakeRequest[]) => void
+): Unsubscribe => {
+  // Always emit local data first
+  callback(loadStoredIntakeRequests());
+
+  const fetchRequests = async () => {
+    try {
+      const { data, error } = await supabase
+        .from(INTAKE_REQUESTS_TABLE)
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        // Table might not exist yet or connection offline, fallback to local
+        callback(loadStoredIntakeRequests());
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const mapped: IntakeRequest[] = data.map((row: any) => {
+          if (row.data && typeof row.data === 'object') {
+            return { ...row.data, id: row.id, status: row.status || row.data.status };
+          }
+          return {
+            id: row.id,
+            createdAt: row.created_at || new Date().toISOString(),
+            status: row.status || 'pending',
+            ownerName: row.owner_name,
+            ownerPhone: row.owner_phone,
+            ownerEmail: row.owner_email || '',
+            dogName: row.dog_name,
+            dogBreed: row.dog_breed || '',
+            dogAge: row.dog_age || '',
+            dogSize: row.dog_size || 'medium',
+            serviceType: row.service_type || 'boarding',
+            startDate: row.start_date,
+            endDate: row.end_date,
+            isFriendlyWithDogs: row.is_friendly_with_dogs || 'yes',
+            isNeutered: Boolean(row.is_neutered),
+            isVaccinated: Boolean(row.is_vaccinated),
+            specialNeeds: row.special_needs || '',
+            notes: row.notes || '',
+            calculatedPrice: Number(row.calculated_price) || 0,
+            depositRequested: Number(row.deposit_requested) || 0,
+            internalNotes: row.internal_notes || '',
+          } as IntakeRequest;
+        });
+
+        localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(mapped));
+        callback(mapped);
+      }
+    } catch (e) {
+      callback(loadStoredIntakeRequests());
+    }
+  };
+
+  fetchRequests();
+
+  const channel = supabase
+    .channel('public:intake_requests')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: INTAKE_REQUESTS_TABLE },
+      () => {
+        fetchRequests();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
 

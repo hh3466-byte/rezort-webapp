@@ -245,7 +245,7 @@ export const VoiceAgentBar: React.FC<VoiceAgentBarProps> = ({
               type="text"
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              placeholder='למשל: "שמוליק, שריין מקום למקסי מיום ראשון עד רביעי, 600 ש״ח, שילם בביט מקדמה 150"'
+              placeholder='למשל: "שריין מקום למקסי מיום ראשון עד רביעי, 600 ש״ח, שילם בביט מקדמה 150"'
               disabled={isProcessing}
               className="flex-1 h-full bg-white text-slate-900 border border-slate-300 rounded-2xl px-4 text-xs sm:text-sm font-medium focus:outline-none focus:border-[#044e45] shadow-xs"
               autoFocus
