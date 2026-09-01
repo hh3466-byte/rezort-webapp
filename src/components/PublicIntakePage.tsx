@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ResortSettings, ServiceType, IntakeRequest } from '../types';
 import { addDays, getTodayStr, calculateDaysCount } from '../utils/dateUtils';
 import { saveIntakeRequestToDb } from '../services/dbService';
-import { sendResortWhatsAppNotification, formatIntakeNotification } from '../services/notificationService';
+import { sendResortEmailNotification, sendResortWhatsAppNotification, formatIntakeNotification } from '../services/notificationService';
 import { 
   CheckCircle2, 
   Send, 
@@ -12,7 +12,9 @@ import {
   Heart, 
   ShieldCheck, 
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  MessageSquare,
+  PhoneCall
 } from 'lucide-react';
 
 interface PublicIntakePageProps {
@@ -38,10 +40,11 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   const [isNeutered, setIsNeutered] = useState(true);
   const [isVaccinated, setIsVaccinated] = useState(true);
   const [specialNeeds, setSpecialNeeds] = useState('');
-  const [notes, setNotes] = useState('');
+  const [freeText, setFreeText] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isQuickCallback, setIsQuickCallback] = useState(false);
 
   // Auto adjust dates when training is selected
   const handleServiceChange = (st: ServiceType) => {
@@ -55,6 +58,62 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
 
   const daysCount = Math.max(1, calculateDaysCount(startDate, endDate));
 
+  // Quick "אנא התקשרו אלי" Submission
+  const handleQuickCallRequest = async () => {
+    if (!ownerName.trim() || !ownerPhone.trim()) {
+      alert('נא למלא שם מלא ומספר טלפון כדי שנוכל לחזור אליכם');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setIsQuickCallback(true);
+
+    const requestId = `call-${Date.now()}`;
+    const newRequest: IntakeRequest = {
+      id: requestId,
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+      ownerName: ownerName.trim(),
+      ownerPhone: ownerPhone.trim(),
+      ownerEmail: ownerEmail.trim() || undefined,
+      dogName: dogName.trim() || 'פנייה טלפונית',
+      dogBreed: dogBreed.trim() || 'לא צוין',
+      dogAge: dogAge.trim() || undefined,
+      dogSize,
+      serviceType,
+      startDate,
+      endDate,
+      isFriendlyWithDogs,
+      isNeutered,
+      isVaccinated,
+      specialNeeds: specialNeeds.trim() || undefined,
+      notes: `[בקשת שיחה חוזרת] ${freeText.trim()}`,
+    };
+
+    try {
+      // 1. Save to database
+      await saveIntakeRequestToDb(newRequest);
+
+      // 2. Send instant email notification to shinshin1964@gmail.com
+      await sendResortEmailNotification(
+        `📞 בקשת שיחה חוזרת דחופה מלקוח: ${ownerName} (${ownerPhone})`,
+        newRequest,
+        freeText.trim() || 'הלקוח ביקש שתחזרו אליו טלפונית בהקדם לתיאום'
+      );
+
+      // 3. Fallback WhatsApp notification
+      sendResortWhatsAppNotification(formatIntakeNotification(newRequest), settings);
+
+      setIsSubmitted(true);
+    } catch (err) {
+      console.error('Error submitting quick call request:', err);
+      setIsSubmitted(true);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Full Detailed Form Submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ownerName.trim() || !ownerPhone.trim() || !dogName.trim()) {
@@ -63,6 +122,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
     }
 
     setIsSubmitting(true);
+    setIsQuickCallback(false);
 
     const requestId = `req-${Date.now()}`;
     const newRequest: IntakeRequest = {
@@ -83,23 +143,26 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       isNeutered,
       isVaccinated,
       specialNeeds: specialNeeds.trim() || undefined,
-      notes: notes.trim() || undefined,
+      notes: freeText.trim() || undefined,
     };
 
     try {
       // 1. Save to Supabase and LocalStorage
       await saveIntakeRequestToDb(newRequest);
 
-      // 2. Send automated notification to Resort's WhatsApp
-      await sendResortWhatsAppNotification(
-        formatIntakeNotification(newRequest),
-        settings
+      // 2. Send automated email notification to shinshin1964@gmail.com
+      await sendResortEmailNotification(
+        `🐾 בקשת קליטה חדשה בריזורט לכלב: ${dogName} (${ownerName})`,
+        newRequest,
+        freeText.trim()
       );
+
+      // 3. WhatsApp notification
+      sendResortWhatsAppNotification(formatIntakeNotification(newRequest), settings);
 
       setIsSubmitted(true);
     } catch (err) {
       console.error('Error submitting intake request:', err);
-      // Still show success to user if saved locally
       setIsSubmitted(true);
     } finally {
       setIsSubmitting(false);
@@ -120,25 +183,15 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
               תודה רבה, {ownerName}! 🐾
             </h2>
             <p className="text-sm font-semibold text-slate-600">
-              בקשת השריון עבור <span className="text-emerald-700 font-bold">{dogName}</span> התקבלה בהצלחה בריזורט לכלב.
+              {isQuickCallback
+                ? `בקשתכם לשיחה טלפונית התקבלה בהצלחה בריזורט לכלב.`
+                : `בקשת השריון עבור ${dogName} התקבלה בהצלחה בריזורט לכלב.`}
             </p>
           </div>
 
           <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-4 text-right space-y-2 text-xs text-slate-700">
-            <div className="flex items-center justify-between border-b border-emerald-200/60 pb-1.5 font-bold text-emerald-950">
-              <span>📅 תאריכים מבוקשים:</span>
-              <span>{startDate} עד {endDate} ({daysCount} ימים)</span>
-            </div>
-            <div className="flex items-center justify-between border-b border-emerald-200/60 pb-1.5">
-              <span>🐕 שירות:</span>
-              <span className="font-bold">
-                {serviceType === 'training' ? 'תהליך אילוף (50 יום)' :
-                 serviceType === 'day_training' ? 'אילוף ביומיות' :
-                 serviceType === 'daycare' ? 'יום כיף (דייקר)' : 'פנסיון לינה'}
-              </span>
-            </div>
-            <p className="text-emerald-900 pt-1 font-medium leading-relaxed">
-              📞 <strong>מה השלב הבא?</strong> צוות הריזורט לכלב יעבור על הפרטים וייצור עמכם קשר טלפוני בהקדם לתיאום סופי, בדיקת התאמה והסדרת שריון המקום.
+            <p className="text-emerald-950 font-bold leading-relaxed">
+              📞 <strong>מה השלב הבא?</strong> צוות הריזורט לכלב קיבל את פנייתכם ויחזור אליכם טלפונית בהקדם למספר <span className="font-mono font-black text-emerald-800">{ownerPhone}</span> לתיאום והשלמת הפרטים.
             </p>
           </div>
 
@@ -198,9 +251,31 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
             הריזורט לכלב
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-md mx-auto">
-            טופס קליטה ובקשת שריון מקום 🐾 מלאו מספר שאלות קצרות וצוות הריזורט לכלב ייצור עמכם קשר טלפוני לתיאום סופי.
+            טופס קליטה ובקשת שריון מקום 🐾 מלאו את הפרטים ונחזור אליכם טלפונית לתיאום והסדרת השריון.
           </p>
         </header>
+
+        {/* Quick "אנא התקשרו אלי" Top Banner */}
+        <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-3xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="text-right">
+            <div className="flex items-center gap-2 text-sm font-black text-emerald-950">
+              <PhoneCall className="w-4 h-4 text-emerald-600 animate-bounce" />
+              <span>רוצים שנתקשר אליכם ישירות?</span>
+            </div>
+            <p className="text-xs text-slate-600 font-medium mt-0.5">
+              מלאו שם וטלפון למטה ולחצו "אנא התקשרו אלי" לשיחה מהירה!
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleQuickCallRequest}
+            disabled={isSubmitting}
+            className="w-full sm:w-auto bg-[#065f46] hover:bg-[#044e45] active:scale-98 text-white font-black px-5 py-2.5 rounded-2xl text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0"
+          >
+            <PhoneCall className="w-4 h-4" />
+            <span>📞 אנא התקשרו אלי</span>
+          </button>
+        </div>
 
         {/* Intake Form */}
         <form onSubmit={handleSubmit} className="bg-white rounded-3xl border border-slate-200/90 shadow-md p-5 sm:p-7 space-y-6">
@@ -209,7 +284,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm font-black text-[#0f4c3a] pb-1 border-b border-slate-100">
               <User className="w-4 h-4 text-emerald-600" />
-              <span>פרטי איש קשר (הבעלים)</span>
+              <span>פרטי איש קשר (הבעלים) - חובה</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -229,7 +304,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
 
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
-                  טלפון נייד בוואטסאפ *
+                  טלפון נייד לחזרה / וואטסאפ *
                 </label>
                 <input
                   type="tel"
@@ -267,7 +342,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
 
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
-                  גזע
+                  גזע הכלב
                 </label>
                 <input
                   type="text"
@@ -286,7 +361,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                   type="text"
                   value={dogAge}
                   onChange={(e) => setDogAge(e.target.value)}
-                  placeholder="למשל: שנה וחצי / גור"
+                  placeholder="למשל: שנתיים / גור"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
                 />
               </div>
@@ -399,7 +474,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
             </div>
           </div>
 
-          {/* Section 5: Crucial Vetting Questions */}
+          {/* Section 5: Vetting Questions */}
           <div className="space-y-3">
             <div className="flex items-center gap-2 text-sm font-black text-[#0f4c3a] pb-1 border-b border-slate-100">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
@@ -499,24 +574,24 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                 />
               </div>
 
-              {/* Notes */}
+              {/* Free Text Field */}
               <div>
                 <label className="font-bold text-slate-700 block mb-1">
-                  📝 הערות נוספות לצוות הריזורט
+                  💬 שדה טקסט חופשי / מה תרצו לשאול או לספר לנו?
                 </label>
                 <textarea
-                  rows={2}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="כל פרט נוסף שיעזור לנו להעניק לכלבכם את השהות הנעימה ביותר"
+                  rows={3}
+                  value={freeText}
+                  onChange={(e) => setFreeText(e.target.value)}
+                  placeholder="כתבו לנו כאן כל פרט נוסף, שאלה לגבי השהות או בקשה מיוחדת..."
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:bg-white focus:border-emerald-500 focus:outline-none"
                 />
               </div>
             </div>
           </div>
 
-          {/* Submit Button */}
-          <div className="pt-2">
+          {/* Action Buttons: Quick Call Request & Full Submit */}
+          <div className="pt-2 space-y-2.5">
             <button
               type="submit"
               disabled={isSubmitting}
@@ -527,10 +602,21 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  <span>שלח בקשת שריון לריזורט לכלב</span>
+                  <span>🐾 שלח בקשת שריון מפורטת לריזורט</span>
                 </>
               )}
             </button>
+
+            <button
+              type="button"
+              onClick={handleQuickCallRequest}
+              disabled={isSubmitting}
+              className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-2 border-emerald-300 font-black py-3 rounded-2xl text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            >
+              <PhoneCall className="w-4 h-4 text-emerald-700" />
+              <span>📞 אנא התקשרו אלי (שיחה מהירה לתיאום)</span>
+            </button>
+
             <p className="text-center text-[11px] text-slate-400 font-medium mt-2">
               🔒 הפרטים נשלחים ישירות לצוות הריזורט לכלב לצורך תיאום טלפוני ובדיקת זמינות.
             </p>

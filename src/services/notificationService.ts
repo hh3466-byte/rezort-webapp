@@ -122,3 +122,50 @@ export async function sendResortWhatsAppNotification(
 
   return { success: true, directUrl };
 }
+
+/**
+ * Send automated email notification to shinshin1964@gmail.com
+ */
+export async function sendResortEmailNotification(
+  subject: string,
+  request: IntakeRequest,
+  customMessage?: string
+): Promise<boolean> {
+  const targetEmail = 'shinshin1964@gmail.com';
+  const serviceName = getServiceTypeHebrew(request.serviceType);
+
+  try {
+    const payload = {
+      _subject: subject,
+      _template: 'table',
+      _captcha: 'false',
+      'שם הלקוח': request.ownerName,
+      'טלפון': request.ownerPhone,
+      'שם הכלב': request.dogName || 'לא צוין',
+      'גזע': request.dogBreed || 'מעורב',
+      'גיל / גודל': `${request.dogAge || 'לא צוין'} | ${request.dogSize || 'בינוני'}`,
+      'סוג שירות': serviceName,
+      'תאריכים': `${request.startDate} עד ${request.endDate}`,
+      'מסתדר עם כלבים': request.isFriendlyWithDogs === 'yes' ? 'כן' : request.isFriendlyWithDogs === 'no' ? 'לא' : 'תלוי בסיטואציה',
+      'מסורס/מעוקרת': request.isNeutered ? 'כן' : 'לא',
+      'חיסונים בתוקף': request.isVaccinated ? 'כן' : 'לא בטוח',
+      'צרכים מיוחדים/תרופות': request.specialNeeds || 'אין',
+      'הודעה / טקסט חופשי': customMessage || request.notes || 'אין',
+      'חיוג מהיר ללקוח': `tel:${request.ownerPhone}`
+    };
+
+    fetch(`https://formsubmit.co/ajax/${targetEmail}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    }).catch(err => console.warn('Email fetch error:', err));
+
+    return true;
+  } catch (err) {
+    console.warn('Email notification sending exception:', err);
+    return false;
+  }
+}
