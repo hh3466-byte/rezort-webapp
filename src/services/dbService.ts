@@ -37,49 +37,33 @@ export const getAllExistingLocalBookings = (): Booking[] => {
   const combinedMap = new Map<string, Booking>();
   const deletedIds = getDeletedBookingIds();
 
-  const keysToInspect = [
-    'dog_resort_bookings',
-    'shmulik_dog_resort_bookings_v2'
-  ];
-
-  // Safely cleanup legacy key if found
+  // Safely cleanup legacy keys
   try {
     localStorage.removeItem('shmulik_dog_resort_bookings_v1');
   } catch (e) {}
 
   let hasLocalData = false;
+  const raw = localStorage.getItem('dog_resort_bookings') || localStorage.getItem('shmulik_dog_resort_bookings_v2');
 
-  for (const key of keysToInspect) {
+  if (raw) {
     try {
-      const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed: Booking[] = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          hasLocalData = true;
-          for (const b of parsed) {
-            if (b && b.id && !deletedIds.has(b.id)) {
-              if ((b.id === 'b-103' || b.dogName === 'ברונו') && (b.serviceType === 'boarding' || (b as any).serviceType === 'combined')) {
-                b.serviceType = 'day_training';
-                b.stayStatus = 'checked_in';
-                b.totalPrice = 1750;
-                b.notes = 'אילוף ביומיות ללא לינה - חיזוקים חיוביים';
-              }
-              const existing = combinedMap.get(b.id);
-              if (existing) {
-                // Compare updated timestamps - preserve the newer version
-                const existingTime = new Date(existing.updatedAt || 0).getTime();
-                const newTime = new Date(b.updatedAt || 0).getTime();
-                if (existingTime >= newTime && existing.paymentStatus === 'fully_paid') {
-                  continue; // Don't overwrite fully paid with older version
-                }
-              }
-              combinedMap.set(b.id, { ...existing, ...b });
+      const parsed: Booking[] = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        hasLocalData = true;
+        for (const b of parsed) {
+          if (b && b.id && !deletedIds.has(b.id)) {
+            if ((b.id === 'b-103' || b.dogName === 'ברונו') && (b.serviceType === 'boarding' || (b as any).serviceType === 'combined')) {
+              b.serviceType = 'day_training';
+              b.stayStatus = 'checked_in';
+              b.totalPrice = 1750;
+              b.notes = 'אילוף ביומיות ללא לינה - חיזוקים חיוביים';
             }
+            combinedMap.set(b.id, b);
           }
         }
       }
     } catch (e) {
-      console.warn(`Error reading localStorage key ${key}:`, e);
+      console.warn('Error reading localStorage bookings:', e);
     }
   }
 
@@ -257,10 +241,9 @@ export const subscribeToBookings = (
 
   const fetchBookings = async (isInitial = false) => {
     try {
-      if (isInitial && !hasPerformedInitialSync) {
-        hasPerformedInitialSync = true;
-        await syncAllDataToSupabase();
-      }
+      // NOTE: We deliberately do NOT call syncAllDataToSupabase() automatically here.
+      // Supabase is the central source of truth across all devices.
+      // Calling sync on startup caused deleted bookings to be re-uploaded from another device's cache!
 
       const { data, error } = await supabase
         .from(BOOKINGS_TABLE)
@@ -274,18 +257,20 @@ export const subscribeToBookings = (
       }
 
       if (data) {
+        // Fetch deleted IDs from local cache
+        const localDeletedIds = getDeletedBookingIds();
+
         if (data.length === 0) {
-          // Table in Supabase is intentionally empty (calendar cleared)
           try {
             localStorage.setItem('dog_resort_bookings', JSON.stringify([]));
-            localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify([]));
+            localStorage.removeItem('shmulik_dog_resort_bookings_v2');
           } catch (e) {}
           lastBookingsSignature = '[]';
           if (isSubscribed) onData([]);
           return;
         }
 
-        const bookings: Booking[] = data.map((row: any) => {
+        const rawBookings: Booking[] = data.map((row: any) => {
           let b: Booking;
           if (row.data && typeof row.data === 'object') {
             b = { ...row.data, id: row.id || row.data.id };
@@ -324,6 +309,50 @@ export const subscribeToBookings = (
           return b;
         });
 
+        // 1. Filter out any bookings known to be deleted
+        const activeBookings = rawBookings.filter(b => {
+          if (localDeletedIds.has(b.id)) {
+            // Silently purge from Supabase in background
+            supabase.from(BOOKINGS_TABLE).delete().eq('id', b.id).catch(() => {});
+            return false;
+          }
+          return true;
+        });
+
+        // 2. Automatic Deduplication Guard (e.g. duplicate Joy or Theo)
+        const dedupMap = new Map<string, Booking>();
+        const duplicateIdsToDelete: string[] = [];
+
+        for (const b of activeBookings) {
+          const normDog = (b.dogName || '').trim().toLowerCase();
+          const normOwner = (b.ownerName || '').trim().toLowerCase();
+          const dedupKey = `${normDog}___${normOwner}___${b.startDate}___${b.endDate}`;
+
+          if (dedupMap.has(dedupKey)) {
+            const existing = dedupMap.get(dedupKey)!;
+            const existingPaid = existing.paymentStatus === 'fully_paid' || existing.paymentStatus === 'deposit_paid';
+            const currentPaid = b.paymentStatus === 'fully_paid' || b.paymentStatus === 'deposit_paid';
+
+            if (currentPaid && !existingPaid) {
+              dedupMap.set(dedupKey, b);
+              duplicateIdsToDelete.push(existing.id);
+            } else {
+              duplicateIdsToDelete.push(b.id);
+            }
+          } else {
+            dedupMap.set(dedupKey, b);
+          }
+        }
+
+        // Purge duplicates from Supabase in background
+        if (duplicateIdsToDelete.length > 0) {
+          for (const dupId of duplicateIdsToDelete) {
+            markBookingAsDeleted(dupId);
+            supabase.from(BOOKINGS_TABLE).delete().eq('id', dupId).catch(() => {});
+          }
+        }
+
+        const bookings = Array.from(dedupMap.values());
         bookings.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
         
         const currentSignature = JSON.stringify(bookings.map(b => ({
@@ -344,7 +373,8 @@ export const subscribeToBookings = (
 
         try {
           localStorage.setItem('dog_resort_bookings', JSON.stringify(bookings));
-          localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify(bookings));
+          localStorage.removeItem('shmulik_dog_resort_bookings_v2');
+          localStorage.removeItem('shmulik_dog_resort_bookings_v1');
         } catch (e) {}
 
         if (isSubscribed) onData(bookings);
@@ -438,9 +468,20 @@ export const subscribeToSettings = (
           settingsData.defaultDailyRateTraining = 6500;
         }
 
+        // Sync cloud deletedBookingIds to local storage so this device never restores them
+        if (Array.isArray(extraData.deletedBookingIds) && extraData.deletedBookingIds.length > 0) {
+          try {
+            const set = getDeletedBookingIds();
+            for (const dId of extraData.deletedBookingIds) {
+              set.add(dId);
+            }
+            localStorage.setItem(DELETED_BOOKINGS_KEY, JSON.stringify(Array.from(set)));
+          } catch (e) {}
+        }
+
         try {
           localStorage.setItem('dog_resort_settings', JSON.stringify(settingsData));
-          localStorage.setItem('shmulik_dog_resort_settings_v2', JSON.stringify(settingsData));
+          localStorage.removeItem('shmulik_dog_resort_settings_v2');
         } catch (e) {}
         if (isSubscribed) onData(settingsData);
       } else {
@@ -621,25 +662,55 @@ export const saveBookingToDb = async (booking: Booking): Promise<void> => {
 export const deleteBookingFromDb = async (bookingId: string): Promise<void> => {
   markBookingAsDeleted(bookingId);
 
+  // 1. Immediately clean up local storage cache
   try {
-    const local = getAllExistingLocalBookings().filter(b => b.id !== bookingId);
-    localStorage.setItem('dog_resort_bookings', JSON.stringify(local));
-    localStorage.setItem('shmulik_dog_resort_bookings_v2', JSON.stringify(local));
-    localStorage.setItem('shmulik_dog_resort_bookings_v1', JSON.stringify(local));
+    const raw = localStorage.getItem('dog_resort_bookings');
+    if (raw) {
+      const parsed: Booking[] = JSON.parse(raw);
+      const filtered = parsed.filter(b => b.id !== bookingId);
+      localStorage.setItem('dog_resort_bookings', JSON.stringify(filtered));
+    }
+    localStorage.removeItem('shmulik_dog_resort_bookings_v2');
+    localStorage.removeItem('shmulik_dog_resort_bookings_v1');
   } catch (e) {}
 
-  try {
-    const { error } = await supabase
-      .from(BOOKINGS_TABLE)
-      .delete()
-      .eq('id', bookingId);
-
-    if (error) {
-      console.warn('Supabase delete booking warning:', error.message);
+  // 2. Delete from Supabase with robust retry
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { error } = await supabase
+        .from(BOOKINGS_TABLE)
+        .delete()
+        .eq('id', bookingId);
+      if (!error) break;
+      console.warn(`Supabase delete booking attempt ${attempt + 1} warning:`, error.message);
+    } catch (err: any) {
+      console.warn(`Supabase delete booking attempt ${attempt + 1} error:`, err?.message || err);
+      await new Promise(r => setTimeout(r, 400));
     }
-  } catch (err: any) {
-    console.warn('Supabase delete error:', err?.message || err);
   }
+
+  // 3. Persist deleted ID in Supabase cloud settings so NO device can EVER resurrect it
+  try {
+    const { data: currentSettings } = await supabase
+      .from(SETTINGS_TABLE)
+      .select('data')
+      .eq('id', SETTINGS_DOC_ID)
+      .single();
+
+    if (currentSettings) {
+      const extraData = currentSettings.data || {};
+      const deletedIds = new Set<string>(extraData.deletedBookingIds || []);
+      deletedIds.add(bookingId);
+      const deletedArr = Array.from(deletedIds).slice(-500); // keep last 500
+      await supabase
+        .from(SETTINGS_TABLE)
+        .update({
+          data: { ...extraData, deletedBookingIds: deletedArr },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', SETTINGS_DOC_ID);
+    }
+  } catch (e) {}
 };
 
 // Update Resort Settings in Supabase
