@@ -29,7 +29,7 @@ async function runQA() {
   assert(defaultSettings.defaultDailyRateDayTraining === 250, 'Day Training price is 250 NIS/day', `Got ${defaultSettings.defaultDailyRateDayTraining}`);
   assert(defaultSettings.defaultDailyRateBoarding === 180, 'Boarding price is 180 NIS/day', `Got ${defaultSettings.defaultDailyRateBoarding}`);
   assert(defaultSettings.defaultDailyRateDaycare === 90, 'Daycare price is 90 NIS/day', `Got ${defaultSettings.defaultDailyRateDaycare}`);
-  assert(defaultSettings.bitNumber === '054-8889900', 'Bit number configured', `Got ${defaultSettings.bitNumber}`);
+  assert(defaultSettings.bitNumber === '054-8765888', 'Bit number configured', `Got ${defaultSettings.bitNumber}`);
 
   // --- 2. DATE UTILS & DURATION CALCULATIONS ---
   console.log('\n--- 2. DATES & PRICING CALCULATIONS TEST ---');

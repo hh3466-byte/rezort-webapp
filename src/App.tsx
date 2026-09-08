@@ -416,19 +416,45 @@ export default function App() {
       ? 'paybox' 
       : 'credit';
 
+    // Auto-match payment with any pending or recent intake questionnaire by phone or customer name
+    const cleanPayPhone = (payment.customer_phone || '').replace(/\D/g, '');
+    const matchedIntake = intakeRequests.find(req => {
+      const cleanReqPhone = (req.ownerPhone || '').replace(/\D/g, '');
+      if (cleanPayPhone.length >= 7 && cleanReqPhone.length >= 7) {
+        return cleanReqPhone.includes(cleanPayPhone) || cleanPayPhone.includes(cleanReqPhone);
+      }
+      return req.ownerName.trim().toLowerCase() === payment.customer_name.trim().toLowerCase();
+    });
+
     setBookingWizardOpen({
       isOpen: true,
       initialData: {
-        ownerName: payment.customer_name,
-        ownerPhone: payment.customer_phone,
-        ownerEmail: payment.customer_email || '',
+        ownerName: matchedIntake?.ownerName || payment.customer_name,
+        ownerPhone: payment.customer_phone || matchedIntake?.ownerPhone || '',
+        ownerEmail: payment.customer_email || matchedIntake?.ownerEmail || '',
+        dogName: matchedIntake?.dogName || '',
+        dogBreed: matchedIntake?.dogBreed || '',
+        serviceType: matchedIntake?.serviceType || 'boarding',
+        startDate: matchedIntake?.startDate || getTodayStr(),
+        endDate: matchedIntake?.endDate || addDays(getTodayStr(), 3),
+        vaccinationValid: matchedIntake?.isVaccinated ?? true,
         depositAmount: payment.amount,
         totalPrice: payment.amount,
         paymentStatus: 'deposit_paid',
         paymentMethod: payMethod,
-        notes: `עסקת Grow (אסמכתא: ${payment.reference_id})`,
+        stayStatus: 'booked',
+        notes: [
+          matchedIntake?.specialNeeds ? `צרכים מיוחדים: ${matchedIntake.specialNeeds}` : '',
+          matchedIntake?.notes ? `הערות מהשאלון: ${matchedIntake.notes}` : '',
+          `עסקת Grow (אסמכתא: ${payment.reference_id})`
+        ].filter(Boolean).join(' | '),
       }
     });
+
+    if (matchedIntake) {
+      updateIntakeRequestStatusInDb(matchedIntake.id, 'approved');
+      showToast(`✨ תאריכים ופרטי ${matchedIntake.dogName} נטענו אוטומטית משאלון הקליטה!`);
+    }
   };
 
   // Grow Payment Dismissal
@@ -1061,6 +1087,7 @@ export default function App() {
           isOpen={bookingWizardOpen.isOpen}
           initialData={bookingWizardOpen.initialData}
           existingBookings={bookings}
+          intakeRequests={intakeRequests}
           settings={settings}
           onClose={() => {
             setBookingWizardOpen({ isOpen: false, initialData: null });

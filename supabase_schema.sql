@@ -78,7 +78,55 @@ ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 
--- 5. Create Public Access Policies (Anon & Authenticated)
+-- 4. Grow Incoming Payments Table
+CREATE TABLE IF NOT EXISTS public.grow_incoming_payments (
+  id TEXT PRIMARY KEY,
+  reference_id TEXT NOT NULL,
+  customer_name TEXT NOT NULL,
+  customer_phone TEXT,
+  customer_email TEXT,
+  amount NUMERIC DEFAULT 0,
+  payment_method TEXT DEFAULT 'Bit',
+  raw_email_snippet TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. Intake Requests Table
+CREATE TABLE IF NOT EXISTS public.intake_requests (
+  id TEXT PRIMARY KEY,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  status TEXT DEFAULT 'pending',
+  owner_name TEXT NOT NULL,
+  owner_phone TEXT NOT NULL,
+  owner_email TEXT,
+  dog_name TEXT NOT NULL,
+  dog_breed TEXT,
+  dog_age TEXT,
+  dog_size TEXT,
+  service_type TEXT NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  is_friendly_with_dogs TEXT,
+  is_neutered BOOLEAN DEFAULT TRUE,
+  is_vaccinated BOOLEAN DEFAULT TRUE,
+  special_needs TEXT,
+  notes TEXT,
+  internal_notes TEXT,
+  deposit_requested NUMERIC DEFAULT 0,
+  data JSONB,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. Enable Row Level Security (RLS)
+ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.grow_incoming_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.intake_requests ENABLE ROW LEVEL SECURITY;
+
+-- 7. Create Public Access Policies (Anon & Authenticated)
 DROP POLICY IF EXISTS "Allow public access to bookings" ON public.bookings;
 CREATE POLICY "Allow public access to bookings" ON public.bookings FOR ALL USING (true) WITH CHECK (true);
 
@@ -88,7 +136,16 @@ CREATE POLICY "Allow public access to settings" ON public.settings FOR ALL USING
 DROP POLICY IF EXISTS "Allow public access to customers" ON public.customers;
 CREATE POLICY "Allow public access to customers" ON public.customers FOR ALL USING (true) WITH CHECK (true);
 
--- 6. Enable Realtime Publications
+DROP POLICY IF EXISTS "Allow public access to grow payments" ON public.grow_incoming_payments;
+CREATE POLICY "Allow public access to grow payments" ON public.grow_incoming_payments FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public access to intake requests" ON public.intake_requests;
+CREATE POLICY "Allow public access to intake requests" ON public.intake_requests FOR ALL USING (true) WITH CHECK (true);
+
+-- 8. Enable Realtime Publications
 ALTER PUBLICATION supabase_realtime ADD TABLE public.bookings;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.customers;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.grow_incoming_payments;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.intake_requests;
+

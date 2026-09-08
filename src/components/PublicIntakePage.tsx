@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ResortSettings, ServiceType, IntakeRequest } from '../types';
-import { addDays, getTodayStr, calculateDaysCount } from '../utils/dateUtils';
+import { addDays, getTodayStr, calculateDaysCount, getDayNameHebrew, formatDateIL } from '../utils/dateUtils';
 import { saveIntakeRequestToDb } from '../services/dbService';
 import { sendResortEmailNotification, sendResortWhatsAppNotification, formatIntakeNotification } from '../services/notificationService';
 import { 
@@ -37,6 +37,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   const [serviceType, setServiceType] = useState<ServiceType>('boarding');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(addDays(today, 3));
+  const [isFlexibleDates, setIsFlexibleDates] = useState(false);
   
   // Mandatory Vetting Questions State
   const [isFriendlyWithDogs, setIsFriendlyWithDogs] = useState<'yes' | 'no' | 'depends'>('yes');
@@ -81,6 +82,18 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       setErrorMessage('נא למלא את גזע הכלב (שדה חובה - אם מעורב כתבו מעורב)');
       return false;
     }
+    if (!startDate) {
+      setErrorMessage('נא לבחור תאריך כניסה / הגעה לריזורט (שדה חובה)');
+      return false;
+    }
+    if (!endDate) {
+      setErrorMessage('נא לבחור תאריך איסוף / יציאה מהריזורט (שדה חובה)');
+      return false;
+    }
+    if (endDate < startDate) {
+      setErrorMessage('תאריך היציאה אינו יכול להיות מוקדם מתאריך הכניסה');
+      return false;
+    }
     if (!specialNeeds.trim()) {
       setErrorMessage('נא למלא את שדה הצרכים המיוחדים והבריאות (שדה חובה - אם הכלב בריא לחצו על "בריא לחלוטין / אין")');
       return false;
@@ -120,6 +133,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       specialNeeds: specialNeeds.trim(),
       notes: [
         isCallbackOnly ? '[בקשת שיחה חוזרת טלפונית]' : '',
+        isFlexibleDates ? '[תאריכים גמישים / בירור זמינות כללי]' : '',
         freeText.trim()
       ].filter(Boolean).join(' | ') || undefined,
     };
@@ -188,7 +202,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
               </button>
             ) : (
               <a
-                href={`https://wa.me/${settings.managerPhone?.replace(/\D/g, '') || '0548889900'}`}
+                href={`https://wa.me/${settings.managerPhone?.replace(/\D/g, '') || '0548765888'}`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center justify-center gap-2 w-full bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold py-3 rounded-2xl text-sm transition-all cursor-pointer shadow-md"
@@ -404,16 +418,24 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
           </div>
 
           {/* Section 4: Dates */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm font-black text-[#0f4c3a] pb-1 border-b border-slate-100">
-              <Calendar className="w-4 h-4 text-emerald-600" />
-              <span>תאריכים מבוקשים ({daysCount} {daysCount === 1 ? 'יום' : 'ימים'}) <span className="text-red-500">*</span></span>
+          <div className="space-y-3 bg-emerald-50/50 p-4 sm:p-5 rounded-2xl border-2 border-emerald-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-emerald-200/80">
+              <div className="flex items-center gap-2 text-sm font-black text-[#0f4c3a]">
+                <Calendar className="w-4 h-4 text-emerald-600" />
+                <span>תאריכי השהות המבוקשים <span className="text-red-500">*</span></span>
+              </div>
+              <span className="text-xs font-black text-emerald-800 bg-white px-3 py-1 rounded-full border border-emerald-200 shadow-2xs self-start sm:self-auto">
+                {serviceType === 'daycare' ? 'שהות יומית' : `סה״כ ${daysCount} ${daysCount === 1 ? 'יום' : 'ימים'} (${daysCount > 1 ? `${daysCount - 1} לילות` : 'ללא לינה'})`}
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  תאריך הגעה *
+                <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1">
+                  <span>🏨 תאריך כניסה / הגעה לריזורט *</span>
+                  <span className="text-[11px] text-emerald-700 font-bold">
+                    {startDate ? `יום ${getDayNameHebrew(startDate)}, ${formatDateIL(startDate)}` : ''}
+                  </span>
                 </label>
                 <input
                   type="date"
@@ -425,17 +447,22 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                     setStartDate(val);
                     if (serviceType === 'training') {
                       setEndDate(addDays(val, 50));
+                    } else if (serviceType === 'daycare') {
+                      setEndDate(val);
                     } else if (val > endDate) {
                       setEndDate(addDays(val, 1));
                     }
                   }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:outline-none font-mono"
+                  className="w-full bg-white border border-emerald-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-900 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  תאריך יציאה / סיום *
+                <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1">
+                  <span>🚗 תאריך איסוף / יציאה מהריזורט *</span>
+                  <span className="text-[11px] text-emerald-700 font-bold">
+                    {endDate ? `יום ${getDayNameHebrew(endDate)}, ${formatDateIL(endDate)}` : ''}
+                  </span>
                 </label>
                 <input
                   type="date"
@@ -443,10 +470,49 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                   min={startDate}
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:outline-none font-mono"
+                  className="w-full bg-white border border-emerald-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-900 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono"
                 />
               </div>
             </div>
+
+            {/* Quick Duration Chips */}
+            {serviceType !== 'training' && serviceType !== 'daycare' && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
+                <span className="text-[11px] font-bold text-slate-500">בחירה מהירה:</span>
+                <button
+                  type="button"
+                  onClick={() => setEndDate(addDays(startDate, 2))}
+                  className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer"
+                >
+                  סופ״ש (2 לילות)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEndDate(addDays(startDate, 7))}
+                  className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer"
+                >
+                  שבוע (7 ימים)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEndDate(addDays(startDate, 14))}
+                  className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer"
+                >
+                  שבועיים (14 יום)
+                </button>
+              </div>
+            )}
+
+            {/* Flexible dates toggle */}
+            <label className="flex items-center gap-2 pt-1 text-xs text-slate-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isFlexibleDates}
+                onChange={(e) => setIsFlexibleDates(e.target.checked)}
+                className="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+              />
+              <span className="font-semibold text-slate-700">התאריכים גמישים / עדיין לא סופיים (בירור זמינות ראשוני)</span>
+            </label>
           </div>
 
           {/* Section 5: Mandatory Vetting Questions */}

@@ -105,11 +105,20 @@ export const getLocalSettings = (): ResortSettings => {
         if (parsed.defaultDailyRateTraining && Number(parsed.defaultDailyRateTraining) < 1000) {
           parsed.defaultDailyRateTraining = 6500;
         }
+        if (parsed.managerPhone && parsed.managerPhone.includes('8889900')) {
+          parsed.managerPhone = defaultSettings.managerPhone;
+        }
+        if (parsed.whatsappNotificationPhone && parsed.whatsappNotificationPhone.includes('8889900')) {
+          parsed.whatsappNotificationPhone = defaultSettings.whatsappNotificationPhone;
+        }
+        if (parsed.bitNumber && parsed.bitNumber.includes('8889900')) {
+          parsed.bitNumber = defaultSettings.bitNumber;
+        }
         return { ...defaultSettings, ...parsed };
       }
     } catch (e) {}
   }
-  return defaultSettings;
+  return { ...defaultSettings };
 };
 
 // Sync all local / past user data (bookings, settings, customers) to Supabase
@@ -124,21 +133,28 @@ export const syncAllDataToSupabase = async (): Promise<{ bookingsSynced: number;
 
   try {
     // 1. Sync Settings
+    const sanitizePhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.managerPhone : ph;
+    const effectivePhone = sanitizePhone(settings.managerPhone || settings.whatsappNotificationPhone);
     const settingsPayload = {
       id: SETTINGS_DOC_ID,
       resort_name: settings.resortName,
       manager_name: settings.managerName,
-      manager_phone: settings.managerPhone,
+      manager_phone: effectivePhone,
       max_capacity: settings.maxCapacity,
       default_daily_rate_boarding: settings.defaultDailyRateBoarding,
       default_daily_rate_training: settings.defaultDailyRateTraining,
       default_daily_rate_combined: settings.defaultDailyRateCombined,
       default_daily_rate_daycare: settings.defaultDailyRateDaycare,
-      bit_number: settings.bitNumber,
-      paybox_link: settings.payboxLink,
+      bit_number: sanitizePhone(settings.bitNumber) || effectivePhone,
+      paybox_link: settings.payboxLink || settings.growPaymentLink,
       bank_details: settings.bankDetails,
       auto_check_vaccination: settings.autoCheckVaccination,
-      data: settings,
+      data: {
+        ...settings,
+        managerPhone: effectivePhone,
+        whatsappNotificationPhone: effectivePhone,
+        bitNumber: sanitizePhone(settings.bitNumber) || effectivePhone
+      },
       updated_at: new Date().toISOString()
     };
 
@@ -384,36 +400,49 @@ export const subscribeToSettings = (
       }
 
       if (data) {
-        const rawTraining = data.default_daily_rate_training ?? data.defaultDailyRateTraining ?? data.data?.defaultDailyRateTraining;
+        const extraData = (data.data && typeof data.data === 'object') ? data.data : {};
+        const rawTraining = data.default_daily_rate_training ?? data.defaultDailyRateTraining ?? extraData.defaultDailyRateTraining;
         const validTrainingRate = (rawTraining && Number(rawTraining) >= 1000) ? Number(rawTraining) : 6500;
-        const maxCap = data.max_capacity ?? data.maxCapacity ?? data.data?.maxCapacity ?? defaultSettings.maxCapacity;
+        const maxCap = data.max_capacity ?? data.maxCapacity ?? extraData.maxCapacity ?? defaultSettings.maxCapacity;
+
+        const sanitizePhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.managerPhone : ph;
+        const effectivePhone = sanitizePhone(data.manager_phone || extraData.whatsappNotificationPhone || extraData.managerPhone);
 
         const settingsData: ResortSettings = {
-          resortName: data.resort_name || data.resortName || data.data?.resortName || defaultSettings.resortName,
-          managerName: data.manager_name || data.managerName || data.data?.managerName || defaultSettings.managerName,
-          managerPhone: data.manager_phone || data.managerPhone || data.data?.managerPhone || defaultSettings.managerPhone,
+          ...defaultSettings,
+          ...extraData,
+          resortName: data.resort_name || data.resortName || extraData.resortName || defaultSettings.resortName,
+          managerName: data.manager_name || data.managerName || extraData.managerName || defaultSettings.managerName,
+          managerPhone: effectivePhone,
+          whatsappNotificationPhone: effectivePhone,
           maxCapacity: Number(maxCap) || defaultSettings.maxCapacity,
-          defaultDailyRateBoarding: Number(data.default_daily_rate_boarding ?? data.defaultDailyRateBoarding ?? data.data?.defaultDailyRateBoarding) || defaultSettings.defaultDailyRateBoarding,
+          defaultDailyRateBoarding: Number(data.default_daily_rate_boarding ?? extraData.defaultDailyRateBoarding) || defaultSettings.defaultDailyRateBoarding,
           defaultDailyRateTraining: validTrainingRate,
-          defaultDailyRateDayTraining: Number(data.default_daily_rate_day_training ?? data.defaultDailyRateDayTraining ?? data.data?.defaultDailyRateDayTraining) || 250,
+          defaultDailyRateDayTraining: Number(data.default_daily_rate_day_training ?? extraData.defaultDailyRateDayTraining) || 250,
           defaultDailyRateCombined: 0,
-          defaultDailyRateDaycare: Number(data.default_daily_rate_daycare ?? data.defaultDailyRateDaycare ?? data.data?.defaultDailyRateDaycare) || defaultSettings.defaultDailyRateDaycare,
-          bitNumber: data.bit_number || data.bitNumber || data.data?.bitNumber || defaultSettings.bitNumber,
-          payboxLink: data.paybox_link || data.payboxLink || data.data?.payboxLink || defaultSettings.payboxLink,
-          bankDetails: data.bank_details || data.bankDetails || data.data?.bankDetails || defaultSettings.bankDetails,
-          autoCheckVaccination: data.auto_check_vaccination ?? data.autoCheckVaccination ?? data.data?.autoCheckVaccination ?? defaultSettings.autoCheckVaccination,
+          defaultDailyRateDaycare: Number(data.default_daily_rate_daycare ?? extraData.defaultDailyRateDaycare) || defaultSettings.defaultDailyRateDaycare,
+          bitNumber: sanitizePhone(data.bit_number || extraData.bitNumber),
+          payboxLink: data.paybox_link || extraData.payboxLink || defaultSettings.payboxLink,
+          growPaymentLink: extraData.growPaymentLink || data.paybox_link || extraData.payboxLink || defaultSettings.growPaymentLink,
+          bankDetails: data.bank_details || extraData.bankDetails || defaultSettings.bankDetails,
+          autoCheckVaccination: data.auto_check_vaccination ?? extraData.autoCheckVaccination ?? defaultSettings.autoCheckVaccination,
+          callmebotApiKey: extraData.callmebotApiKey || '',
+          greenApiIdInstance: extraData.greenApiIdInstance || '',
+          greenApiToken: extraData.greenApiToken || '',
+          payboxPaymentLink: extraData.payboxPaymentLink || '',
+          whatsappBookingConfirmationTemplate: extraData.whatsappBookingConfirmationTemplate || defaultSettings.whatsappBookingConfirmationTemplate,
+          whatsappPaymentReminderTemplate: extraData.whatsappPaymentReminderTemplate || defaultSettings.whatsappPaymentReminderTemplate,
         };
 
         if (!settingsData.defaultDailyRateTraining || Number(settingsData.defaultDailyRateTraining) < 1000) {
           settingsData.defaultDailyRateTraining = 6500;
         }
 
-        const merged = { ...defaultSettings, ...settingsData };
         try {
-          localStorage.setItem('dog_resort_settings', JSON.stringify(merged));
-          localStorage.setItem('shmulik_dog_resort_settings_v2', JSON.stringify(merged));
+          localStorage.setItem('dog_resort_settings', JSON.stringify(settingsData));
+          localStorage.setItem('shmulik_dog_resort_settings_v2', JSON.stringify(settingsData));
         } catch (e) {}
-        if (isSubscribed) onData(merged);
+        if (isSubscribed) onData(settingsData);
       } else {
         const local = getLocalSettings();
         if (isSubscribed) onData(local);
@@ -615,8 +644,14 @@ export const deleteBookingFromDb = async (bookingId: string): Promise<void> => {
 
 // Update Resort Settings in Supabase
 export const saveSettingsToDb = async (settings: ResortSettings): Promise<void> => {
+  const sanitizePhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.managerPhone : ph;
+  const phone = sanitizePhone(settings.whatsappNotificationPhone || settings.managerPhone);
+
   const sanitizedSettings: ResortSettings = {
     ...settings,
+    managerPhone: sanitizePhone(settings.managerPhone) || phone,
+    whatsappNotificationPhone: sanitizePhone(settings.whatsappNotificationPhone) || phone,
+    bitNumber: sanitizePhone(settings.bitNumber) || phone,
     defaultDailyRateTraining: Number(settings.defaultDailyRateTraining) || 6500,
     defaultDailyRateDayTraining: Number(settings.defaultDailyRateDayTraining) || 250,
   };
@@ -638,7 +673,7 @@ export const saveSettingsToDb = async (settings: ResortSettings): Promise<void> 
       default_daily_rate_combined: sanitizedSettings.defaultDailyRateCombined || 0,
       default_daily_rate_daycare: sanitizedSettings.defaultDailyRateDaycare,
       bit_number: sanitizedSettings.bitNumber,
-      paybox_link: sanitizedSettings.payboxLink,
+      paybox_link: sanitizedSettings.payboxLink || sanitizedSettings.growPaymentLink,
       bank_details: sanitizedSettings.bankDetails,
       auto_check_vaccination: sanitizedSettings.autoCheckVaccination,
       data: sanitizedSettings,

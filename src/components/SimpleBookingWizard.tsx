@@ -34,7 +34,7 @@ import {
   Volume2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Booking, ResortSettings, ServiceType, PaymentMethod, StayStatus, AgentActionProposal } from '../types';
+import { Booking, ResortSettings, ServiceType, PaymentMethod, StayStatus, AgentActionProposal, IntakeRequest } from '../types';
 import { 
   getTodayStr, 
   addDays, 
@@ -52,6 +52,7 @@ interface SimpleBookingWizardProps {
   isOpen: boolean;
   initialData?: Partial<Booking> | null;
   existingBookings: Booking[];
+  intakeRequests?: IntakeRequest[];
   settings: ResortSettings;
   onClose: () => void;
   onSave: (booking: Booking) => void;
@@ -61,6 +62,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   isOpen,
   initialData,
   existingBookings,
+  intakeRequests = [],
   settings,
   onClose,
   onSave,
@@ -310,6 +312,32 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     }
   }, [ownerPhone, existingBookings]);
 
+  // Helper: auto-detect matching intake questionnaire when typing phone
+  const matchedIntakeRequest = React.useMemo(() => {
+    const clean = ownerPhone.replace(/\D/g, '');
+    if (clean.length < 7 || !intakeRequests || intakeRequests.length === 0) return null;
+    return intakeRequests.find(r => {
+      const rClean = r.ownerPhone.replace(/\D/g, '');
+      return rClean.includes(clean) || clean.includes(rClean);
+    }) || null;
+  }, [ownerPhone, intakeRequests]);
+
+  const handleApplyIntakeRequest = (req: IntakeRequest) => {
+    if (req.ownerName) setOwnerName(req.ownerName);
+    if (req.ownerEmail) setOwnerEmail(req.ownerEmail);
+    if (req.dogName) setDogName(req.dogName);
+    if (req.dogBreed) setDogBreed(req.dogBreed);
+    if (req.serviceType) handleServiceTypeSelect(req.serviceType);
+    if (req.startDate) setStartDate(req.startDate);
+    if (req.endDate) setEndDate(req.endDate);
+    if (req.isVaccinated !== undefined) setVaccinationValid(req.isVaccinated);
+    const combinedNotes = [
+      req.specialNeeds ? `צרכים מיוחדים: ${req.specialNeeds}` : '',
+      req.notes ? `הערות משאלון: ${req.notes}` : ''
+    ].filter(Boolean).join(' | ');
+    if (combinedNotes) setNotes(prev => prev ? `${prev} | ${combinedNotes}` : combinedNotes);
+  };
+
   // Update service type & rate default when service type changes
   const handleServiceTypeSelect = (type: ServiceType) => {
     setServiceType(type);
@@ -346,6 +374,31 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       setTotalPrice(initialData.totalPrice);
     }
   }, [initialData]);
+
+  // Synchronize wizard state whenever initialData changes (e.g. from Grow payment or intake request)
+  useEffect(() => {
+    if (!initialData) return;
+    if (initialData.ownerPhone) setOwnerPhone(initialData.ownerPhone);
+    if (initialData.ownerName) setOwnerName(initialData.ownerName);
+    if (initialData.ownerEmail) setOwnerEmail(initialData.ownerEmail);
+    if (initialData.dogName) setDogName(initialData.dogName);
+    if (initialData.dogBreed) setDogBreed(initialData.dogBreed);
+    if (initialData.dogAgeGroup) setDogAgeGroup(initialData.dogAgeGroup);
+    if (initialData.dogGender) setDogGender(initialData.dogGender);
+    if (initialData.serviceType) {
+      setServiceType(initialData.serviceType);
+      if (initialData.serviceType === 'day_training') setDailyRate(settings.defaultDailyRateDayTraining || 250);
+      else if (initialData.serviceType === 'daycare') setDailyRate(settings.defaultDailyRateDaycare);
+      else if (initialData.serviceType === 'training') setDailyRate(settings.defaultDailyRateTraining || 6500);
+      else setDailyRate(settings.defaultDailyRateBoarding);
+    }
+    if (initialData.startDate) setStartDate(initialData.startDate);
+    if (initialData.endDate) setEndDate(initialData.endDate);
+    if (initialData.depositAmount !== undefined) setDepositAmount(initialData.depositAmount);
+    if (initialData.notes) setNotes(initialData.notes);
+    if (initialData.vaccinationValid !== undefined) setVaccinationValid(initialData.vaccinationValid);
+    if (initialData.paymentMethod) setPaymentMethod(initialData.paymentMethod);
+  }, [initialData, settings]);
 
   // Signature canvas setup
   useEffect(() => {
@@ -801,6 +854,30 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     />
                   </div>
                 </div>
+
+                {/* If intake questionnaire recognized for this phone number */}
+                {matchedIntakeRequest && (
+                  <div className="mt-2.5 p-3 rounded-xl bg-emerald-50/90 border-2 border-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2 animate-in fade-in">
+                    <div className="text-xs text-emerald-950">
+                      <div className="flex items-center gap-1.5 font-black text-emerald-800">
+                        <span className="text-sm">📥</span>
+                        <span>זוהה שאלון קליטה עבור {matchedIntakeRequest.ownerName} ({matchedIntakeRequest.dogName})!</span>
+                      </div>
+                      <div className="text-[11px] text-emerald-700 mt-0.5 font-medium">
+                        שירות: <strong>{matchedIntakeRequest.serviceType === 'boarding' ? 'פנסיון' : matchedIntakeRequest.serviceType === 'training' ? 'אילוף' : 'יומיות'}</strong> · 
+                        תאריכים: <strong className="text-emerald-900 font-bold">{formatDateIL(matchedIntakeRequest.startDate)} עד {formatDateIL(matchedIntakeRequest.endDate)}</strong>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyIntakeRequest(matchedIntakeRequest)}
+                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5"
+                      title="החל את התאריכים ופרטי הכלב ישירות לתוך ההזמנה"
+                    >
+                      <span>⚡ טען תאריכים ופרטים מהשאלון</span>
+                    </button>
+                  </div>
+                )}
 
                 {/* If existing customer recognized with dogs */}
                 {matchedExistingCustomer && matchedExistingCustomer.dogs.length > 0 && !dogName && (

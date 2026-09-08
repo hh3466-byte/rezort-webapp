@@ -79,7 +79,7 @@ export async function sendResortWhatsAppNotification(
   message: string,
   settings: ResortSettings
 ): Promise<{ success: boolean; directUrl: string }> {
-  const phone = cleanPhoneNumber(settings.whatsappNotificationPhone || settings.managerPhone || '0548889900');
+  const phone = cleanPhoneNumber(settings.whatsappNotificationPhone || settings.managerPhone || '0548765888');
   
   // Format Israeli international phone (05... -> 9725...)
   const intlPhone = phone.startsWith('0') ? '972' + phone.substring(1) : phone;

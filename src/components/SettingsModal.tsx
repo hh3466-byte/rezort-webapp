@@ -38,6 +38,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [formData, setFormData] = useState<ResortSettings>(() => {
     const s = { ...settings };
+    const rawPhone = s.whatsappNotificationPhone || s.managerPhone || '';
+    const phone = rawPhone.includes('8889900') ? '054-8765888' : (rawPhone || '054-8765888');
+    s.whatsappNotificationPhone = phone;
+    s.managerPhone = phone;
+    if (s.bitNumber && s.bitNumber.includes('8889900')) {
+      s.bitNumber = phone;
+    }
     if (!s.defaultDailyRateTraining || Number(s.defaultDailyRateTraining) < 1000) {
       s.defaultDailyRateTraining = 6500;
     }
@@ -50,6 +57,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     setFormData(prev => {
       const s = { ...prev, ...settings };
+      const rawPhone = s.whatsappNotificationPhone || s.managerPhone || '';
+      const phone = rawPhone.includes('8889900') ? '054-8765888' : (rawPhone || '054-8765888');
+      s.whatsappNotificationPhone = phone;
+      s.managerPhone = phone;
+      if (s.bitNumber && s.bitNumber.includes('8889900')) {
+        s.bitNumber = phone;
+      }
       if (!s.defaultDailyRateTraining || Number(s.defaultDailyRateTraining) < 1000) {
         s.defaultDailyRateTraining = 6500;
       }
@@ -92,7 +106,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   });
 
   const executeSave = (newSettings: ResortSettings) => {
-    onSaveSettings(newSettings);
+    const rawPhone = newSettings.whatsappNotificationPhone || newSettings.managerPhone || '';
+    const phone = rawPhone.includes('8889900') ? '054-8765888' : (rawPhone || '054-8765888');
+    const finalSettings = {
+      ...newSettings,
+      whatsappNotificationPhone: phone,
+      managerPhone: phone,
+      bitNumber: (!newSettings.bitNumber || newSettings.bitNumber === newSettings.managerPhone || newSettings.bitNumber.includes('8889900') || newSettings.bitNumber === '054-8765888') ? phone : newSettings.bitNumber
+    };
+    onSaveSettings(finalSettings);
     setSaveSuccess(true);
     setTimeout(() => {
       setSaveSuccess(false);
@@ -358,15 +380,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div>
                   <label className="text-xs text-slate-700 font-bold block mb-1">
-                    📱 טלפון לקבלת התראות וואטסאפ של הריזורט
+                    📱 טלפון ראשי של הריזורט (לוואטסאפ, שיחות והתראות)
                   </label>
                   <input
                     type="tel"
-                    value={formData.whatsappNotificationPhone || formData.managerPhone || ''}
-                    onChange={(e) => setFormData({ ...formData, whatsappNotificationPhone: e.target.value })}
-                    placeholder="054-8889900"
+                    value={formData.whatsappNotificationPhone !== undefined ? formData.whatsappNotificationPhone : (formData.managerPhone || '')}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        whatsappNotificationPhone: val,
+                        managerPhone: val,
+                        bitNumber: (!prev.bitNumber || prev.bitNumber === prev.managerPhone || prev.bitNumber === '054-8765888' || prev.bitNumber.includes('8889900')) ? val : prev.bitNumber
+                      }));
+                    }}
+                    placeholder="054-8765888"
                     className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
                   />
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    המספר המשמש להתראות מערכת, שיחות ושליחת וואטסאפ ללקוחות.
+                  </span>
                 </div>
 
                 <div>
