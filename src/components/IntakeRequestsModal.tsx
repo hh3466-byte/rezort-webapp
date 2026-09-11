@@ -1063,25 +1063,6 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   />
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">₪</span>
                 </div>
-
-                {/* Quick amount chips */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <span className="text-[11px] font-bold text-slate-400 self-center">סכומים מהירים:</span>
-                  {[200, 300, 500, 750, 1000, 1500].map(amt => (
-                    <button
-                      key={amt}
-                      type="button"
-                      onClick={() => setPaymentAmount(String(amt))}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                        paymentAmount === String(amt)
-                          ? 'bg-blue-600 text-white shadow-2xs'
-                          : 'bg-slate-100 hover:bg-blue-50 text-slate-700 border border-slate-200'
-                      }`}
-                    >
-                      ₪{amt}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               {/* Payment Link (Optional override) */}
