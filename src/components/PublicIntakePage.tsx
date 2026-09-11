@@ -43,6 +43,8 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   const [isFriendlyWithDogs, setIsFriendlyWithDogs] = useState<'yes' | 'no' | 'depends'>('yes');
   const [isNeutered, setIsNeutered] = useState<boolean>(true);
   const [isVaccinated, setIsVaccinated] = useState<boolean>(true);
+  const [isHouseTrained, setIsHouseTrained] = useState<boolean>(true);
+  const [isTreatedParasites, setIsTreatedParasites] = useState<boolean>(true);
   const [specialNeeds, setSpecialNeeds] = useState('');
   const [freeText, setFreeText] = useState('');
 
@@ -51,12 +53,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   const [isQuickCallback, setIsQuickCallback] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Auto adjust dates when training is selected
+  // Auto adjust dates when service is selected
   const handleServiceChange = (st: ServiceType) => {
     setServiceType(st);
-    if (st === 'training') {
-      setEndDate(addDays(startDate, 50));
-    } else if (st === 'daycare') {
+    if (st === 'daycare') {
       setEndDate(startDate);
     }
   };
@@ -95,7 +95,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       return false;
     }
     if (!specialNeeds.trim()) {
-      setErrorMessage('סעיף 4 הינו שדה חובה: לחצו על הכפתור "הכלב בריא לחלוטין" או פרטו תרופות/צרכים מיוחדים בתיבה');
+      setErrorMessage('סעיף 6 הינו שדה חובה: לחצו על הכפתור "הכלב בריא לחלוטין" או פרטו תרופות/צרכים מיוחדים בתיבה');
       return false;
     }
     return true;
@@ -130,6 +130,8 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       isFriendlyWithDogs,
       isNeutered,
       isVaccinated,
+      isHouseTrained,
+      isTreatedParasites,
       specialNeeds: specialNeeds.trim(),
       notes: [
         isCallbackOnly ? '[בקשת שיחה חוזרת טלפונית]' : '',
@@ -392,11 +394,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
               <span>השירות המבוקש <span className="text-red-500">*</span></span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {[
                 { id: 'boarding', icon: '🏨', title: 'פנסיון לינה', desc: 'אירוח מלא בריזורט' },
-                { id: 'training', icon: '🎓', title: 'אילוף (50 יום)', desc: 'תכנית אילוף ושיקום' },
-                { id: 'day_training', icon: '🦮', title: 'אילוף יומי', desc: 'ללא לינת לילה' },
+                { id: 'training', icon: '🎓', title: 'אילוף', desc: 'תכנית אילוף ושיקום' },
                 { id: 'daycare', icon: '✂️', title: 'יום כיף (דייקר)', desc: 'שהות יומית ומשחקים' },
               ].map((s) => (
                 <button
@@ -556,8 +557,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                 </div>
               </div>
 
-              {/* Question 2 & 3: Neutered & Vaccinated */}
+              {/* Question 2, 3, 4, 5: Yes/No Vetting Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* 2. Neutered */}
                 <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-emerald-200/80 flex items-center justify-between">
                   <span className="font-extrabold text-slate-900 text-xs">
                     ✂️ 2. מסורס / מעוקרת? <span className="text-red-500">*</span>
@@ -584,6 +586,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                   </div>
                 </div>
 
+                {/* 3. Vaccinated */}
                 <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-emerald-200/80 flex items-center justify-between">
                   <span className="font-extrabold text-slate-900 text-xs">
                     💉 3. חיסונים בתוקף? <span className="text-red-500">*</span>
@@ -609,13 +612,67 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                     </button>
                   </div>
                 </div>
+
+                {/* 4. House / Potty Trained */}
+                <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-emerald-200/80 flex items-center justify-between">
+                  <span className="font-extrabold text-slate-900 text-xs">
+                    🚽 4. מחונך לצרכים? <span className="text-red-500">*</span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsHouseTrained(true)}
+                      className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
+                        isHouseTrained ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      כן
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsHouseTrained(false)}
+                      className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
+                        !isHouseTrained ? 'bg-amber-600 text-white border-amber-600 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      לא
+                    </button>
+                  </div>
+                </div>
+
+                {/* 5. Treated against Ticks and Fleas */}
+                <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-emerald-200/80 flex items-center justify-between">
+                  <span className="font-extrabold text-slate-900 text-xs">
+                    🛡️ 5. מטופל נגד קרציות ופשפשים? <span className="text-red-500">*</span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsTreatedParasites(true)}
+                      className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
+                        isTreatedParasites ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      כן
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsTreatedParasites(false)}
+                      className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
+                        !isTreatedParasites ? 'bg-red-600 text-white border-red-600 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      לא
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              {/* Question 4: Special needs or medication */}
+              {/* Question 6: Special needs or medication */}
               <div className="p-4 bg-slate-50 rounded-2xl border-2 border-emerald-200/90 space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="font-extrabold text-slate-900 block text-xs">
-                    🩺 4. מצב בריאותי, צרכים מיוחדים או תרופות <span className="text-red-500">*</span>
+                    🩺 6. מצב בריאותי, צרכים מיוחדים או תרופות <span className="text-red-500">*</span>
                   </label>
                   <span className="text-[10px] bg-emerald-100 text-emerald-900 font-bold px-2 py-0.5 rounded-full border border-emerald-300">
                     שדה חובה

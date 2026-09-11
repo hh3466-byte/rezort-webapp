@@ -24,7 +24,7 @@ export function formatPhoneForWhatsApp(phone: string): string {
 export function getServiceTypeHebrew(type: string): string {
   switch (type) {
     case 'boarding': return 'פנסיון';
-    case 'training': return 'תהליך אילוף (50 יום)';
+    case 'training': return 'אילוף';
     case 'day_training': return 'אילוף ביומיות (ללא לינה)';
     case 'combined': return 'פנסיון';
     case 'daycare': return 'יום כיף / שהות יומית';

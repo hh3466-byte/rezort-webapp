@@ -259,7 +259,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   </div>
 
                   {/* Card Middle: Key Vetting Indicators */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
                     {/* Friendly with dogs */}
                     <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                       <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
@@ -269,8 +269,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         req.isFriendlyWithDogs === 'yes' ? 'text-emerald-700' :
                         req.isFriendlyWithDogs === 'no' ? 'text-red-700' : 'text-amber-700'
                       }`}>
-                        {req.isFriendlyWithDogs === 'yes' ? 'חברותי מאוד 🟢' :
-                         req.isFriendlyWithDogs === 'no' ? 'תוקפני / לבד 🔴' : 'תלוי בסיטואציה 🟡'}
+                        {req.isFriendlyWithDogs === 'yes' ? 'חברותי 🟢' :
+                         req.isFriendlyWithDogs === 'no' ? 'תוקפני 🔴' : 'תלוי 🟡'}
                       </span>
                     </div>
 
@@ -290,7 +290,27 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         חיסונים בתוקף:
                       </span>
                       <span className={`font-bold ${req.isVaccinated ? 'text-emerald-700' : 'text-red-600'}`}>
-                        {req.isVaccinated ? 'בתוקף מלא 💉' : 'חסר / לא בטוח ⚠️'}
+                        {req.isVaccinated ? 'כן 💉' : 'חסר ⚠️'}
+                      </span>
+                    </div>
+
+                    {/* House Trained */}
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
+                        מחונך לצרכים:
+                      </span>
+                      <span className={`font-bold ${req.isHouseTrained !== false ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {req.isHouseTrained !== false ? 'כן 🚽' : 'לא ⚠️'}
+                      </span>
+                    </div>
+
+                    {/* Treated for Parasites */}
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
+                        נגד קרציות/פשפשים:
+                      </span>
+                      <span className={`font-bold ${req.isTreatedParasites !== false ? 'text-emerald-700' : 'text-amber-700'}`}>
+                        {req.isTreatedParasites !== false ? 'מטופל 🛡️' : 'לא ⚠️'}
                       </span>
                     </div>
 
@@ -300,9 +320,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         גודל כלב:
                       </span>
                       <span className="font-bold text-slate-800">
-                        {req.dogSize === 'small' ? 'קטן (עד 10 ק״ג)' :
-                         req.dogSize === 'medium' ? 'בינוני (10-25 ק״ג)' :
-                         req.dogSize === 'large' ? 'גדול (25-45 ק״ג)' : 'ענק (45+ ק״ג)'}
+                        {req.dogSize === 'small' ? 'קטן' :
+                         req.dogSize === 'medium' ? 'בינוני' :
+                         req.dogSize === 'large' ? 'גדול' : 'ענק'}
                       </span>
                     </div>
                   </div>

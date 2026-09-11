@@ -95,6 +95,8 @@ export interface IntakeRequest {
   isFriendlyWithDogs: 'yes' | 'no' | 'depends';
   isNeutered: boolean;
   isVaccinated: boolean;
+  isHouseTrained?: boolean; // מחונך לצרכים
+  isTreatedParasites?: boolean; // מטופל נגד קרציות ופשפשים
   specialNeeds?: string;
   notes?: string;
   calculatedPrice?: number;

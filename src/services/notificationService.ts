@@ -12,6 +12,8 @@ export function formatIntakeNotification(request: IntakeRequest): string {
 
   const neuteredLabel = request.isNeutered ? 'כן ✂️' : 'לא';
   const vaccinatedLabel = request.isVaccinated ? 'כן בתוקף 💉' : 'חסר/לא ידוע ⚠️';
+  const houseTrainedLabel = request.isHouseTrained !== false ? 'כן 🚽' : 'לא ⚠️';
+  const parasitesLabel = request.isTreatedParasites !== false ? 'כן 🛡️' : 'לא ⚠️';
 
   return `🐾 *בקשת קליטה חדשה בריזורט לכלב!*
 --------------------------------
@@ -24,6 +26,8 @@ export function formatIntakeNotification(request: IntakeRequest): string {
 🐕 *מסתדר עם כלבים:* ${friendlyLabel}
 ✂️ *מסורס/מעוקרת:* ${neuteredLabel}
 💉 *חיסונים בתוקף:* ${vaccinatedLabel}
+🚽 *מחונך לצרכים:* ${houseTrainedLabel}
+🛡️ *טיפול נגד קרציות ופשפשים:* ${parasitesLabel}
 ${request.specialNeeds ? `🩺 *צרכים מיוחדים:* ${request.specialNeeds}\n` : ''}${request.notes ? `📝 *הערות:* ${request.notes}\n` : ''}--------------------------------
 💡 *לטיפול, חיוג ללקוח ומשלוח קישור תשלום:* פתח את מסך "בקשות קליטה" ביומן הריזורט.`;
 }
@@ -151,6 +155,8 @@ export async function sendResortEmailNotification(
       'מסתדר עם כלבים': request.isFriendlyWithDogs === 'yes' ? 'כן' : request.isFriendlyWithDogs === 'no' ? 'לא' : 'תלוי בסיטואציה',
       'מסורס/מעוקרת': request.isNeutered ? 'כן' : 'לא',
       'חיסונים בתוקף': request.isVaccinated ? 'כן' : 'לא בטוח',
+      'מחונך לצרכים': request.isHouseTrained !== false ? 'כן' : 'לא',
+      'מטופל נגד קרציות ופשפשים': request.isTreatedParasites !== false ? 'כן' : 'לא',
       'צרכים מיוחדים/תרופות': request.specialNeeds || 'אין',
       'הודעה / טקסט חופשי': customMessage || request.notes || 'אין',
       'חיוג מהיר ללקוח': `tel:${request.ownerPhone}`
