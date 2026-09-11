@@ -83,7 +83,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
     }
   };
 
-  const applyDatePreset = (preset: 'weekend' | 'next_weekend' | 'midweek' | 'week' | 'twoweeks' | 'training_month') => {
+  const applyDatePreset = (preset: 'weekend' | 'next_weekend' | 'midweek' | 'week' | 'twoweeks') => {
     const d = new Date(today + 'T00:00:00');
     const day = d.getDay(); // 0: Sun, 1: Mon, 2: Tue, 3: Wed, 4: Thu, 5: Fri, 6: Sat
 
@@ -109,8 +109,6 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       setEndDate(addDays(startDate, 7));
     } else if (preset === 'twoweeks') {
       setEndDate(addDays(startDate, 14));
-    } else if (preset === 'training_month') {
-      setEndDate(addDays(startDate, 30));
     }
   };
 
@@ -662,15 +660,6 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                   >
                     שבועיים (14 לילות)
                   </button>
-                  {serviceType === 'training' && (
-                    <button
-                      type="button"
-                      onClick={() => applyDatePreset('training_month')}
-                      className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-xs font-bold text-purple-900 transition-colors cursor-pointer shadow-2xs"
-                    >
-                      חודש אילוף (30 יום)
-                    </button>
-                  )}
                 </div>
 
               </div>
