@@ -64,10 +64,17 @@ export function formatClientPaymentLinkMessage(
     settings.growPaymentLink || 
     'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
 
-  return `היי ${request.ownerName}, שמחנו לשוחח! 🐾🐶
-שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר בריזורט לכלב בין התאריכים ${request.startDate} עד ${request.endDate}.
+  const depositSection = request.depositRequested && request.depositRequested > 0
+    ? `\n💰 *סכום המקדמה שסוכם לשריון המקום:* ₪${request.depositRequested}\n`
+    : '';
 
-להשלמת השריון הסופי, מצורף הקישור המאובטח לתשלום המקדמה:
+  const depositInstruction = request.depositRequested && request.depositRequested > 0
+    ? ` (יש להזין ₪${request.depositRequested} בעמוד התשלום)`
+    : '';
+
+  return `היי ${request.ownerName}, שמחנו לשוחח! 🐾🐶
+שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר בריזורט לכלב בין התאריכים ${request.startDate} עד ${request.endDate}.${depositSection}
+להשלמת השריון הסופי, מצורף הקישור המאובטח לתשלום${depositInstruction}:
 👉 ${paymentLink}
 
 (אפשר לשלם בנוחות גם בביט למספר: ${settings.bitNumber || settings.managerPhone})
