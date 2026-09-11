@@ -17,7 +17,9 @@ import {
   Filter,
   Search,
   ExternalLink,
-  ChevronDown
+  ChevronDown,
+  Copy,
+  Check
 } from 'lucide-react';
 
 interface IntakeRequestsModalProps {
@@ -39,6 +41,14 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 }) => {
   const [filter, setFilter] = useState<'all' | 'pending' | 'payment_requested' | 'approved' | 'rejected'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const handleCopyIntakeLink = () => {
+    const url = `${window.location.origin}/?intake=true`;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
 
   const pendingCount = requests.filter(r => r.status === 'pending').length;
   const paymentRequestedCount = requests.filter(r => r.status === 'payment_requested').length;
@@ -97,14 +107,26 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-9 h-9 rounded-xl bg-white hover:bg-slate-200 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition-colors border border-slate-200 shadow-2xs"
-            title="סגור"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopyIntakeLink}
+              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              title="העתקת הקישור לשאלון הקליטה לשליחה מהירה ללקוחות בוואטסאפ"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedLink ? 'הקישור הועתק!' : 'העתק קישור שאלון'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-9 h-9 rounded-xl bg-white hover:bg-slate-200 text-slate-500 hover:text-slate-900 flex items-center justify-center cursor-pointer transition-colors border border-slate-200 shadow-2xs"
+              title="סגור"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Filters & Search Toolbar */}
