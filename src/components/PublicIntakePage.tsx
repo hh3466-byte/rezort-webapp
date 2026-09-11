@@ -15,7 +15,10 @@ import {
   ArrowRight,
   MessageSquare,
   PhoneCall,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  Minus,
+  Clock
 } from 'lucide-react';
 
 interface PublicIntakePageProps {
@@ -62,6 +65,54 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   };
 
   const daysCount = Math.max(1, calculateDaysCount(startDate, endDate));
+  const nightsCount = Math.max(1, calculateDaysCount(startDate, endDate));
+
+  const handleNightsChange = (delta: number) => {
+    const newNights = Math.max(1, nightsCount + delta);
+    setEndDate(addDays(startDate, newNights));
+  };
+
+  const handleStartDateChange = (newStart: string) => {
+    if (!newStart) return;
+    const currentNights = Math.max(1, calculateDaysCount(startDate, endDate));
+    setStartDate(newStart);
+    if (serviceType === 'daycare') {
+      setEndDate(newStart);
+    } else {
+      setEndDate(addDays(newStart, currentNights));
+    }
+  };
+
+  const applyDatePreset = (preset: 'weekend' | 'next_weekend' | 'midweek' | 'week' | 'twoweeks' | 'training_month') => {
+    const d = new Date(today + 'T00:00:00');
+    const day = d.getDay(); // 0: Sun, 1: Mon, 2: Tue, 3: Wed, 4: Thu, 5: Fri, 6: Sat
+
+    if (preset === 'weekend') {
+      let daysToThu = (4 - day + 7) % 7;
+      if (day === 5 || day === 6) daysToThu += 7;
+      const s = addDays(today, daysToThu);
+      setStartDate(s);
+      setEndDate(addDays(s, 2));
+    } else if (preset === 'next_weekend') {
+      let daysToThu = (4 - day + 7) % 7;
+      daysToThu += 7;
+      const s = addDays(today, daysToThu);
+      setStartDate(s);
+      setEndDate(addDays(s, 2));
+    } else if (preset === 'midweek') {
+      let daysToSun = (0 - day + 7) % 7;
+      if (daysToSun === 0 && day > 0) daysToSun = 7;
+      const s = addDays(today, daysToSun);
+      setStartDate(s);
+      setEndDate(addDays(s, 4));
+    } else if (preset === 'week') {
+      setEndDate(addDays(startDate, 7));
+    } else if (preset === 'twoweeks') {
+      setEndDate(addDays(startDate, 14));
+    } else if (preset === 'training_month') {
+      setEndDate(addDays(startDate, 30));
+    }
+  };
 
   // Strict Validation Function
   const validateForm = (): boolean => {
@@ -419,88 +470,209 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
           </div>
 
           {/* Section 4: Dates */}
-          <div className="space-y-3 bg-emerald-50/50 p-4 sm:p-5 rounded-2xl border-2 border-emerald-200">
+          <div className="space-y-3.5 bg-emerald-50/50 p-4 sm:p-5 rounded-2xl border-2 border-emerald-200">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-emerald-200/80">
               <div className="flex items-center gap-2 text-sm font-black text-[#0f4c3a]">
                 <Calendar className="w-4 h-4 text-emerald-600" />
                 <span>תאריכי השהות המבוקשים <span className="text-red-500">*</span></span>
               </div>
               <span className="text-xs font-black text-emerald-800 bg-white px-3 py-1 rounded-full border border-emerald-200 shadow-2xs self-start sm:self-auto">
-                {serviceType === 'daycare' ? 'שהות יומית' : `סה״כ ${daysCount} ${daysCount === 1 ? 'יום' : 'ימים'} (${daysCount > 1 ? `${daysCount - 1} לילות` : 'ללא לינה'})`}
+                {serviceType === 'daycare' ? 'שהות יומית (ללא לינה)' : `סה״כ ${daysCount} ${daysCount === 1 ? 'יום' : 'ימים'} (${nightsCount} ${nightsCount === 1 ? 'לילה' : 'לילות'})`}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <div>
-                <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1">
-                  <span>🏨 תאריך כניסה / הגעה לריזורט *</span>
-                  <span className="text-[11px] text-emerald-700 font-bold">
-                    {startDate ? `יום ${getDayNameHebrew(startDate)}, ${formatDateIL(startDate)}` : ''}
+            {/* DAYCARE SINGLE-DAY MODE */}
+            {serviceType === 'daycare' ? (
+              <div className="bg-white rounded-2xl p-4 border border-emerald-200 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 block">
+                    ☀️ בחר את תאריך יום הכיף המבוקש *
+                  </label>
+                  <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
+                    שעות פעילות: 08:00 - 18:00
                   </span>
-                </label>
-                <input
-                  type="date"
-                  required
-                  min={today}
-                  value={startDate}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setStartDate(val);
-                    if (serviceType === 'training') {
-                      setEndDate(addDays(val, 50));
-                    } else if (serviceType === 'daycare') {
-                      setEndDate(val);
-                    } else if (val > endDate) {
-                      setEndDate(addDays(val, 1));
-                    }
-                  }}
-                  className="w-full bg-white border border-emerald-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-900 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono"
-                />
-              </div>
+                </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1">
-                  <span>🚗 תאריך איסוף / יציאה מהריזורט *</span>
-                  <span className="text-[11px] text-emerald-700 font-bold">
-                    {endDate ? `יום ${getDayNameHebrew(endDate)}, ${formatDateIL(endDate)}` : ''}
-                  </span>
-                </label>
-                <input
-                  type="date"
-                  required
-                  min={startDate}
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-white border border-emerald-300 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-900 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono"
-                />
-              </div>
-            </div>
+                {/* Quick Chips for Daycare */}
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-500 self-center ml-1">בחירה מהירה:</span>
+                  {[
+                    { label: 'היום', date: today },
+                    { label: 'מחר', date: addDays(today, 1) },
+                    { label: 'מחרתיים', date: addDays(today, 2) },
+                  ].map(chip => (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => { setStartDate(chip.date); setEndDate(chip.date); }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        startDate === chip.date
+                          ? 'bg-emerald-700 text-white shadow-xs'
+                          : 'bg-slate-100 hover:bg-emerald-100 text-slate-800 border border-slate-200'
+                      }`}
+                    >
+                      {chip.label} (יום {getDayNameHebrew(chip.date)})
+                    </button>
+                  ))}
+                </div>
 
-            {/* Quick Duration Chips */}
-            {serviceType !== 'training' && serviceType !== 'daycare' && (
-              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
-                <span className="text-[11px] font-bold text-slate-500">בחירה מהירה:</span>
-                <button
-                  type="button"
-                  onClick={() => setEndDate(addDays(startDate, 2))}
-                  className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer"
-                >
-                  סופ״ש (2 לילות)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEndDate(addDays(startDate, 7))}
-                  className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer"
-                >
-                  שבוע (7 ימים)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEndDate(addDays(startDate, 14))}
-                  className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer"
-                >
-                  שבועיים (14 יום)
-                </button>
+                <div className="relative">
+                  <input
+                    type="date"
+                    required
+                    min={today}
+                    value={startDate}
+                    onChange={(e) => {
+                      setStartDate(e.target.value);
+                      setEndDate(e.target.value);
+                    }}
+                    className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
+                  />
+                  <div className="mt-1.5 text-xs text-emerald-800 font-black flex items-center gap-1">
+                    <span>📅 יום {getDayNameHebrew(startDate)}, {formatDateIL(startDate)}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* BOARDING / TRAINING OVERNIGHT MODE */
+              <div className="space-y-3">
+                
+                {/* Visual Duration Stepper Banner */}
+                <div className="bg-white rounded-2xl p-3 sm:p-4 border border-emerald-200 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl font-bold shrink-0">
+                      🌙
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-slate-500 font-bold">משך השהות בריזורט:</div>
+                      <div className="text-sm sm:text-base font-black text-emerald-950">
+                        {nightsCount} {nightsCount === 1 ? 'לילה' : 'לילות'} ({daysCount} {daysCount === 1 ? 'יום' : 'ימים'})
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Interactive Nights Stepper */}
+                  <div className="flex items-center justify-between sm:justify-end gap-2 bg-slate-50 sm:bg-transparent p-1.5 sm:p-0 rounded-xl border sm:border-0 border-slate-200">
+                    <span className="text-xs font-bold text-slate-600">שינוי לילות מהיר:</span>
+                    <div className="flex items-center border border-slate-300 rounded-xl bg-white shadow-2xs overflow-hidden">
+                      <button
+                        type="button"
+                        disabled={nightsCount <= 1}
+                        onClick={() => handleNightsChange(-1)}
+                        className="w-9 h-8 hover:bg-slate-100 active:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center font-black text-slate-700 transition-all cursor-pointer border-l border-slate-200"
+                        title="הפחת לילה אחד (-1)"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="px-3 text-xs font-black text-slate-900 min-w-[2.75rem] text-center font-mono">
+                        {nightsCount}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleNightsChange(1)}
+                        className="w-9 h-8 hover:bg-slate-100 active:bg-slate-200 flex items-center justify-center font-black text-emerald-800 transition-all cursor-pointer border-r border-slate-200"
+                        title="הוסף לילה אחד (+1)"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Two Date Inputs with Israeli Hebrew Day Display */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Arrival Date */}
+                  <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-emerald-200 shadow-2xs">
+                    <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1.5">
+                      <span>🏨 תאריך הגעה / כניסה לריזורט *</span>
+                      <span className="text-[11px] text-emerald-700 font-black">
+                        {startDate ? `יום ${getDayNameHebrew(startDate)}` : ''}
+                      </span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      min={today}
+                      value={startDate}
+                      onChange={(e) => handleStartDateChange(e.target.value)}
+                      className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
+                    />
+                    <div className="mt-1 text-[11px] text-slate-500 font-semibold">
+                      {startDate ? formatDateIL(startDate) : ''}
+                    </div>
+                  </div>
+
+                  {/* Departure Date */}
+                  <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-emerald-200 shadow-2xs">
+                    <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1.5">
+                      <span>🚗 תאריך איסוף / יציאה מהריזורט *</span>
+                      <span className="text-[11px] text-emerald-700 font-black">
+                        {endDate ? `יום ${getDayNameHebrew(endDate)}` : ''}
+                      </span>
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      min={startDate}
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
+                    />
+                    <div className="mt-1 text-[11px] text-slate-500 font-semibold">
+                      {endDate ? formatDateIL(endDate) : ''}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Presets Chips */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
+                  <span className="text-[11px] font-bold text-slate-500">תקופות נפוצות:</span>
+                  <button
+                    type="button"
+                    onClick={() => applyDatePreset('weekend')}
+                    className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    סופ״ש הקרוב (חמישי-שבת)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyDatePreset('next_weekend')}
+                    className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    סופ״ש הבא
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyDatePreset('midweek')}
+                    className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    אמצע שבוע (ראשון-חמישי)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyDatePreset('week')}
+                    className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    שבוע מלא (7 לילות)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyDatePreset('twoweeks')}
+                    className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    שבועיים (14 לילות)
+                  </button>
+                  {serviceType === 'training' && (
+                    <button
+                      type="button"
+                      onClick={() => applyDatePreset('training_month')}
+                      className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg text-xs font-bold text-purple-900 transition-colors cursor-pointer shadow-2xs"
+                    >
+                      חודש אילוף (30 יום)
+                    </button>
+                  )}
+                </div>
+
               </div>
             )}
 

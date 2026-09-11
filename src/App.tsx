@@ -12,6 +12,7 @@ import {
   subscribeToIntakeRequests,
   updateIntakeRequestStatusInDb,
   deleteIntakeRequestFromDb,
+  saveIntakeRequestToDb,
   loadStoredIntakeRequests,
   saveBookingToDb, 
   deleteBookingFromDb, 
@@ -1215,6 +1216,11 @@ export default function App() {
             await updateIntakeRequestStatusInDb(id, status, notes);
             showToast('סטטוס בקשת הקליטה עודכן');
           }}
+          onSaveRequest={async (updatedReq) => {
+            await saveIntakeRequestToDb(updatedReq);
+            setIntakeRequests(prev => prev.map(r => r.id === updatedReq.id ? updatedReq : r));
+            showToast('פרטי בקשת הקליטה עודכנו ונשמרו! ✨');
+          }}
           onApproveAndBook={async (req) => {
             setBookingWizardOpen({
               isOpen: true,
@@ -1228,7 +1234,7 @@ export default function App() {
                 startDate: req.startDate,
                 endDate: req.endDate,
                 vaccinationValid: req.isVaccinated,
-                notes: [req.specialNeeds, req.notes].filter(Boolean).join(' | '),
+                notes: [req.specialNeeds, req.notes, req.internalNotes ? `הערות שמוליק: ${req.internalNotes}` : ''].filter(Boolean).join(' | '),
                 depositAmount: req.depositRequested || 0,
                 paymentStatus: req.depositRequested ? 'deposit_paid' : 'fully_paid',
                 stayStatus: 'booked'

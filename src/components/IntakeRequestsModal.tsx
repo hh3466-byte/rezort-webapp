@@ -19,8 +19,14 @@ import {
   ExternalLink,
   ChevronDown,
   Copy,
-  Check
+  Check,
+  Pencil,
+  AlertCircle,
+  Plus,
+  Minus,
+  Save
 } from 'lucide-react';
+import { calculateDaysCount, addDays, formatDateIL, getDayNameHebrew } from '../utils/dateUtils';
 
 interface IntakeRequestsModalProps {
   requests: IntakeRequest[];
@@ -29,6 +35,7 @@ interface IntakeRequestsModalProps {
   onUpdateStatus: (id: string, status: IntakeRequestStatus, internalNotes?: string) => Promise<void>;
   onApproveAndBook: (request: IntakeRequest) => void;
   onDeleteRequest: (id: string) => Promise<void>;
+  onSaveRequest?: (request: IntakeRequest) => Promise<void>;
 }
 
 export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
@@ -37,11 +44,53 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   onClose,
   onUpdateStatus,
   onApproveAndBook,
-  onDeleteRequest
+  onDeleteRequest,
+  onSaveRequest
 }) => {
   const [filter, setFilter] = useState<'all' | 'pending' | 'payment_requested' | 'approved' | 'rejected'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<IntakeRequest | null>(null);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const handleSaveEdit = async () => {
+    if (!editingRequest) return;
+    setEditError(null);
+
+    if (!editingRequest.ownerName.trim()) {
+      setEditError('נא למלא שם בעלים מלא');
+      return;
+    }
+    if (!editingRequest.ownerPhone.trim()) {
+      setEditError('נא למלא מספר טלפון נייד');
+      return;
+    }
+    if (!editingRequest.dogName.trim()) {
+      setEditError('נא למלא את שם הכלב/ה');
+      return;
+    }
+    if (!editingRequest.startDate || !editingRequest.endDate) {
+      setEditError('נא לבחור תאריכי שהות');
+      return;
+    }
+    if (editingRequest.endDate < editingRequest.startDate) {
+      setEditError('תאריך היציאה אינו יכול להיות מוקדם מתאריך הכניסה');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      if (onSaveRequest) {
+        await onSaveRequest(editingRequest);
+      }
+      setEditingRequest(null);
+    } catch (err: any) {
+      setEditError('אירעה שגיאה בשמירת השינויים, אנא נסה שוב');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   const handleCopyIntakeLink = () => {
     const url = `${window.location.origin}/?intake=true`;
@@ -327,19 +376,41 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Special Needs & Notes if any */}
-                  {(req.specialNeeds || req.notes) && (
-                    <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-2.5 text-xs text-amber-950 space-y-1">
-                      {req.specialNeeds && (
-                        <div>
-                          <strong className="font-bold">🩺 צרכים מיוחדים/תרופות:</strong> {req.specialNeeds}
+                  {/* Special Needs, Client Notes & Shmulik Internal Notes */}
+                  {(req.specialNeeds || req.notes || req.internalNotes || (req.depositRequested && req.depositRequested > 0)) && (
+                    <div className="space-y-2">
+                      {(req.specialNeeds || req.notes) && (
+                        <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-2.5 text-xs text-amber-950 space-y-1">
+                          {req.specialNeeds && (
+                            <div>
+                              <strong className="font-bold">🩺 צרכים מיוחדים/תרופות:</strong> {req.specialNeeds}
+                            </div>
+                          )}
+                          {req.notes && (
+                            <div>
+                              <strong className="font-bold">📝 הערות הלקוח:</strong> {req.notes}
+                            </div>
+                          )}
                         </div>
                       )}
-                      {req.notes && (
-                        <div>
-                          <strong className="font-bold">📝 הערות הלקוח:</strong> {req.notes}
+
+                      {req.internalNotes && (
+                        <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-2.5 text-xs text-blue-950 space-y-0.5">
+                          <div className="font-bold flex items-center gap-1 text-blue-900">
+                            <span>📌 סיכום שיחה והערות שמוליק:</span>
+                          </div>
+                          <div className="font-medium text-slate-800 pr-1 whitespace-pre-wrap">
+                            {req.internalNotes}
+                          </div>
                         </div>
                       )}
+
+                      {req.depositRequested && req.depositRequested > 0 ? (
+                        <div className="text-xs font-bold text-emerald-900 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200 inline-flex items-center gap-1.5">
+                          <span>💰 סכום מקדמה שסוכם:</span>
+                          <span className="font-mono text-sm">₪{req.depositRequested}</span>
+                        </div>
+                      ) : null}
                     </div>
                   )}
 
@@ -373,6 +444,17 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 
                     {/* Right: Booking decision actions (Manual after call) */}
                     <div className="flex items-center gap-2">
+                      {/* Edit Details Button */}
+                      <button
+                        type="button"
+                        onClick={() => { setEditingRequest({ ...req }); setEditError(null); }}
+                        className="bg-amber-50 hover:bg-amber-100 active:scale-98 text-amber-950 border border-amber-300 font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                        title="ערוך את כל פרטי הבקשה (שירות, תאריכים, פרטי כלב, בעלים, חיסונים והערות)"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-amber-700" />
+                        <span>ערוך פרטים ✏️</span>
+                      </button>
+
                       {/* Send Grow Payment Link button */}
                       <button
                         type="button"
@@ -430,6 +512,483 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
         </div>
 
       </div>
+
+      {/* FULL EDIT INTAKE SUB-MODAL */}
+      {editingRequest && (
+        <div className="fixed inset-0 z-60 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-amber-50/60 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-900 flex items-center justify-center font-black text-lg shadow-2xs">
+                  ✏️
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    עריכת בקשת קליטה: {editingRequest.dogName}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    עדכן שינויים, תאריכים, סכומים והערות שסוכמו בשיחה עם {editingRequest.ownerName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingRequest(null)}
+                className="w-8 h-8 rounded-xl bg-white hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer border border-slate-200 shadow-2xs"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs">
+              {editError && (
+                <div className="bg-red-50 text-red-700 border border-red-200 rounded-xl p-3 font-bold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              {/* 1. Service Type */}
+              <div className="space-y-1.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                <label className="font-extrabold text-slate-800 block text-xs">
+                  ✨ סוג השירות המבוקש
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'boarding', label: '🏨 פנסיון לינה' },
+                    { id: 'training', label: '🎓 אילוף' },
+                    { id: 'daycare', label: '✂️ יום כיף' },
+                  ].map(st => (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => setEditingRequest({
+                        ...editingRequest,
+                        serviceType: st.id as any,
+                        endDate: st.id === 'daycare' ? editingRequest.startDate : editingRequest.endDate
+                      })}
+                      className={`py-2 px-1 rounded-xl border text-center font-bold transition-all cursor-pointer ${
+                        editingRequest.serviceType === st.id
+                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {st.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. Dates */}
+              <div className="space-y-2 bg-emerald-50/40 p-3.5 rounded-2xl border border-emerald-200">
+                <div className="flex items-center justify-between">
+                  <label className="font-extrabold text-[#0f4c3a] block text-xs">
+                    📅 תאריכי שהות בריזורט
+                  </label>
+                  <span className="text-[11px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                    {editingRequest.serviceType === 'daycare' ? 'שהות יומית' : `${Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate))} ימים (${Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate))} לילות)`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">
+                      🏨 תאריך הגעה / כניסה:
+                    </span>
+                    <input
+                      type="date"
+                      value={editingRequest.startDate}
+                      onChange={(e) => {
+                        const s = e.target.value;
+                        const curNights = Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate));
+                        setEditingRequest({
+                          ...editingRequest,
+                          startDate: s,
+                          endDate: editingRequest.serviceType === 'daycare' ? s : addDays(s, curNights)
+                        });
+                      }}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-900 font-bold focus:border-emerald-500 focus:outline-none"
+                    />
+                    <div className="text-[10px] text-emerald-800 font-bold mt-1">
+                      {editingRequest.startDate ? `יום ${getDayNameHebrew(editingRequest.startDate)}, ${formatDateIL(editingRequest.startDate)}` : ''}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">
+                      🚗 תאריך איסוף / יציאה:
+                    </span>
+                    <input
+                      type="date"
+                      min={editingRequest.startDate}
+                      value={editingRequest.endDate}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, endDate: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-900 font-bold focus:border-emerald-500 focus:outline-none"
+                    />
+                    <div className="text-[10px] text-emerald-800 font-bold mt-1">
+                      {editingRequest.endDate ? `יום ${getDayNameHebrew(editingRequest.endDate)}, ${formatDateIL(editingRequest.endDate)}` : ''}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick nights adjust */}
+                {editingRequest.serviceType !== 'daycare' && (
+                  <div className="flex items-center justify-between pt-1 text-xs">
+                    <span className="text-slate-500 font-medium">כוונון לילות מהיר:</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const n = Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate) - 1);
+                          setEditingRequest({ ...editingRequest, endDate: addDays(editingRequest.startDate, n) });
+                        }}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-700"
+                      >
+                        -1 לילה
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const n = calculateDaysCount(editingRequest.startDate, editingRequest.endDate) + 1;
+                          setEditingRequest({ ...editingRequest, endDate: addDays(editingRequest.startDate, n) });
+                        }}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-700"
+                      >
+                        +1 לילה
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingRequest({ ...editingRequest, endDate: addDays(editingRequest.startDate, 7) })}
+                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-lg font-bold"
+                      >
+                        שבוע (7 לילות)
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Dog Details */}
+              <div className="space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                <label className="font-extrabold text-slate-800 block text-xs">
+                  🐕 פרטי הכלב/ה
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">שם הכלב *</span>
+                    <input
+                      type="text"
+                      value={editingRequest.dogName}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, dogName: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">גזע</span>
+                    <input
+                      type="text"
+                      value={editingRequest.dogBreed || ''}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, dogBreed: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">גיל</span>
+                    <input
+                      type="text"
+                      value={editingRequest.dogAge || ''}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, dogAge: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[11px] text-slate-600 font-bold block mb-1">גודל כלב:</span>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[
+                      { id: 'small', label: 'קטן (עד 10)' },
+                      { id: 'medium', label: 'בינוני (10-25)' },
+                      { id: 'large', label: 'גדול (25-45)' },
+                      { id: 'giant', label: 'ענק (45+)' },
+                    ].map(s => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setEditingRequest({ ...editingRequest, dogSize: s.id as any })}
+                        className={`py-1.5 px-1 rounded-xl border text-[11px] font-bold transition-all cursor-pointer ${
+                          editingRequest.dogSize === s.id
+                            ? 'bg-emerald-700 text-white border-emerald-700'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. Owner Details */}
+              <div className="space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                <label className="font-extrabold text-slate-800 block text-xs">
+                  👤 פרטי הבעלים
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">שם הבעלים *</span>
+                    <input
+                      type="text"
+                      value={editingRequest.ownerName}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, ownerName: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">טלפון נייד *</span>
+                    <input
+                      type="tel"
+                      value={editingRequest.ownerPhone}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, ownerPhone: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-emerald-500 focus:outline-none font-mono"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">דוא״ל</span>
+                    <input
+                      type="email"
+                      value={editingRequest.ownerEmail || ''}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, ownerEmail: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Vetting & Health Questions */}
+              <div className="space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                <label className="font-extrabold text-slate-800 block text-xs">
+                  🛡️ התאמה ובריאות
+                </label>
+                <div className="space-y-2">
+                  {/* Friendly with dogs */}
+                  <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200">
+                    <span className="font-bold text-slate-700">מסתדר עם כלבים:</span>
+                    <div className="flex items-center gap-1">
+                      {[
+                        { id: 'yes', label: 'חברותי 🟢' },
+                        { id: 'depends', label: 'תלוי 🟡' },
+                        { id: 'no', label: 'תוקפני 🔴' },
+                      ].map(f => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => setEditingRequest({ ...editingRequest, isFriendlyWithDogs: f.id as any })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                            editingRequest.isFriendlyWithDogs === f.id
+                              ? 'bg-emerald-700 text-white'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Booleans: Neutered, Vaccinated, House-trained, Parasites */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200">
+                      <span className="font-bold text-slate-700">מסורס / מעוקרת:</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingRequest({ ...editingRequest, isNeutered: true })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${editingRequest.isNeutered ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-700'}`}
+                        >
+                          כן
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingRequest({ ...editingRequest, isNeutered: false })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${!editingRequest.isNeutered ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+                        >
+                          לא
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200">
+                      <span className="font-bold text-slate-700">חיסונים בתוקף:</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingRequest({ ...editingRequest, isVaccinated: true })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${editingRequest.isVaccinated ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-700'}`}
+                        >
+                          כן
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingRequest({ ...editingRequest, isVaccinated: false })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${!editingRequest.isVaccinated ? 'bg-red-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+                        >
+                          לא
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200">
+                      <span className="font-bold text-slate-700">מחונך לצרכים:</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingRequest({ ...editingRequest, isHouseTrained: true })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${editingRequest.isHouseTrained !== false ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-700'}`}
+                        >
+                          כן
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingRequest({ ...editingRequest, isHouseTrained: false })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${editingRequest.isHouseTrained === false ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+                        >
+                          לא
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200">
+                      <span className="font-bold text-slate-700">נגד קרציות/פשפשים:</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingRequest({ ...editingRequest, isTreatedParasites: true })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${editingRequest.isTreatedParasites !== false ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-700'}`}
+                        >
+                          כן
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingRequest({ ...editingRequest, isTreatedParasites: false })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer ${editingRequest.isTreatedParasites === false ? 'bg-amber-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+                        >
+                          לא
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 6. Notes & Special Needs */}
+              <div className="space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                <label className="font-extrabold text-slate-800 block text-xs">
+                  📝 הערות, צרכים מיוחדים וסיכום שיחה
+                </label>
+                <div className="space-y-2">
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">
+                      🩺 צרכים מיוחדים / תרופות:
+                    </span>
+                    <textarea
+                      rows={2}
+                      value={editingRequest.specialNeeds || ''}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, specialNeeds: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-900 font-medium focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">
+                      📝 הערות הלקוח:
+                    </span>
+                    <textarea
+                      rows={2}
+                      value={editingRequest.notes || ''}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, notes: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-xl p-2 text-slate-900 font-medium focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-blue-900 font-bold block mb-1">
+                      📌 סיכום שיחה והערות שמוליק (פנימי):
+                    </span>
+                    <textarea
+                      rows={2}
+                      value={editingRequest.internalNotes || ''}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, internalNotes: e.target.value })}
+                      placeholder="למשל: סוכם בשיחה שיביא את המזון שלו, מקדמה 500 ש״ח תועבר בביט..."
+                      className="w-full bg-blue-50/60 border border-blue-200 rounded-xl p-2 text-slate-900 font-medium focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 7. Deposit & Status */}
+              <div className="space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                <label className="font-extrabold text-slate-800 block text-xs">
+                  💰 מקדמה וסטטוס טיפול
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">
+                      סכום מקדמה מבוקש (₪):
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={editingRequest.depositRequested || ''}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, depositRequested: Number(e.target.value) || 0 })}
+                      placeholder="0"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold font-mono focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-600 font-bold block mb-1">
+                      סטטוס הבקשה:
+                    </span>
+                    <select
+                      value={editingRequest.status}
+                      onChange={(e) => setEditingRequest({ ...editingRequest, status: e.target.value as any })}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-bold focus:border-emerald-500 focus:outline-none cursor-pointer"
+                    >
+                      <option value="pending">ממתין לשיחה</option>
+                      <option value="payment_requested">נשלח קישור לתשלום</option>
+                      <option value="approved">נקלט ביומן</option>
+                      <option value="rejected">נדחה</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Sub-modal Footer */}
+            <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setEditingRequest(null)}
+                className="bg-white hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl border border-slate-300 cursor-pointer shadow-2xs transition-colors"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                disabled={isSavingEdit}
+                onClick={handleSaveEdit}
+                className="bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white font-black px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all disabled:opacity-50"
+              >
+                {isSavingEdit ? 'שומר שינויים...' : '💾 שמור שינויים'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
