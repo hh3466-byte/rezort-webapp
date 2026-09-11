@@ -53,6 +53,10 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [editingRequest, setEditingRequest] = useState<IntakeRequest | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [paymentPromptRequest, setPaymentPromptRequest] = useState<IntakeRequest | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<string>('');
+  const [customPaymentLink, setCustomPaymentLink] = useState<string>('');
+  const [isSendingPayment, setIsSendingPayment] = useState<boolean>(false);
 
   const handleSaveEdit = async () => {
     if (!editingRequest) return;
@@ -116,17 +120,39 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     return true;
   });
 
-  const handleSendGrowPaymentLink = async (request: IntakeRequest) => {
-    const cleanPhone = cleanPhoneNumber(request.ownerPhone);
-    const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-    const msg = formatClientPaymentLinkMessage(request, settings);
-    const whatsappUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
+  const handleOpenPaymentPrompt = (request: IntakeRequest) => {
+    setPaymentPromptRequest(request);
+    setPaymentAmount(request.depositRequested ? String(request.depositRequested) : '');
+    setCustomPaymentLink(settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg');
+  };
 
-    // Open WhatsApp
-    window.open(whatsappUrl, '_blank');
+  const handleConfirmSendPayment = async () => {
+    if (!paymentPromptRequest) return;
+    setIsSendingPayment(true);
+    try {
+      const numAmount = Number(paymentAmount) || 0;
+      const updated: IntakeRequest = {
+        ...paymentPromptRequest,
+        depositRequested: numAmount,
+        status: 'payment_requested'
+      };
 
-    // Update status in DB
-    await onUpdateStatus(request.id, 'payment_requested');
+      if (onSaveRequest) {
+        await onSaveRequest(updated);
+      } else {
+        await onUpdateStatus(paymentPromptRequest.id, 'payment_requested');
+      }
+
+      const cleanPhone = cleanPhoneNumber(paymentPromptRequest.ownerPhone);
+      const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
+      const msg = formatClientPaymentLinkMessage(updated, settings, numAmount, customPaymentLink);
+      const whatsappUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
+
+      window.open(whatsappUrl, '_blank');
+      setPaymentPromptRequest(null);
+    } finally {
+      setIsSendingPayment(false);
+    }
   };
 
   return (
@@ -407,7 +433,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 
                       {req.depositRequested && req.depositRequested > 0 ? (
                         <div className="text-xs font-bold text-emerald-900 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200 inline-flex items-center gap-1.5">
-                          <span>💰 סכום מקדמה שסוכם:</span>
+                          <span>💰 הסכום שסוכם הוא:</span>
                           <span className="font-mono text-sm">₪{req.depositRequested}</span>
                         </div>
                       ) : null}
@@ -458,9 +484,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       {/* Send Grow Payment Link button */}
                       <button
                         type="button"
-                        onClick={() => handleSendGrowPaymentLink(req)}
+                        onClick={() => handleOpenPaymentPrompt(req)}
                         className="bg-blue-50 hover:bg-blue-100 active:scale-98 text-blue-900 border border-blue-300 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                        title="שלח קישור מאובטח לתשלום מקדמה ב-Grow ישירות לוואטסאפ של הלקוח"
+                        title="הגדר סכום שסוכם ושלח קישור תשלום Grow ישירות לוואטסאפ של הלקוח"
                       >
                         <CreditCard className="w-3.5 h-3.5 text-blue-600" />
                         <span>שלח קישור תשלום Grow 💬</span>
@@ -927,15 +953,15 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 </div>
               </div>
 
-              {/* 7. Deposit & Status */}
+              {/* 7. Agreed Amount & Status */}
               <div className="space-y-2 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
                 <label className="font-extrabold text-slate-800 block text-xs">
-                  💰 מקדמה וסטטוס טיפול
+                  💰 סכום שסוכם וסטטוס טיפול
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
                     <span className="text-[11px] text-slate-600 font-bold block mb-1">
-                      סכום מקדמה מבוקש (₪):
+                      הסכום שסוכם (₪):
                     </span>
                     <input
                       type="number"
@@ -982,6 +1008,126 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 className="bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white font-black px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all disabled:opacity-50"
               >
                 {isSavingEdit ? 'שומר שינויים...' : '💾 שמור שינויים'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* QUICK PAYMENT PROMPT MODAL */}
+      {paymentPromptRequest && (
+        <div className="fixed inset-0 z-70 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-blue-50/70 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-900 flex items-center justify-center font-black text-lg shadow-2xs">
+                  💳
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    שליחת קישור לתשלום בוואטסאפ
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    עבור {paymentPromptRequest.ownerName} ({paymentPromptRequest.dogName})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPaymentPromptRequest(null)}
+                className="w-8 h-8 rounded-xl bg-white hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer border border-slate-200 shadow-2xs"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 sm:p-5 space-y-4 text-xs">
+              {/* Amount input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-900 block">
+                  💰 הסכום שסוכם (₪):
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min={0}
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    placeholder="לדוגמה: 500"
+                    className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-blue-500 rounded-xl px-4 py-2.5 text-base font-black font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    autoFocus
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">₪</span>
+                </div>
+
+                {/* Quick amount chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className="text-[11px] font-bold text-slate-400 self-center">סכומים מהירים:</span>
+                  {[200, 300, 500, 750, 1000, 1500].map(amt => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setPaymentAmount(String(amt))}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                        paymentAmount === String(amt)
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'bg-slate-100 hover:bg-blue-50 text-slate-700 border border-slate-200'
+                      }`}
+                    >
+                      ₪{amt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Payment Link (Optional override) */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 block">
+                  🔗 קישור לתשלום (Grow):
+                </label>
+                <input
+                  type="text"
+                  value={customPaymentLink}
+                  onChange={(e) => setCustomPaymentLink(e.target.value)}
+                  className="w-full bg-slate-50 text-slate-800 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:outline-none font-mono"
+                  placeholder="https://pay.grow.link/..."
+                />
+                <span className="text-[10px] text-slate-400 block">
+                  (ברירת מחדל: עמוד Grow של הריזורט לתשלום מאובטח ב-Bit, Apple Pay ואשראי. ניתן להדביק קישור ספציפי אם הפקת באפליקציית Grow).
+                </span>
+              </div>
+
+              {/* Message preview snippet */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-[11px] text-slate-700 space-y-1">
+                <span className="font-bold text-slate-500 block">תצוגה מקדימה של הודעת הוואטסאפ שתשלח:</span>
+                <div className="text-slate-800 whitespace-pre-wrap font-sans bg-white p-2.5 rounded-xl border border-slate-200">
+                  {`היי ${paymentPromptRequest.ownerName}, שמחנו לשוחח! 🐾🐶\nשמחים לעדכן שהמקום עבור *${paymentPromptRequest.dogName}* נשמר בריזורט לכלב בין התאריכים ${paymentPromptRequest.startDate} עד ${paymentPromptRequest.endDate}.${paymentAmount ? `\n💰 *הסכום שסוכם הוא:* ₪${paymentAmount}\n` : ''}\nלהשלמת השריון, מצורף הקישור המאובטח לתשלום${paymentAmount ? ` (יש להזין ₪${paymentAmount} בעמוד התשלום)` : ''}:\n👉 ${customPaymentLink}\n\n(בתוך הקישור ניתן לשלם בנוחות ב-Bit, Apple Pay, Google Pay או כרטיס אשראי)\n\nבברכה חמה,\nצוות הריזורט לכלב 🐕🤍`}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setPaymentPromptRequest(null)}
+                className="bg-white hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl border border-slate-300 cursor-pointer shadow-2xs"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                disabled={isSendingPayment}
+                onClick={handleConfirmSendPayment}
+                className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>{isSendingPayment ? 'מעדכן ושולח...' : '📲 שלח עכשיו בוואטסאפ'}</span>
               </button>
             </div>
 

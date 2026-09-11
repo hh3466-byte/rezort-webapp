@@ -58,26 +58,31 @@ export function formatBookingConfirmedNotification(booking: Booking): string {
  */
 export function formatClientPaymentLinkMessage(
   request: IntakeRequest,
-  settings: ResortSettings
+  settings: ResortSettings,
+  amount?: number,
+  customLink?: string
 ): string {
   const paymentLink = 
+    customLink?.trim() ||
     settings.growPaymentLink || 
     'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
 
-  const depositSection = request.depositRequested && request.depositRequested > 0
-    ? `\n💰 *סכום המקדמה שסוכם לשריון המקום:* ₪${request.depositRequested}\n`
+  const agreedAmount = amount !== undefined ? amount : (request.depositRequested || 0);
+
+  const amountSection = agreedAmount > 0
+    ? `\n💰 *הסכום שסוכם הוא:* ₪${agreedAmount}\n`
     : '';
 
-  const depositInstruction = request.depositRequested && request.depositRequested > 0
-    ? ` (יש להזין ₪${request.depositRequested} בעמוד התשלום)`
+  const amountInstruction = agreedAmount > 0
+    ? ` (יש להזין ₪${agreedAmount} בעמוד התשלום)`
     : '';
 
   return `היי ${request.ownerName}, שמחנו לשוחח! 🐾🐶
-שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר בריזורט לכלב בין התאריכים ${request.startDate} עד ${request.endDate}.${depositSection}
-להשלמת השריון הסופי, מצורף הקישור המאובטח לתשלום${depositInstruction}:
+שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר בריזורט לכלב בין התאריכים ${request.startDate} עד ${request.endDate}.${amountSection}
+להשלמת השריון, מצורף הקישור המאובטח לתשלום${amountInstruction}:
 👉 ${paymentLink}
 
-(אפשר לשלם בנוחות גם בביט למספר: ${settings.bitNumber || settings.managerPhone})
+(בתוך הקישור ניתן לשלם בנוחות ב-Bit, Apple Pay, Google Pay או כרטיס אשראי)
 
 בברכה חמה,
 צוות הריזורט לכלב 🐕🤍`;

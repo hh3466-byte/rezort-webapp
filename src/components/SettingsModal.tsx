@@ -360,7 +360,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-4">
                 <div>
                   <label className="text-xs text-slate-700 font-bold block mb-1">
-                    🔗 קישור ראשי לתשלום מקדמה מ-Grow (כולל Bit, PayBox וכרטיסי אשראי)
+                    🔗 קישור לתשלום מ-Grow (כולל Bit, Apple Pay, Google Pay וכרטיסי אשראי)
                   </label>
                   <input
                     type="text"
@@ -374,7 +374,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
                   />
                   <span className="text-[10px] text-slate-400 mt-1 block">
-                    קישור זה יישלח ללקוח בלחיצה על "שלח קישור לתשלום בוואטסאפ" במסך בקשות הקליטה.
+                    קישור זה יישלח ללקוח בלחיצה על "שלח קישור תשלום Grow 💬" במסך בקשות הקליטה (הלקוח משלם ב-Bit ובאשראי ישירות בתוך הקישור).
                   </span>
                 </div>
 

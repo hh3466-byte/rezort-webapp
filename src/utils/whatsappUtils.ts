@@ -54,10 +54,9 @@ export function generatePaymentReminderMessage(booking: Booking, settings: Resor
   }
 
   msg += `אפשרויות תשלום נוחות:\n`;
-  if (settings.bitNumber) {
-    msg += `🔹 *ביט (Bit) / פייבוקס:* ${settings.bitNumber}\n`;
-  }
-  if (settings.payboxLink) {
+  if (settings.growPaymentLink) {
+    msg += `🔹 *תשלום מאובטח (כולל Bit, Apple Pay, Google Pay וכרטיסי אשראי):* ${settings.growPaymentLink}\n`;
+  } else if (settings.payboxLink) {
     msg += `🔹 *קישור PayBox ישיר:* ${settings.payboxLink}\n`;
   }
   if (settings.bankDetails) {
