@@ -55,6 +55,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isQuickCallback, setIsQuickCallback] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [saturdayWarning, setSaturdayWarning] = useState<string | null>(null);
 
   // Auto adjust dates when service is selected
   const handleServiceChange = (st: ServiceType) => {
@@ -68,8 +69,21 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   const nightsCount = Math.max(1, calculateDaysCount(startDate, endDate));
 
   const handleNightsChange = (delta: number) => {
-    const newNights = Math.max(1, nightsCount + delta);
-    setEndDate(addDays(startDate, newNights));
+    let newNights = Math.max(1, nightsCount + delta);
+    let targetEnd = addDays(startDate, newNights);
+    const endD = new Date(targetEnd + 'T00:00:00');
+    if (endD.getDay() === 6 && serviceType === 'boarding') {
+      // Cannot check out on Saturday - advance or back to avoid Saturday
+      if (delta > 0) {
+        newNights += 1;
+        targetEnd = addDays(startDate, newNights);
+      } else {
+        newNights = Math.max(1, newNights - 1);
+        targetEnd = addDays(startDate, newNights);
+      }
+    }
+    setEndDate(targetEnd);
+    setSaturdayWarning(null);
   };
 
   const handleStartDateChange = (newStart: string) => {
@@ -79,7 +93,26 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
     if (serviceType === 'daycare' || serviceType === 'training') {
       setEndDate(newStart);
     } else {
-      setEndDate(addDays(newStart, currentNights));
+      let targetEnd = addDays(newStart, currentNights);
+      const endD = new Date(targetEnd + 'T00:00:00');
+      if (endD.getDay() === 6) {
+        targetEnd = addDays(targetEnd, 1);
+      }
+      setEndDate(targetEnd);
+    }
+    setSaturdayWarning(null);
+  };
+
+  const handleEndDateChange = (val: string) => {
+    if (!val) return;
+    const d = new Date(val + 'T00:00:00');
+    if (d.getDay() === 6 && serviceType === 'boarding') {
+      const sun = addDays(val, 1);
+      setEndDate(sun);
+      setSaturdayWarning('⚠️ היציאה אינה יכולה להיות ביום שבת (אין שחרורים בשבת). תאריך היציאה עודכן ליום ראשון בשעה 09:30.');
+    } else {
+      setEndDate(val);
+      setSaturdayWarning(null);
     }
   };
 
@@ -88,27 +121,41 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
     const day = d.getDay(); // 0: Sun, 1: Mon, 2: Tue, 3: Wed, 4: Thu, 5: Fri, 6: Sat
 
     if (preset === 'weekend') {
-      let daysToThu = (4 - day + 7) % 7;
-      if (day === 5 || day === 6) daysToThu += 7;
-      const s = addDays(today, daysToThu);
+      // Upcoming Friday to Sunday (2 nights)
+      let daysToFri = (5 - day + 7) % 7;
+      if (day === 6) daysToFri = 6;
+      const s = addDays(today, daysToFri);
       setStartDate(s);
-      setEndDate(addDays(s, 2));
+      setEndDate(addDays(s, 2)); // Friday + 2 days = Sunday!
+      setSaturdayWarning(null);
     } else if (preset === 'next_weekend') {
-      let daysToThu = (4 - day + 7) % 7;
-      daysToThu += 7;
-      const s = addDays(today, daysToThu);
+      // Following Friday to Sunday (2 nights)
+      let daysToFri = (5 - day + 7) % 7;
+      if (day === 6) daysToFri = 6;
+      const s = addDays(today, daysToFri + 7);
       setStartDate(s);
-      setEndDate(addDays(s, 2));
+      setEndDate(addDays(s, 2)); // Friday + 2 days = Sunday!
+      setSaturdayWarning(null);
     } else if (preset === 'midweek') {
-      let daysToSun = (0 - day + 7) % 7;
-      if (daysToSun === 0 && day > 0) daysToSun = 7;
+      // Upcoming Sunday to Thursday (4 nights)
+      let daysToSun = (7 - day) % 7;
+      if (day === 0) daysToSun = 7;
       const s = addDays(today, daysToSun);
       setStartDate(s);
-      setEndDate(addDays(s, 4));
+      setEndDate(addDays(s, 4)); // Sunday + 4 days = Thursday
+      setSaturdayWarning(null);
     } else if (preset === 'week') {
-      setEndDate(addDays(startDate, 7));
+      let targetEnd = addDays(startDate, 7);
+      const endD = new Date(targetEnd + 'T00:00:00');
+      if (endD.getDay() === 6) targetEnd = addDays(targetEnd, 1); // skip Saturday
+      setEndDate(targetEnd);
+      setSaturdayWarning(null);
     } else if (preset === 'twoweeks') {
-      setEndDate(addDays(startDate, 14));
+      let targetEnd = addDays(startDate, 14);
+      const endD = new Date(targetEnd + 'T00:00:00');
+      if (endD.getDay() === 6) targetEnd = addDays(targetEnd, 1); // skip Saturday
+      setEndDate(targetEnd);
+      setSaturdayWarning(null);
     }
   };
 
@@ -145,6 +192,13 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       if (endDate < startDate) {
         setErrorMessage('תאריך היציאה אינו יכול להיות מוקדם מתאריך הכניסה');
         return false;
+      }
+      if (serviceType === 'boarding') {
+        const endD = new Date(endDate + 'T00:00:00');
+        if (endD.getDay() === 6) {
+          setErrorMessage('היציאה לא יכולה להיות ביום שבת (אין שחרורים בשבת). היציאה מסופ״ש הינה ביום ראשון בשעה 09:30.');
+          return false;
+        }
       }
     }
     if (!specialNeeds.trim()) {
@@ -712,15 +766,15 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                         id: 'weekend', 
                         icon: '🌟', 
                         title: 'סופ״ש הקרוב', 
-                        subtitle: 'חמישי - שבת', 
+                        subtitle: 'שישי 14:00 ➔ ראשון 09:30', 
                         detail: '2 לילות',
-                        matches: nightsCount === 2 && getDayNameHebrew(startDate) === 'חמישי'
+                        matches: nightsCount === 2 && getDayNameHebrew(startDate) === 'שישי' && getDayNameHebrew(endDate) === 'ראשון'
                       },
                       { 
                         id: 'next_weekend', 
                         icon: '📅', 
                         title: 'סופ״ש הבא', 
-                        subtitle: 'חמישי - שבת הבא', 
+                        subtitle: 'שישי הבא ➔ ראשון', 
                         detail: '2 לילות',
                         matches: false
                       },
@@ -728,9 +782,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                         id: 'midweek', 
                         icon: '💼', 
                         title: 'אמצע שבוע', 
-                        subtitle: 'ראשון - חמישי', 
+                        subtitle: 'ראשון ➔ חמישי', 
                         detail: '4 לילות',
-                        matches: nightsCount === 4 && getDayNameHebrew(startDate) === 'ראשון'
+                        matches: nightsCount === 4 && getDayNameHebrew(startDate) === 'ראשון' && getDayNameHebrew(endDate) === 'חמישי'
                       },
                       { 
                         id: 'week', 
@@ -792,7 +846,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                       required
                       min={startDate}
                       value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
+                      onChange={(e) => handleEndDateChange(e.target.value)}
                       className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
                     />
                     <div className="mt-1 text-[11px] text-slate-500 font-bold flex items-center justify-between">
@@ -803,6 +857,32 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                     </div>
                   </div>
                 </div>
+
+                {/* 4. Mandatory Weekend & Holiday Schedule & Customer Service Policy */}
+                <div className="bg-amber-50/95 border-2 border-amber-300/90 rounded-2xl p-3.5 sm:p-4 text-xs text-amber-950 space-y-2 shadow-2xs">
+                  <div className="font-black text-amber-950 flex items-center gap-2 text-xs sm:text-sm">
+                    <span className="text-base">⏰</span>
+                    <span>נהלי שעות כניסה, יציאה ושירות לקוחות בסופ״ש וחגים:</span>
+                  </div>
+                  <div className="space-y-1.5 font-bold leading-relaxed pr-1">
+                    <p>
+                      • <strong>כניסה:</strong> עד שעה 14:00 בשישי / ערב חג.
+                    </p>
+                    <p>
+                      • <strong>יציאה:</strong> ביום ראשון / למחרת החג בשעה 09:30 (היציאה לא יכולה להיות ביום שבת).
+                    </p>
+                    <p className="text-amber-950 bg-amber-100/80 p-2.5 rounded-xl border border-amber-300/80 font-black">
+                      📢 בסוף שבוע אין שירות לקוחות, הצוות מתמקד בטיפול בכלבים בלבד. על הבעלים להתגבר ולהתאפק עד לחידוש שירות הלקוחות למחרת השבת / חג.
+                    </p>
+                  </div>
+                </div>
+
+                {saturdayWarning && (
+                  <div className="bg-red-50 border-2 border-red-300 text-red-900 rounded-xl p-3 text-xs font-black flex items-center gap-2 animate-shake">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>{saturdayWarning}</span>
+                  </div>
+                )}
 
               </div>
             )}
