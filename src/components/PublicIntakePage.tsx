@@ -95,7 +95,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       return false;
     }
     if (!specialNeeds.trim()) {
-      setErrorMessage('נא למלא את שדה הצרכים המיוחדים והבריאות (שדה חובה - אם הכלב בריא לחצו על "בריא לחלוטין / אין")');
+      setErrorMessage('סעיף 4 הינו שדה חובה: לחצו על הכפתור "הכלב בריא לחלוטין" או פרטו תרופות/צרכים מיוחדים בתיבה');
       return false;
     }
     return true;
@@ -612,27 +612,52 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
               </div>
 
               {/* Question 4: Special needs or medication */}
-              <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-emerald-200/80 space-y-2">
+              <div className="p-4 bg-slate-50 rounded-2xl border-2 border-emerald-200/90 space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="font-extrabold text-slate-900 block text-xs">
-                    🩺 4. צרכים מיוחדים, תרופות, מזון מיוחד או רגישויות <span className="text-red-500">*</span>
+                    🩺 4. מצב בריאותי, צרכים מיוחדים או תרופות <span className="text-red-500">*</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => setSpecialNeeds('אין צרכים מיוחדים, בריא לחלוטין')}
-                    className="text-[11px] text-emerald-800 bg-emerald-100/70 hover:bg-emerald-200 px-2.5 py-0.5 rounded-lg font-bold transition-colors cursor-pointer"
-                  >
-                    + לחצו אם בריא לחלוטין
-                  </button>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-900 font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+                    שדה חובה
+                  </span>
                 </div>
-                <input
-                  type="text"
-                  required
-                  value={specialNeeds}
-                  onChange={(e) => setSpecialNeeds(e.target.value)}
-                  placeholder='למשל: "אין", "מקבל כדור בבוקר", "אוכל רפואי בלבד"'
-                  className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:outline-none"
-                />
+
+                {/* Dominant "Completely Healthy" Button - Prominent, full box size */}
+                <button
+                  type="button"
+                  onClick={() => setSpecialNeeds('בריא לחלוטין (אין תרופות או צרכים מיוחדים)')}
+                  className={`w-full py-3.5 px-4 rounded-xl border-2 text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm ${
+                    specialNeeds === 'בריא לחלוטין (אין תרופות או צרכים מיוחדים)'
+                      ? 'bg-[#065f46] text-white border-[#065f46] ring-2 ring-emerald-500/40 shadow-emerald-900/20'
+                      : 'bg-emerald-50 hover:bg-emerald-100/90 text-emerald-950 border-emerald-300 hover:border-emerald-400 hover:shadow-md'
+                  }`}
+                >
+                  {specialNeeds === 'בריא לחלוטין (אין תרופות או צרכים מיוחדים)' ? (
+                    <>
+                      <CheckCircle2 className="w-5 h-5 text-emerald-300 shrink-0" />
+                      <span>✅ נבחר: הכלב בריא לחלוטין (אין תרופות או צרכים מיוחדים)</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-lg">🟢</span>
+                      <span>לחצו כאן אם הכלב בריא לחלוטין (ללא תרופות או מזון מיוחד)</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Input box for special needs / medication */}
+                <div className="space-y-1 pt-1">
+                  <label className="text-[11px] font-bold text-slate-600 block">
+                    או הקלידו כאן פירוט אם הכלב נוטל תרופות, מזון רפואי או רגישויות:
+                  </label>
+                  <input
+                    type="text"
+                    value={specialNeeds === 'בריא לחלוטין (אין תרופות או צרכים מיוחדים)' ? '' : specialNeeds}
+                    onChange={(e) => setSpecialNeeds(e.target.value)}
+                    placeholder='למשל: "מקבל חצי כדור בבוקר", "אוכל רפואי בלבד", "רגישות לעוף"...'
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none placeholder:text-slate-400"
+                  />
+                </div>
               </div>
 
               {/* Question 5: Free Text Field */}
