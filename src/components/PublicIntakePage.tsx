@@ -761,6 +761,17 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
               <span>📞 אנא התקשרו אלי (שיחה טלפונית לתיאום)</span>
             </button>
 
+            {/* Direct WhatsApp Call & Chat Button */}
+            <a
+              href={`https://wa.me/${(settings.whatsappNotificationPhone || settings.managerPhone || '0548765888').replace(/\D/g, '').replace(/^0/, '972')}?text=${encodeURIComponent('שלום צוות הריזורט לכלב 🐾 רציתי לברר פרטים או לשוחח בוואטסאפ לגבי שהות/קליטה')}`}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full bg-[#25D366] hover:bg-[#1EBE5D] active:scale-[0.99] text-white font-black py-3.5 rounded-2xl text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>💬 חיוג / שיחה מהירה בוואטסאפ של הריזורט</span>
+            </a>
+
             <p className="text-center text-[11px] text-slate-400 font-medium mt-2">
               🔒 הפרטים נשלחים ישירות לצוות הריזורט לכלב לצורך תיאום טלפוני ובדיקת זמינות.
             </p>

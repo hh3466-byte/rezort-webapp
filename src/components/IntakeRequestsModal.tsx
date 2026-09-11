@@ -348,24 +348,26 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     
                     {/* Left: Contact actions */}
                     <div className="flex items-center gap-2">
+                      {/* WhatsApp Call & Chat - Primary Green Button */}
                       <a
-                        href={`tel:${cleanPhone}`}
-                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs"
-                        title="חייג לשיחת תיאום והיכרות עם הלקוח"
-                      >
-                        <Phone className="w-3.5 h-3.5" />
-                        <span>חייג ללקוח</span>
-                      </a>
-
-                      <a
-                        href={`https://wa.me/${intlPhone}`}
+                        href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(`שלום ${req.ownerName}, כאן שמוליק מ${settings.resortName} 🐾 בהמשך לשאלון הקליטה ששלחתם עבור ${req.dogName}`)}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs"
-                        title="פתח שיחת וואטסאפ עם הלקוח"
+                        className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                        title="פתיחת שיחה או חיוג קולי בוואטסאפ מול הלקוח מהוואטסאפ של הריזורט"
                       >
-                        <MessageCircle className="w-3.5 h-3.5 text-[#25D366]" />
-                        <span>צ׳אט וואטסאפ</span>
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>📞 חיוג / וואטסאפ מריזורט</span>
+                      </a>
+
+                      {/* Regular SIM Phone Call */}
+                      <a
+                        href={`tel:${cleanPhone}`}
+                        className="bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-2xs"
+                        title="חיוג סלולרי רגיל (מהסים של הטלפון)"
+                      >
+                        <Phone className="w-3.5 h-3.5 text-slate-500" />
+                        <span>חיוג סלולרי</span>
                       </a>
                     </div>
 
