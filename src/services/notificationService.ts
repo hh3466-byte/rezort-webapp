@@ -131,6 +131,8 @@ export async function sendResortEmailNotification(
   request: IntakeRequest,
   customMessage?: string
 ): Promise<boolean> {
+  // FormSubmit verified endpoint token for shinshin1964@gmail.com
+  const formSubmitToken = '5b70295e0906d160337fe5545abf9e02';
   const targetEmail = 'shinshin1964@gmail.com';
   const serviceName = getServiceTypeHebrew(request.serviceType);
 
@@ -154,14 +156,21 @@ export async function sendResortEmailNotification(
       'חיוג מהיר ללקוח': `tel:${request.ownerPhone}`
     };
 
-    fetch(`https://formsubmit.co/ajax/${targetEmail}`, {
+    fetch(`https://formsubmit.co/ajax/${formSubmitToken}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
       body: JSON.stringify(payload)
-    }).catch(err => console.warn('Email fetch error:', err));
+    }).catch(err => {
+      console.warn('Email fetch error with token, trying direct email:', err);
+      fetch(`https://formsubmit.co/ajax/${targetEmail}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(e => console.warn('Email fallback error:', e));
+    });
 
     return true;
   } catch (err) {

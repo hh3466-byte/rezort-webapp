@@ -930,7 +930,7 @@ export const saveIntakeRequestToDb = async (request: IntakeRequest): Promise<voi
     const updated = [request, ...current.filter(r => r.id !== request.id)];
     localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(updated));
 
-    // 2. Upsert to Supabase
+    // 2. Upsert to Supabase intake_requests table
     const { error } = await supabase
       .from(INTAKE_REQUESTS_TABLE)
       .upsert({
@@ -958,8 +958,30 @@ export const saveIntakeRequestToDb = async (request: IntakeRequest): Promise<voi
         data: request
       });
 
+    // 3. Fallback: If table does not exist or fails, save to settings.data.intakeRequests in Supabase
     if (error) {
-      console.warn('Supabase save intake request warning (stored locally):', error.message);
+      console.warn('Supabase save intake request notice (syncing via settings channel):', error.message);
+      try {
+        const { data: sRow } = await supabase
+          .from(SETTINGS_TABLE)
+          .select('data')
+          .eq('id', SETTINGS_DOC_ID)
+          .single();
+
+        const extraData = (sRow && sRow.data && typeof sRow.data === 'object') ? sRow.data : {};
+        const existing: IntakeRequest[] = Array.isArray(extraData.intakeRequests) ? extraData.intakeRequests : [];
+        const merged = [request, ...existing.filter(r => r.id !== request.id)];
+
+        await supabase
+          .from(SETTINGS_TABLE)
+          .update({
+            data: { ...extraData, intakeRequests: merged },
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', SETTINGS_DOC_ID);
+      } catch (fallbackErr) {
+        console.warn('Fallback settings intake save error:', fallbackErr);
+      }
     }
   } catch (e) {
     console.warn('saveIntakeRequestToDb error:', e);
@@ -989,7 +1011,7 @@ export const updateIntakeRequestStatusInDb = async (
     });
     localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(updated));
 
-    // 2. Update in Supabase
+    // 2. Update in Supabase intake_requests table
     const updatePayload: any = { status };
     if (internalNotes !== undefined) updatePayload.internal_notes = internalNotes;
 
@@ -998,8 +1020,36 @@ export const updateIntakeRequestStatusInDb = async (
       .update(updatePayload)
       .eq('id', id);
 
+    // 3. Fallback update in settings.data.intakeRequests
     if (error) {
-      console.warn('Supabase update intake status warning:', error.message);
+      try {
+        const { data: sRow } = await supabase
+          .from(SETTINGS_TABLE)
+          .select('data')
+          .eq('id', SETTINGS_DOC_ID)
+          .single();
+
+        const extraData = (sRow && sRow.data && typeof sRow.data === 'object') ? sRow.data : {};
+        const existing: IntakeRequest[] = Array.isArray(extraData.intakeRequests) ? extraData.intakeRequests : [];
+        const mapped = existing.map(r => {
+          if (r.id === id) {
+            return {
+              ...r,
+              status,
+              internalNotes: internalNotes !== undefined ? internalNotes : r.internalNotes
+            };
+          }
+          return r;
+        });
+
+        await supabase
+          .from(SETTINGS_TABLE)
+          .update({
+            data: { ...extraData, intakeRequests: mapped },
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', SETTINGS_DOC_ID);
+      } catch (e2) {}
     }
   } catch (e) {
     console.warn('updateIntakeRequestStatusInDb error:', e);
@@ -1015,10 +1065,32 @@ export const deleteIntakeRequestFromDb = async (id: string): Promise<void> => {
     const updated = current.filter(r => r.id !== id);
     localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(updated));
 
-    await supabase
+    const { error } = await supabase
       .from(INTAKE_REQUESTS_TABLE)
       .delete()
       .eq('id', id);
+
+    if (error) {
+      try {
+        const { data: sRow } = await supabase
+          .from(SETTINGS_TABLE)
+          .select('data')
+          .eq('id', SETTINGS_DOC_ID)
+          .single();
+
+        const extraData = (sRow && sRow.data && typeof sRow.data === 'object') ? sRow.data : {};
+        const existing: IntakeRequest[] = Array.isArray(extraData.intakeRequests) ? extraData.intakeRequests : [];
+        const filtered = existing.filter(r => r.id !== id);
+
+        await supabase
+          .from(SETTINGS_TABLE)
+          .update({
+            data: { ...extraData, intakeRequests: filtered },
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', SETTINGS_DOC_ID);
+      } catch (e2) {}
+    }
   } catch (e) {
     console.warn('deleteIntakeRequestFromDb error:', e);
   }
@@ -1041,7 +1113,22 @@ export const subscribeToIntakeRequests = (
         .order('created_at', { ascending: false });
 
       if (error) {
-        // Table might not exist yet or connection offline, fallback to local
+        // Table might not exist yet, fallback to reading settings.data.intakeRequests
+        try {
+          const { data: sRow } = await supabase
+            .from(SETTINGS_TABLE)
+            .select('data')
+            .eq('id', SETTINGS_DOC_ID)
+            .single();
+
+          if (sRow?.data?.intakeRequests && Array.isArray(sRow.data.intakeRequests)) {
+            const list: IntakeRequest[] = sRow.data.intakeRequests;
+            localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(list));
+            callback(list);
+            return;
+          }
+        } catch (e2) {}
+
         callback(loadStoredIntakeRequests());
         return;
       }
@@ -1078,6 +1165,22 @@ export const subscribeToIntakeRequests = (
 
         localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(mapped));
         callback(mapped);
+      } else {
+        // Check if settings fallback has any
+        try {
+          const { data: sRow } = await supabase
+            .from(SETTINGS_TABLE)
+            .select('data')
+            .eq('id', SETTINGS_DOC_ID)
+            .single();
+
+          if (sRow?.data?.intakeRequests && Array.isArray(sRow.data.intakeRequests) && sRow.data.intakeRequests.length > 0) {
+            const list: IntakeRequest[] = sRow.data.intakeRequests;
+            localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(list));
+            callback(list);
+            return;
+          }
+        } catch (e2) {}
       }
     } catch (e) {
       callback(loadStoredIntakeRequests());
@@ -1087,10 +1190,17 @@ export const subscribeToIntakeRequests = (
   fetchRequests();
 
   const channel = supabase
-    .channel('public:intake_requests')
+    .channel('public:intake_requests_all')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: INTAKE_REQUESTS_TABLE },
+      () => {
+        fetchRequests();
+      }
+    )
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: SETTINGS_TABLE },
       () => {
         fetchRequests();
       }
