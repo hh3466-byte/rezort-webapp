@@ -59,7 +59,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   // Auto adjust dates when service is selected
   const handleServiceChange = (st: ServiceType) => {
     setServiceType(st);
-    if (st === 'daycare') {
+    if (st === 'daycare' || st === 'training') {
       setEndDate(startDate);
     }
   };
@@ -76,7 +76,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
     if (!newStart) return;
     const currentNights = Math.max(1, calculateDaysCount(startDate, endDate));
     setStartDate(newStart);
-    if (serviceType === 'daycare') {
+    if (serviceType === 'daycare' || serviceType === 'training') {
       setEndDate(newStart);
     } else {
       setEndDate(addDays(newStart, currentNights));
@@ -132,16 +132,20 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       return false;
     }
     if (!startDate) {
-      setErrorMessage('נא לבחור תאריך כניסה / הגעה לריזורט (שדה חובה)');
+      setErrorMessage(serviceType === 'training' 
+        ? 'נא לבחור תאריך כניסה / הגעה לאילוף (שדה חובה)'
+        : 'נא לבחור תאריך כניסה / הגעה לריזורט (שדה חובה)');
       return false;
     }
-    if (!endDate) {
-      setErrorMessage('נא לבחור תאריך איסוף / יציאה מהריזורט (שדה חובה)');
-      return false;
-    }
-    if (endDate < startDate) {
-      setErrorMessage('תאריך היציאה אינו יכול להיות מוקדם מתאריך הכניסה');
-      return false;
+    if (serviceType !== 'training') {
+      if (!endDate) {
+        setErrorMessage('נא לבחור תאריך איסוף / יציאה מהריזורט (שדה חובה)');
+        return false;
+      }
+      if (endDate < startDate) {
+        setErrorMessage('תאריך היציאה אינו יכול להיות מוקדם מתאריך הכניסה');
+        return false;
+      }
     }
     if (!specialNeeds.trim()) {
       setErrorMessage('סעיף 6 הינו שדה חובה: לחצו על הכפתור "הכלב בריא לחלוטין" או פרטו תרופות/צרכים מיוחדים בתיבה');
@@ -161,6 +165,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
     setIsSubmitting(true);
     setIsQuickCallback(isCallbackOnly);
 
+    const finalEndDate = serviceType === 'training' ? startDate : endDate;
     const requestId = `${isCallbackOnly ? 'call' : 'req'}-${Date.now()}`;
     const newRequest: IntakeRequest = {
       id: requestId,
@@ -175,7 +180,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       dogSize,
       serviceType,
       startDate,
-      endDate,
+      endDate: finalEndDate,
       isFriendlyWithDogs,
       isNeutered,
       isVaccinated,
@@ -225,20 +230,18 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
             <CheckCircle2 className="w-10 h-10" />
           </div>
 
-          <div className="space-y-2">
-            <h2 className="text-2xl font-black text-[#0f4c3a]">
-              תודה רבה, {ownerName}! 🐾
+          <div className="space-y-2.5">
+            <h2 className="text-xl sm:text-2xl font-black text-[#0f4c3a] leading-snug">
+              תודה על משלוח הטופס, בבקשה להמתין לתשובה. 🐾
             </h2>
-            <p className="text-sm font-semibold text-slate-600">
-              {isQuickCallback
-                ? `בקשתכם לשיחה טלפונית עבור ${dogName} התקבלה בהצלחה בריזורט לכלב.`
-                : `שאלון הקליטה עבור ${dogName} התקבל בהצלחה בריזורט לכלב.`}
+            <p className="text-sm font-bold text-slate-700">
+              פרטי הבקשה עבור {dogName} נקלטו בהצלחה בריזורט לכלב.
             </p>
           </div>
 
-          <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-4 text-right space-y-2 text-xs text-slate-700">
-            <p className="text-emerald-950 font-bold leading-relaxed">
-              📞 <strong>מה השלב הבא?</strong> צוות הריזורט לכלב קיבל את כל הפרטים ויחזור אליכם טלפונית בהקדם למספר <span className="font-mono font-black text-emerald-800">{ownerPhone}</span> לתיאום סופי, מענה על שאלות והסדרת השריון.
+          <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-4 text-center space-y-2 text-xs text-slate-700">
+            <p className="text-emerald-950 font-bold leading-relaxed text-sm">
+              צוות הריזורט קיבל את הטופס ויחזור אליכם בהקדם למספר <span className="font-mono font-black text-emerald-800">{ownerPhone}</span>.
             </p>
           </div>
 
@@ -475,7 +478,11 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                 <span>תאריכי השהות המבוקשים <span className="text-red-500">*</span></span>
               </div>
               <span className="text-xs font-black text-emerald-800 bg-white px-3 py-1 rounded-full border border-emerald-200 shadow-2xs self-start sm:self-auto">
-                {serviceType === 'daycare' ? 'שהות יומית (ללא לינה)' : `סה״כ ${daysCount} ${daysCount === 1 ? 'יום' : 'ימים'} (${nightsCount} ${nightsCount === 1 ? 'לילה' : 'לילות'})`}
+                {serviceType === 'training' 
+                  ? 'תחילת אילוף (משך יקבע בשיחה)' 
+                  : serviceType === 'daycare' 
+                  ? 'שהות יומית (ללא לינה)' 
+                  : `סה״כ ${daysCount} ${daysCount === 1 ? 'יום' : 'ימים'} (${nightsCount} ${nightsCount === 1 ? 'לילה' : 'לילות'})`}
               </span>
             </div>
 
@@ -531,135 +538,270 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                   </div>
                 </div>
               </div>
-            ) : (
-              /* BOARDING / TRAINING OVERNIGHT MODE */
-              <div className="space-y-3">
-                
-                {/* Visual Duration Stepper Banner */}
-                <div className="bg-white rounded-2xl p-3 sm:p-4 border border-emerald-200 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl font-bold shrink-0">
-                      🌙
-                    </div>
-                    <div>
-                      <div className="text-[11px] text-slate-500 font-bold">משך השהות בריזורט:</div>
-                      <div className="text-sm sm:text-base font-black text-emerald-950">
-                        {nightsCount} {nightsCount === 1 ? 'לילה' : 'לילות'} ({daysCount} {daysCount === 1 ? 'יום' : 'ימים'})
-                      </div>
-                    </div>
+            ) : serviceType === 'training' ? (
+              /* TRAINING DEDICATED START DATE MODE */
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-emerald-200 shadow-2xs space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-xs font-black text-slate-900 block">
+                      🎓 תאריך הגעה / כניסה לאילוף *
+                    </label>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      בחר מתי תרצו להתחיל את תהליך האילוף בריזורט
+                    </span>
                   </div>
+                  <span className="text-[11px] text-emerald-800 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                    תכנית מותאמת אישית
+                  </span>
+                </div>
 
-                  {/* Interactive Nights Stepper */}
-                  <div className="flex items-center justify-between sm:justify-end gap-2 bg-slate-50 sm:bg-transparent p-1.5 sm:p-0 rounded-xl border sm:border-0 border-slate-200">
-                    <span className="text-xs font-bold text-slate-600">שינוי לילות מהיר:</span>
-                    <div className="flex items-center border border-slate-300 rounded-xl bg-white shadow-2xs overflow-hidden">
-                      <button
-                        type="button"
-                        disabled={nightsCount <= 1}
-                        onClick={() => handleNightsChange(-1)}
-                        className="w-9 h-8 hover:bg-slate-100 active:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent flex items-center justify-center font-black text-slate-700 transition-all cursor-pointer border-l border-slate-200"
-                        title="הפחת לילה אחד (-1)"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="px-3 text-xs font-black text-slate-900 min-w-[2.75rem] text-center font-mono">
-                        {nightsCount}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleNightsChange(1)}
-                        className="w-9 h-8 hover:bg-slate-100 active:bg-slate-200 flex items-center justify-center font-black text-emerald-800 transition-all cursor-pointer border-r border-slate-200"
-                        title="הוסף לילה אחד (+1)"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                {/* Quick Start Chips for Training */}
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[11px] font-bold text-slate-500 self-center ml-1">התחלה מהירה:</span>
+                  {[
+                    { label: 'מחר', date: addDays(today, 1) },
+                    { 
+                      label: 'תחילת שבוע הבא', 
+                      date: (() => {
+                        const d = new Date(today + 'T00:00:00');
+                        const day = d.getDay();
+                        let daysToSun = (0 - day + 7) % 7;
+                        if (daysToSun === 0) daysToSun = 7;
+                        return addDays(today, daysToSun);
+                      })() 
+                    },
+                    { label: 'בעוד שבוע', date: addDays(today, 7) },
+                    { label: 'בעוד שבועיים', date: addDays(today, 14) },
+                  ].map(chip => (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => { setStartDate(chip.date); setEndDate(chip.date); }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        startDate === chip.date
+                          ? 'bg-emerald-700 text-white shadow-xs'
+                          : 'bg-slate-100 hover:bg-emerald-100 text-slate-800 border border-slate-200'
+                      }`}
+                    >
+                      {chip.label} (יום {getDayNameHebrew(chip.date)})
+                    </button>
+                  ))}
+                </div>
+
+                {/* Date Input */}
+                <div className="relative">
+                  <input
+                    type="date"
+                    required
+                    min={today}
+                    value={startDate}
+                    onChange={(e) => {
+                      setStartDate(e.target.value);
+                      setEndDate(e.target.value);
+                    }}
+                    className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
+                  />
+                  <div className="mt-1.5 text-xs text-emerald-800 font-black flex items-center gap-1">
+                    <span>📅 יום {getDayNameHebrew(startDate)}, {formatDateIL(startDate)}</span>
                   </div>
                 </div>
 
-                {/* Two Date Inputs with Israeli Hebrew Day Display */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Arrival Date */}
-                  <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-emerald-200 shadow-2xs">
-                    <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1.5">
-                      <span>🏨 תאריך הגעה / כניסה לריזורט *</span>
-                      <span className="text-[11px] text-emerald-700 font-black">
-                        {startDate ? `יום ${getDayNameHebrew(startDate)}` : ''}
-                      </span>
+                {/* Helpful Note */}
+                <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-950 flex items-start gap-2">
+                  <span className="text-base shrink-0">💡</span>
+                  <p className="leading-relaxed">
+                    <strong>לידיעתכם:</strong> כל אילוף בריזורט הינו תהליך ייחודי ומותאם אישית. תאריך הסיום ומשך התכנית יסוכמו בשיחה אישית עם שמוליק לאחר אבחון הצרכים.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* BOARDING OVERNIGHT MODE */
+              <div className="space-y-3">
+                
+                {/* 1. Check-in Date */}
+                <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-emerald-200 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span>🏨 1. תאריך הגעה / כניסה לריזורט *</span>
                     </label>
+                    <span className="text-xs text-emerald-800 font-black">
+                      {startDate ? `יום ${getDayNameHebrew(startDate)}` : ''}
+                    </span>
+                  </div>
+                  <div className="relative">
                     <input
                       type="date"
                       required
                       min={today}
                       value={startDate}
                       onChange={(e) => handleStartDateChange(e.target.value)}
-                      className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
+                      className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
                     />
-                    <div className="mt-1 text-[11px] text-slate-500 font-semibold">
-                      {startDate ? formatDateIL(startDate) : ''}
+                    <div className="mt-1 text-[11px] text-slate-500 font-bold flex items-center justify-between">
+                      <span>כניסה: {startDate ? formatDateIL(startDate) : ''}</span>
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleStartDateChange(today)}
+                          className="text-[10px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer font-bold"
+                        >
+                          היום
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleStartDateChange(addDays(today, 1))}
+                          className="text-[10px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer font-bold"
+                        >
+                          מחר
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. BETWEEN: Popular Presets & Duration Across FULL WIDTH */}
+                <div className="bg-white p-3.5 sm:p-4 rounded-2xl border-2 border-emerald-300/80 shadow-2xs space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">⏱️</span>
+                      <div>
+                        <span className="text-xs font-black text-slate-900 block">
+                          תקופות נפוצות ומשך השהות (בחירה מהירה):
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          הקליקו על תקופה מוכנה או כווננו את כמות הלילות
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Interactive Nights Stepper */}
+                    <div className="flex items-center gap-2 self-start sm:self-auto bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200">
+                      <span className="text-xs font-bold text-slate-700">לילות:</span>
+                      <div className="flex items-center border border-slate-300 rounded-lg bg-white shadow-2xs overflow-hidden">
+                        <button
+                          type="button"
+                          disabled={nightsCount <= 1}
+                          onClick={() => handleNightsChange(-1)}
+                          className="w-7 h-7 hover:bg-slate-100 active:bg-slate-200 disabled:opacity-30 flex items-center justify-center font-black text-slate-700 transition-all cursor-pointer border-l border-slate-200"
+                          title="הפחת לילה (-1)"
+                        >
+                          <Minus className="w-3 h-3" />
+                        </button>
+                        <span className="px-2.5 text-xs font-black text-emerald-950 min-w-[2rem] text-center font-mono">
+                          {nightsCount}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleNightsChange(1)}
+                          className="w-7 h-7 hover:bg-slate-100 active:bg-slate-200 flex items-center justify-center font-black text-emerald-800 transition-all cursor-pointer border-r border-slate-200"
+                          title="הוסף לילה (+1)"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <span className="text-[11px] font-bold text-emerald-800">
+                        ({daysCount} ימים)
+                      </span>
                     </div>
                   </div>
 
-                  {/* Departure Date */}
-                  <div className="bg-white p-3 sm:p-3.5 rounded-2xl border border-emerald-200 shadow-2xs">
-                    <label className="text-xs font-bold text-slate-800 flex items-center justify-between mb-1.5">
-                      <span>🚗 תאריך איסוף / יציאה מהריזורט *</span>
-                      <span className="text-[11px] text-emerald-700 font-black">
-                        {endDate ? `יום ${getDayNameHebrew(endDate)}` : ''}
-                      </span>
+                  {/* 5 Preset Cards Arranged Cleanly Across Full Width */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 w-full">
+                    {[
+                      { 
+                        id: 'weekend', 
+                        icon: '🌟', 
+                        title: 'סופ״ש הקרוב', 
+                        subtitle: 'חמישי - שבת', 
+                        detail: '2 לילות',
+                        matches: nightsCount === 2 && getDayNameHebrew(startDate) === 'חמישי'
+                      },
+                      { 
+                        id: 'next_weekend', 
+                        icon: '📅', 
+                        title: 'סופ״ש הבא', 
+                        subtitle: 'חמישי - שבת הבא', 
+                        detail: '2 לילות',
+                        matches: false
+                      },
+                      { 
+                        id: 'midweek', 
+                        icon: '💼', 
+                        title: 'אמצע שבוע', 
+                        subtitle: 'ראשון - חמישי', 
+                        detail: '4 לילות',
+                        matches: nightsCount === 4 && getDayNameHebrew(startDate) === 'ראשון'
+                      },
+                      { 
+                        id: 'week', 
+                        icon: '🏖️', 
+                        title: 'שבוע מלא', 
+                        subtitle: '7 לילות', 
+                        detail: '8 ימים',
+                        matches: nightsCount === 7
+                      },
+                      { 
+                        id: 'twoweeks', 
+                        icon: '🌴', 
+                        title: 'שבועיים', 
+                        subtitle: '14 לילות', 
+                        detail: '15 ימים',
+                        matches: nightsCount === 14
+                      },
+                    ].map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => applyDatePreset(preset.id as any)}
+                        className={`w-full p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                          preset.matches
+                            ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm ring-2 ring-emerald-500/30'
+                            : 'bg-slate-50 hover:bg-emerald-50/80 text-slate-800 border-slate-200 hover:border-emerald-300'
+                        }`}
+                      >
+                        <div className="text-base">{preset.icon}</div>
+                        <div className={`text-xs font-extrabold ${preset.matches ? 'text-white' : 'text-slate-900'}`}>
+                          {preset.title}
+                        </div>
+                        <div className={`text-[10px] font-medium leading-tight ${preset.matches ? 'text-emerald-100' : 'text-slate-500'}`}>
+                          {preset.subtitle}
+                        </div>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                          preset.matches ? 'bg-white/20 text-white' : 'bg-emerald-100/70 text-emerald-800'
+                        }`}>
+                          {preset.detail}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Check-out Date */}
+                <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-emerald-200 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span>🚗 2. תאריך איסוף / יציאה מהריזורט *</span>
                     </label>
+                    <span className="text-xs text-emerald-800 font-black">
+                      {endDate ? `יום ${getDayNameHebrew(endDate)}` : ''}
+                    </span>
+                  </div>
+                  <div className="relative">
                     <input
                       type="date"
                       required
                       min={startDate}
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
+                      className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
                     />
-                    <div className="mt-1 text-[11px] text-slate-500 font-semibold">
-                      {endDate ? formatDateIL(endDate) : ''}
+                    <div className="mt-1 text-[11px] text-slate-500 font-bold flex items-center justify-between">
+                      <span>יציאה: {endDate ? formatDateIL(endDate) : ''}</span>
+                      <span className="text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        איסוף ביום {getDayNameHebrew(endDate)} (סה״כ {nightsCount} לילות)
+                      </span>
                     </div>
                   </div>
-                </div>
-
-                {/* Quick Presets Chips */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
-                  <span className="text-[11px] font-bold text-slate-500">תקופות נפוצות:</span>
-                  <button
-                    type="button"
-                    onClick={() => applyDatePreset('weekend')}
-                    className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    סופ״ש הקרוב (חמישי-שבת)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyDatePreset('next_weekend')}
-                    className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    סופ״ש הבא
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyDatePreset('midweek')}
-                    className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    אמצע שבוע (ראשון-חמישי)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyDatePreset('week')}
-                    className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    שבוע מלא (7 לילות)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyDatePreset('twoweeks')}
-                    className="px-2.5 py-1 bg-white hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    שבועיים (14 לילות)
-                  </button>
                 </div>
 
               </div>
@@ -903,11 +1045,11 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
               className="w-full bg-[#065f46] hover:bg-[#044e45] active:scale-[0.99] text-white font-black py-4 rounded-2xl text-base shadow-lg shadow-emerald-950/10 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
             >
               {isSubmitting ? (
-                <span>שולח שאלון לריזורט...</span>
+                <span>שולח טופס לריזורט...</span>
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  <span>🐾 שלח שאלון קליטה ובקשת שריון</span>
+                  <span>שלח טופס</span>
                 </>
               )}
             </button>
@@ -930,7 +1072,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
               className="w-full bg-[#25D366] hover:bg-[#1EBE5D] active:scale-[0.99] text-white font-black py-3.5 rounded-2xl text-sm flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
             >
               <MessageSquare className="w-4 h-4" />
-              <span>💬 חיוג / שיחה מהירה בוואטסאפ של הריזורט</span>
+              <span>שיחה לוואטסאפ של הריזורט</span>
             </a>
 
             <p className="text-center text-[11px] text-slate-400 font-medium mt-2">

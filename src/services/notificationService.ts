@@ -15,6 +15,10 @@ export function formatIntakeNotification(request: IntakeRequest): string {
   const houseTrainedLabel = request.isHouseTrained !== false ? 'כן 🚽' : 'לא ⚠️';
   const parasitesLabel = request.isTreatedParasites !== false ? 'כן 🛡️' : 'לא ⚠️';
 
+  const datesLine = request.serviceType === 'training'
+    ? `📅 *תאריך כניסה מבוקש לאילוף:* החל מ-${request.startDate} (משך יסוכם בשיחה)`
+    : `📅 *תאריכים:* מ-${request.startDate} עד ${request.endDate}`;
+
   return `🐾 *בקשת קליטה חדשה בריזורט לכלב!*
 --------------------------------
 👤 *בעלים:* ${request.ownerName}
@@ -22,7 +26,7 @@ export function formatIntakeNotification(request: IntakeRequest): string {
 🐶 *כלב:* ${request.dogName} (${request.dogBreed || 'מעורב'})
 🎂 *גיל/גודל:* ${request.dogAge || 'לא צוין'} | ${request.dogSize === 'small' ? 'קטן' : request.dogSize === 'medium' ? 'בינוני' : request.dogSize === 'large' ? 'גדול' : 'ענק'}
 🏨 *שירות מבוקש:* ${serviceName}
-📅 *תאריכים:* מ-${request.startDate} עד ${request.endDate}
+${datesLine}
 🐕 *מסתדר עם כלבים:* ${friendlyLabel}
 ✂️ *מסורס/מעוקרת:* ${neuteredLabel}
 💉 *חיסונים בתוקף:* ${vaccinatedLabel}
@@ -77,8 +81,12 @@ export function formatClientPaymentLinkMessage(
     ? ` (יש להזין ₪${agreedAmount} בעמוד התשלום)`
     : '';
 
+  const stayText = request.serviceType === 'training'
+    ? `לתכנית אילוף בריזורט לכלב החל מתאריך ${request.startDate}`
+    : `בריזורט לכלב בין התאריכים ${request.startDate} עד ${request.endDate}`;
+
   return `היי ${request.ownerName}, שמחנו לשוחח! 🐾🐶
-שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר בריזורט לכלב בין התאריכים ${request.startDate} עד ${request.endDate}.${amountSection}
+שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר ${stayText}.${amountSection}
 להשלמת השריון, מצורף הקישור המאובטח לתשלום${amountInstruction}:
 👉 ${paymentLink}
 

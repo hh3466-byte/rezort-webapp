@@ -329,7 +329,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     {/* Quick Dates Badge */}
                     <div className="flex items-center gap-2 self-start sm:self-center bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
                       <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{serviceLabel}: {req.startDate} ➔ {req.endDate}</span>
+                      <span>{serviceLabel}: {req.serviceType === 'training' ? `כניסה החל מ-${req.startDate}` : `${req.startDate} ➔ ${req.endDate}`}</span>
                     </div>
                   </div>
 
@@ -451,10 +451,10 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         target="_blank"
                         rel="noreferrer"
                         className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-                        title="פתיחת שיחה או חיוג קולי בוואטסאפ מול הלקוח מהוואטסאפ של הריזורט"
+                        title="שיחה לוואטסאפ של הריזורט"
                       >
                         <MessageCircle className="w-3.5 h-3.5" />
-                        <span>📞 חיוג / וואטסאפ מריזורט</span>
+                        <span>שיחה לוואטסאפ של הריזורט</span>
                       </a>
 
                       {/* Regular SIM Phone Call */}
@@ -612,28 +612,31 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               <div className="space-y-2 bg-emerald-50/40 p-3.5 rounded-2xl border border-emerald-200">
                 <div className="flex items-center justify-between">
                   <label className="font-extrabold text-[#0f4c3a] block text-xs">
-                    📅 תאריכי שהות בריזורט
+                    {editingRequest.serviceType === 'training' ? '🎓 תאריך כניסה לאילוף' : '📅 תאריכי שהות בריזורט'}
                   </label>
                   <span className="text-[11px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
-                    {editingRequest.serviceType === 'daycare' ? 'שהות יומית' : `${Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate))} ימים (${Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate))} לילות)`}
+                    {editingRequest.serviceType === 'training' 
+                      ? 'תחילת אילוף (משך מותאם אישית)' 
+                      : editingRequest.serviceType === 'daycare' 
+                      ? 'שהות יומית' 
+                      : `${Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate))} ימים (${Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate))} לילות)`}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {editingRequest.serviceType === 'training' ? (
                   <div>
                     <span className="text-[11px] text-slate-600 font-bold block mb-1">
-                      🏨 תאריך הגעה / כניסה:
+                      🎓 תאריך הגעה / כניסה לאילוף:
                     </span>
                     <input
                       type="date"
                       value={editingRequest.startDate}
                       onChange={(e) => {
                         const s = e.target.value;
-                        const curNights = Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate));
                         setEditingRequest({
                           ...editingRequest,
                           startDate: s,
-                          endDate: editingRequest.serviceType === 'daycare' ? s : addDays(s, curNights)
+                          endDate: s
                         });
                       }}
                       className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-900 font-bold focus:border-emerald-500 focus:outline-none"
@@ -642,58 +645,85 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       {editingRequest.startDate ? `יום ${getDayNameHebrew(editingRequest.startDate)}, ${formatDateIL(editingRequest.startDate)}` : ''}
                     </div>
                   </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <span className="text-[11px] text-slate-600 font-bold block mb-1">
+                          🏨 תאריך הגעה / כניסה:
+                        </span>
+                        <input
+                          type="date"
+                          value={editingRequest.startDate}
+                          onChange={(e) => {
+                            const s = e.target.value;
+                            const curNights = Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate));
+                            setEditingRequest({
+                              ...editingRequest,
+                              startDate: s,
+                              endDate: editingRequest.serviceType === 'daycare' ? s : addDays(s, curNights)
+                            });
+                          }}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-900 font-bold focus:border-emerald-500 focus:outline-none"
+                        />
+                        <div className="text-[10px] text-emerald-800 font-bold mt-1">
+                          {editingRequest.startDate ? `יום ${getDayNameHebrew(editingRequest.startDate)}, ${formatDateIL(editingRequest.startDate)}` : ''}
+                        </div>
+                      </div>
 
-                  <div>
-                    <span className="text-[11px] text-slate-600 font-bold block mb-1">
-                      🚗 תאריך איסוף / יציאה:
-                    </span>
-                    <input
-                      type="date"
-                      min={editingRequest.startDate}
-                      value={editingRequest.endDate}
-                      onChange={(e) => setEditingRequest({ ...editingRequest, endDate: e.target.value })}
-                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-900 font-bold focus:border-emerald-500 focus:outline-none"
-                    />
-                    <div className="text-[10px] text-emerald-800 font-bold mt-1">
-                      {editingRequest.endDate ? `יום ${getDayNameHebrew(editingRequest.endDate)}, ${formatDateIL(editingRequest.endDate)}` : ''}
+                      <div>
+                        <span className="text-[11px] text-slate-600 font-bold block mb-1">
+                          🚗 תאריך איסוף / יציאה:
+                        </span>
+                        <input
+                          type="date"
+                          min={editingRequest.startDate}
+                          value={editingRequest.endDate}
+                          onChange={(e) => setEditingRequest({ ...editingRequest, endDate: e.target.value })}
+                          className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-mono text-slate-900 font-bold focus:border-emerald-500 focus:outline-none"
+                        />
+                        <div className="text-[10px] text-emerald-800 font-bold mt-1">
+                          {editingRequest.endDate ? `יום ${getDayNameHebrew(editingRequest.endDate)}, ${formatDateIL(editingRequest.endDate)}` : ''}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Quick nights adjust */}
-                {editingRequest.serviceType !== 'daycare' && (
-                  <div className="flex items-center justify-between pt-1 text-xs">
-                    <span className="text-slate-500 font-medium">כוונון לילות מהיר:</span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const n = Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate) - 1);
-                          setEditingRequest({ ...editingRequest, endDate: addDays(editingRequest.startDate, n) });
-                        }}
-                        className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-700"
-                      >
-                        -1 לילה
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const n = calculateDaysCount(editingRequest.startDate, editingRequest.endDate) + 1;
-                          setEditingRequest({ ...editingRequest, endDate: addDays(editingRequest.startDate, n) });
-                        }}
-                        className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-700"
-                      >
-                        +1 לילה
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingRequest({ ...editingRequest, endDate: addDays(editingRequest.startDate, 7) })}
-                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-lg font-bold"
-                      >
-                        שבוע (7 לילות)
-                      </button>
-                    </div>
-                  </div>
+                    {/* Quick nights adjust */}
+                    {editingRequest.serviceType !== 'daycare' && (
+                      <div className="flex items-center justify-between pt-1 text-xs">
+                        <span className="text-slate-500 font-medium">כוונון לילות מהיר:</span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const n = Math.max(1, calculateDaysCount(editingRequest.startDate, editingRequest.endDate) - 1);
+                              setEditingRequest({ ...editingRequest, endDate: addDays(editingRequest.startDate, n) });
+                            }}
+                            className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-700"
+                          >
+                            -1 לילה
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const n = calculateDaysCount(editingRequest.startDate, editingRequest.endDate) + 1;
+                              setEditingRequest({ ...editingRequest, endDate: addDays(editingRequest.startDate, n) });
+                            }}
+                            className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-700"
+                          >
+                            +1 לילה
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingRequest({ ...editingRequest, endDate: addDays(editingRequest.startDate, 7) })}
+                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-lg font-bold"
+                          >
+                            שבוע (7 לילות)
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -1086,7 +1116,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-[11px] text-slate-700 space-y-1">
                 <span className="font-bold text-slate-500 block">תצוגה מקדימה של הודעת הוואטסאפ שתשלח:</span>
                 <div className="text-slate-800 whitespace-pre-wrap font-sans bg-white p-2.5 rounded-xl border border-slate-200">
-                  {`היי ${paymentPromptRequest.ownerName}, שמחנו לשוחח! 🐾🐶\nשמחים לעדכן שהמקום עבור *${paymentPromptRequest.dogName}* נשמר בריזורט לכלב בין התאריכים ${paymentPromptRequest.startDate} עד ${paymentPromptRequest.endDate}.${paymentAmount ? `\n💰 *הסכום שסוכם הוא:* ₪${paymentAmount}\n` : ''}\nלהשלמת השריון, מצורף הקישור המאובטח לתשלום${paymentAmount ? ` (יש להזין ₪${paymentAmount} בעמוד התשלום)` : ''}:\n👉 ${customPaymentLink}\n\n(בתוך הקישור ניתן לשלם בנוחות ב-Bit, Apple Pay, Google Pay או כרטיס אשראי)\n\nבברכה חמה,\nצוות הריזורט לכלב 🐕🤍`}
+                  {`היי ${paymentPromptRequest.ownerName}, שמחנו לשוחח! 🐾🐶\nשמחים לעדכן שהמקום עבור *${paymentPromptRequest.dogName}* נשמר ${paymentPromptRequest.serviceType === 'training' ? `לתכנית אילוף בריזורט לכלב החל מתאריך ${paymentPromptRequest.startDate}` : `בריזורט לכלב בין התאריכים ${paymentPromptRequest.startDate} עד ${paymentPromptRequest.endDate}`}.${paymentAmount ? `\n💰 *הסכום שסוכם הוא:* ₪${paymentAmount}\n` : ''}\nלהשלמת השריון, מצורף הקישור המאובטח לתשלום${paymentAmount ? ` (יש להזין ₪${paymentAmount} בעמוד התשלום)` : ''}:\n👉 ${customPaymentLink}\n\n(בתוך הקישור ניתן לשלם בנוחות ב-Bit, Apple Pay, Google Pay או כרטיס אשראי)\n\nבברכה חמה,\nצוות הריזורט לכלב 🐕🤍`}
                 </div>
               </div>
 
