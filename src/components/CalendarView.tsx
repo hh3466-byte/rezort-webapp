@@ -31,6 +31,8 @@ import {
   getDailyBreakdown
 } from '../utils/dateUtils';
 import { getServiceTypeHebrew } from '../utils/whatsappUtils';
+import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
+import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
 
 export type CalendarDisplayMode = 'month' | 'two_weeks' | 'week' | 'day';
 
@@ -66,6 +68,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const todayStr = getTodayStr();
   const [displayMode, setDisplayMode] = useState<CalendarDisplayMode>('two_weeks');
   const [focusedDate, setFocusedDate] = useState<string>(todayStr);
+  const [greetingModalDate, setGreetingModalDate] = useState<string | null>(null);
 
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
   const daysGrid = getMonthGrid(currentYear, currentMonth);
@@ -469,11 +472,28 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       >
                         פירוט יום
                       </button>
+
+                      {/* Shabbat / Holiday Greeting Button in Two-Weeks View */}
+                      {holidayInfo.isSpecial && dayBookings.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setGreetingModalDate(day.dateStr);
+                          }}
+                          title={`שלח ד״ש ${holidayInfo.label} לכל בעלי הכלבים של יום זה`}
+                          className="bg-[#25D366] hover:bg-[#1EBE5D] text-white text-[11px] font-black px-2 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs flex items-center gap-0.5 shrink-0"
+                        >
+                          <span>📲</span>
+                          <span>ד״ש</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => onNewBookingForDate(day.dateStr)}
                         title="הוסף הזמנה ליום זה"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 rounded-lg transition-colors cursor-pointer shadow-2xs shrink-0"
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
@@ -554,6 +574,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               const isCurrentMonth = dayObj.isCurrentMonth;
               const occupancyRatio = (dateBookings.length / settings.maxCapacity) * 100;
               const isFull = dateBookings.length >= settings.maxCapacity;
+              const holidayInfo = getDateShabbatOrHoliday(dayObj.dateStr);
 
               return (
                 <div
@@ -572,19 +593,29 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       : 'bg-slate-50/40 border-slate-100 opacity-40'
                   }`}
                 >
-                  {/* Day Header (Number + Occupancy Count) */}
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`text-xs sm:text-sm font-bold ${
-                        isToday
-                          ? 'text-emerald-900 font-extrabold bg-emerald-200/60 px-1.5 py-0.2 rounded-md'
-                          : isCurrentMonth
-                          ? 'text-slate-800'
-                          : 'text-slate-400'
-                      }`}
-                    >
-                      {dayObj.dayNumber}
-                    </span>
+                  {/* Day Header (Number + Holiday Badge + Occupancy Count) */}
+                  <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center gap-1">
+                      <span
+                        className={`text-xs sm:text-sm font-bold ${
+                          isToday
+                            ? 'text-emerald-900 font-extrabold bg-emerald-200/60 px-1.5 py-0.2 rounded-md'
+                            : isCurrentMonth
+                            ? 'text-slate-800'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {dayObj.dayNumber}
+                      </span>
+                      {holidayInfo.isSpecial && (
+                        <span 
+                          className="text-[9px] font-black bg-amber-100 text-amber-950 border border-amber-300 px-1 py-0.2 rounded leading-none truncate max-w-[62px]"
+                          title={holidayInfo.label}
+                        >
+                          {holidayInfo.icon} {holidayInfo.label}
+                        </span>
+                      )}
+                    </div>
 
                     {dateBookings.length > 0 && (
                       <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
@@ -631,6 +662,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {/* Shabbat / Holiday Direct Greeting Button */}
+                  {holidayInfo.isSpecial && dateBookings.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setGreetingModalDate(dayObj.dateStr);
+                      }}
+                      className="w-full mt-1 bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white text-[9px] font-black py-0.5 px-1 rounded-md flex items-center justify-center gap-1 shadow-2xs cursor-pointer transition-all hover:scale-102"
+                      title={`שלח ד״ש ${holidayInfo.label} לכל בעלי הכלבים של יום זה`}
+                    >
+                      <span className="text-[10px]">📲</span>
+                      <span>ד״ש לבעלים ({dateBookings.length})</span>
+                    </button>
+                  )}
 
                   {/* Quick Action Button */}
                   <div className="opacity-0 group-hover:opacity-100 transition-opacity flex justify-between items-center pt-1 border-t border-slate-100 mt-1">
@@ -961,6 +1008,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* Shabbat & Jewish Holiday Dog Greeting Modal */}
+      {greetingModalDate && (
+        <ShabbatHolidayGreetingModal
+          dateStr={greetingModalDate}
+          bookings={bookings}
+          settings={settings}
+          onClose={() => setGreetingModalDate(null)}
+        />
       )}
 
     </div>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   X, 
   Calendar, 
@@ -21,6 +21,8 @@ import {
 import { Booking, ResortSettings } from '../types';
 import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage } from '../utils/whatsappUtils';
+import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
+import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
 
 interface DayDetailsModalProps {
   dateStr: string | null;
@@ -53,6 +55,8 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
 
   const breakdown = getDailyBreakdown(bookings, dateStr);
   const isOverbooked = breakdown.total > settings.maxCapacity;
+  const holidayInfo = getDateShabbatOrHoliday(dateStr);
+  const [isGreetingModalOpen, setIsGreetingModalOpen] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in">
@@ -110,6 +114,39 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Shabbat / Holiday Greeting Button Banner */}
+        {breakdown.staying.length > 0 && (
+          <div className="mt-4 p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center font-black text-xl shadow-2xs shrink-0">
+                💬
+              </div>
+              <div>
+                <div className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                  <span>עדכון ד״ש מהכלבים {holidayInfo.isSpecial ? `(${holidayInfo.label})` : ''}</span>
+                  {holidayInfo.isSpecial && (
+                    <span className="text-[10px] bg-emerald-200/80 text-emerald-950 px-2 py-0.2 rounded-full font-black">
+                      {holidayInfo.icon} חג / שבת
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-emerald-800 font-medium">
+                  שליחת הודעת וואטסאפ אישית וחמה לבעלי {breakdown.staying.length} הכלבים ששוהים כעת בריזורט
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsGreetingModalOpen(true)}
+              className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black px-4 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all shadow-xs cursor-pointer hover:shadow-md shrink-0"
+            >
+              <MessageSquare className="w-4 h-4 fill-white/20 shrink-0" />
+              <span>שלח ד״ש לבעלים ({breakdown.staying.length} כלבים)</span>
+            </button>
+          </div>
+        )}
 
         {/* 3 Sections: Arrivals, Stayers, Departures */}
         <div className="my-5 space-y-5">
@@ -211,6 +248,16 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
           </div>
 
         </div>
+
+        {/* Shabbat / Holiday Greeting Modal */}
+        {isGreetingModalOpen && (
+          <ShabbatHolidayGreetingModal
+            dateStr={dateStr}
+            bookings={bookings}
+            settings={settings}
+            onClose={() => setIsGreetingModalOpen(false)}
+          />
+        )}
 
       </div>
     </div>
