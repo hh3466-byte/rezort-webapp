@@ -156,3 +156,85 @@ export interface AgentActionProposal {
 }
 
 export type TabType = 'calendar' | 'occupancy' | 'bookings' | 'customers' | 'reports' | 'guide';
+
+export type VoucherStatus = 'active' | 'redeemed' | 'expired';
+
+export interface BenefitOption {
+  id: string;
+  title: string;
+  badge: string;
+  description: string;
+  icon: string;
+}
+
+export const RESORT_BENEFIT_OPTIONS: BenefitOption[] = [
+  {
+    id: 'discount_100',
+    title: '100 ₪ הנחה בהזמנה',
+    badge: 'הנחה כספית',
+    description: 'בהזמנת שהות של 3 ימים ומעלה (סופ״ש ארוך)',
+    icon: '💰'
+  },
+  {
+    id: 'late_checkout',
+    title: 'צ\'ק-אאוט מאוחר חינם בערב',
+    badge: 'שווי ₪100',
+    description: 'איסוף גמיש בערב (עד 19:00) ללא תוספת תשלום',
+    icon: '🌙'
+  },
+  {
+    id: 'training_consultation',
+    title: 'שיחת ייעוץ אילוף והתנהגות עם שמוליק',
+    badge: 'שווי ₪250',
+    description: 'שיחת ייעוץ אישית 1-על-1 למיקוד בהתנהגות הכלב',
+    icon: '🐾'
+  },
+  {
+    id: 'daycare_free',
+    title: 'יום שהות יומי (Daycare) / יום כיף',
+    badge: 'חוויה במתחם',
+    description: 'יום כיף ומשחקים במתחם הדשא והסוויטות',
+    icon: '☀️'
+  },
+  {
+    id: 'premium_treat',
+    title: 'מארז פינוק: עצם לעיסה טבעית + חטיפי בריאות',
+    badge: 'פינוק קבלת פנים',
+    description: 'מארז חטיפי פרימיום ועצם בקר טבעית מובחרת',
+    icon: '🦴'
+  },
+  {
+    id: 'vip_photo',
+    title: 'מזכרת צילום VIP מהחופשה לשיתוף ברשתות',
+    badge: 'מזכרת דיגיטלית',
+    description: 'תמונת איכות מקצועית של הכלב במתחם מוכנה לסטורי',
+    icon: '📸'
+  },
+  {
+    id: 'brain_games',
+    title: 'סשן משחקי חשיבה והעשרה מנטלית אישי',
+    badge: 'העשרה קוגניטיבית',
+    description: 'משחקי רחרוח ופאזלים מותאמים אישית לכלב',
+    icon: '🧠'
+  }
+];
+
+export interface DigitalVoucher {
+  id: string;
+  code: string;
+  type: 'loyalty' | 'refer_friend';
+  customerName: string;
+  dogName: string;
+  phone: string;
+  benefitText: string;
+  selectedBenefitId?: string;
+  selectedBenefitText?: string;
+  status: VoucherStatus;
+  createdAt: string;
+  expiryDate: string;
+  redeemedAt?: string;
+  redeemedByOwner?: string;
+  redeemedByDog?: string;
+  redeemedBookingId?: string;
+  notes?: string;
+}

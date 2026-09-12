@@ -24,7 +24,7 @@ interface CustomersViewProps {
   settings: ResortSettings;
   onNewBookingForCustomer: (customer: Customer) => void;
   onSelectBooking: (booking: Booking) => void;
-  onOpenVoucher?: (data: { customerName: string; dogName: string; phone: string }) => void;
+  onOpenVoucher?: (data: { customerName: string; dogName: string; phone: string; staysCount?: number }) => void;
 }
 
 export const CustomersView: React.FC<CustomersViewProps> = ({
@@ -228,7 +228,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       onClick={() => onOpenVoucher({
                         customerName: customer.name,
                         dogName: customer.dogs[0]?.name || '',
-                        phone: customer.phone
+                        phone: customer.phone,
+                        staysCount: customer.totalVisits
                       })}
                       className="py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 shrink-0"
                       title="הפק ושלח שובר הטבה לפעם הבאה או חבר מביא חבר"

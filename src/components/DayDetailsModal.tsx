@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
 import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr } from '../utils/dateUtils';
-import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage } from '../utils/whatsappUtils';
+import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage, cleanPhoneNumber } from '../utils/whatsappUtils';
 import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
 
@@ -37,7 +37,7 @@ interface DayDetailsModalProps {
   onOpenPaymentModal: (booking: Booking) => void;
   onToggleStayStatus: (bookingId: string, newStatus: Booking['stayStatus']) => void;
   onInitiateRelease?: (booking: Booking) => void;
-  onOpenVoucher?: (data: { customerName: string; dogName: string; phone: string }) => void;
+  onOpenVoucher?: (data: { customerName: string; dogName: string; phone: string; staysCount?: number }) => void;
 }
 
 export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
@@ -59,6 +59,12 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   const isOverbooked = breakdown.total > settings.maxCapacity;
   const holidayInfo = getDateShabbatOrHoliday(dateStr);
   const [isGreetingModalOpen, setIsGreetingModalOpen] = useState(false);
+
+  const getStaysCount = (phone: string) => {
+    const clean = cleanPhoneNumber(phone);
+    if (!clean) return 0;
+    return bookings.filter(bk => cleanPhoneNumber(bk.ownerPhone) === clean).length;
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in">
@@ -178,7 +184,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
-                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone })}
+                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
                     actionType="arrival"
                   />
                 ))}
@@ -211,7 +217,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
-                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone })}
+                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
                     actionType="staying"
                   />
                 ))}
@@ -244,7 +250,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
-                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone })}
+                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
                     actionType="departure"
                   />
                 ))}

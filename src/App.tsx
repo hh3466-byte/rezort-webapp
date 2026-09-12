@@ -18,7 +18,8 @@ import {
   deleteBookingFromDb, 
   saveSettingsToDb, 
   batchRestoreToDb, 
-  clearAllBookingsFromDb
+  clearAllBookingsFromDb,
+  updateVoucherStatusInDb
 } from './services/dbService';
 import { parseVoiceOrWhatsAppText } from './services/agentService';
 import { getTodayStr, getBookingsForDate, addDays, HEBREW_MONTHS, getBookingPaymentsInMonth } from './utils/dateUtils';
@@ -127,6 +128,7 @@ export default function App() {
     customerName?: string;
     dogName?: string;
     phone?: string;
+    staysCount?: number;
   } | null>(null);
 
   // Metrics Row Collapse State
@@ -1600,6 +1602,18 @@ export default function App() {
             });
             await updateIntakeRequestStatusInDb(req.id, 'approved');
             setIntakeRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'approved' } : r));
+
+            // Auto-redeem voucher if present in request notes
+            const voucherMatch = (req.notes || '').match(/שובר.*?:\s*([A-Z0-9\u0590-\u05FF-]+)/i);
+            if (voucherMatch && voucherMatch[1]) {
+              const code = voucherMatch[1].trim();
+              await updateVoucherStatusInDb(code, 'redeemed', {
+                redeemedByOwner: req.ownerName,
+                redeemedByDog: req.dogName
+              });
+              showToast(`🎁 שובר ${code} עודכן כנוצל במערכת`);
+            }
+
             setIsIntakeModalOpen(false);
           }}
           onDeleteRequest={async (id) => {
@@ -1635,7 +1649,9 @@ export default function App() {
           initialCustomerName={voucherModalData.customerName}
           initialDogName={voucherModalData.dogName}
           initialPhone={voucherModalData.phone}
+          staysCount={voucherModalData.staysCount}
           settings={settings}
+          bookings={bookings}
           onClose={() => setVoucherModalData(null)}
         />
       )}

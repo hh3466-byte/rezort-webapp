@@ -1,5 +1,5 @@
 import { supabase } from '../utils/supabase';
-import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus } from '../types';
+import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus, DigitalVoucher, VoucherStatus } from '../types';
 import { initialBookings, defaultSettings } from '../data/initialData';
 import { extractCustomers } from '../utils/storage';
 
@@ -9,6 +9,8 @@ const CUSTOMERS_TABLE = 'customers';
 const GROW_PAYMENTS_TABLE = 'grow_incoming_payments';
 const INTAKE_REQUESTS_TABLE = 'intake_requests';
 const LOCAL_INTAKE_REQUESTS_KEY = 'dog_resort_intake_requests';
+const VOUCHERS_TABLE = 'vouchers';
+const LOCAL_VOUCHERS_KEY = 'dog_resort_vouchers';
 const SETTINGS_DOC_ID = 'resort_config';
 const DELETED_BOOKINGS_KEY = 'shmulik_dog_resort_deleted_ids';
 
@@ -1214,6 +1216,174 @@ export const subscribeToIntakeRequests = (
         fetchRequests();
       }
     )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
+// ==================== Digital Vouchers Persistence ====================
+
+export const loadStoredVouchers = (): DigitalVoucher[] => {
+  try {
+    const raw = localStorage.getItem(LOCAL_VOUCHERS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const findVoucherByCode = (code: string): DigitalVoucher | null => {
+  const clean = (code || '').trim().toUpperCase();
+  if (!clean) return null;
+  const list = loadStoredVouchers();
+  return list.find(v => v.code.trim().toUpperCase() === clean) || null;
+};
+
+export const saveVoucherToDb = async (voucher: DigitalVoucher): Promise<void> => {
+  try {
+    // 1. Update local storage
+    const current = loadStoredVouchers();
+    const updated = [voucher, ...current.filter(v => v.id !== voucher.id && v.code.toUpperCase() !== voucher.code.toUpperCase())];
+    localStorage.setItem(LOCAL_VOUCHERS_KEY, JSON.stringify(updated));
+
+    // 2. Upsert to Supabase vouchers table
+    try {
+      await supabase
+        .from(VOUCHERS_TABLE)
+        .upsert({
+          id: voucher.id,
+          code: voucher.code,
+          type: voucher.type,
+          customer_name: voucher.customerName,
+          dog_name: voucher.dogName,
+          phone: voucher.phone,
+          benefit_text: voucher.benefitText,
+          status: voucher.status,
+          created_at: voucher.createdAt,
+          expiry_date: voucher.expiryDate,
+          redeemed_at: voucher.redeemedAt || null,
+          redeemed_by_owner: voucher.redeemedByOwner || null,
+          redeemed_by_dog: voucher.redeemedByDog || null,
+          redeemed_booking_id: voucher.redeemedBookingId || null,
+          notes: voucher.notes || null,
+          data: voucher
+        });
+    } catch (errSupabase) {
+      // Fallback: persist inside settings table
+      try {
+        const { data: sData } = await supabase.from(SETTINGS_TABLE).select('data').eq('id', SETTINGS_DOC_ID).single();
+        const settingsObj = sData?.data || {};
+        const vList = settingsObj.vouchers || [];
+        const newVList = [voucher, ...vList.filter((v: any) => v.id !== voucher.id && v.code !== voucher.code)];
+        await supabase.from(SETTINGS_TABLE).upsert({ id: SETTINGS_DOC_ID, data: { ...settingsObj, vouchers: newVList } });
+      } catch (errFallback) {}
+    }
+  } catch (e) {
+    console.warn('saveVoucherToDb error:', e);
+  }
+};
+
+export const updateVoucherStatusInDb = async (
+  codeOrId: string,
+  status: VoucherStatus,
+  details?: { redeemedByOwner?: string; redeemedByDog?: string; redeemedBookingId?: string; notes?: string }
+): Promise<void> => {
+  try {
+    const clean = codeOrId.trim().toUpperCase();
+    const current = loadStoredVouchers();
+    let updatedVoucher: DigitalVoucher | null = null;
+
+    const updated = current.map(v => {
+      if (v.id === codeOrId || v.code.toUpperCase() === clean) {
+        updatedVoucher = {
+          ...v,
+          status,
+          ...(status === 'redeemed' ? { redeemedAt: new Date().toISOString() } : {}),
+          ...(details?.redeemedByOwner ? { redeemedByOwner: details.redeemedByOwner } : {}),
+          ...(details?.redeemedByDog ? { redeemedByDog: details.redeemedByDog } : {}),
+          ...(details?.redeemedBookingId ? { redeemedBookingId: details.redeemedBookingId } : {}),
+          ...(details?.notes ? { notes: details.notes } : {})
+        };
+        return updatedVoucher;
+      }
+      return v;
+    });
+
+    localStorage.setItem(LOCAL_VOUCHERS_KEY, JSON.stringify(updated));
+
+    if (updatedVoucher) {
+      await saveVoucherToDb(updatedVoucher);
+    }
+  } catch (e) {
+    console.warn('updateVoucherStatusInDb error:', e);
+  }
+};
+
+export const subscribeToVouchers = (callback: (vouchers: DigitalVoucher[]) => void): Unsubscribe => {
+  callback(loadStoredVouchers());
+
+  const fetchVouchers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from(VOUCHERS_TABLE)
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        // Fallback to settings.data.vouchers
+        try {
+          const { data: sData } = await supabase.from(SETTINGS_TABLE).select('data').eq('id', SETTINGS_DOC_ID).single();
+          if (sData?.data?.vouchers && Array.isArray(sData.data.vouchers)) {
+            localStorage.setItem(LOCAL_VOUCHERS_KEY, JSON.stringify(sData.data.vouchers));
+            callback(sData.data.vouchers);
+            return;
+          }
+        } catch (e2) {}
+        callback(loadStoredVouchers());
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const mapped: DigitalVoucher[] = data.map((row: any) => {
+          if (row.data && typeof row.data === 'object') {
+            return { ...row.data, id: row.id, status: row.status || row.data.status };
+          }
+          return {
+            id: row.id,
+            code: row.code,
+            type: row.type || 'loyalty',
+            customerName: row.customer_name || '',
+            dogName: row.dog_name || '',
+            phone: row.phone || '',
+            benefitText: row.benefit_text || '',
+            status: row.status || 'active',
+            createdAt: row.created_at || new Date().toISOString(),
+            expiryDate: row.expiry_date || '',
+            redeemedAt: row.redeemed_at || undefined,
+            redeemedByOwner: row.redeemed_by_owner || undefined,
+            redeemedByDog: row.redeemed_by_dog || undefined,
+            redeemedBookingId: row.redeemed_booking_id || undefined,
+            notes: row.notes || undefined
+          };
+        });
+        localStorage.setItem(LOCAL_VOUCHERS_KEY, JSON.stringify(mapped));
+        callback(mapped);
+      } else {
+        callback(loadStoredVouchers());
+      }
+    } catch (e) {
+      callback(loadStoredVouchers());
+    }
+  };
+
+  fetchVouchers();
+
+  const channel = supabase
+    .channel('public:vouchers_all')
+    .on('postgres_changes', { event: '*', schema: 'public', table: VOUCHERS_TABLE }, () => fetchVouchers())
+    .on('postgres_changes', { event: '*', schema: 'public', table: SETTINGS_TABLE }, () => fetchVouchers())
     .subscribe();
 
   return () => {

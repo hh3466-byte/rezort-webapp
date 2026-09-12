@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { ResortSettings, ServiceType, IntakeRequest } from '../types';
+import React, { useState, useMemo } from 'react';
+import { ResortSettings, ServiceType, IntakeRequest, RESORT_BENEFIT_OPTIONS } from '../types';
 import { addDays, getTodayStr, calculateDaysCount, getDayNameHebrew, formatDateIL } from '../utils/dateUtils';
-import { saveIntakeRequestToDb } from '../services/dbService';
+import { saveIntakeRequestToDb, findVoucherByCode } from '../services/dbService';
 import { sendResortEmailNotification, sendResortWhatsAppNotification, formatIntakeNotification } from '../services/notificationService';
 import { 
   CheckCircle2, 
@@ -85,6 +85,14 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
     }
     return '';
   });
+
+  const matchedVoucher = useMemo(() => {
+    if (!voucherCode.trim()) return null;
+    return findVoucherByCode(voucherCode.trim());
+  }, [voucherCode]);
+
+  // Customer's choice of perk/benefit
+  const [selectedBenefitId, setSelectedBenefitId] = useState<string>('discount_100');
 
   // Auto adjust dates when service is selected
   const handleServiceChange = (st: ServiceType) => {
@@ -250,6 +258,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
 
     const finalEndDate = serviceType === 'training' ? startDate : endDate;
     const requestId = `${isCallbackOnly ? 'call' : 'req'}-${Date.now()}`;
+    const chosenBenefit = RESORT_BENEFIT_OPTIONS.find(b => b.id === selectedBenefitId);
     const newRequest: IntakeRequest = {
       id: requestId,
       createdAt: new Date().toISOString(),
@@ -275,7 +284,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
         isFlexibleDates ? '[תאריכים גמישים / בירור זמינות כללי]' : '',
         clientOrigin === 'returning' ? '[💎 לקוח חוזר]' : '',
         clientOrigin === 'referral' ? `[🤝 חבר מביא חבר${referralFriendName.trim() ? `: הופנה ע״י ${referralFriendName.trim()}` : ''}]` : '',
-        voucherCode.trim() ? `[🎁 קוד שובר: ${voucherCode.trim()} - 100 ₪ הנחה בשהות 3+ ימים, אין כפל הטבות]` : '',
+        voucherCode.trim() ? `[🎁 שובר: ${voucherCode.trim()} | הטבה שנבחרה: ${chosenBenefit ? `${chosenBenefit.title} (${chosenBenefit.badge})` : '100 ₪ הנחה'}]` : '',
         freeText.trim()
       ].filter(Boolean).join(' | ') || undefined,
     };
@@ -525,11 +534,17 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
 
               {/* Context notes */}
               {clientOrigin === 'returning' && (
-                <div className="mt-2.5 p-3 bg-amber-50/90 border border-amber-200/80 rounded-xl text-xs text-amber-950 flex items-center gap-2 animate-in fade-in">
-                  <span className="text-base">🐾</span>
-                  <div className="leading-snug">
-                    <strong className="font-black">ברוכים השבים לריזורט!</strong> אם פרטי הכלב, החיסונים והבריאות ללא שינוי, נשתמש בתיק הקיים שלכם במערכת.
+                <div className="mt-2.5 p-3 bg-amber-50/90 border border-amber-200/80 rounded-xl text-xs text-amber-950 space-y-1 animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🐾</span>
+                    <strong className="font-black">ברוכים השבים לריזורט!</strong>
                   </div>
+                  <p className="text-[11px] text-amber-900 leading-snug">
+                    אם פרטי הכלב, החיסונים והבריאות ללא שינוי, נשתמש בתיק הקיים שלכם במערכת.
+                  </p>
+                  <p className="text-[10px] text-amber-800 font-bold pt-1 border-t border-amber-200/70">
+                    * שימו לב: ללקוחות שחוזרים בפעם הרביעית ומעלה, ההטבה ניתנת במסלול ״חבר מביא חבר״ (מעבירים שובר לחבר עם כלב, וכאשר החבר מבצע שהות משלמת ראשונה, אתם זוכים בהטבה לשהות הבאה!).
+                  </p>
                 </div>
               )}
 
@@ -592,19 +607,95 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
               </div>
 
               {voucherCode ? (
-                <div className="mt-2 p-2.5 bg-amber-50 border border-amber-300/90 rounded-xl text-xs text-amber-950 flex items-start gap-2 animate-in fade-in">
-                  <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="leading-snug">
-                    <span className="font-black">הטבת שובר פעילה:</span> 100 ₪ הנחה בשהות של 3 ימים ומעלה (סופ״ש ארוך).
-                    <div className="text-[10px] text-amber-900 font-medium mt-0.5">
-                      * תנאי המבצע: בהזמנת מינימום 3 ימים (סופ״ש ארוך) · אין כפל הטבות ומבצעים · ההנחה תעודכן ע״י הריזורט בתיאום ההזמנה.
+                matchedVoucher?.status === 'redeemed' ? (
+                  <div className="mt-2 p-2.5 bg-red-50 border border-red-300 rounded-xl text-xs text-red-950 flex items-start gap-2 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <div className="leading-snug">
+                      <span className="font-black text-red-900">קוד שובר זה כבר נוצל בעבר! ⚠️</span>
+                      <div className="text-[10px] text-red-800 mt-0.5">
+                        השובר מומש {matchedVoucher.redeemedAt ? `בתאריך ${formatDateIL(matchedVoucher.redeemedAt)}` : ''} {matchedVoucher.redeemedByOwner ? `ע״י ${matchedVoucher.redeemedByOwner}` : ''}. שוברי הטבה תקפים לשימוש חד-פעמי בלבד.
+                      </div>
                     </div>
                   </div>
-                </div>
+                ) : matchedVoucher && (matchedVoucher.status === 'expired' || (matchedVoucher.expiryDate && matchedVoucher.expiryDate < today)) ? (
+                  <div className="mt-2 p-2.5 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-950 flex items-start gap-2 animate-in fade-in">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="leading-snug">
+                      <span className="font-black text-amber-900">תוקף השובר פג</span>
+                      <div className="text-[10px] text-amber-800 mt-0.5">
+                        תוקף שובר זה פג בתאריך {formatDateIL(matchedVoucher.expiryDate)}.
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-2 p-2.5 bg-emerald-50 border border-emerald-400/90 rounded-xl text-xs text-emerald-950 flex items-start gap-2 animate-in fade-in">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="leading-snug">
+                      <span className="font-black text-emerald-900">
+                        {matchedVoucher ? '✅ שובר מאומת ופעיל!' : '🎁 קוד שובר זוהה:'}
+                      </span>{' '}
+                      <span className="font-bold text-emerald-950">
+                        {matchedVoucher?.benefitText || 'שובר תקף לבחירת הטבה'}
+                      </span>
+                      <div className="text-[10px] text-emerald-800 font-medium mt-0.5">
+                        * תנאי המבצע: בהזמנת מינימום 3 ימים (סופ״ש ארוך) · אין כפל הטבות ומבצעים · ההנחה תעודכן ע״י הריזורט בתיאום ההזמנה.
+                      </div>
+                    </div>
+                  </div>
+                )
               ) : (
                 <p className="text-[11px] text-slate-500 mt-1 leading-normal">
                   שובר פינוק ללקוח חוזר או שובר ״חבר מביא חבר״ מעניק 100 ₪ הנחה בשהות של 3 ימים ומעלה (ללא כפל הטבות).
                 </p>
+              )}
+
+              {/* Interactive Benefit Choice Menu */}
+              {(voucherCode || clientOrigin === 'returning' || clientOrigin === 'referral') && (
+                <div className="space-y-2 pt-3 mt-3 border-t border-slate-200/80 animate-in fade-in">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-600" />
+                      <span>בחרו את ההטבה המועדפת עליכם לשהות זו (לבחירה 1 מתוך ההטבות):</span>
+                    </label>
+                    <span className="text-[10px] font-bold text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded-lg border border-amber-300">
+                      ללא כפל הטבות
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {RESORT_BENEFIT_OPTIONS.map((opt) => {
+                      const isSelected = selectedBenefitId === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setSelectedBenefitId(opt.id)}
+                          className={`p-2.5 rounded-xl border text-right transition-all flex items-start gap-2.5 cursor-pointer ${
+                            isSelected
+                              ? 'bg-gradient-to-r from-amber-50 to-amber-100/80 border-amber-500 ring-2 ring-amber-500/30 text-amber-950 shadow-xs font-bold'
+                              : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="text-xl shrink-0 mt-0.5">{opt.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-xs font-black text-slate-900 leading-snug">{opt.title}</span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-amber-200/70 text-amber-950 shrink-0">
+                                {opt.badge}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{opt.description}</p>
+                          </div>
+                          {isSelected && <Check className="w-4 h-4 text-amber-600 shrink-0 mt-1" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="text-[10px] text-amber-900 font-medium">
+                    * תנאי המבצע: בהזמנת שהות של 3 ימים ומעלה (סופ״ש ארוך) · אין כפל הטבות ומבצעים · ההטבה שנבחרה תאושר ע״י הריזורט בתיאום ההזמנה.
+                  </div>
+                </div>
               )}
             </div>
           </div>
