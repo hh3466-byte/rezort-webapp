@@ -1,5 +1,6 @@
 import { IntakeRequest, Booking, ResortSettings } from '../types';
 import { cleanPhoneNumber, getServiceTypeHebrew } from '../utils/whatsappUtils';
+import { formatDateIL } from '../utils/dateUtils';
 
 /**
  * Format automated intake request notification to the Resort team
@@ -16,8 +17,8 @@ export function formatIntakeNotification(request: IntakeRequest): string {
   const parasitesLabel = request.isTreatedParasites !== false ? 'כן 🛡️' : 'לא ⚠️';
 
   const datesLine = request.serviceType === 'training'
-    ? `📅 *תאריך כניסה מבוקש לאילוף:* החל מ-${request.startDate} (משך יסוכם בשיחה)`
-    : `📅 *תאריכים:* מ-${request.startDate} עד ${request.endDate}`;
+    ? `📅 *תאריך כניסה מבוקש לאילוף:* החל מ-${formatDateIL(request.startDate)} (משך יסוכם בשיחה)`
+    : `📅 *תאריכים:* מ-${formatDateIL(request.startDate)} עד ${formatDateIL(request.endDate)}`;
 
   return `🐾 *בקשת קליטה חדשה בריזורט לכלב!*
 --------------------------------
@@ -50,7 +51,7 @@ export function formatBookingConfirmedNotification(booking: Booking): string {
 🐶 *כלב:* ${booking.dogName} (${booking.dogBreed || 'מעורב'})
 👤 *בעלים:* ${booking.ownerName} (${booking.ownerPhone})
 🏨 *שירות:* ${serviceName}
-📅 *תאריכים:* מ-${booking.startDate} עד ${booking.endDate}
+📅 *תאריכים:* מ-${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}
 💰 *סה״כ לתשלום:* ₪${booking.totalPrice}
 💳 *סטטוס תשלום:* ${paidStatus}
 --------------------------------
@@ -82,8 +83,8 @@ export function formatClientPaymentLinkMessage(
     : '';
 
   const stayText = request.serviceType === 'training'
-    ? `לתכנית אילוף בריזורט לכלב החל מתאריך ${request.startDate}`
-    : `בריזורט לכלב בין התאריכים ${request.startDate} עד ${request.endDate}`;
+    ? `לתכנית אילוף בריזורט לכלב החל מתאריך ${formatDateIL(request.startDate)}`
+    : `בריזורט לכלב בין התאריכים ${formatDateIL(request.startDate)} עד ${formatDateIL(request.endDate)}`;
 
   return `היי ${request.ownerName}, שמחנו לשוחח! 🐾🐶
 שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר ${stayText}.${amountSection}
@@ -108,8 +109,8 @@ export function formatClientRejectionMessage(
   settings: ResortSettings
 ): string {
   const datesText = request.serviceType === 'training'
-    ? `החל מתאריך ${request.startDate}`
-    : `בתאריכים אלו (${request.startDate} עד ${request.endDate})`;
+    ? `החל מתאריך ${formatDateIL(request.startDate)}`
+    : `בתאריכים אלו (${formatDateIL(request.startDate)} עד ${formatDateIL(request.endDate)})`;
 
   return `היי ${request.ownerName}, תודה רבה על פנייתך ל${settings.resortName} 🐾
 לצערי ${datesText} אנו בתפוסה מלאה ולא נוכל לקלוט את ${request.dogName}.

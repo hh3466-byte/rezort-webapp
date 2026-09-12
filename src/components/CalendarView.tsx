@@ -390,7 +390,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               return (
                 <div
                   key={day.dateStr}
-                  className={`rounded-2xl border p-3 flex flex-col justify-between transition-all ${
+                  className={`rounded-2xl border p-3 flex flex-col justify-start transition-all ${
                     isToday
                       ? 'bg-emerald-50/70 border-2 border-emerald-500 shadow-md ring-2 ring-emerald-500/20'
                       : 'bg-slate-50/50 border-slate-200 hover:border-slate-300 shadow-2xs hover:shadow-xs'
@@ -446,8 +446,42 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     </div>
                   </div>
 
+                  {/* Action Buttons: שריין מקום פנוי + פירוט יום (מתחת לתפוסה ולפני רשימת הכלבים) */}
+                  <div className="space-y-1.5 mb-2.5">
+                    {/* Free Spot Quick Booking Action */}
+                    {freeSpots > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => onNewBookingForDate(day.dateStr)}
+                        className="w-full py-1.5 px-2 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 hover:text-emerald-900 border border-dashed border-emerald-400 hover:border-emerald-500 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs group"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
+                        <span>שריין מקום פנוי ({freeSpots} נותרו)</span>
+                      </button>
+                    )}
+
+                    {/* Day Actions */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onSelectDate(day.dateStr)}
+                        className="flex-1 text-center bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold py-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                      >
+                        פירוט יום
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onNewBookingForDate(day.dateStr)}
+                        title="הוסף הזמנה ליום זה"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Clean List of Dogs (שם הכלב בלבד ללא עומס) */}
-                  <div className="space-y-1.5 my-1">
+                  <div className="space-y-1.5 flex-1">
                     {dayBookings.length === 0 ? (
                       <div className="text-center py-4 px-2 bg-white/70 rounded-xl border border-dashed border-slate-200">
                         <span className="text-xs text-slate-400 font-bold block">אין כלבים ביום זה</span>
@@ -490,37 +524,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         );
                       })
                     )}
-                  </div>
-
-                  {/* Free Spot Quick Booking Action */}
-                  {freeSpots > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => onNewBookingForDate(day.dateStr)}
-                      className="w-full mt-2 py-1.5 px-2 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 hover:text-emerald-900 border border-dashed border-emerald-400 hover:border-emerald-500 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs group"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
-                      <span>שריין מקום פנוי ({freeSpots} נותרו)</span>
-                    </button>
-                  )}
-
-                  {/* Day Actions Footer */}
-                  <div className="pt-2 border-t border-slate-200 flex items-center gap-1.5 mt-2">
-                    <button
-                      type="button"
-                      onClick={() => onSelectDate(day.dateStr)}
-                      className="flex-1 text-center bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold py-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer"
-                    >
-                      פירוט יום
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onNewBookingForDate(day.dateStr)}
-                      title="הוסף הזמנה ליום זה"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 rounded-lg transition-colors cursor-pointer shadow-2xs"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 </div>
               );

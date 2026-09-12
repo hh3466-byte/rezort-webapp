@@ -9,13 +9,39 @@ export const HEBREW_MONTHS = [
 ];
 
 /**
- * Format YYYY-MM-DD to Israeli display format (DD/MM/YYYY)
+ * Format YYYY-MM-DD to Israeli display format (DD.MM.YY)
+ * Example: 2026-09-18 -> 18.09.26
  */
 export function formatDateIL(dateStr: string): string {
   if (!dateStr) return '';
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return dateStr;
-  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts.length >= 3) {
+      const day = parts[2].substring(0, 2);
+      const month = parts[1];
+      const year = parts[0];
+      const yearShort = year.length === 4 ? year.slice(2) : year;
+      return `${day}.${month}.${yearShort}`;
+    }
+  }
+  return dateStr;
+}
+
+/**
+ * Format YYYY-MM-DD to Israeli full format with 4-digit year (DD.MM.YYYY)
+ */
+export function formatDateILFull(dateStr: string): string {
+  if (!dateStr) return '';
+  if (dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts.length >= 3) {
+      const day = parts[2].substring(0, 2);
+      const month = parts[1];
+      const year = parts[0];
+      return `${day}.${month}.${year}`;
+    }
+  }
+  return dateStr;
 }
 
 export function formatDateDisplay(dateStr: string): string {

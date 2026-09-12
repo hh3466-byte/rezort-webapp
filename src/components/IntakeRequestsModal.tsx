@@ -547,9 +547,13 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     </div>
 
                     {/* Quick Dates Badge */}
-                    <div className="flex items-center gap-2 self-start sm:self-center bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700">
-                      <Calendar className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{serviceLabel}: {req.serviceType === 'training' ? `כניסה החל מ-${req.startDate}` : `${req.startDate} ➔ ${req.endDate}`}</span>
+                    <div className="flex items-center gap-2 self-start sm:self-center bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700" dir="rtl">
+                      <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>
+                        {serviceLabel}: {req.serviceType === 'training' 
+                          ? `כניסה החל מ-${formatDateIL(req.startDate)}` 
+                          : `${formatDateIL(req.startDate)} עד ${formatDateIL(req.endDate)}`}
+                      </span>
                     </div>
                   </div>
 
