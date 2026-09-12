@@ -631,17 +631,37 @@ export default function App() {
       {/* Centered Main Layout Container matching the user's screenshot */}
       <div className="max-w-6xl mx-auto space-y-4">
         
-        {/* Top Header Row */}
-        <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 pt-1 pb-2 border-b border-slate-100">
+        {/* Top Centered Brand Header: Logo & Slogan */}
+        <header className="flex flex-col items-center justify-center text-center pt-2 pb-1">
+          <div className="flex items-center justify-center gap-3">
+            <img 
+              src="/resort-logo.svg" 
+              alt="לוגו הריזורט לכלב" 
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow-xs hover:scale-105 transition-transform shrink-0" 
+            />
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-[#0f4c3a] tracking-tight flex items-center justify-center gap-2">
+                <span>יומן הריזורט לכלב</span>
+                <span>🐕</span>
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+                ניהול יומן פנסיון ואילוף, בקשות קליטה ותקבולים
+              </p>
+            </div>
+          </div>
+        </header>
+
+        {/* All Controls in One Single Unified Horizontal Row */}
+        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 pb-2.5 border-b border-slate-200">
           
-          {/* Action Buttons (Left in RTL) */}
-          <div className="flex flex-wrap items-center gap-2 order-3 xl:order-1">
+          {/* Action Buttons (Right in RTL) */}
+          <div className="flex items-center gap-2 overflow-x-auto py-1">
             {/* 1. First from right: Intake Requests Modal (with prominent live count) */}
             <button
               type="button"
               onClick={() => setIsIntakeModalOpen(true)}
               id="btn-intake-requests-top"
-              className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-2xs ${
+              className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-2xs shrink-0 ${
                 pendingIntakeCount > 0
                   ? 'bg-gradient-to-r from-emerald-50 via-white to-emerald-50 hover:from-emerald-100 hover:to-emerald-50 border-2 border-emerald-600 text-emerald-950 shadow-md shadow-emerald-700/15 ring-2 ring-emerald-500/25 hover:scale-[1.02] active:scale-95'
                   : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-emerald-300 text-slate-800'
@@ -664,7 +684,7 @@ export default function App() {
             <button
               onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
               id="btn-new-booking-top"
-              className="bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
             >
               <span className="text-base font-bold">+</span>
               <span>הזמנה חדשה</span>
@@ -674,7 +694,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsSendIntakeModalOpen(true)}
-              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-emerald-300 text-slate-800 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-emerald-300 text-slate-800 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
               title="שליחת טופס בקשת קליטה בוואטסאפ ללקוח שהתקשר, או פתיחת הטופס"
             >
               <span className="text-base">🔗</span>
@@ -685,7 +705,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsReportsOpen(true)}
-              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-amber-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-amber-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
               title="דוחות כספיים ותפוסה"
             >
               <span className="text-base">💰</span>
@@ -696,7 +716,7 @@ export default function App() {
             <button
               onClick={handleOpenSettingsWithAuth}
               id="btn-settings-top"
-              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
               title="הגדרות תפוסה, תעריפים, ביט וגיבוי (אישור מנהל)"
             >
               <span className="text-base">⚙️</span>
@@ -708,7 +728,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsReviewModalDismissed(false)}
-                className="bg-amber-50 hover:bg-amber-100 active:scale-95 border border-amber-300 text-amber-900 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer animate-pulse"
+                className="bg-amber-50 hover:bg-amber-100 active:scale-95 border border-amber-300 text-amber-900 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer animate-pulse shrink-0"
                 title="לחץ לפתיחת בקשת חוות דעת לכלבים שהשתחררו אתמול"
               >
                 <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
@@ -717,8 +737,8 @@ export default function App() {
             )}
           </div>
 
-          {/* Main View Navigation Tabs (Center in RTL) */}
-          <div className="flex items-center justify-center order-2 bg-slate-100/90 p-1 rounded-2xl border border-slate-200 shadow-2xs">
+          {/* Main View Navigation Tabs (Left in RTL) */}
+          <div className="flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200 shadow-2xs shrink-0">
             <button
               type="button"
               onClick={() => setActiveTab('calendar')}
@@ -772,25 +792,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* Right Brand Title & Subtitle with Official Resort Logo in RTL */}
-          <div className="text-right order-1 xl:order-3 flex items-center justify-end gap-3 shrink-0">
-            <img 
-              src="/resort-logo.svg" 
-              alt="לוגו הריזורט לכלב" 
-              className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow-xs hover:scale-105 transition-transform shrink-0" 
-            />
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-[#0f4c3a] tracking-tight flex items-center justify-end gap-1.5">
-                <span>יומן הריזורט לכלב</span>
-                <span>🐕</span>
-              </h1>
-              <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
-                ניהול יומן פנסיון ואילוף, בקשות קליטה ותקבולים
-              </p>
-            </div>
-          </div>
-
-        </header>
+        </div>
 
         {/* 5 Metric Stat Cards: תפוסה כללית | פנסיון | אילוף | חוב פתוח | נגבה עד כה (כולן לחיצות לעיון ועריכה) */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
