@@ -542,8 +542,8 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                   <p className="text-[11px] text-amber-900 leading-snug">
                     אם פרטי הכלב, החיסונים והבריאות ללא שינוי, נשתמש בתיק הקיים שלכם במערכת.
                   </p>
-                  <p className="text-[10px] text-amber-800 font-bold pt-1 border-t border-amber-200/70">
-                    * שימו לב: ללקוחות שחוזרים בפעם הרביעית ומעלה, ההטבה ניתנת במסלול ״חבר מביא חבר״ (מעבירים שובר לחבר עם כלב, וכאשר החבר מבצע שהות משלמת ראשונה, אתם זוכים בהטבה לשהות הבאה!).
+                  <p className="text-[10px] text-amber-900 font-bold pt-1 border-t border-amber-200/70">
+                    * לקוחות ותיקים (אירוח 4 ומעלה)? מגיעה לכם מתנת VIP ישירה: יום כיף ושהות יומית VIP במתחם הדשא מתנה (09:00–19:00)! ובנוסף תוכלו להעביר שובר ״חבר מביא חבר״ ולצבור זיכוי של 100 ₪.
                   </p>
                 </div>
               )}
