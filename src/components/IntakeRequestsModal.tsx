@@ -211,7 +211,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   בקשות קליטה מלקוחות
                 </h2>
                 {pendingCount > 0 && (
-                  <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-black animate-pulse">
+                  <span className="bg-gradient-to-r from-red-600 to-rose-600 text-white text-xs px-2.5 py-0.5 rounded-full font-black shadow-xs ring-1 ring-white/50 animate-pulse">
                     {pendingCount} חדשות
                   </span>
                 )}
@@ -266,8 +266,12 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 }`}
               >
                 <span>{tab.label}</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                  filter === tab.id ? 'bg-emerald-800 text-white' : 'bg-slate-200 text-slate-700'
+                <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${
+                  tab.id === 'pending' && tab.count > 0
+                    ? 'bg-red-600 text-white shadow-2xs'
+                    : filter === tab.id 
+                    ? 'bg-emerald-800 text-white' 
+                    : 'bg-slate-200 text-slate-700'
                 }`}>
                   {tab.count}
                 </span>
