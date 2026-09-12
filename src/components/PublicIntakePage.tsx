@@ -865,26 +865,20 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                 <div className="bg-amber-50/95 border-2 border-amber-300/90 rounded-2xl p-3.5 sm:p-4 text-xs text-amber-950 space-y-2.5 shadow-2xs">
                   <div className="font-black text-amber-950 flex items-center gap-2 text-xs sm:text-sm">
                     <span className="text-base">⏰</span>
-                    <span>שעות פעילות, נהלי כניסה/יציאה ושירות לקוחות:</span>
+                    <span>שעות פעילות הריזורט לכלב בימים א-ה הן 09:00 - 19:00</span>
                   </div>
-                  <div className="space-y-1.5 font-bold leading-relaxed pr-1">
+                  <div className="space-y-2 font-bold leading-relaxed pr-1">
                     <p>
-                      • <strong>אמצע שבוע (ראשון – חמישי):</strong> שעות פעילות ושירות לקוחות הינן <strong>09:00 – 19:00</strong>.
+                      • <strong>בשישי וערב חג:</strong> עד שעה <strong>14:00</strong> ובצאת השבת / החג משעה <strong>09:00</strong>.
                     </p>
-                    <p>
-                      • <strong>כניסה בסופ״ש/ערב חג:</strong> עד שעה 14:00 בשישי / ערב חג.
-                    </p>
-                    <p>
-                      • <strong>יציאה מסופ״ש/חג:</strong> ביום ראשון / למחרת החג בשעה <strong>09:00</strong> בלבד (היציאה אינה יכולה להיות ביום שבת).
-                    </p>
-                    <div className="text-amber-950 bg-amber-100/90 p-2.5 sm:p-3 rounded-xl border border-amber-300/90 font-black leading-relaxed space-y-1 mt-1">
-                      <div className="flex items-center gap-1.5">
-                        <span>📢</span>
-                        <span>שימו לב — שירות לקוחות וטיפול בכלבים:</span>
-                      </div>
-                      <p className="text-[11px] sm:text-xs font-bold">
-                        גם באמצע השבוע מעבר לשעות הפעילות (לפני 09:00 ואחרי 19:00), ובסופי שבוע וחגים — <strong>אין שירות לקוחות</strong>.<br />
-                        על הבעלים להתגבר ולהתאפק! בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐾
+                    <div className="text-amber-950 bg-amber-100/90 p-2.5 sm:p-3 rounded-xl border border-amber-300/90 font-black leading-relaxed space-y-1.5 mt-1">
+                      <p className="text-[11px] sm:text-xs">
+                        בשעות שאין שירות לקוחות, אנו לא עוסקים בהולכים על 2.<br />
+                        אנו מתמקדים אך ורק בטיפול וברווחה רק למי שיש לו 4 רגליים וזנב 🐾
+                      </p>
+                      <p className="text-[11px] sm:text-xs">
+                        לכן על הבעלים להתגבר ולהתאפק עד למחרת לצאת השבת / החג לשעה 09:00 שאז נחדש את שירות הלקוחות לבעלי הכלבים.<br />
+                        תודה על ההתחשבות.
                       </p>
                     </div>
                   </div>
