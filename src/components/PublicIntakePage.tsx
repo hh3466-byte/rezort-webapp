@@ -1193,7 +1193,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                   </div>
                   <div className="space-y-2 font-bold leading-relaxed pr-1">
                     <p>
-                      • <strong>בשישי וערב חג:</strong> עד שעה <strong>14:00</strong> ובצאת השבת / החג משעה <strong>09:00</strong>.
+                      • <strong>בשישי וערב חג:</strong> עד שעה <strong>14:00</strong>, ובצאת השבת / החג (למחרת השבת / חג) משעה <strong>09:00</strong>.
                     </p>
                     <div className="text-amber-950 bg-amber-100/90 p-2.5 sm:p-3 rounded-xl border border-amber-300/90 font-black leading-relaxed space-y-1 mt-1">
                       <p className="text-[11px] sm:text-xs">
