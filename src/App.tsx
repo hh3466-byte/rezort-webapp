@@ -960,7 +960,7 @@ export default function App() {
         {todayHolidayInfo.isSpecial && totalDogsToday > 0 && !isGreetingBannerDismissed && (
           <div className="animate-in fade-in slide-in-from-top-2 duration-300">
             {todayUnsentGreetingsCount > 0 ? (
-              <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white rounded-2xl p-3 sm:p-4 shadow-md border border-emerald-600/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white rounded-2xl p-3 sm:p-4 shadow-md border border-red-500/60 flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                   <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl shrink-0 shadow-xs ring-1 ring-white/30">
                     {todayHolidayInfo.icon || '🕯️'}
@@ -974,7 +974,7 @@ export default function App() {
                         נותרו {todayUnsentGreetingsCount} לשליחה
                       </span>
                       {notificationPermission === 'granted' ? (
-                        <span className="bg-emerald-500/30 text-emerald-100 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-400/30 flex items-center gap-1">
+                        <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/30 flex items-center gap-1">
                           <span>🔔</span>
                           <span>תזכורת פוש ב-11:00 פעילה</span>
                         </span>
@@ -990,7 +990,7 @@ export default function App() {
                         </button>
                       )}
                     </div>
-                    <p className="text-xs text-emerald-100 font-medium mt-0.5">
+                    <p className="text-xs text-red-100 font-medium mt-0.5">
                       נוכחים היום {totalDogsToday} כלבים בריזורט ({todayGreetingsSentCount} נשלחו עד כה). שלח להם ד״ש משמח בוואטסאפ בקליק!
                     </p>
                   </div>
@@ -1000,9 +1000,9 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setGreetingModalDate(todayStr)}
-                    className="w-full sm:w-auto bg-white hover:bg-emerald-50 text-emerald-950 font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shrink-0"
+                    className="w-full sm:w-auto bg-white hover:bg-red-50 text-red-950 font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shrink-0"
                   >
-                    <MessageCircle className="w-4 h-4 text-emerald-700" />
+                    <MessageCircle className="w-4 h-4 text-red-600" />
                     <span>שלח ד״ש עכשיו לבעלים</span>
                   </button>
                 </div>

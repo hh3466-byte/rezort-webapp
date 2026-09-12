@@ -102,6 +102,12 @@ export interface IntakeRequest {
   calculatedPrice?: number;
   depositRequested?: number;
   internalNotes?: string;
+  termsAccepted?: boolean;
+  termsAcceptedAt?: string;
+  clientOrigin?: 'new' | 'returning' | 'referral';
+  selectedBenefitId?: string;
+  voucherCode?: string;
+  isPhoneVerified?: boolean;
 }
 
 export interface ResortSettings {

@@ -1391,4 +1391,135 @@ export const subscribeToVouchers = (callback: (vouchers: DigitalVoucher[]) => vo
   };
 };
 
+export interface PhoneVerificationResult {
+  isKnown: boolean;
+  name?: string;
+  dogName?: string;
+  dogBreed?: string;
+  totalVisits: number;
+  isVip: boolean;
+}
+
+/**
+ * Verifies if a customer's phone number exists in resort records
+ * Checks local bookings, stored vouchers, and Supabase customers/bookings tables
+ */
+export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVerificationResult> => {
+  const digits = (rawPhone || '').replace(/\D/g, '');
+  if (digits.length < 7) {
+    return { isKnown: false, totalVisits: 0, isVip: false };
+  }
+
+  // Israeli phone matching: extract last 7 or 8 digits to match across formats (05X-XXXXXXX vs 972-5X-XXXXXXX)
+  const matchSuffix = digits.length >= 8 ? digits.slice(-8) : digits.slice(-7);
+
+  // 1. Check local storage bookings (fast offline / cache check)
+  try {
+    const localBookings = getAllExistingLocalBookings();
+    const matchedLocalBookings = localBookings.filter(b => {
+      const bDigits = (b.ownerPhone || '').replace(/\D/g, '');
+      return bDigits && (bDigits.endsWith(matchSuffix) || bDigits.includes(matchSuffix));
+    });
+
+    if (matchedLocalBookings.length > 0) {
+      const latest = matchedLocalBookings[matchedLocalBookings.length - 1];
+      const totalVisits = matchedLocalBookings.length;
+      return {
+        isKnown: true,
+        name: latest.ownerName,
+        dogName: latest.dogName,
+        dogBreed: latest.dogBreed,
+        totalVisits,
+        isVip: totalVisits >= 4 || matchedLocalBookings.some(b => (b as any).isVip)
+      };
+    }
+  } catch (e) {
+    console.warn('verifyCustomerByPhone local check warning:', e);
+  }
+
+  // 2. Check local vouchers
+  try {
+    const localVouchers = loadStoredVouchers();
+    const matchedVoucher = localVouchers.find(v => {
+      const vDigits = (v.phone || '').replace(/\D/g, '');
+      return vDigits && (vDigits.endsWith(matchSuffix) || vDigits.includes(matchSuffix));
+    });
+    if (matchedVoucher) {
+      return {
+        isKnown: true,
+        name: matchedVoucher.customerName,
+        dogName: matchedVoucher.dogName,
+        totalVisits: 1,
+        isVip: false
+      };
+    }
+  } catch (e) {
+    console.warn('verifyCustomerByPhone vouchers check warning:', e);
+  }
+
+  // 3. Query Supabase customers table
+  try {
+    const { data: custData, error: custErr } = await supabase
+      .from(CUSTOMERS_TABLE)
+      .select('name, phone, dogs, total_visits, is_vip');
+
+    if (!custErr && custData && Array.isArray(custData)) {
+      const match = custData.find((c: any) => {
+        const cDigits = (c.phone || '').replace(/\D/g, '');
+        return cDigits && (cDigits.endsWith(matchSuffix) || cDigits.includes(matchSuffix));
+      });
+
+      if (match) {
+        const dog = Array.isArray(match.dogs) && match.dogs.length > 0 ? match.dogs[0] : undefined;
+        return {
+          isKnown: true,
+          name: match.name,
+          dogName: typeof dog === 'string' ? dog : dog?.name,
+          dogBreed: typeof dog === 'object' ? dog?.breed : undefined,
+          totalVisits: Number(match.total_visits) || 1,
+          isVip: Boolean(match.is_vip) || (Number(match.total_visits) >= 4)
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('verifyCustomerByPhone supabase customers query warning:', e);
+  }
+
+  // 4. Query Supabase bookings table
+  try {
+    const { data: bkData, error: bkErr } = await supabase
+      .from(BOOKINGS_TABLE)
+      .select('owner_name, owner_phone, dog_name, dog_breed');
+
+    if (!bkErr && bkData && Array.isArray(bkData)) {
+      const matches = bkData.filter((b: any) => {
+        const bDigits = (b.owner_phone || '').replace(/\D/g, '');
+        return bDigits && (bDigits.endsWith(matchSuffix) || bDigits.includes(matchSuffix));
+      });
+
+      if (matches.length > 0) {
+        const latest = matches[matches.length - 1];
+        const totalVisits = matches.length;
+        return {
+          isKnown: true,
+          name: latest.owner_name,
+          dogName: latest.dog_name,
+          dogBreed: latest.dog_breed,
+          totalVisits,
+          isVip: totalVisits >= 4
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('verifyCustomerByPhone supabase bookings query warning:', e);
+  }
+
+  return {
+    isKnown: false,
+    totalVisits: 0,
+    isVip: false
+  };
+};
+
+
 
