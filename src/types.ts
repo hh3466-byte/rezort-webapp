@@ -177,9 +177,9 @@ export const RESORT_BENEFIT_OPTIONS: BenefitOption[] = [
   },
   {
     id: 'late_checkout',
-    title: 'צ\'ק-אאוט מאוחר חינם בערב',
+    title: 'צ\'ק-אאוט במוצאי שבת או חג (19:00-21:00)',
     badge: 'שווי ₪100',
-    description: 'איסוף גמיש בערב (עד 19:00) ללא תוספת תשלום',
+    description: 'איסוף מיוחד במוצאי שבת או חג בין 19:00 ל-21:00 ללא תוספת תשלום',
     icon: '🌙'
   },
   {
@@ -191,9 +191,9 @@ export const RESORT_BENEFIT_OPTIONS: BenefitOption[] = [
   },
   {
     id: 'daycare_free',
-    title: 'יום שהות יומי (Daycare) / יום כיף',
+    title: 'יום שהות יומי (Daycare) / יום כיף 09:00-19:00',
     badge: 'חוויה במתחם',
-    description: 'יום כיף ומשחקים במתחם הדשא והסוויטות',
+    description: 'יום כיף ומשחקים במתחם הדשא בין השעות 09:00 ל-19:00 מתנה',
     icon: '☀️'
   },
   {
@@ -212,9 +212,9 @@ export const RESORT_BENEFIT_OPTIONS: BenefitOption[] = [
   },
   {
     id: 'brain_games',
-    title: 'סשן משחקי חשיבה והעשרה מנטלית אישי',
+    title: 'סשן משחקי חשיבה והעשרה מנטלית אישי (Brain Games)',
     badge: 'העשרה קוגניטיבית',
-    description: 'משחקי רחרוח ופאזלים מותאמים אישית לכלב',
+    description: 'משחקי רחרוח ופאזלים מותאמים אישית לכלב – מוענק על ידי צוות הריזורט',
     icon: '🧠'
   }
 ];
