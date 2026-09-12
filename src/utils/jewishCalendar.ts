@@ -102,6 +102,18 @@ export function getDateShabbatOrHoliday(dateStrOrObj: string | Date): HolidayInf
   }
 
   if (holiday) {
+    // Eves of holidays (like Friday) are busy check-in days (open until 14:00).
+    // Greetings are sent on Shabbat (Saturday) and on the holiday itself!
+    if (holiday.startsWith('ערב ')) {
+      return {
+        isSpecial: false,
+        label: holiday,
+        icon: '🕯️',
+        isShabbat: false,
+        holidayName: holiday
+      };
+    }
+
     let icon = '🍷';
     if (holiday.includes('סוכות')) icon = '🌿';
     else if (holiday.includes('חנוכה')) icon = '🕎';
