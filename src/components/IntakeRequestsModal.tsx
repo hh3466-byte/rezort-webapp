@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { IntakeRequest, IntakeRequestStatus, ResortSettings, Booking } from '../types';
 import { cleanPhoneNumber, getServiceTypeHebrew } from '../utils/whatsappUtils';
-import { formatClientPaymentLinkMessage } from '../services/notificationService';
+import { formatClientPaymentLinkMessage, formatClientRejectionMessage } from '../services/notificationService';
 import { 
   X, 
   Phone, 
@@ -24,7 +24,9 @@ import {
   AlertCircle,
   Plus,
   Minus,
-  Save
+  Save,
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 import { calculateDaysCount, addDays, formatDateIL, getDayNameHebrew } from '../utils/dateUtils';
 
@@ -57,6 +59,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [customPaymentLink, setCustomPaymentLink] = useState<string>('');
   const [isSendingPayment, setIsSendingPayment] = useState<boolean>(false);
+  const [rejectPromptRequest, setRejectPromptRequest] = useState<IntakeRequest | null>(null);
+  const [rejectMessageText, setRejectMessageText] = useState<string>('');
+  const [isProcessingReject, setIsProcessingReject] = useState<boolean>(false);
 
   const handleSaveEdit = async () => {
     if (!editingRequest) return;
@@ -155,6 +160,41 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     }
   };
 
+  const handleOpenRejectPrompt = (request: IntakeRequest) => {
+    setRejectPromptRequest(request);
+    setRejectMessageText(formatClientRejectionMessage(request, settings));
+  };
+
+  const handleConfirmRejectWithWhatsApp = async () => {
+    if (!rejectPromptRequest) return;
+    setIsProcessingReject(true);
+    try {
+      await onUpdateStatus(rejectPromptRequest.id, 'rejected');
+      const cleanPhone = cleanPhoneNumber(rejectPromptRequest.ownerPhone);
+      const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
+      const whatsappUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(rejectMessageText)}`;
+      window.open(whatsappUrl, '_blank');
+      setRejectPromptRequest(null);
+    } catch (e) {
+      console.warn('Reject error:', e);
+    } finally {
+      setIsProcessingReject(false);
+    }
+  };
+
+  const handleConfirmRejectWithoutWhatsApp = async () => {
+    if (!rejectPromptRequest) return;
+    setIsProcessingReject(true);
+    try {
+      await onUpdateStatus(rejectPromptRequest.id, 'rejected');
+      setRejectPromptRequest(null);
+    } catch (e) {
+      console.warn('Reject error:', e);
+    } finally {
+      setIsProcessingReject(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200" dir="rtl">
       <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
@@ -235,16 +275,36 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
             ))}
           </div>
 
-          {/* Search Bar */}
-          <div className="relative min-w-[200px]">
-            <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="חיפוש לפי שם, כלב או טלפון..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl pr-9 pl-3 py-1.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:outline-none"
-            />
+          {/* Search Bar & Bulk Actions */}
+          <div className="flex items-center gap-2">
+            {filter === 'rejected' && filteredRequests.length > 0 && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (window.confirm(`האם למחוק לצמיתות את כל ${filteredRequests.length} בקשות הקליטה שנדחו מהמערכת?\nפעולה זו תמחק אותן לחלוטין ולא ניתנת לשחזור.`)) {
+                    for (const req of filteredRequests) {
+                      await onDeleteRequest(req.id);
+                    }
+                  }
+                }}
+                className="bg-red-50 hover:bg-red-100 active:scale-98 text-red-700 border border-red-200 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs whitespace-nowrap"
+                title="מחיקה סופית של כל הבקשות שנדחו מהמערכת"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                <span>מחק הכל ({filteredRequests.length})</span>
+              </button>
+            )}
+
+            <div className="relative min-w-[200px]">
+              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="חיפוש לפי שם, כלב או טלפון..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pr-9 pl-3 py-1.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
           </div>
         </div>
 
@@ -503,16 +563,55 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         <span>קלוט ליומן הראשי 🟢</span>
                       </button>
 
-                      {/* Reject / Dismiss */}
-                      {req.status !== 'rejected' && (
+                      {/* Reject / Dismiss OR Restore & Permanent Deletion */}
+                      {req.status !== 'rejected' ? (
                         <button
                           type="button"
-                          onClick={() => onUpdateStatus(req.id, 'rejected')}
+                          onClick={() => handleOpenRejectPrompt(req)}
                           className="bg-white hover:bg-red-50 text-red-600 border border-slate-200 hover:border-red-200 font-bold px-2.5 py-1.5 rounded-xl text-xs transition-colors cursor-pointer"
-                          title="סגור / דחה בקשה"
+                          title="דחה בקשה זו (עם אפשרות שליחת הודעת וואטסאפ מנומסת ללקוח)"
                         >
                           דחה
                         </button>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          {/* Send rejection WhatsApp message */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenRejectPrompt(req)}
+                            className="bg-emerald-50 hover:bg-emerald-100 active:scale-98 text-emerald-800 border border-emerald-300 font-bold px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                            title="שלח הודעת דחייה מנומסת בוואטסאפ ללקוח"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>הודעת דחייה 💬</span>
+                          </button>
+
+                          {/* Restore / Reopen */}
+                          <button
+                            type="button"
+                            onClick={() => onUpdateStatus(req.id, 'pending')}
+                            className="bg-slate-100 hover:bg-slate-200 active:scale-98 text-slate-700 border border-slate-300 font-bold px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                            title="החזר את הבקשה לסטטוס ממתין לבדיקה"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
+                            <span>שחזר</span>
+                          </button>
+
+                          {/* Permanent Deletion */}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (window.confirm(`האם למחוק סופית את בקשת הקליטה של ${req.dogName} (${req.ownerName})?\nפעולה זו תמחק את הבקשה לחלוטין מהמערכת ללא אפשרות שחזור.`)) {
+                                await onDeleteRequest(req.id);
+                              }
+                            }}
+                            className="bg-red-600 hover:bg-red-700 active:scale-98 text-white font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                            title="מחיקה סופית ומוחלטת של ההזמנה/בקשה מהמערכת"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>מחיקה סופית 🗑️</span>
+                          </button>
+                        </div>
                       )}
                     </div>
 
@@ -1140,6 +1239,99 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 <MessageCircle className="w-4 h-4" />
                 <span>{isSendingPayment ? 'מעדכן ושולח...' : '📲 שלח עכשיו בוואטסאפ'}</span>
               </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* REJECT WITH WHATSAPP SUB-MODAL */}
+      {rejectPromptRequest && (
+        <div className="fixed inset-0 z-70 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 bg-red-50/70 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-800 flex items-center justify-center font-black text-lg shadow-2xs">
+                  💬
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                    דחיית בקשת קליטה ושליחת הודעה ללקוח
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    עבור {rejectPromptRequest.ownerName} ({rejectPromptRequest.dogName}) · {rejectPromptRequest.ownerPhone}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRejectPromptRequest(null)}
+                className="w-8 h-8 rounded-xl bg-white hover:bg-slate-200 text-slate-500 flex items-center justify-center cursor-pointer border border-slate-200 shadow-2xs"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 sm:p-5 space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-900 block flex items-center justify-between">
+                  <span>נוסח הודעת הדחייה המנומסת (ניתן לערוך בחופשיות):</span>
+                  <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    שליחה ישירה לוואטסאפ
+                  </span>
+                </label>
+                <textarea
+                  rows={6}
+                  value={rejectMessageText}
+                  onChange={(e) => setRejectMessageText(e.target.value)}
+                  className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-red-400 rounded-xl p-3 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500/20 leading-relaxed font-sans"
+                  placeholder="הזן נוסח הודעה..."
+                />
+              </div>
+
+              <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3 text-[11px] text-amber-900 space-y-1">
+                <span className="font-bold block">💡 בחר כיצד להמשיך:</span>
+                <p>
+                  באפשרותך לדחות את הבקשה ולפתוח מיד הודעת וואטסאפ מנוסחת היטב ללקוח, או לדחות את הבקשה במערכת בלבד ללא יצירת קשר.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setRejectPromptRequest(null)}
+                className="bg-white hover:bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-xl border border-slate-300 cursor-pointer text-xs"
+              >
+                ביטול
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isProcessingReject}
+                  onClick={handleConfirmRejectWithoutWhatsApp}
+                  className="bg-white hover:bg-red-50 text-red-700 border border-red-200 font-bold px-3.5 py-2 rounded-xl text-xs cursor-pointer transition-colors shadow-2xs"
+                  title="עדכן סטטוס לנדחה במערכת ללא פתיחת הודעת וואטסאפ"
+                >
+                  דחה בלבד (ללא הודעה)
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isProcessingReject}
+                  onClick={handleConfirmRejectWithWhatsApp}
+                  className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-4 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 text-xs transition-all"
+                  title="עדכן לנדחה ופתח שיחת וואטסאפ עם ההודעה המנוסחת ללקוח"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>📲 דחה ושלח בוואטסאפ</span>
+                </button>
+              </div>
             </div>
 
           </div>

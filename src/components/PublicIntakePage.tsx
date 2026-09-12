@@ -137,12 +137,12 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       setEndDate(addDays(s, 2)); // Friday + 2 days = Sunday!
       setSaturdayWarning(null);
     } else if (preset === 'midweek') {
-      // Upcoming Sunday to Thursday (4 nights)
+      // Upcoming Sunday to Friday (5 nights: Sunday to Friday morning, including Thursday night)
       let daysToSun = (7 - day) % 7;
       if (day === 0) daysToSun = 7;
       const s = addDays(today, daysToSun);
       setStartDate(s);
-      setEndDate(addDays(s, 4)); // Sunday + 4 days = Thursday
+      setEndDate(addDays(s, 5)); // Sunday + 5 days = Friday!
       setSaturdayWarning(null);
     } else if (preset === 'week') {
       let targetEnd = addDays(startDate, 7);
@@ -782,9 +782,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                         id: 'midweek', 
                         icon: '💼', 
                         title: 'אמצע שבוע', 
-                        subtitle: 'ראשון ➔ חמישי', 
-                        detail: '4 לילות',
-                        matches: nightsCount === 4 && getDayNameHebrew(startDate) === 'ראשון' && getDayNameHebrew(endDate) === 'חמישי'
+                        subtitle: 'ראשון ➔ שישי (עד 14:00)', 
+                        detail: '5 לילות',
+                        matches: nightsCount === 5 && getDayNameHebrew(startDate) === 'ראשון' && getDayNameHebrew(endDate) === 'שישי'
                       },
                       { 
                         id: 'week', 
@@ -828,6 +828,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                       </button>
                     ))}
                   </div>
+                  <p className="text-[11px] text-slate-500 font-bold text-center mt-2.5">
+                    💡 בחירה בלחצן מהיר מגדירה תאריכים מראש, אך ניתן תמיד לערוך ולשנות את התאריכים באופן חופשי בשדות למטה לפי רצונכם.
+                  </p>
                 </div>
 
                 {/* 3. Check-out Date */}

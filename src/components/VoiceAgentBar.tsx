@@ -136,50 +136,7 @@ export const VoiceAgentBar: React.FC<VoiceAgentBarProps> = ({
         </div>
       )}
 
-      {/* Quick Prompt Chips */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar text-xs">
-        <span className="text-slate-400 font-semibold shrink-0 text-[11px]">הוראות מהירות לסוכן:</span>
-        <button
-          type="button"
-          onClick={() => handleExecute('שריין מקום לפנסיון לכלב לאקי של דני ממחר עד סוף השבוע 500 שח שילם מקדמה 150')}
-          disabled={isProcessing}
-          className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-lg shrink-0 font-medium cursor-pointer transition-colors"
-        >
-          ✨ שריון לפנסיון
-        </button>
-        <button
-          type="button"
-          onClick={() => handleExecute('הורד קובץ גיבוי של כל הנתונים')}
-          disabled={isProcessing}
-          className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 px-2.5 py-1 rounded-lg shrink-0 font-medium cursor-pointer transition-colors"
-        >
-          💾 בצע גיבוי
-        </button>
-        <button
-          type="button"
-          onClick={() => handleExecute('למחוק את כל הנתונים ביומן')}
-          disabled={isProcessing}
-          className="bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 px-2.5 py-1 rounded-lg shrink-0 font-medium cursor-pointer transition-colors"
-        >
-          🧹 מחק את כל הנתונים
-        </button>
-        <button
-          type="button"
-          onClick={() => handleExecute('רשום תהליך אילוף 70 יום לכלב')}
-          disabled={isProcessing}
-          className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-lg shrink-0 font-medium cursor-pointer transition-colors"
-        >
-          🎓 תהליך אילוף (70 יום)
-        </button>
-        <button
-          type="button"
-          onClick={() => handleExecute('עבור למסך דוחות כספיים')}
-          disabled={isProcessing}
-          className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 px-2.5 py-1 rounded-lg shrink-0 font-medium cursor-pointer transition-colors"
-        >
-          💰 עבור לדוחות
-        </button>
-      </div>
+
 
       {/* Main Bottom Control Row matching the screenshot */}
       <div className="flex items-center gap-3 w-full">

@@ -101,6 +101,25 @@ export function formatClientPaymentLinkMessage(
 }
 
 /**
+ * Format polite rejection message to send to the client via WhatsApp
+ */
+export function formatClientRejectionMessage(
+  request: IntakeRequest,
+  settings: ResortSettings
+): string {
+  const datesText = request.serviceType === 'training'
+    ? `החל מתאריך ${request.startDate}`
+    : `בתאריכים אלו (${request.startDate} עד ${request.endDate})`;
+
+  return `היי ${request.ownerName}, תודה רבה על פנייתך ל${settings.resortName} 🐾
+לצערי ${datesText} אנו בתפוסה מלאה ולא נוכל לקלוט את ${request.dogName}.
+נשמח מאוד לעמוד לשירותכם במועד אחר! 🙏🐕
+
+בברכה חמה,
+${settings.managerName || 'שמוליק'} - ${settings.resortName}`;
+}
+
+/**
  * Send automated WhatsApp alert to the Resort phone (autonomous background CallMeBot or direct link)
  */
 export async function sendResortWhatsAppNotification(

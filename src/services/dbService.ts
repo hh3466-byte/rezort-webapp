@@ -313,7 +313,7 @@ export const subscribeToBookings = (
         const activeBookings = rawBookings.filter(b => {
           if (localDeletedIds.has(b.id)) {
             // Silently purge from Supabase in background
-            supabase.from(BOOKINGS_TABLE).delete().eq('id', b.id).catch(() => {});
+            Promise.resolve(supabase.from(BOOKINGS_TABLE).delete().eq('id', b.id)).catch(() => {});
             return false;
           }
           return true;
@@ -348,7 +348,7 @@ export const subscribeToBookings = (
         if (duplicateIdsToDelete.length > 0) {
           for (const dupId of duplicateIdsToDelete) {
             markBookingAsDeleted(dupId);
-            supabase.from(BOOKINGS_TABLE).delete().eq('id', dupId).catch(() => {});
+            Promise.resolve(supabase.from(BOOKINGS_TABLE).delete().eq('id', dupId)).catch(() => {});
           }
         }
 
@@ -1067,32 +1067,34 @@ export const deleteIntakeRequestFromDb = async (id: string): Promise<void> => {
     const updated = current.filter(r => r.id !== id);
     localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(updated));
 
-    const { error } = await supabase
-      .from(INTAKE_REQUESTS_TABLE)
-      .delete()
-      .eq('id', id);
+    // 1. Delete from intake_requests table if it exists
+    try {
+      await supabase
+        .from(INTAKE_REQUESTS_TABLE)
+        .delete()
+        .eq('id', id);
+    } catch (e1) {}
 
-    if (error) {
-      try {
-        const { data: sRow } = await supabase
-          .from(SETTINGS_TABLE)
-          .select('data')
-          .eq('id', SETTINGS_DOC_ID)
-          .single();
+    // 2. Always delete from settings.data.intakeRequests
+    try {
+      const { data: sRow } = await supabase
+        .from(SETTINGS_TABLE)
+        .select('data')
+        .eq('id', SETTINGS_DOC_ID)
+        .single();
 
-        const extraData = (sRow && sRow.data && typeof sRow.data === 'object') ? sRow.data : {};
-        const existing: IntakeRequest[] = Array.isArray(extraData.intakeRequests) ? extraData.intakeRequests : [];
-        const filtered = existing.filter(r => r.id !== id);
+      const extraData = (sRow && sRow.data && typeof sRow.data === 'object') ? sRow.data : {};
+      const existing: IntakeRequest[] = Array.isArray(extraData.intakeRequests) ? extraData.intakeRequests : [];
+      const filtered = existing.filter(r => r.id !== id);
 
-        await supabase
-          .from(SETTINGS_TABLE)
-          .update({
-            data: { ...extraData, intakeRequests: filtered },
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', SETTINGS_DOC_ID);
-      } catch (e2) {}
-    }
+      await supabase
+        .from(SETTINGS_TABLE)
+        .update({
+          data: { ...extraData, intakeRequests: filtered },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', SETTINGS_DOC_ID);
+    } catch (e2) {}
   } catch (e) {
     console.warn('deleteIntakeRequestFromDb error:', e);
   }
@@ -1178,13 +1180,16 @@ export const subscribeToIntakeRequests = (
             .eq('id', SETTINGS_DOC_ID)
             .single();
 
-          if (sRow?.data?.intakeRequests && Array.isArray(sRow.data.intakeRequests) && sRow.data.intakeRequests.length > 0) {
+          if (sRow?.data?.intakeRequests && Array.isArray(sRow.data.intakeRequests)) {
             const list: IntakeRequest[] = sRow.data.intakeRequests;
             localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(list));
             callback(list);
             return;
           }
         } catch (e2) {}
+
+        localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify([]));
+        callback([]);
       }
     } catch (e) {
       callback(loadStoredIntakeRequests());

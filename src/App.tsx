@@ -1214,6 +1214,7 @@ export default function App() {
           onClose={() => setIsIntakeModalOpen(false)}
           onUpdateStatus={async (id, status, notes) => {
             await updateIntakeRequestStatusInDb(id, status, notes);
+            setIntakeRequests(prev => prev.map(r => r.id === id ? { ...r, status, ...(notes !== undefined ? { internalNotes: notes } : {}) } : r));
             showToast('סטטוס בקשת הקליטה עודכן');
           }}
           onSaveRequest={async (updatedReq) => {
@@ -1241,11 +1242,13 @@ export default function App() {
               }
             });
             await updateIntakeRequestStatusInDb(req.id, 'approved');
+            setIntakeRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'approved' } : r));
             setIsIntakeModalOpen(false);
           }}
           onDeleteRequest={async (id) => {
             await deleteIntakeRequestFromDb(id);
-            showToast('בקשת הקליטה הוסרה');
+            setIntakeRequests(prev => prev.filter(r => r.id !== id));
+            showToast('בקשת הקליטה נמחקה סופית מהמערכת 🗑️');
           }}
         />
       )}
