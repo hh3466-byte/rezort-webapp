@@ -588,14 +588,14 @@ export default function App() {
       <div className="max-w-6xl mx-auto space-y-4">
         
         {/* Top Header Row */}
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1 pb-1">
+        <header className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 pt-1 pb-2 border-b border-slate-100">
           
-          {/* Left Buttons in RTL (top left): + הזמנה חדשה, בקשות קליטה, חוות דעת, משותף, הגדרות */}
-          <div className="flex flex-wrap items-center gap-2.5 order-2 sm:order-1">
+          {/* Action Buttons (Left in RTL) */}
+          <div className="flex flex-wrap items-center gap-2 order-3 xl:order-1">
             <button
               onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
               id="btn-new-booking-top"
-              className="bg-[#065f46] hover:bg-[#044e45] active:scale-98 text-white font-bold px-4 py-2.5 rounded-xl text-sm shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="bg-[#065f46] hover:bg-[#044e45] active:scale-98 text-white font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <span>+</span>
               <span>הזמנה חדשה</span>
@@ -617,6 +617,17 @@ export default function App() {
               )}
             </button>
 
+            {/* Reports Button */}
+            <button
+              type="button"
+              onClick={() => setIsReportsOpen(true)}
+              className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 hover:border-amber-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="דוחות כספיים ותפוסה"
+            >
+              <span>💰</span>
+              <span>דוחות</span>
+            </button>
+
             {/* Public Intake Link Button */}
             <button
               type="button"
@@ -624,7 +635,7 @@ export default function App() {
               className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 text-slate-600 hover:text-emerald-700 font-semibold px-2.5 py-2 rounded-xl text-xs shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
               title="פתיחת שאלון הקליטה המקוון (אותו שולחים ללקוחות פונים בוואטסאפ)"
             >
-              <span>🔗 שאלון קליטה</span>
+              <span>🔗 שאלון</span>
             </button>
 
             {/* Notification button for pending review requests (dogs checked out yesterday) */}
@@ -640,36 +651,91 @@ export default function App() {
               </button>
             )}
 
-            <div className="flex items-center gap-1.5 bg-[#eff6ff] border border-blue-100 text-blue-700 px-3 py-1.5 rounded-full text-xs font-semibold shadow-2xs">
-              <span>🔮</span>
-              <span>משותף</span>
-            </div>
-
+            {/* Settings Button */}
             <button
               onClick={handleOpenSettingsWithAuth}
               id="btn-settings-top"
-              className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold px-3 py-1.5 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
               title="הגדרות תפוסה, תעריפים, ביט וגיבוי (אישור מנהל)"
             >
               <SettingsIcon className="w-4 h-4 text-emerald-700" />
-              <span>⚙️ הגדרות ותעריפים</span>
+              <span>⚙️ הגדרות</span>
+            </button>
+
+            <div className="hidden sm:flex items-center gap-1.5 bg-[#eff6ff] border border-blue-100 text-blue-700 px-2.5 py-1.5 rounded-full text-xs font-semibold shadow-2xs">
+              <span>🔮</span>
+              <span>משותף</span>
+            </div>
+          </div>
+
+          {/* Main View Navigation Tabs (Center in RTL) */}
+          <div className="flex items-center justify-center order-2 bg-slate-100/90 p-1 rounded-2xl border border-slate-200 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setActiveTab('calendar')}
+              className={`text-xs sm:text-sm font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'calendar'
+                  ? 'bg-[#065f46] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+            >
+              <span>📅</span>
+              <span>יומן</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('forecast')}
+              className={`text-xs sm:text-sm font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'forecast'
+                  ? 'bg-[#065f46] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+            >
+              <span>📊</span>
+              <span>תפוסה</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('bookings')}
+              className={`text-xs sm:text-sm font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'bookings'
+                  ? 'bg-[#065f46] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+            >
+              <span>📋</span>
+              <span>הזמנות ({activeBookings.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('customers')}
+              className={`text-xs sm:text-sm font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'customers'
+                  ? 'bg-[#065f46] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+            >
+              <span>⭐</span>
+              <span>לקוחות</span>
             </button>
           </div>
 
           {/* Right Brand Title & Subtitle with Official Resort Logo in RTL */}
-          <div className="text-right order-1 sm:order-2 flex items-center justify-end gap-3">
-            {/* Official Resort Logo placed to the left in continuation to the line */}
+          <div className="text-right order-1 xl:order-3 flex items-center justify-end gap-3 shrink-0">
             <img 
               src="/resort-logo.svg" 
               alt="לוגו הריזורט לכלב" 
-              className="w-11 h-11 sm:w-13 sm:h-13 object-contain drop-shadow-xs hover:scale-105 transition-transform shrink-0" 
+              className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow-xs hover:scale-105 transition-transform shrink-0" 
             />
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-[#0f4c3a] tracking-tight flex items-center justify-end gap-2">
+              <h1 className="text-xl sm:text-2xl font-black text-[#0f4c3a] tracking-tight flex items-center justify-end gap-1.5">
                 <span>יומן הריזורט לכלב</span>
                 <span>🐕</span>
               </h1>
-              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
                 דבר אליי — ואני אנהל את היומן: הזמנות, תשלומים ותפוסה
               </p>
             </div>
@@ -863,92 +929,7 @@ export default function App() {
         {/* Voice & Text Smart Assistant Input Bar */}
         <VoiceAgentBar onProcessCommand={handleAgentProcess} />
 
-        {/* Navigation Tabs Bar (Pills matching image) */}
-        <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 no-scrollbar">
-          
-          {/* Left Button in RTL: היום */}
-          <button
-            onClick={handleJumpToToday}
-            className="bg-white hover:bg-emerald-50 border border-emerald-500 text-emerald-700 text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all cursor-pointer shrink-0 shadow-2xs"
-          >
-            היום
-          </button>
 
-          {/* Right Tabs Group in RTL */}
-          <div className="flex items-center gap-2 shrink-0">
-            
-            {/* Tab: גיבוי & הגדרות */}
-            <button
-              onClick={handleOpenSettingsWithAuth}
-              className="bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-            >
-              <span>💾</span>
-              <span>גיבוי</span>
-            </button>
-
-            {/* Tab: דוחות */}
-            <button
-              onClick={() => setIsReportsOpen(true)}
-              className="bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-            >
-              <span>💰</span>
-              <span>דוחות</span>
-            </button>
-
-            {/* Tab: לקוחות */}
-            <button
-              onClick={() => setActiveTab('customers')}
-              className={`text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
-                activeTab === 'customers'
-                  ? 'bg-[#065f46] text-white border border-[#065f46]'
-                  : 'bg-white hover:bg-slate-100 border border-slate-200 text-slate-700'
-              }`}
-            >
-              <span>⭐</span>
-              <span>לקוחות</span>
-            </button>
-
-            {/* Tab: הזמנות */}
-            <button
-              onClick={() => setActiveTab('bookings')}
-              className={`text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
-                activeTab === 'bookings'
-                  ? 'bg-[#065f46] text-white border border-[#065f46]'
-                  : 'bg-white hover:bg-slate-100 border border-slate-200 text-slate-700'
-              }`}
-            >
-              <span>📋</span>
-              <span>הזמנות ({activeBookings.length})</span>
-            </button>
-
-            {/* Tab: תפוסה */}
-            <button
-              onClick={() => setActiveTab('forecast')}
-              className={`text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
-                activeTab === 'forecast'
-                  ? 'bg-[#065f46] text-white border border-[#065f46]'
-                  : 'bg-white hover:bg-slate-100 border border-slate-200 text-slate-700'
-              }`}
-            >
-              <span>📊</span>
-              <span>תפוסה</span>
-            </button>
-
-            {/* Tab: יומן */}
-            <button
-              onClick={() => setActiveTab('calendar')}
-              className={`text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs ${
-                activeTab === 'calendar'
-                  ? 'bg-[#065f46] text-white border border-[#065f46]'
-                  : 'bg-white hover:bg-slate-100 border border-slate-200 text-slate-700'
-              }`}
-            >
-              <span>📅</span>
-              <span>יומן</span>
-            </button>
-
-          </div>
-        </div>
 
         {/* Active View Container */}
         <main className="transition-all">
