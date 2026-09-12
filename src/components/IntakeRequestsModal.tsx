@@ -405,7 +405,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         req.isFriendlyWithDogs === 'no' ? 'text-red-700' : 'text-amber-700'
                       }`}>
                         {req.isFriendlyWithDogs === 'yes' ? 'חברותי 🟢' :
-                         req.isFriendlyWithDogs === 'no' ? 'תוקפני 🔴' : 'תלוי 🟡'}
+                         req.isFriendlyWithDogs === 'no' ? 'חייב בידוד / תוקפני 🔴' : 'תלוי 🟡'}
                       </span>
                     </div>
 
@@ -936,7 +936,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       {[
                         { id: 'yes', label: 'חברותי 🟢' },
                         { id: 'depends', label: 'תלוי 🟡' },
-                        { id: 'no', label: 'תוקפני 🔴' },
+                        { id: 'no', label: 'חייב בידוד / תוקפני 🔴' },
                       ].map(f => (
                         <button
                           key={f.id}

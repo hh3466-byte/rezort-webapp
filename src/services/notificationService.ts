@@ -8,7 +8,7 @@ export function formatIntakeNotification(request: IntakeRequest): string {
   const serviceName = getServiceTypeHebrew(request.serviceType);
   const friendlyLabel = 
     request.isFriendlyWithDogs === 'yes' ? 'כן 🟢' :
-    request.isFriendlyWithDogs === 'no' ? 'לא 🔴' : 'תלוי בסיטואציה 🟡';
+    request.isFriendlyWithDogs === 'no' ? 'לא / תוקפני / חייב בידוד 🔴' : 'תלוי בסיטואציה 🟡';
 
   const neuteredLabel = request.isNeutered ? 'כן ✂️' : 'לא';
   const vaccinatedLabel = request.isVaccinated ? 'כן בתוקף 💉' : 'חסר/לא ידוע ⚠️';

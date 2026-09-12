@@ -925,7 +925,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                   {[
                     { id: 'yes', label: 'כן, חברותי מאוד 🟢' },
                     { id: 'depends', label: 'תלוי בסיטואציה 🟡' },
-                    { id: 'no', label: 'לא / תוקפני / לבד 🔴' },
+                    { id: 'no', label: 'לא / תוקפני / לבד / חייב בידוד 🔴' },
                   ].map((f) => (
                     <button
                       key={f.id}
