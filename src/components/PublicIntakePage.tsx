@@ -871,14 +871,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                     <p>
                       • <strong>בשישי וערב חג:</strong> עד שעה <strong>14:00</strong> ובצאת השבת / החג משעה <strong>09:00</strong>.
                     </p>
-                    <div className="text-amber-950 bg-amber-100/90 p-2.5 sm:p-3 rounded-xl border border-amber-300/90 font-black leading-relaxed space-y-1.5 mt-1">
+                    <div className="text-amber-950 bg-amber-100/90 p-2.5 sm:p-3 rounded-xl border border-amber-300/90 font-black leading-relaxed space-y-1 mt-1">
                       <p className="text-[11px] sm:text-xs">
-                        בשעות שאין שירות לקוחות, אנו לא עוסקים בהולכים על 2.<br />
-                        אנו מתמקדים אך ורק בטיפול וברווחה רק למי שיש לו 4 רגליים וזנב 🐾
-                      </p>
-                      <p className="text-[11px] sm:text-xs">
-                        לכן על הבעלים להתגבר ולהתאפק עד למחרת לצאת השבת / החג לשעה 09:00 שאז נחדש את שירות הלקוחות לבעלי הכלבים.<br />
-                        תודה על ההתחשבות.
+                        מעבר לשעות הפעילות (לפני 09:00 ואחרי 19:00), ובסופי שבוע וחגים על הבעלים להתגבר ולהתאפק! בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐾
                       </p>
                     </div>
                   </div>
