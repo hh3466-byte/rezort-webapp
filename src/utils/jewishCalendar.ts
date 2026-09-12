@@ -144,6 +144,24 @@ export function getOccasionWord(dateStr?: string): string {
 }
 
 /**
+ * Extract only the first name of the owner for personal, natural messages.
+ * e.g., "ישראל ישראלי" -> "ישראל", "דני כהן" -> "דני", "דני ומיכל כהן" -> "דני ומיכל"
+ */
+export function getFirstName(fullName: string): string {
+  if (!fullName) return '';
+  // Remove common salutations if present
+  const clean = fullName.trim().replace(/^(מר|גב'|גברת|ד"ר|דוקטור)\s+/i, '');
+  
+  // Handle couple names like "דני ומיכל כהן", "דני ומיכל", "יוסי & דנה"
+  const coupleMatch = clean.match(/^([\u0590-\u05FF\w]+(?:\s*(?:ו|ועם|\&|\+)\s*[\u0590-\u05FF\w]+))/);
+  if (coupleMatch) {
+    return coupleMatch[1];
+  }
+  // Standard "First Last" -> "First"
+  return clean.split(/\s+/)[0] || clean;
+}
+
+/**
  * Format the warm personal dog message as requested by Shmulik:
  * שלום (שם הבעלים) למרות שאין שירות לקוחות להולכים על 2 בסופ"ש/חג (לפי הצורך), אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.
  * אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.
@@ -156,16 +174,18 @@ export function formatShabbatHolidayGreeting(
   dateStr?: string
 ): string {
   const occasionWord = getOccasionWord(dateStr);
+  const firstName = getFirstName(ownerName);
+  const cleanDog = (dogName || '').trim();
 
   if (customTemplate) {
     return customTemplate
-      .replace(/{ownerName}/g, ownerName)
-      .replace(/{dogName}/g, dogName)
-      .replace(/\(שם הבעלים\)/g, ownerName)
-      .replace(/\(שם הכלב\)/g, dogName)
+      .replace(/{ownerName}/g, firstName)
+      .replace(/{dogName}/g, cleanDog)
+      .replace(/\(שם הבעלים\)/g, firstName)
+      .replace(/\(שם הכלב\)/g, cleanDog)
       .replace(/בסופ"ש\/חג \(לפי הצורך\)/g, occasionWord)
       .replace(/בסופ"ש\/חג/g, occasionWord)
       .replace(/{occasion}/g, occasionWord);
   }
-  return `שלום ${ownerName} למרות שאין שירות לקוחות להולכים על 2 ${occasionWord}, אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.\nאז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.\n${dogName}`;
+  return `שלום ${firstName} למרות שאין שירות לקוחות להולכים על 2 ${occasionWord}, אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.\nאז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.\n${cleanDog}`;
 }

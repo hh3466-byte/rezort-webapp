@@ -33,14 +33,29 @@ export function getServiceTypeHebrew(type: string): string {
 }
 
 /**
+ * Extract only the first name of the owner for warm, natural messages.
+ * e.g., "ישראל ישראלי" -> "ישראל", "דני כהן" -> "דני", "דני ומיכל כהן" -> "דני ומיכל"
+ */
+export function getFirstName(fullName: string): string {
+  if (!fullName) return '';
+  const clean = fullName.trim().replace(/^(מר|גב'|גברת|ד"ר|דוקטור)\s+/i, '');
+  const coupleMatch = clean.match(/^([\u0590-\u05FF\w]+(?:\s*(?:ו|ועם|\&|\+)\s*[\u0590-\u05FF\w]+))/);
+  if (coupleMatch) {
+    return coupleMatch[1];
+  }
+  return clean.split(/\s+/)[0] || clean;
+}
+
+/**
  * Generate Hebrew WhatsApp payment reminder message
  */
 export function generatePaymentReminderMessage(booking: Booking, settings: ResortSettings): string {
   const remainingBalance = Math.max(0, booking.totalPrice - booking.depositAmount);
   const serviceHebrew = getServiceTypeHebrew(booking.serviceType);
   const datesText = `${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}`;
+  const firstName = getFirstName(booking.ownerName);
 
-  let msg = `שלום ${booking.ownerName}, כאן צוות הריזורט לכלב 🐾\n\n`;
+  let msg = `שלום ${firstName}, כאן צוות הריזורט לכלב 🐾\n\n`;
   msg += `תזכורת ידידותית לגבי השהות של *${booking.dogName}* אצלנו:\n`;
   msg += `📌 *סוג שירות:* ${serviceHebrew}\n`;
   msg += `📅 *תאריכים:* ${datesText}\n`;
@@ -75,8 +90,9 @@ export function generateBookingConfirmationMessage(booking: Booking, settings: R
   const serviceHebrew = getServiceTypeHebrew(booking.serviceType);
   const datesText = `${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}`;
   const remainingBalance = Math.max(0, booking.totalPrice - booking.depositAmount);
+  const firstName = getFirstName(booking.ownerName);
 
-  let msg = `שלום ${booking.ownerName}! 🐾\n`;
+  let msg = `שלום ${firstName}! 🐾\n`;
   msg += `שמחים לעדכן כי המקום עבור *${booking.dogName}* שוריין בהצלחה ב${settings.resortName}!\n\n`;
   msg += `📋 *פרטי ההזמנה:*\n`;
   msg += `🐕 *שם הכלב:* ${booking.dogName} (${booking.dogBreed || 'גזע כללי'})\n`;

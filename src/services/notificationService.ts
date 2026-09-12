@@ -1,5 +1,5 @@
 import { IntakeRequest, Booking, ResortSettings } from '../types';
-import { cleanPhoneNumber, getServiceTypeHebrew } from '../utils/whatsappUtils';
+import { cleanPhoneNumber, getServiceTypeHebrew, getFirstName } from '../utils/whatsappUtils';
 import { formatDateIL } from '../utils/dateUtils';
 
 /**
@@ -86,7 +86,9 @@ export function formatClientPaymentLinkMessage(
     ? `לתכנית אילוף בריזורט לכלב החל מתאריך ${formatDateIL(request.startDate)}`
     : `בריזורט לכלב בין התאריכים ${formatDateIL(request.startDate)} עד ${formatDateIL(request.endDate)}`;
 
-  return `היי ${request.ownerName}, שמחנו לשוחח! 🐾🐶
+  const firstName = getFirstName(request.ownerName);
+
+  return `היי ${firstName}, שמחנו לשוחח! 🐾🐶
 שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר ${stayText}.${amountSection}
 להשלמת השריון, מצורף הקישור המאובטח לתשלום${amountInstruction}:
 👉 ${paymentLink}
@@ -112,7 +114,9 @@ export function formatClientRejectionMessage(
     ? `החל מתאריך ${formatDateIL(request.startDate)}`
     : `בתאריכים אלו (${formatDateIL(request.startDate)} עד ${formatDateIL(request.endDate)})`;
 
-  return `היי ${request.ownerName}, תודה רבה על פנייתך ל${settings.resortName} 🐾
+  const firstName = getFirstName(request.ownerName);
+
+  return `היי ${firstName}, תודה רבה על פנייתך ל${settings.resortName} 🐾
 לצערי ${datesText} אנו בתפוסה מלאה ולא נוכל לקלוט את ${request.dogName}.
 נשמח מאוד לעמוד לשירותכם במועד אחר! 🙏🐕
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { IntakeRequest, IntakeRequestStatus, ResortSettings, Booking } from '../types';
-import { cleanPhoneNumber, getServiceTypeHebrew } from '../utils/whatsappUtils';
+import { cleanPhoneNumber, getServiceTypeHebrew, getFirstName } from '../utils/whatsappUtils';
 import { formatClientPaymentLinkMessage, formatClientRejectionMessage } from '../services/notificationService';
 import { SendIntakeModal } from './SendIntakeModal';
 import { 
@@ -618,7 +618,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         {/* שורה שלישית: לחץ לוואטסאפ איתו */}
                         <div className="pt-0.5">
                           <a
-                            href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(`שלום ${req.ownerName}, כאן שמוליק מ${settings.resortName} 🐾 בהמשך לטופס בקשת הקליטה ששלחתם עבור ${req.dogName}`)}`}
+                            href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(`שלום ${getFirstName(req.ownerName)}, כאן שמוליק מ${settings.resortName} 🐾 בהמשך לטופס בקשת הקליטה ששלחתם עבור ${req.dogName}`)}`}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black px-4 py-2 rounded-xl text-sm transition-all shadow-xs cursor-pointer hover:shadow-md"
