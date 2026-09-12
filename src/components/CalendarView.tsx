@@ -32,7 +32,7 @@ import {
 } from '../utils/dateUtils';
 import { getServiceTypeHebrew } from '../utils/whatsappUtils';
 
-export type CalendarDisplayMode = 'month' | 'week' | 'day';
+export type CalendarDisplayMode = 'month' | 'two_weeks' | 'week' | 'day';
 
 interface CalendarViewProps {
   bookings: Booking[];
@@ -47,6 +47,8 @@ interface CalendarViewProps {
   onSetMonth?: (month: number) => void;
   onSetYear?: (year: number) => void;
   onJumpToToday?: () => void;
+  monthToDateRevenue?: number;
+  onOpenRevenueMetric?: () => void;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -62,15 +64,39 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onSetMonth,
   onSetYear,
   onJumpToToday,
+  monthToDateRevenue,
+  onOpenRevenueMetric,
 }) => {
   const todayStr = getTodayStr();
-  const [displayMode, setDisplayMode] = useState<CalendarDisplayMode>('month');
+  const [displayMode, setDisplayMode] = useState<CalendarDisplayMode>('two_weeks');
   const [focusedDate, setFocusedDate] = useState<string>(todayStr);
 
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
   const daysGrid = getMonthGrid(currentYear, currentMonth);
   const weekDays = getWeekDays(focusedDate);
   const dayBreakdown = getDailyBreakdown(activeBookings, focusedDate);
+
+  // Two weeks view computation (14 days starting from focusedDate)
+  const twoWeeksDays = React.useMemo(() => {
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+      const dStr = addDays(focusedDate, i);
+      const d = new Date(dStr + 'T12:00:00');
+      days.push({
+        dateStr: dStr,
+        dayName: HEBREW_DAYS[d.getDay()],
+        dayNumber: d.getDate(),
+        monthNumber: d.getMonth() + 1,
+        isToday: dStr === todayStr,
+      });
+    }
+    return days;
+  }, [focusedDate, todayStr]);
+
+  const twoWeeksStart = twoWeeksDays[0]?.dateStr || focusedDate;
+  const twoWeeksEnd = twoWeeksDays[13]?.dateStr || focusedDate;
+  const twoWeeksActiveBookings = activeBookings.filter(b => b.startDate <= twoWeeksEnd && b.endDate >= twoWeeksStart);
+  const twoWeeksUniqueDogs = new Set(twoWeeksActiveBookings.map(b => b.dogName)).size;
 
   const monthStart = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-01`;
   const lastDayInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -82,6 +108,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const weekEnd = weekDays[6].dateStr;
   const weekActiveBookings = activeBookings.filter(b => b.startDate <= weekEnd && b.endDate >= weekStart);
   const weekUniqueDogs = new Set(weekActiveBookings.map(b => b.dogName)).size;
+
+  const handlePrevTwoWeeks = () => {
+    setFocusedDate(prev => addDays(prev, -14));
+  };
+
+  const handleNextTwoWeeks = () => {
+    setFocusedDate(prev => addDays(prev, 14));
+  };
 
   const handlePrevWeek = () => {
     setFocusedDate(prev => addDays(prev, -7));
@@ -135,11 +169,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   return (
     <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-6 shadow-xs select-none" dir="rtl">
       
-      {/* Top Controls: Navigation + Fast Dropdowns + View Mode Switcher */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+      {/* Top Controls: Centered Navigation Toolbar + Attached View Mode Switcher */}
+      <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-6 pb-4 border-b border-slate-100">
         
         {/* Navigation Controls */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 bg-slate-50/80 p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
           
           {displayMode === 'month' && (
             <>
@@ -148,7 +182,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 type="button"
                 onClick={onPrevMonth}
                 title="חודש קודם"
-                className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200"
+                className="flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200 shadow-2xs"
               >
                 <span>›</span>
                 <span>קודם</span>
@@ -185,9 +219,37 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 type="button"
                 onClick={onNextMonth}
                 title="חודש הבא"
-                className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200"
+                className="flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200 shadow-2xs"
               >
                 <span>הבא</span>
+                <span>‹</span>
+              </button>
+            </>
+          )}
+
+          {displayMode === 'two_weeks' && (
+            <>
+              <button
+                type="button"
+                onClick={handlePrevTwoWeeks}
+                className="flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200 shadow-2xs"
+                title="14 ימים קודמים"
+              >
+                <span>›</span>
+                <span>שבועיים קודמים</span>
+              </button>
+
+              <div className="font-extrabold text-xs sm:text-sm text-emerald-950 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-300 shadow-2xs">
+                {formatDateIL(twoWeeksStart)} - {formatDateIL(twoWeeksEnd)}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleNextTwoWeeks}
+                className="flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200 shadow-2xs"
+                title="14 ימים הבאים"
+              >
+                <span>שבועיים הבאים</span>
                 <span>‹</span>
               </button>
             </>
@@ -198,20 +260,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               <button
                 type="button"
                 onClick={handlePrevWeek}
-                className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200"
+                className="flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200 shadow-2xs"
               >
                 <span>›</span>
                 <span>שבוע קודם</span>
               </button>
 
-              <div className="font-bold text-xs sm:text-sm text-slate-800 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200">
+              <div className="font-bold text-xs sm:text-sm text-slate-800 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-2xs">
                 {formatDateIL(weekDays[0].dateStr)} - {formatDateIL(weekDays[6].dateStr)}
               </div>
 
               <button
                 type="button"
                 onClick={handleNextWeek}
-                className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200"
+                className="flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200 shadow-2xs"
               >
                 <span>שבוע הבא</span>
                 <span>‹</span>
@@ -224,20 +286,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               <button
                 type="button"
                 onClick={handlePrevDay}
-                className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200"
+                className="flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200 shadow-2xs"
               >
                 <span>›</span>
                 <span>יום קודם</span>
               </button>
 
-              <div className="font-bold text-xs sm:text-sm text-emerald-900 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-200">
+              <div className="font-bold text-xs sm:text-sm text-emerald-900 bg-white px-3 py-2 rounded-xl border border-emerald-200 shadow-2xs">
                 {formatFullHebrewDate(focusedDate)}
               </div>
 
               <button
                 type="button"
                 onClick={handleNextDay}
-                className="flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200"
+                className="flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-700 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl transition-all cursor-pointer border border-slate-200 shadow-2xs"
               >
                 <span>יום הבא</span>
                 <span>‹</span>
@@ -249,14 +311,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           <button
             type="button"
             onClick={handleJumpTodayInternal}
-            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold px-3 py-2 rounded-xl transition-colors cursor-pointer shadow-2xs"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black px-3.5 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
           >
             היום
           </button>
         </div>
 
-        {/* View Mode Toggle: חודש / שבוע / יום בודד */}
-        <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200 shrink-0 self-start sm:self-auto">
+        {/* View Mode Toggle: חודש / שבועיים קרובים / שבוע / יום בודד - הצמדה ישירה לתפריט */}
+        <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200 shrink-0 shadow-2xs">
           <button
             type="button"
             onClick={() => setDisplayMode('month')}
@@ -272,6 +334,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
           <button
             type="button"
+            onClick={() => {
+              setDisplayMode('two_weeks');
+              setFocusedDate(todayStr);
+            }}
+            className={`flex items-center gap-1.5 text-xs sm:text-sm font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
+              displayMode === 'two_weeks'
+                ? 'bg-white text-emerald-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <CalendarRange className="w-3.5 h-3.5 text-emerald-600" />
+            <span>שבועיים קרובים</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setDisplayMode('week')}
             className={`flex items-center gap-1.5 text-xs sm:text-sm font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer ${
               displayMode === 'week'
@@ -279,7 +357,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <CalendarRange className="w-3.5 h-3.5" />
+            <Clock className="w-3.5 h-3.5" />
             <span>שבוע</span>
           </button>
 
@@ -309,6 +387,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               {displayMode === 'month' && (
                 <span>חודש {HEBREW_MONTHS[currentMonth]} {currentYear}</span>
               )}
+              {displayMode === 'two_weeks' && (
+                <span>שבועיים קרובים ({formatDateIL(twoWeeksStart)} עד {formatDateIL(twoWeeksEnd)})</span>
+              )}
               {displayMode === 'week' && (
                 <span>שבוע {formatDateIL(weekDays[0].dateStr)} עד {formatDateIL(weekDays[6].dateStr)}</span>
               )}
@@ -320,6 +401,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               {displayMode === 'month' && (
                 <span>סה״כ {monthActiveBookings.length} הזמנות פעילות בחודש זה ({monthUniqueDogs} כלבים שונים)</span>
               )}
+              {displayMode === 'two_weeks' && (
+                <span>סה״כ {twoWeeksActiveBookings.length} הזמנות פעילות ב-14 הימים ({twoWeeksUniqueDogs} כלבים שונים)</span>
+              )}
               {displayMode === 'week' && (
                 <span>סה״כ {weekActiveBookings.length} הזמנות פעילות בשבוע זה ({weekUniqueDogs} כלבים שונים)</span>
               )}
@@ -330,11 +414,48 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {displayMode === 'month' && (
-            <span className="text-xs font-bold text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
-              🐾 {monthActiveBookings.length} שהויות בחודש
-            </span>
+            <>
+              <span className="text-xs font-bold text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
+                🐾 {monthActiveBookings.length} שהויות בחודש
+              </span>
+              {monthToDateRevenue !== undefined && (
+                <button
+                  type="button"
+                  onClick={onOpenRevenueMetric}
+                  className="flex items-center gap-2 bg-white hover:bg-emerald-50 text-emerald-950 border border-emerald-300 hover:border-emerald-500 text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs group active:scale-98"
+                  title="לחץ לצפייה בגרפי עמודות חודשיים ושנתיים וייצוא לאקסל"
+                >
+                  <span>💳 הכנסות מתחילת החודש:</span>
+                  <span className="font-mono text-sm font-black text-emerald-700">₪{monthToDateRevenue.toLocaleString('he-IL')}</span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md font-bold group-hover:bg-emerald-200">
+                    גרפים 📊
+                  </span>
+                </button>
+              )}
+            </>
+          )}
+          {displayMode === 'two_weeks' && (
+            <>
+              <span className="text-xs font-bold text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
+                🐾 {twoWeeksActiveBookings.length} שהויות בשבועיים הקרובים
+              </span>
+              {monthToDateRevenue !== undefined && (
+                <button
+                  type="button"
+                  onClick={onOpenRevenueMetric}
+                  className="flex items-center gap-2 bg-white hover:bg-emerald-50 text-emerald-950 border border-emerald-300 hover:border-emerald-500 text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs group active:scale-98"
+                  title="לחץ לצפייה בגרפי עמודות חודשיים ושנתיים וייצוא לאקסל"
+                >
+                  <span>💳 הכנסות מתחילת החודש:</span>
+                  <span className="font-mono text-sm font-black text-emerald-700">₪{monthToDateRevenue.toLocaleString('he-IL')}</span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md font-bold group-hover:bg-emerald-200">
+                    גרפים 📊
+                  </span>
+                </button>
+              )}
+            </>
           )}
           {displayMode === 'week' && (
             <span className="text-xs font-bold text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
@@ -348,6 +469,201 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* =========================================================================
+          MODE: TWO WEEKS VIEW (תצוגת שבועיים קרובים - 14 ימים עם כל הכלבים ומקומות פנויים ללא הסתרה)
+         ========================================================================= */}
+      {displayMode === 'two_weeks' && (
+        <div className="animate-in fade-in space-y-4" dir="rtl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 sm:gap-4 items-start">
+            {twoWeeksDays.map((day) => {
+              const dayBookings = getBookingsForDate(activeBookings, day.dateStr);
+              const isToday = day.isToday;
+              const occupiedCount = dayBookings.length;
+              const maxCap = settings.maxCapacity;
+              const freeSpots = Math.max(0, maxCap - occupiedCount);
+              const isFull = occupiedCount >= maxCap;
+              const occupancyPercent = Math.min(100, Math.round((occupiedCount / maxCap) * 100));
+
+              return (
+                <div
+                  key={day.dateStr}
+                  className={`rounded-2xl border p-3 flex flex-col justify-between transition-all ${
+                    isToday
+                      ? 'bg-emerald-50/70 border-2 border-emerald-500 shadow-md ring-2 ring-emerald-500/20'
+                      : 'bg-slate-50/50 border-slate-200 hover:border-slate-300 shadow-2xs hover:shadow-xs'
+                  }`}
+                >
+                  {/* Header: Day Name + Date + Today Badge */}
+                  <div className="pb-2 border-b border-slate-200 flex items-center justify-between">
+                    <div>
+                      <span className="font-extrabold text-sm text-slate-900 block">
+                        יום {day.dayName}
+                      </span>
+                      <span className="text-xs text-slate-500 font-medium">
+                        {formatDateIL(day.dateStr)}
+                      </span>
+                    </div>
+                    {isToday && (
+                      <span className="text-[11px] bg-emerald-600 text-white font-black px-2 py-0.5 rounded-full shadow-2xs animate-pulse">
+                        היום ⭐
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Occupancy & Free Spots Badge (בצורה מלאה ולא מוסתרת) */}
+                  <div className={`my-2 p-2 rounded-xl border ${
+                    isFull
+                      ? 'bg-red-50 border-red-200 text-red-900'
+                      : freeSpots <= 3
+                      ? 'bg-amber-50 border-amber-200 text-amber-900'
+                      : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  }`}>
+                    <div className="flex items-center justify-between text-xs font-bold mb-1">
+                      <span>תפוסה: {occupiedCount}/{maxCap}</span>
+                      <span>
+                        {isFull ? (
+                          <span className="text-red-700 font-black">בתפוסה מלאה 🔴</span>
+                        ) : (
+                          <span className="text-emerald-700 font-black">🟢 {freeSpots} מקומות פנויים</span>
+                        )}
+                      </span>
+                    </div>
+                    {/* Progress Bar */}
+                    <div className="w-full h-1.5 bg-white rounded-full overflow-hidden border border-slate-200/60">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          isFull
+                            ? 'bg-red-500'
+                            : occupiedCount > maxCap * 0.7
+                            ? 'bg-amber-500'
+                            : 'bg-emerald-500'
+                        }`}
+                        style={{ width: `${occupancyPercent}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Complete List of Dogs (בצורה מלאה ולא מוסתרת - כל הכלבים ללא slice וללא הגבלת גובה מוסתרת) */}
+                  <div className="space-y-2 my-1">
+                    {dayBookings.length === 0 ? (
+                      <div className="text-center py-4 px-2 bg-white/70 rounded-xl border border-dashed border-slate-200">
+                        <span className="text-xs text-slate-400 font-bold block">אין כלבים רשומים ליום זה</span>
+                        <span className="text-[11px] text-emerald-600 font-medium">כל {maxCap} המקומות פנויים</span>
+                      </div>
+                    ) : (
+                      dayBookings.map((b) => {
+                        const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
+                        const isPaid = b.paymentStatus === 'fully_paid';
+                        const isDeposit = b.paymentStatus === 'deposit_paid';
+                        const isArrival = b.startDate === day.dateStr;
+                        const isDeparture = b.endDate === day.dateStr;
+                        const remainingDebt = Math.max(0, Math.round(b.totalPrice - b.depositAmount));
+
+                        return (
+                          <div
+                            key={b.id}
+                            onClick={() => onSelectBooking(b)}
+                            className={`border rounded-xl p-2.5 text-xs transition-all cursor-pointer shadow-2xs hover:shadow-xs ${
+                              isEnded
+                                ? 'bg-slate-100/80 border-slate-200 text-slate-500 opacity-75'
+                                : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-900'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between font-bold">
+                              <span className="flex items-center gap-1.5 min-w-0">
+                                <Dog className={`w-3.5 h-3.5 shrink-0 ${isEnded ? 'text-slate-400' : 'text-emerald-600'}`} />
+                                <span className="truncate font-black text-slate-900">{b.dogName}</span>
+                                {b.dogBreed && (
+                                  <span className="text-[10px] text-slate-500 font-normal truncate">({b.dogBreed})</span>
+                                )}
+                              </span>
+                              <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold shrink-0">
+                                {isEnded ? '🏁 הסתיים' : getServiceTypeHebrew(b.serviceType)}
+                              </span>
+                            </div>
+
+                            <div className="text-[11px] text-slate-600 mt-1 flex items-center justify-between font-medium">
+                              <span className="truncate">{b.ownerName}</span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {!isEnded && isArrival && (
+                                  <span className="text-[10px] bg-blue-50 text-blue-800 border border-blue-200 font-bold px-1.5 py-0.2 rounded">
+                                    📥 כניסה
+                                  </span>
+                                )}
+                                {!isEnded && isDeparture && (
+                                  <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 font-bold px-1.5 py-0.2 rounded">
+                                    📤 יציאה
+                                  </span>
+                                )}
+                                {!isEnded && !isArrival && !isDeparture && (
+                                  <span className="text-[10px] bg-slate-50 text-slate-600 border border-slate-200 font-medium px-1.5 py-0.2 rounded">
+                                    🐾 שוהה
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="mt-1.5 flex items-center justify-between text-[10px] pt-1 border-t border-slate-100">
+                              <span className={`px-1.5 py-0.5 rounded font-bold ${
+                                isEnded
+                                  ? 'bg-slate-200 text-slate-600'
+                                  : isPaid
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : isDeposit
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {isEnded ? 'הסתיים' : isPaid ? 'שולם מלא' : isDeposit ? `מקדמה ₪${b.depositAmount}` : `חוב ₪${remainingDebt}`}
+                              </span>
+                              {b.ownerPhone && (
+                                <span className="text-slate-400 font-mono text-[9px]" dir="ltr">
+                                  {b.ownerPhone}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Free Spot Quick Booking Action */}
+                  {freeSpots > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onNewBookingForDate(day.dateStr)}
+                      className="w-full mt-2 py-1.5 px-2 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-800 hover:text-emerald-900 border border-dashed border-emerald-400 hover:border-emerald-500 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs group"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-110 transition-transform" />
+                      <span>שריין מקום פנוי ({freeSpots} נותרו)</span>
+                    </button>
+                  )}
+
+                  {/* Day Actions Footer */}
+                  <div className="pt-2 border-t border-slate-200 flex items-center gap-1.5 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => onSelectDate(day.dateStr)}
+                      className="flex-1 text-center bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold py-1.5 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                    >
+                      פירוט יום
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onNewBookingForDate(day.dateStr)}
+                      title="הוסף הזמנה ליום זה"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white p-1.5 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* =========================================================================
           MODE 1: MONTH VIEW (לוח חודשי מלא מיושר מימין לשמאל: ראשון -> שבת)

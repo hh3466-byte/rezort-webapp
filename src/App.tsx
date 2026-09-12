@@ -794,8 +794,8 @@ export default function App() {
 
         </div>
 
-        {/* 5 Metric Stat Cards: תפוסה כללית | פנסיון | אילוף | חוב פתוח | נגבה עד כה (כולן לחיצות לעיון ועריכה) */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        {/* 4 Metric Stat Cards: תפוסה כללית | פנסיון | אילוף | חוב פתוח (כולן לחיצות לעיון ועריכה, הכנסות חודשיות מאוחדות בלוח השנה) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           
           {/* Card 1 (Right in RTL): תפוסה כללית */}
           <div 
@@ -948,33 +948,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Card 5 (Left in RTL): הכנסות מתחילת החודש */}
-          <div 
-            onClick={() => setActiveHeaderMetric('revenue')}
-            role="button"
-            tabIndex={0}
-            className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all active:scale-[0.99] group"
-            title="לחץ לצפייה בגרפי עמודות חודשיים ושנתיים וייצוא לאקסל"
-          >
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-bold text-slate-500 text-right group-hover:text-emerald-700 transition-colors">
-                הכנסות מתחילת החודש
-              </div>
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                💳 מתחילת החודש
-              </span>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-[#0f766e] my-1 text-right">
-              ₪{monthToDateCollected.toLocaleString('he-IL')}
-            </div>
-            <div className="flex items-center justify-between text-[11px] font-medium text-slate-400 pt-1 border-t border-slate-50">
-              <span className="truncate">{monthPaidCount} שולמו החודש • גרפים 📊</span>
-              <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100 flex items-center gap-0.5">
-                עיון וגרפים 🔍
-              </span>
-            </div>
-          </div>
-
         </div>
 
 
@@ -1002,6 +975,8 @@ export default function App() {
                   initialData: { startDate: dStr, endDate: addDays(dStr, 3) },
                 });
               }}
+              monthToDateRevenue={monthToDateCollected}
+              onOpenRevenueMetric={() => setActiveHeaderMetric('revenue')}
             />
           )}
 
@@ -1251,6 +1226,7 @@ export default function App() {
         <IntakeRequestsModal
           requests={intakeRequests}
           settings={settings}
+          bookings={bookings}
           onClose={() => setIsIntakeModalOpen(false)}
           onUpdateStatus={async (id, status, notes) => {
             await updateIntakeRequestStatusInDb(id, status, notes);

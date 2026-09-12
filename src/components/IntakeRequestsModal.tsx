@@ -27,13 +27,15 @@ import {
   Minus,
   Save,
   Trash2,
-  RotateCcw
+  RotateCcw,
+  Dog
 } from 'lucide-react';
-import { calculateDaysCount, addDays, formatDateIL, getDayNameHebrew } from '../utils/dateUtils';
+import { calculateDaysCount, addDays, formatDateIL, getDayNameHebrew, getBookingsForDate } from '../utils/dateUtils';
 
 interface IntakeRequestsModalProps {
   requests: IntakeRequest[];
   settings: ResortSettings;
+  bookings?: Booking[];
   onClose: () => void;
   onUpdateStatus: (id: string, status: IntakeRequestStatus, internalNotes?: string) => Promise<void>;
   onApproveAndBook: (request: IntakeRequest) => void;
@@ -41,9 +43,151 @@ interface IntakeRequestsModalProps {
   onSaveRequest?: (request: IntakeRequest) => Promise<void>;
 }
 
+// Subcomponent: Live Calendar & Available Spots for Requested Dates
+const RequestedDatesCalendar: React.FC<{
+  startDate: string;
+  endDate: string;
+  serviceType: string;
+  bookings?: Booking[];
+  settings: ResortSettings;
+}> = ({ startDate, endDate, serviceType, bookings = [], settings }) => {
+  const activeBookings = (bookings || []).filter(b => b.stayStatus !== 'cancelled');
+
+  const daysList = React.useMemo(() => {
+    if (!startDate) return [];
+    const list: string[] = [];
+    const isSingleDayTraining = serviceType === 'training' && (!endDate || endDate <= startDate);
+    const targetEnd = isSingleDayTraining ? addDays(startDate, 13) : (endDate || startDate);
+    
+    let curr = startDate;
+    let safety = 0;
+    while (curr <= targetEnd && safety < 45) {
+      list.push(curr);
+      curr = addDays(curr, 1);
+      safety++;
+    }
+    return list;
+  }, [startDate, endDate, serviceType]);
+
+  if (daysList.length === 0) return null;
+
+  const dayStats = daysList.map(dStr => {
+    const dayBookings = getBookingsForDate(activeBookings, dStr);
+    const count = dayBookings.length;
+    const max = settings.maxCapacity || 25;
+    const free = Math.max(0, max - count);
+    const isFull = count >= max;
+    const percent = Math.min(100, Math.round((count / max) * 100));
+    return {
+      dateStr: dStr,
+      dayName: getDayNameHebrew(dStr),
+      dayBookings,
+      count,
+      max,
+      free,
+      isFull,
+      percent
+    };
+  });
+
+  const minFree = Math.min(...dayStats.map(s => s.free));
+  const hasFullDays = dayStats.some(s => s.isFull);
+
+  return (
+    <div className="bg-slate-50/90 border border-slate-200 rounded-2xl p-3 sm:p-3.5 space-y-2.5 my-2.5 shadow-2xs">
+      {/* Header and overall availability banner */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200/80">
+        <div className="flex items-center gap-2 font-black text-xs text-slate-900">
+          <Calendar className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>יומן תפוסה ומקומות פנויים לתאריכים המבוקשים ({daysList.length} ימים):</span>
+        </div>
+
+        <div>
+          {hasFullDays ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-black bg-red-100 text-red-800 border border-red-300 px-2.5 py-0.5 rounded-lg shadow-2xs animate-pulse">
+              <span>⚠️ שים לב: ישנם ימים בתפוסה מלאה!</span>
+            </span>
+          ) : minFree <= 2 ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-black bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-0.5 rounded-lg shadow-2xs">
+              <span>🟡 תפוסה גבוהה (נותרו {minFree} פנויים בלבד)</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] font-black bg-emerald-100 text-emerald-900 border border-emerald-300 px-2.5 py-0.5 rounded-lg shadow-2xs">
+              <span>✅ יש מקום פנוי בכל הימים (לפחות {minFree} פנויים)</span>
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Days Strip / Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+        {dayStats.map((st) => (
+          <div
+            key={st.dateStr}
+            className={`rounded-xl border p-2 text-xs flex flex-col justify-between transition-all ${
+              st.isFull
+                ? 'bg-red-50 border-red-200 text-red-900'
+                : st.free <= 2
+                ? 'bg-amber-50/70 border-amber-200 text-amber-900'
+                : 'bg-white border-slate-200 text-slate-800 shadow-2xs'
+            }`}
+          >
+            {/* Day Title */}
+            <div className="flex items-center justify-between font-bold pb-1 border-b border-slate-100">
+              <span className="text-[11px] text-slate-800">יום {st.dayName}</span>
+              <span className="text-[10px] text-slate-500 font-mono">{formatDateIL(st.dateStr).slice(0, 5)}</span>
+            </div>
+
+            {/* Occupancy and Free spots */}
+            <div className="my-1.5 space-y-1">
+              <div className="flex items-center justify-between text-[11px] font-bold">
+                <span>תפוסה: {st.count}/{st.max}</span>
+                <span className={st.isFull ? 'text-red-700 font-black' : st.free <= 2 ? 'text-amber-700 font-black' : 'text-emerald-700 font-black'}>
+                  {st.isFull ? '0 פנוי 🔴' : `${st.free} פנוי 🟢`}
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    st.isFull ? 'bg-red-500' : st.count > st.max * 0.7 ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${st.percent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Dogs booked on this day */}
+            <div className="pt-1 border-t border-slate-100 text-[10px]">
+              {st.dayBookings.length === 0 ? (
+                <span className="text-slate-400 font-medium">פנוי לחלוטין ✨</span>
+              ) : (
+                <div className="flex flex-wrap gap-1 max-h-[50px] overflow-y-auto no-scrollbar">
+                  {st.dayBookings.map(b => (
+                    <span
+                      key={b.id}
+                      className="inline-flex items-center gap-0.5 bg-slate-100 text-slate-700 font-bold px-1.5 py-0.2 rounded text-[9px] truncate max-w-full"
+                      title={`${b.dogName} (${getServiceTypeHebrew(b.serviceType)}) - ${b.ownerName}`}
+                    >
+                      <span>🐾</span>
+                      <span className="truncate max-w-[55px]">{b.dogName}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   requests,
   settings,
+  bookings = [],
   onClose,
   onUpdateStatus,
   onApproveAndBook,
@@ -516,6 +660,15 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     </div>
                   )}
 
+                  {/* LIVE OCCUPANCY & AVAILABLE SPOTS CALENDAR FOR REQUESTED DATES */}
+                  <RequestedDatesCalendar
+                    startDate={req.startDate}
+                    endDate={req.endDate}
+                    serviceType={req.serviceType}
+                    bookings={bookings}
+                    settings={settings}
+                  />
+
                   {/* Card Bottom: Shmulik Action Buttons */}
                   <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
                     
@@ -840,6 +993,15 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     )}
                   </>
                 )}
+
+                {/* Live Occupancy Calendar in Edit Modal */}
+                <RequestedDatesCalendar
+                  startDate={editingRequest.startDate}
+                  endDate={editingRequest.endDate}
+                  serviceType={editingRequest.serviceType}
+                  bookings={bookings}
+                  settings={settings}
+                />
               </div>
 
               {/* 3. Dog Details */}
@@ -1191,6 +1353,15 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 
             {/* Content */}
             <div className="p-4 sm:p-5 space-y-4 text-xs">
+              {/* Live Occupancy Calendar for Requested Dates */}
+              <RequestedDatesCalendar
+                startDate={paymentPromptRequest.startDate}
+                endDate={paymentPromptRequest.endDate}
+                serviceType={paymentPromptRequest.serviceType}
+                bookings={bookings}
+                settings={settings}
+              />
+
               {/* Amount input */}
               <div className="space-y-1.5">
                 <label className="text-xs font-black text-slate-900 block">
