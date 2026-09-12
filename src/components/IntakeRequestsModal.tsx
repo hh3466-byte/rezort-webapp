@@ -206,6 +206,22 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [rejectPromptRequest, setRejectPromptRequest] = useState<IntakeRequest | null>(null);
   const [rejectMessageText, setRejectMessageText] = useState<string>('');
   const [isProcessingReject, setIsProcessingReject] = useState<boolean>(false);
+  const [customPrices, setCustomPrices] = useState<Record<string, number>>({});
+
+  const handleUpdatePrice = async (req: IntakeRequest, newPrice: number) => {
+    setCustomPrices(prev => ({ ...prev, [req.id]: newPrice }));
+    if (onSaveRequest && newPrice >= 0 && newPrice !== req.depositRequested) {
+      try {
+        await onSaveRequest({
+          ...req,
+          depositRequested: newPrice,
+          calculatedPrice: newPrice
+        });
+      } catch (err) {
+        console.error('Error saving edited price:', err);
+      }
+    }
+  };
 
   const handleSaveEdit = async () => {
     if (!editingRequest) return;
@@ -272,7 +288,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const handleOpenPaymentPrompt = (request: IntakeRequest) => {
     setPaymentPromptRequest(request);
     const calculatedDefault = Math.max(1, calculateDaysCount(request.startDate, request.endDate)) * (Number(settings.defaultDailyRateBoarding) || 180);
-    setPaymentAmount(request.depositRequested ? String(request.depositRequested) : String(calculatedDefault));
+    const effectiveAmount = customPrices[request.id] ?? request.depositRequested ?? calculatedDefault;
+    setPaymentAmount(String(effectiveAmount));
     setCustomPaymentLink(settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg');
   };
 
@@ -491,6 +508,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 minute: '2-digit'
               });
               const daysCount = Math.max(1, calculateDaysCount(req.startDate, req.endDate));
+              const defaultBoardingPrice = daysCount * (Number(settings?.defaultDailyRateBoarding) || 180);
+              const defaultPrice = req.serviceType === 'training' ? (Number(settings?.defaultDailyRateTraining) || 6500) : defaultBoardingPrice;
+              const currentReqPrice = customPrices[req.id] !== undefined ? customPrices[req.id] : (req.depositRequested || defaultPrice);
 
               return (
                 <div
@@ -560,10 +580,10 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     </div>
 
                     {/* Quick Dates Badge with Required Payment Calculation */}
-                    <div className="flex flex-col items-start gap-1 self-start sm:self-center bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 shadow-2xs" dir="rtl">
+                    <div className="flex flex-col items-start gap-1.5 self-start sm:self-center bg-slate-50 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 shadow-2xs" dir="rtl">
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>
+                        <span className="font-extrabold text-slate-800">
                           {serviceLabel}: {req.serviceType === 'training' 
                             ? `כניסה החל מ-${formatDateIL(req.startDate)}` 
                             : `${formatDateIL(req.startDate)} עד ${formatDateIL(req.endDate)}`}
@@ -572,28 +592,73 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       
                       {req.serviceType !== 'training' ? (
                         <>
-                          <div className="text-[11px] text-slate-500 font-semibold mr-5">
-                            סה"כ {daysCount} {daysCount === 1 ? 'יום' : 'ימים'}
-                          </div>
-                          <div className="text-[11px] font-black text-emerald-900 bg-emerald-100/70 border border-emerald-300/80 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs mr-5 mt-0.5">
-                            <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                            <span>חישוב לתשלום:</span>
-                            <span className="font-mono text-xs text-emerald-950 font-black">
-                              ₪{(daysCount * (Number(settings?.defaultDailyRateBoarding) || 180)).toLocaleString('he-IL')}
+                          {/* Emphasized Days Count Badge */}
+                          <div className="flex items-center gap-1.5 mr-5">
+                            <span className="inline-flex items-center gap-1 text-xs font-black bg-amber-100/90 text-amber-950 border border-amber-300 px-2.5 py-0.5 rounded-lg shadow-2xs">
+                              <span>⏳ סה"כ {daysCount} {daysCount === 1 ? 'יום' : 'ימים'}</span>
                             </span>
+                          </div>
+
+                          {/* Editable Payment Calculation */}
+                          <div className="text-xs font-bold text-emerald-900 bg-emerald-100/80 border border-emerald-300/90 px-2.5 py-1.5 rounded-xl flex flex-wrap items-center gap-2 shadow-2xs mr-5 mt-0.5">
+                            <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                            <span className="font-black text-xs text-emerald-950">סכום לתשלום:</span>
+                            <div className="inline-flex items-center bg-white border border-emerald-400 rounded-lg px-2 py-0.5 shadow-xs focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-600">
+                              <span className="text-emerald-800 font-black text-xs ml-1">₪</span>
+                              <input
+                                type="number"
+                                min={0}
+                                step={10}
+                                value={currentReqPrice}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setCustomPrices(prev => ({ ...prev, [req.id]: val }));
+                                }}
+                                onBlur={(e) => {
+                                  const val = Number(e.target.value);
+                                  handleUpdatePrice(req, val);
+                                }}
+                                className="w-20 font-black font-mono text-sm text-slate-900 bg-transparent focus:outline-none text-right"
+                                title="לחץ לשינוי ועריכת הסכום לפי הצורך לפני שליחה"
+                              />
+                              <Pencil className="w-3 h-3 text-emerald-600 mr-1 opacity-70 shrink-0 cursor-pointer" />
+                            </div>
                             <span className="text-[10px] text-emerald-800 font-medium">
                               ({daysCount} ימים × ₪{Number(settings?.defaultDailyRateBoarding) || 180})
+                            </span>
+                            <span className="text-[10px] text-emerald-700 bg-white/70 border border-emerald-200/80 px-1.5 py-0.5 rounded font-bold">
+                              ✏️ ניתן לעריכה
                             </span>
                           </div>
                         </>
                       ) : (
-                        <div className="text-[11px] font-black text-emerald-900 bg-emerald-100/70 border border-emerald-300/80 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs mr-5 mt-0.5">
+                        <div className="text-xs font-bold text-emerald-900 bg-emerald-100/80 border border-emerald-300/90 px-2.5 py-1.5 rounded-xl flex flex-wrap items-center gap-2 shadow-2xs mr-5 mt-0.5">
                           <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                          <span>חישוב לתשלום:</span>
-                          <span className="font-mono text-xs text-emerald-950 font-black">
-                            ₪{(Number(settings?.defaultDailyRateTraining) || 6500).toLocaleString('he-IL')}
-                          </span>
+                          <span className="font-black text-xs text-emerald-950">סכום לתשלום:</span>
+                          <div className="inline-flex items-center bg-white border border-emerald-400 rounded-lg px-2 py-0.5 shadow-xs focus-within:ring-2 focus-within:ring-emerald-500 focus-within:border-emerald-600">
+                            <span className="text-emerald-800 font-black text-xs ml-1">₪</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={50}
+                              value={currentReqPrice}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setCustomPrices(prev => ({ ...prev, [req.id]: val }));
+                              }}
+                              onBlur={(e) => {
+                                const val = Number(e.target.value);
+                                handleUpdatePrice(req, val);
+                              }}
+                              className="w-20 font-black font-mono text-sm text-slate-900 bg-transparent focus:outline-none text-right"
+                              title="לחץ לשינוי ועריכת הסכום לפי הצורך לפני שליחה"
+                            />
+                            <Pencil className="w-3 h-3 text-emerald-600 mr-1 opacity-70 shrink-0 cursor-pointer" />
+                          </div>
                           <span className="text-[10px] text-emerald-800 font-medium">(מחיר תהליך)</span>
+                          <span className="text-[10px] text-emerald-700 bg-white/70 border border-emerald-200/80 px-1.5 py-0.5 rounded font-bold">
+                            ✏️ ניתן לעריכה
+                          </span>
                         </div>
                       )}
                     </div>
