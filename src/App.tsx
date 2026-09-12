@@ -44,6 +44,7 @@ import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricMo
 import { ReviewRequestModal } from './components/ReviewRequestModal';
 import { IntakeRequestsModal } from './components/IntakeRequestsModal';
 import { PublicIntakePage } from './components/PublicIntakePage';
+import { SendIntakeModal } from './components/SendIntakeModal';
 
 export default function App() {
   // Core application state with live Cloud synchronization
@@ -85,6 +86,7 @@ export default function App() {
   const [showPublicIntake, setShowPublicIntake] = useState(isIntakeParam);
   const [intakeRequests, setIntakeRequests] = useState<IntakeRequest[]>(() => loadStoredIntakeRequests());
   const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false);
+  const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
   const pendingIntakeCount = intakeRequests.filter(r => r.status === 'pending').length;
 
   // Manager Authentication State (Passcode 3466)
@@ -446,7 +448,7 @@ export default function App() {
         stayStatus: 'booked',
         notes: [
           matchedIntake?.specialNeeds ? `צרכים מיוחדים: ${matchedIntake.specialNeeds}` : '',
-          matchedIntake?.notes ? `הערות מהשאלון: ${matchedIntake.notes}` : '',
+          matchedIntake?.notes ? `הערות מטופס בקשת הקליטה: ${matchedIntake.notes}` : '',
           `עסקת Grow (אסמכתא: ${payment.reference_id})`
         ].filter(Boolean).join(' | '),
       }
@@ -454,7 +456,7 @@ export default function App() {
 
     if (matchedIntake) {
       updateIntakeRequestStatusInDb(matchedIntake.id, 'approved');
-      showToast(`✨ תאריכים ופרטי ${matchedIntake.dogName} נטענו אוטומטית משאלון הקליטה!`);
+      showToast(`✨ תאריכים ופרטי ${matchedIntake.dogName} נטענו אוטומטית מטופס בקשת הקליטה!`);
     }
   };
 
@@ -626,15 +628,15 @@ export default function App() {
               )}
             </button>
 
-            {/* 3. Public Intake Form Link */}
+            {/* 3. Public Intake Form Link & Proactive Send to Callers */}
             <button
               type="button"
-              onClick={() => setShowPublicIntake(true)}
-              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-emerald-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-              title="פתיחת שאלון הקליטה המקוון (אותו שולחים ללקוחות פונים בוואטסאפ)"
+              onClick={() => setIsSendIntakeModalOpen(true)}
+              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-emerald-300 text-slate-800 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="שליחת טופס בקשת קליטה בוואטסאפ ללקוח שהתקשר, או פתיחת הטופס"
             >
               <span className="text-base">🔗</span>
-              <span>שאלון קליטה</span>
+              <span>טופס בקשת קליטה</span>
             </button>
 
             {/* 4. Reports Button */}
@@ -1238,6 +1240,14 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Send Proactive Intake Request Modal */}
+      <SendIntakeModal
+        isOpen={isSendIntakeModalOpen}
+        onClose={() => setIsSendIntakeModalOpen(false)}
+        settings={settings}
+        onOpenFormPreview={() => setShowPublicIntake(true)}
+      />
 
       {/* Floating Toast Notification */}
       {toastMessage && (

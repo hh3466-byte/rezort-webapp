@@ -333,7 +333,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     if (req.isVaccinated !== undefined) setVaccinationValid(req.isVaccinated);
     const combinedNotes = [
       req.specialNeeds ? `צרכים מיוחדים: ${req.specialNeeds}` : '',
-      req.notes ? `הערות משאלון: ${req.notes}` : ''
+      req.notes ? `הערות מטופס בקשת הקליטה: ${req.notes}` : ''
     ].filter(Boolean).join(' | ');
     if (combinedNotes) setNotes(prev => prev ? `${prev} | ${combinedNotes}` : combinedNotes);
   };
@@ -861,7 +861,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     <div className="text-xs text-emerald-950">
                       <div className="flex items-center gap-1.5 font-black text-emerald-800">
                         <span className="text-sm">📥</span>
-                        <span>זוהה שאלון קליטה עבור {matchedIntakeRequest.ownerName} ({matchedIntakeRequest.dogName})!</span>
+                        <span>זוהה טופס בקשת קליטה עבור {matchedIntakeRequest.ownerName} ({matchedIntakeRequest.dogName})!</span>
                       </div>
                       <div className="text-[11px] text-emerald-700 mt-0.5 font-medium">
                         שירות: <strong>{matchedIntakeRequest.serviceType === 'boarding' ? 'פנסיון' : matchedIntakeRequest.serviceType === 'training' ? 'אילוף' : 'יומיות'}</strong> · 
@@ -874,7 +874,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5"
                       title="החל את התאריכים ופרטי הכלב ישירות לתוך ההזמנה"
                     >
-                      <span>⚡ טען תאריכים ופרטים מהשאלון</span>
+                      <span>⚡ טען תאריכים ופרטים מהטופס</span>
                     </button>
                   </div>
                 )}

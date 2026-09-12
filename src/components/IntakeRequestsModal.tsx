@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { IntakeRequest, IntakeRequestStatus, ResortSettings, Booking } from '../types';
 import { cleanPhoneNumber, getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { formatClientPaymentLinkMessage, formatClientRejectionMessage } from '../services/notificationService';
+import { SendIntakeModal } from './SendIntakeModal';
 import { 
   X, 
   Phone, 
@@ -52,6 +53,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [filter, setFilter] = useState<'all' | 'pending' | 'payment_requested' | 'approved' | 'rejected'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
+  const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<IntakeRequest | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -225,12 +227,22 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={() => setIsSendIntakeModalOpen(true)}
+              className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              title="שליחת טופס בקשת קליטה ישירות לוואטסאפ של לקוח שהתקשר"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>שלח טופס ללקוח</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleCopyIntakeLink}
               className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-              title="העתקת הקישור לשאלון הקליטה לשליחה מהירה ללקוחות בוואטסאפ"
+              title="העתקת הקישור לטופס בקשת הקליטה לשליחה מהירה ללקוחות בוואטסאפ"
             >
               {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedLink ? 'הקישור הועתק!' : 'העתק קישור שאלון'}</span>
+              <span>{copiedLink ? 'הקישור הועתק!' : 'העתק קישור לטופס'}</span>
             </button>
 
             <button
@@ -321,7 +333,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 אין בקשות קליטה {filter === 'pending' ? 'ממתינות לבדיקה' : 'להצגה כעת'}
               </h3>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                לקוחות שימלאו את שאלון הקליטה המקוון יופיעו כאן מיד עם כל הפרטים לצורך תיאום טלפוני ושליחת קישור לתשלום.
+                לקוחות שימלאו את טופס בקשת הקליטה המקוון יופיעו כאן מיד עם כל הפרטים לצורך תיאום טלפוני ושליחת קישור לתשלום.
               </p>
             </div>
           ) : (
@@ -511,7 +523,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     <div className="flex items-center gap-2">
                       {/* WhatsApp Call & Chat - Primary Green Button */}
                       <a
-                        href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(`שלום ${req.ownerName}, כאן שמוליק מ${settings.resortName} 🐾 בהמשך לשאלון הקליטה ששלחתם עבור ${req.dogName}`)}`}
+                        href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(`שלום ${req.ownerName}, כאן שמוליק מ${settings.resortName} 🐾 בהמשך לטופס בקשת הקליטה ששלחתם עבור ${req.dogName}`)}`}
                         target="_blank"
                         rel="noreferrer"
                         className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
@@ -1346,6 +1358,13 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
           </div>
         </div>
       )}
+
+      {/* Proactive Send Form Modal */}
+      <SendIntakeModal
+        isOpen={isSendIntakeModalOpen}
+        onClose={() => setIsSendIntakeModalOpen(false)}
+        settings={settings}
+      />
 
     </div>
   );

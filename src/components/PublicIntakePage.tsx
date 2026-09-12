@@ -18,8 +18,12 @@ import {
   AlertCircle,
   Plus,
   Minus,
-  Clock
+  Clock,
+  MessageCircle,
+  Copy,
+  Check
 } from 'lucide-react';
+import { SendIntakeModal } from './SendIntakeModal';
 
 interface PublicIntakePageProps {
   settings: ResortSettings;
@@ -56,6 +60,8 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   const [isQuickCallback, setIsQuickCallback] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [saturdayWarning, setSaturdayWarning] = useState<string | null>(null);
+  const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
+  const [copiedDirectLink, setCopiedDirectLink] = useState(false);
 
   // Auto adjust dates when service is selected
   const handleServiceChange = (st: ServiceType) => {
@@ -355,8 +361,47 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
             הריזורט לכלב
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-md mx-auto">
-            שאלון קליטה ובקשת שריון מקום 🐾 מלאו את שאלות הסינון ונחזור אליכם טלפונית לתיאום והסדרת השריון.
+            טופס בקשת קליטה ושריון מקום 🐾 מלאו את פרטי הבקשה ונחזור אליכם טלפונית לתיאום והסדרת השריון.
           </p>
+
+          {/* Proactive Send Form to Callers Banner */}
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl p-3.5 sm:p-4 text-emerald-950 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-right mt-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-2xs shrink-0">
+                📲
+              </div>
+              <div>
+                <div className="font-black text-xs sm:text-sm text-emerald-950">
+                  לקוח התקשר זה עתה? שלחו לו את הטופס ישירות למילוי
+                </div>
+                <div className="text-[11px] text-emerald-800 font-medium">
+                  שליחת הודעת וואטסאפ מנומסת מוכנה מראש עם קישור ישיר לטופס בקשת קליטה זה
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsSendIntakeModalOpen(true)}
+                className="w-full sm:w-auto bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>שלח טופס ללקוח בוואטסאפ</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/?intake=true`);
+                  setCopiedDirectLink(true);
+                  setTimeout(() => setCopiedDirectLink(false), 2500);
+                }}
+                className="bg-white hover:bg-emerald-100/60 border border-emerald-300 text-emerald-900 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center gap-1 shadow-2xs cursor-pointer transition-all shrink-0"
+              >
+                {copiedDirectLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedDirectLink ? 'הועתק!' : 'העתק קישור'}</span>
+              </button>
+            </div>
+          </div>
         </header>
 
         {/* Error Alert if validation fails */}
@@ -1167,6 +1212,13 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
         <footer className="text-center text-xs text-slate-400 font-medium pb-6">
           הריזורט לכלב · פנסיון, אילוף ושיקום התנהגותי 🐾
         </footer>
+
+        {/* Proactive Send Form Modal */}
+        <SendIntakeModal
+          isOpen={isSendIntakeModalOpen}
+          onClose={() => setIsSendIntakeModalOpen(false)}
+          settings={settings}
+        />
 
       </div>
     </div>
