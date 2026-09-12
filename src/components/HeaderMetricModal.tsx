@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   X, 
   Search, 
@@ -16,11 +16,16 @@ import {
   DollarSign, 
   AlertCircle,
   ArrowDownLeft,
-  ArrowUpRight
+  ArrowUpRight,
+  BarChart3,
+  Download,
+  TrendingUp,
+  Home
 } from 'lucide-react';
 import { Booking, ResortSettings, StayStatus } from '../types';
 import { getTodayStr, calculateDaysCount, formatDateIL, getBookingsForDate } from '../utils/dateUtils';
-import { generatePaymentReminderMessage, openWhatsAppMessage } from '../utils/whatsappUtils';
+import { generatePaymentReminderMessage, openWhatsAppMessage, getServiceTypeHebrew } from '../utils/whatsappUtils';
+import { exportRevenueChartsToExcel, ChartPeriodItem } from '../utils/exportUtils';
 
 export type HeaderMetricType = 'occupancy' | 'boarding' | 'training' | 'debt' | 'revenue';
 
@@ -33,7 +38,13 @@ interface HeaderMetricModalProps {
   onMarkAsPaid: (bookingId: string) => void;
   onOpenPaymentModal: (booking: Booking) => void;
   onToggleStayStatus?: (bookingId: string, current: StayStatus) => void;
+  onInitiateRelease?: (booking: Booking) => void;
 }
+
+const HEBREW_MONTHS = [
+  'ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני',
+  'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'
+];
 
 export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   metricType,
@@ -44,43 +55,152 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   onMarkAsPaid,
   onOpenPaymentModal,
   onToggleStayStatus,
+  onInitiateRelease,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [trainingFilter, setTrainingFilter] = useState<'all' | 'full' | 'day'>('all');
+  const [chartMode, setChartMode] = useState<'monthly' | 'yearly'>('monthly');
+  const [selectedChartPeriod, setSelectedChartPeriod] = useState<string | null>(null);
+
+  const todayStr = getTodayStr();
+  const currentMonthKey = todayStr.substring(0, 7); // e.g. 2026-09
+  const currentYearKey = todayStr.substring(0, 4);
+
+  const activeBookings = useMemo(() => {
+    return bookings.filter(b => b.stayStatus !== 'cancelled');
+  }, [bookings]);
+
+  // Compute monthly and yearly aggregates for the charts
+  const { monthlyChartData, yearlyChartData, currentMonthCollected, allTimeCollected } = useMemo(() => {
+    const monthlyMap: Record<string, { count: number; collected: number; expected: number; debt: number }> = {};
+    const yearlyMap: Record<string, { count: number; collected: number; expected: number; debt: number }> = {};
+
+    let totalAllTime = 0;
+    let totalThisMonth = 0;
+
+    activeBookings.forEach(b => {
+      const start = b.startDate || '';
+      const mKey = start.substring(0, 7);
+      const yKey = start.substring(0, 4);
+
+      const collected = b.paymentStatus === 'fully_paid'
+        ? (Number(b.totalPrice) || 0)
+        : (Number(b.depositAmount) || 0);
+
+      const expected = Number(b.totalPrice) || 0;
+      const debt = Math.max(0, expected - collected);
+
+      totalAllTime += collected;
+      if (mKey === currentMonthKey) {
+        totalThisMonth += collected;
+      }
+
+      if (mKey && mKey.length === 7) {
+        if (!monthlyMap[mKey]) monthlyMap[mKey] = { count: 0, collected: 0, expected: 0, debt: 0 };
+        monthlyMap[mKey].count += 1;
+        monthlyMap[mKey].collected += collected;
+        monthlyMap[mKey].expected += expected;
+        monthlyMap[mKey].debt += debt;
+      }
+
+      if (yKey && yKey.length === 4) {
+        if (!yearlyMap[yKey]) yearlyMap[yKey] = { count: 0, collected: 0, expected: 0, debt: 0 };
+        yearlyMap[yKey].count += 1;
+        yearlyMap[yKey].collected += collected;
+        yearlyMap[yKey].expected += expected;
+        yearlyMap[yKey].debt += debt;
+      }
+    });
+
+    // Build last 12 months sequence
+    const recentKeys: string[] = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      recentKeys.push(`${y}-${m}`);
+    }
+
+    // Merge any other months that have bookings
+    Object.keys(monthlyMap).forEach(k => {
+      if (!recentKeys.includes(k) && k.length === 7) {
+        recentKeys.push(k);
+      }
+    });
+    recentKeys.sort();
+
+    const monthlyList: ChartPeriodItem[] = recentKeys.map(k => {
+      const [y, m] = k.split('-');
+      const mIdx = parseInt(m, 10) - 1;
+      const label = `${HEBREW_MONTHS[mIdx] || m} '${y.substring(2)}`;
+      const data = monthlyMap[k] || { count: 0, collected: 0, expected: 0, debt: 0 };
+      return {
+        periodKey: k,
+        periodLabel: label,
+        bookingsCount: data.count,
+        totalCollected: data.collected,
+        totalExpected: data.expected,
+        openDebt: data.debt
+      };
+    });
+
+    // Build years sequence
+    const yKeys = Object.keys(yearlyMap);
+    if (!yKeys.includes(currentYearKey)) yKeys.push(currentYearKey);
+    yKeys.sort();
+
+    const yearlyList: ChartPeriodItem[] = yKeys.map(y => {
+      const data = yearlyMap[y] || { count: 0, collected: 0, expected: 0, debt: 0 };
+      return {
+        periodKey: y,
+        periodLabel: `שנת ${y}`,
+        bookingsCount: data.count,
+        totalCollected: data.collected,
+        totalExpected: data.expected,
+        openDebt: data.debt
+      };
+    });
+
+    return {
+      monthlyChartData: monthlyList,
+      yearlyChartData: yearlyList,
+      currentMonthCollected: totalThisMonth,
+      allTimeCollected: totalAllTime
+    };
+  }, [activeBookings, currentMonthKey, currentYearKey]);
 
   if (!metricType) return null;
 
-  const todayStr = getTodayStr();
-  const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
   const todayBookings = getBookingsForDate(activeBookings, todayStr);
 
   // Filter items based on selected metric
   let title = '';
   let subtitle = '';
   let icon = <Sparkles className="w-5 h-5" />;
-  let badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+  let badgeColor = 'bg-slate-100 text-slate-800 border-slate-200';
   let filteredItems: Booking[] = [];
 
   switch (metricType) {
     case 'occupancy':
-      title = 'תפוסה כללית להיום';
-      subtitle = `סך הכל ${todayBookings.length} כלבים שוהים בריזורט היום מתוך קיבולת של ${settings.maxCapacity}`;
-      icon = <Dog className="w-5 h-5 text-emerald-700" />;
+      title = 'תפוסה כוללת להיום';
+      subtitle = `${todayBookings.length} כלבים שוהים בריזורט היום (מתוך ${settings.maxCapacity} מקומות מקסימום)`;
+      icon = <Dog className="w-5 h-5 text-emerald-600" />;
       badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
       filteredItems = todayBookings;
       break;
 
     case 'boarding':
-      title = 'כלבים בפנסיון ומשפחתון היום';
-      subtitle = 'כלבים השוהים בפנסיון עם לינה או יום כיף (דייקר)';
-      icon = <Building2 className="w-5 h-5 text-sky-700" />;
+      title = 'כלבי פנסיון ושהות יומית';
+      subtitle = 'כלבים השוהים בפנסיון לילה או יום כיף פעיל';
+      icon = <Building2 className="w-5 h-5 text-sky-600" />;
       badgeColor = 'bg-sky-50 text-sky-800 border-sky-200';
       filteredItems = todayBookings.filter(b => b.serviceType === 'boarding' || b.serviceType === 'daycare');
       break;
 
     case 'training':
       title = 'כלבים בתהליך אילוף היום';
-      subtitle = 'תהליך אילוף מלא (50 יום) ואילוף ביומיות ללא לינה';
+      subtitle = 'תהליך אילוף מלא ואילוף ביומיות ללא לינה';
       icon = <GraduationCap className="w-5 h-5 text-purple-700" />;
       badgeColor = 'bg-purple-50 text-purple-800 border-purple-200';
       filteredItems = todayBookings.filter(b => {
@@ -99,7 +219,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
         return acc + Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0));
       }, 0);
       title = 'הזמנות עם חוב פתוח לתשלום';
-      subtitle = `${debtItems.length} הזמנות פעילות עם יתרת חוב לתשלום (סה״כ ₪${totalDebtSum.toLocaleString()})`;
+      subtitle = `${debtItems.length} הזמנות פעילות עם יתרת חוב לתשלום (סה״כ ₪${totalDebtSum.toLocaleString('he-IL')})`;
       icon = <AlertCircle className="w-5 h-5 text-red-600" />;
       badgeColor = 'bg-red-50 text-red-700 border-red-200';
       filteredItems = debtItems;
@@ -110,15 +230,23 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const paidItems = activeBookings.filter(b => {
         return (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid';
       });
-      const totalCollectedSum = activeBookings.reduce((acc, b) => {
-        if (b.paymentStatus === 'fully_paid') return acc + (Number(b.totalPrice) || 0);
-        return acc + (Number(b.depositAmount) || 0);
-      }, 0);
-      title = 'פירוט הכנסות ותקבולים';
-      subtitle = `סך הכל נגבו בפועל ₪${totalCollectedSum.toLocaleString()} מתוך ${paidItems.length} הזמנות`;
+      title = 'הכנסות מתחילת החודש ודוחות עמודות';
+      subtitle = `מתחילת החודש נגבו ₪${currentMonthCollected.toLocaleString('he-IL')} • גרפי עמודות בשקלים וייצוא לאקסל`;
       icon = <DollarSign className="w-5 h-5 text-emerald-700" />;
       badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
       filteredItems = paidItems;
+
+      // Filter by chart column click if selected
+      if (selectedChartPeriod) {
+        filteredItems = filteredItems.filter(b => {
+          const start = b.startDate || '';
+          if (chartMode === 'monthly') {
+            return start.startsWith(selectedChartPeriod);
+          } else {
+            return start.startsWith(selectedChartPeriod);
+          }
+        });
+      }
       break;
     }
   }
@@ -141,19 +269,27 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
     openWhatsAppMessage(b.ownerPhone, msg);
   };
 
+  const activeChartData = chartMode === 'monthly' ? monthlyChartData : yearlyChartData;
+  const maxCollectedInChart = Math.max(1, ...activeChartData.map(d => d.totalCollected));
+
+  const handleExportExcel = () => {
+    const periodTitle = chartMode === 'monthly' ? 'דוח_עמודות_הכנסות_לפי_חודשים' : 'דוח_עמודות_הכנסות_לפי_שנים';
+    exportRevenueChartsToExcel(activeChartData, filteredItems, periodTitle);
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden text-slate-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200" dir="rtl">
+      <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden text-slate-900">
         
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/70 flex items-start justify-between gap-3">
+        <div className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/80 flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl border ${badgeColor} shadow-2xs`}>
+            <div className={`p-2.5 rounded-2xl border ${badgeColor} shadow-2xs`}>
               {icon}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-extrabold text-lg sm:text-xl text-slate-900">{title}</h3>
+                <h3 className="font-black text-lg sm:text-xl text-slate-900">{title}</h3>
                 <span className={`text-xs font-black px-2.5 py-0.5 rounded-full border ${badgeColor}`}>
                   {filteredItems.length} פריטים
                 </span>
@@ -162,16 +298,168 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
-            title="סגור חלון"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Direct Excel export for revenue graphs */}
+            {metricType === 'revenue' && (
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                className="bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                title="ייצא את נתוני הגרפים והטבלאות לקובץ אקסל"
+              >
+                <Download className="w-4 h-4" />
+                <span>ייצוא לאקסל</span>
+              </button>
+            )}
+
+            <button
+              onClick={onClose}
+              className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
+              title="סגור חלון"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        {/* Toolbar: Search and Sub-filters */}
+        {/* REVENUE ANALYTICS & COLUMN CHARTS (Displayed when metricType === 'revenue') */}
+        {metricType === 'revenue' && (
+          <div className="p-4 bg-slate-50/60 border-b border-slate-200/70 space-y-3">
+            
+            {/* Controls: Mode Toggle & Summary Stats */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-1 bg-white p-1 rounded-2xl border border-slate-200 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChartMode('monthly');
+                    setSelectedChartPeriod(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                    chartMode === 'monthly'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <BarChart3 className="w-3.5 h-3.5" />
+                  <span>לפי חודשים (12 אחרונים)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChartMode('yearly');
+                    setSelectedChartPeriod(null);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                    chartMode === 'yearly'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>השוואה שנתית</span>
+                </button>
+              </div>
+
+              {/* Summary KPIs */}
+              <div className="flex items-center gap-2">
+                <div className="bg-white border border-emerald-200/80 px-3 py-1.5 rounded-xl text-right shadow-2xs">
+                  <div className="text-[10px] font-bold text-slate-500">הכנסות החודש הנוכחי</div>
+                  <div className="text-sm font-black text-emerald-700">₪{currentMonthCollected.toLocaleString('he-IL')}</div>
+                </div>
+                <div className="bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-right shadow-2xs">
+                  <div className="text-[10px] font-bold text-slate-500">סה״כ מצטבר במערכת</div>
+                  <div className="text-sm font-black text-slate-800">₪{allTimeCollected.toLocaleString('he-IL')}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Column / Bar Chart */}
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-3 sm:p-4 shadow-2xs">
+              <div className="flex items-center justify-between text-xs text-slate-400 font-semibold mb-2">
+                <span>📊 גרף עמודות הכנסות בפועל (סכומים בשקלים כתובים מעל כל עמודה):</span>
+                {selectedChartPeriod && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedChartPeriod(null)}
+                    className="text-xs text-emerald-700 hover:text-emerald-900 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 cursor-pointer flex items-center gap-1"
+                  >
+                    <span>הסר סינון תקופה</span>
+                    <span>✕</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Horizontal Scrollable Chart Area */}
+              <div className="overflow-x-auto pb-1 pt-4">
+                <div className="flex items-end justify-between gap-2 sm:gap-3 min-w-[580px] h-[175px] px-2">
+                  {activeChartData.map((item) => {
+                    const heightPercent = maxCollectedInChart > 0 
+                      ? Math.max(10, Math.round((item.totalCollected / maxCollectedInChart) * 100))
+                      : 10;
+                    const isSelected = selectedChartPeriod === item.periodKey;
+                    const isCurrent = item.periodKey === currentMonthKey || item.periodKey === currentYearKey;
+
+                    return (
+                      <div
+                        key={item.periodKey}
+                        onClick={() => {
+                          setSelectedChartPeriod(isSelected ? null : item.periodKey);
+                        }}
+                        className={`flex-1 flex flex-col items-center justify-end h-full group cursor-pointer transition-all p-1 rounded-xl ${
+                          isSelected 
+                            ? 'bg-emerald-50/80 ring-2 ring-emerald-500 shadow-2xs' 
+                            : 'hover:bg-slate-50'
+                        }`}
+                        title={`${item.periodLabel}: ₪${item.totalCollected.toLocaleString('he-IL')} מתוך ${item.bookingsCount} הזמנות. לחץ לסינון הרשימה.`}
+                      >
+                        {/* Amount in Shekels on top of column */}
+                        <span className={`text-[10px] sm:text-[11px] font-black tracking-tight mb-1 text-center transition-all ${
+                          item.totalCollected > 0 
+                            ? isSelected || isCurrent ? 'text-emerald-800 scale-105' : 'text-slate-700'
+                            : 'text-slate-400 opacity-60'
+                        }`}>
+                          {item.totalCollected > 0 ? `₪${item.totalCollected.toLocaleString('he-IL')}` : '0 ₪'}
+                        </span>
+
+                        {/* The Bar Column */}
+                        <div className="w-full max-w-[42px] bg-slate-100 rounded-t-xl overflow-hidden flex items-end justify-center h-[115px]">
+                          <div
+                            style={{ height: `${heightPercent}%` }}
+                            className={`w-full rounded-t-lg transition-all duration-300 ${
+                              item.totalCollected === 0
+                                ? 'bg-slate-200'
+                                : isSelected
+                                ? 'bg-gradient-to-t from-emerald-700 to-teal-500 shadow-sm'
+                                : isCurrent
+                                ? 'bg-gradient-to-t from-emerald-600 to-emerald-400'
+                                : 'bg-gradient-to-t from-emerald-500/90 to-teal-400/90 group-hover:from-emerald-600 group-hover:to-teal-500'
+                            }`}
+                          />
+                        </div>
+
+                        {/* Label beneath the bar */}
+                        <span className={`text-[11px] font-bold mt-1.5 whitespace-nowrap text-center ${
+                          isSelected ? 'text-emerald-900 font-black' : isCurrent ? 'text-emerald-800' : 'text-slate-600'
+                        }`}>
+                          {item.periodLabel}
+                        </span>
+
+                        {/* Booking Count beneath */}
+                        <span className="text-[9px] text-slate-400 font-medium">
+                          {item.bookingsCount} {item.bookingsCount === 1 ? 'הזמנה' : 'הזמנות'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Toolbar: Search and Filters */}
         <div className="p-3 sm:p-4 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
           <div className="relative flex-1 min-w-[220px]">
             <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -180,12 +468,13 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="חיפוש לפי שם כלב, בעלים, טלפון, הערות..."
-              className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm pl-3 pr-9 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
+              className="w-full pl-3 pr-9 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-900"
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
               >
                 ✕
               </button>
@@ -211,7 +500,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   trainingFilter === 'full' ? 'bg-purple-50 text-purple-800 border border-purple-200' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                תהליך מלא (50 יום)
+                תהליך מלא
               </button>
               <button
                 type="button"
@@ -260,21 +549,19 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                           ({b.dogBreed})
                         </span>
                       )}
-
-                      {/* Service Badge */}
-                      <span className="text-xs bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-lg border border-slate-200 font-bold">
-                        {b.serviceType === 'training' ? '🎓 תהליך אילוף (50 יום)' :
-                         b.serviceType === 'day_training' ? '🦮 אילוף ביומיות' :
-                         b.serviceType === 'boarding' ? '🏨 פנסיון' : '✂️ יום כיף'}
+                      
+                      {/* Service Tag */}
+                      <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-semibold border border-slate-200">
+                        {getServiceTypeHebrew(b.serviceType)}
                       </span>
 
-                      {/* Stay Status */}
+                      {/* Stay Status Tag */}
                       {isEnded ? (
-                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-semibold">
-                          🏁 הסתיים
+                        <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-md font-semibold">
+                          🏁 הסתיים ושוחרר
                         </span>
                       ) : b.stayStatus === 'checked_in' ? (
-                        <span className="text-xs bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded-md font-bold flex items-center gap-0.5">
+                        <span className="text-xs bg-sky-50 text-sky-700 border border-sky-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
                           <ArrowDownLeft className="w-3 h-3" /> שוהה כעת
                         </span>
                       ) : (
@@ -286,16 +573,15 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
                     {/* Metadata: Owner, Phone, Dates */}
                     <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
-                      <span className="flex items-center gap-1 font-semibold text-slate-800">
-                        <User className="w-3.5 h-3.5 text-indigo-500" /> {b.ownerName}
+                      <span className="flex items-center gap-1 text-slate-800 font-medium">
+                        <User className="w-3.5 h-3.5 text-indigo-500" />
+                        {b.ownerName}
                       </span>
-                      <a 
-                        href={`tel:${b.ownerPhone}`} 
-                        className="flex items-center gap-1 font-mono text-emerald-700 hover:underline"
-                      >
-                        <Phone className="w-3.5 h-3.5" /> {b.ownerPhone}
-                      </a>
-                      <span className="flex items-center gap-1 text-slate-700">
+                      <span className="flex items-center gap-1 font-mono text-slate-800 font-semibold" dir="ltr">
+                        <Phone className="w-3.5 h-3.5 text-green-600" />
+                        {b.ownerPhone}
+                      </span>
+                      <span className="flex items-center gap-1 text-slate-800 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
                         <Calendar className="w-3.5 h-3.5 text-amber-600" />
                         <span>{formatDateIL(b.startDate)} עד {formatDateIL(b.endDate)}</span>
                         <span className="text-slate-400 font-semibold">({daysCount} ימים)</span>
@@ -315,11 +601,11 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                     {/* Financial Badge */}
                     <div className="text-right pl-2">
                       <div className="text-xs text-slate-500 font-medium">
-                        סה״כ: <span className="font-bold text-slate-900">₪{totalPrice.toLocaleString()}</span>
+                        סה״כ: <span className="font-bold text-slate-900">₪{totalPrice.toLocaleString('he-IL')}</span>
                       </div>
                       {remainingDebt > 0 && b.paymentStatus !== 'fully_paid' ? (
                         <div className="text-xs font-black text-red-600 flex items-center gap-1">
-                          <span>חוב: ₪{remainingDebt.toLocaleString()}</span>
+                          <span>חוב: ₪{remainingDebt.toLocaleString('he-IL')}</span>
                         </div>
                       ) : (
                         <div className="text-xs font-bold text-green-600 flex items-center gap-1">
@@ -342,6 +628,19 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         >
                           <CheckCircle className="w-3.5 h-3.5" />
                           <span>סמן כשולם</span>
+                        </button>
+                      )}
+
+                      {/* Release Dog Button */}
+                      {b.stayStatus !== 'checked_out' && b.stayStatus !== 'cancelled' && onInitiateRelease && (
+                        <button
+                          type="button"
+                          onClick={() => onInitiateRelease(b)}
+                          className="bg-amber-500 hover:bg-amber-600 active:scale-98 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                          title="שחרר כלב (בדיקת חוב וסגירת שחרור)"
+                        >
+                          <Home className="w-3.5 h-3.5" />
+                          <span>שחרור</span>
                         </button>
                       )}
 
@@ -387,10 +686,9 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         <Edit3 className="w-3.5 h-3.5" />
                         <span>ערוך</span>
                       </button>
-
                     </div>
-                  </div>
 
+                  </div>
                 </div>
               );
             })
@@ -398,14 +696,11 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-3 sm:p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-          <span className="text-xs text-slate-500 font-medium">
-            💡 ניתן לערוך כל פרט בהזמנה, לסמן תשלומים או לעדכן תאריכים ישירות מכאן.
-          </span>
+        <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+          <span>💡 ניתן לערוך כל פרט בהזמנה, לסמן תשלומים או לעדכן תאריכים ישירות מכאן.</span>
           <button
-            type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs rounded-xl shadow-2xs cursor-pointer transition-colors"
+            className="px-4 py-1.5 rounded-xl bg-white border border-slate-200 font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             סגור
           </button>

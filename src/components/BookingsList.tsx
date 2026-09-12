@@ -19,7 +19,8 @@ import {
   Sparkles,
   ArrowDownLeft,
   ArrowUpRight,
-  Download
+  Download,
+  Home
 } from 'lucide-react';
 import { Booking, ResortSettings, ServiceType, PaymentStatus, StayStatus } from '../types';
 import { formatDateIL, calculateDaysCount } from '../utils/dateUtils';
@@ -35,6 +36,7 @@ interface BookingsListProps {
   onMarkAsPaid: (bookingId: string) => void;
   onOpenPaymentModal: (booking: Booking) => void;
   onOpenNewBooking: () => void;
+  onInitiateRelease?: (booking: Booking) => void;
 }
 
 export const BookingsList: React.FC<BookingsListProps> = ({
@@ -46,6 +48,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
   onMarkAsPaid,
   onOpenPaymentModal,
   onOpenNewBooking,
+  onInitiateRelease,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'all' | PaymentStatus>('all');
@@ -383,6 +386,22 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                         >
                           <CheckCircle className="w-4 h-4" />
                           <span>סמן כשולם</span>
+                        </button>
+                      )}
+
+                      {/* Release Dog Button */}
+                      {b.stayStatus !== 'checked_out' && b.stayStatus !== 'cancelled' && onInitiateRelease && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onInitiateRelease(b);
+                          }}
+                          title="שחרר כלב הביתה (בדיקת חוב וסגירת שחרור)"
+                          className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 shadow-xs transition-all cursor-pointer"
+                        >
+                          <Home className="w-4 h-4" />
+                          <span>שחרור</span>
                         </button>
                       )}
 

@@ -33,6 +33,7 @@ interface DayDetailsModalProps {
   onMarkAsPaid: (bookingId: string) => void;
   onOpenPaymentModal: (booking: Booking) => void;
   onToggleStayStatus: (bookingId: string, newStatus: Booking['stayStatus']) => void;
+  onInitiateRelease?: (booking: Booking) => void;
 }
 
 export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
@@ -46,6 +47,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   onMarkAsPaid,
   onOpenPaymentModal,
   onToggleStayStatus,
+  onInitiateRelease,
 }) => {
   if (!dateStr) return null;
 
@@ -136,6 +138,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
+                    onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
                     actionType="arrival"
                   />
                 ))}
@@ -167,6 +170,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
+                    onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
                     actionType="staying"
                   />
                 ))}
@@ -198,6 +202,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
+                    onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
                     actionType="departure"
                   />
                 ))}
@@ -219,6 +224,7 @@ interface DogBookingCardProps {
   onDelete?: () => void;
   onMarkPaid: () => void;
   onOpenPayment: () => void;
+  onInitiateRelease?: () => void;
   actionType: 'arrival' | 'staying' | 'departure';
 }
 
@@ -229,6 +235,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   onDelete,
   onMarkPaid,
   onOpenPayment,
+  onInitiateRelease,
 }) => {
   const todayStr = getTodayStr();
   const isEnded = booking.stayStatus === 'checked_out' || (booking.endDate < todayStr);
@@ -336,6 +343,22 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
             <span>ערוך</span>
           </button>
+
+          {/* Release Dog Button */}
+          {!isEnded && onInitiateRelease && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onInitiateRelease();
+              }}
+              title="שחרר כלב הביתה (בודק חוב פתוח ומאפשר לסמן כשולם ולסגור שחרור)"
+              className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+            >
+              <Home className="w-3.5 h-3.5" />
+              <span>שחרר הביתה</span>
+            </button>
+          )}
 
           {/* Quick Pay Action */}
           {remainingDebt > 0 && !isEnded && (

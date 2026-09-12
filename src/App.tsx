@@ -43,6 +43,7 @@ import { Guide } from './components/Guide';
 import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricModal';
 import { ReviewRequestModal } from './components/ReviewRequestModal';
 import { IntakeRequestsModal } from './components/IntakeRequestsModal';
+import { CheckoutDebtAlertModal } from './components/CheckoutDebtAlertModal';
 import { PublicIntakePage } from './components/PublicIntakePage';
 import { SendIntakeModal } from './components/SendIntakeModal';
 
@@ -187,6 +188,17 @@ export default function App() {
     }
     return acc + (Number(b.depositAmount) || 0);
   }, 0);
+
+  // Month-to-date collections calculation (הכנסות בפועל מתחילת החודש הנוכחי)
+  const currentMonthKey = todayStr.substring(0, 7);
+  const currentMonthBookings = activeBookings.filter(b => b.startDate && b.startDate.startsWith(currentMonthKey));
+  const monthToDateCollected = currentMonthBookings.reduce((acc, b) => {
+    if (b.paymentStatus === 'fully_paid') {
+      return acc + (Number(b.totalPrice) || 0);
+    }
+    return acc + (Number(b.depositAmount) || 0);
+  }, 0);
+  const monthPaidCount = currentMonthBookings.filter(b => (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid').length;
 
   const openDebtTotal = activeBookings.reduce((acc, b) => {
     if (b.paymentStatus === 'fully_paid') return acc;
@@ -564,6 +576,37 @@ export default function App() {
     }
   };
 
+  // Checkout Debt Warning Modal State & Handlers
+  const [checkoutDebtBooking, setCheckoutDebtBooking] = useState<Booking | null>(null);
+
+  const handleInitiateRelease = (booking: Booking) => {
+    const debt = Math.max(0, (Number(booking.totalPrice) || 0) - (Number(booking.depositAmount) || 0));
+    if (debt > 0 && booking.paymentStatus !== 'fully_paid') {
+      setCheckoutDebtBooking(booking);
+    } else {
+      handleToggleStayStatus(booking.id, 'checked_out');
+    }
+  };
+
+  const handleConfirmReleaseWithDebt = async (booking: Booking) => {
+    setCheckoutDebtBooking(null);
+    await handleToggleStayStatus(booking.id, 'checked_out');
+  };
+
+  const handleMarkPaidAndRelease = async (booking: Booking) => {
+    setCheckoutDebtBooking(null);
+    const updated: Booking = {
+      ...booking,
+      depositAmount: Number(booking.totalPrice) || 0,
+      paymentStatus: 'fully_paid',
+      stayStatus: 'checked_out',
+      updatedAt: new Date().toISOString()
+    };
+    setBookings(prev => prev.map(b => b.id === booking.id ? updated : b));
+    showToast(`🏡 ${booking.dogName} שוחרר בהצלחה! התשלום סומן כשולם במלואו.`);
+    await saveBookingToDb(updated);
+  };
+
   // Clear all bookings
   const handleClearAllData = async () => {
     setBookings([]);
@@ -904,29 +947,29 @@ export default function App() {
             </div>
           </div>
 
-          {/* Card 5 (Left in RTL): נגבה עד כה */}
+          {/* Card 5 (Left in RTL): הכנסות מתחילת החודש */}
           <div 
             onClick={() => setActiveHeaderMetric('revenue')}
             role="button"
             tabIndex={0}
             className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all active:scale-[0.99] group"
-            title="לחץ לעיון בכל התקבולים וההכנסות שנגבו"
+            title="לחץ לצפייה בגרפי עמודות חודשיים ושנתיים וייצוא לאקסל"
           >
             <div className="flex items-center justify-between">
               <div className="text-xs font-bold text-slate-500 text-right group-hover:text-emerald-700 transition-colors">
-                נגבה עד כה
+                הכנסות מתחילת החודש
               </div>
               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                💳 הכנסות
+                💳 מתחילת החודש
               </span>
             </div>
             <div className="text-2xl sm:text-3xl font-black text-[#0f766e] my-1 text-right">
-              ₪{totalCollected.toLocaleString('he-IL')}
+              ₪{monthToDateCollected.toLocaleString('he-IL')}
             </div>
             <div className="flex items-center justify-between text-[11px] font-medium text-slate-400 pt-1 border-t border-slate-50">
-              <span className="truncate">סה״כ מקדמות ותשלומים</span>
+              <span className="truncate">{monthPaidCount} שולמו החודש • גרפים 📊</span>
               <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100 flex items-center gap-0.5">
-                עיון ועריכה 🔍
+                עיון וגרפים 🔍
               </span>
             </div>
           </div>
@@ -986,6 +1029,7 @@ export default function App() {
               onEditBooking={(b) => setBookingFormModal({ isOpen: true, initialData: b })}
               onDeleteBooking={handleDeleteBooking}
               onOpenNewBooking={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
+              onInitiateRelease={handleInitiateRelease}
             />
           )}
 
@@ -1045,6 +1089,7 @@ export default function App() {
             setPaymentModalBooking(b);
           }}
           onToggleStayStatus={handleToggleStayStatus}
+          onInitiateRelease={handleInitiateRelease}
         />
       )}
 
@@ -1191,8 +1236,23 @@ export default function App() {
             setPaymentModalBooking(booking);
           }}
           onToggleStayStatus={handleToggleStayStatus}
+          onInitiateRelease={handleInitiateRelease}
         />
       )}
+
+      {/* Checkout Debt Warning Modal */}
+      <CheckoutDebtAlertModal
+        isOpen={!!checkoutDebtBooking}
+        booking={checkoutDebtBooking}
+        settings={settings}
+        onClose={() => setCheckoutDebtBooking(null)}
+        onMarkPaidAndRelease={handleMarkPaidAndRelease}
+        onConfirmReleaseWithDebt={handleConfirmReleaseWithDebt}
+        onOpenPaymentModal={(b) => {
+          setCheckoutDebtBooking(null);
+          setPaymentModalBooking(b);
+        }}
+      />
 
       {/* Intake Requests Modal (Client Online Inquiries) */}
       {isIntakeModalOpen && (

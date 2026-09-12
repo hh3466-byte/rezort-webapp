@@ -65,6 +65,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   const [notes, setNotes] = useState(initialData?.notes || '');
   const [specialDiet, setSpecialDiet] = useState(initialData?.specialDiet || '');
   const [vaccinationValid, setVaccinationValid] = useState(initialData?.vaccinationValid ?? true);
+  const [showDebtCheckoutConfirm, setShowDebtCheckoutConfirm] = useState(false);
 
   // Voice dictation state inside modal (DEFAULT is voice dictation enabled)
   const [voiceMode, setVoiceMode] = useState<'voice' | 'manual'>('voice');
@@ -221,12 +222,24 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       return;
     }
 
-    // Determine payment status
-    let paymentStatus: PaymentStatus = 'unpaid';
-    if (depositAmount >= totalPrice && totalPrice > 0) {
-      paymentStatus = 'fully_paid';
-    } else if (depositAmount > 0) {
-      paymentStatus = 'deposit_paid';
+    const calcDebt = Math.max(0, Number(totalPrice) - Number(depositAmount));
+    if (stayStatus === 'checked_out' && calcDebt > 0 && Number(depositAmount) < Number(totalPrice) && !showDebtCheckoutConfirm) {
+      setShowDebtCheckoutConfirm(true);
+      return;
+    }
+
+    doSave();
+  };
+
+  const doSave = (customDeposit?: number, customPaymentStatus?: PaymentStatus) => {
+    const finalDeposit = customDeposit !== undefined ? Number(customDeposit) : (Number(depositAmount) || 0);
+    let finalPaymentStatus: PaymentStatus = customPaymentStatus || 'unpaid';
+    if (!customPaymentStatus) {
+      if (finalDeposit >= totalPrice && totalPrice > 0) {
+        finalPaymentStatus = 'fully_paid';
+      } else if (finalDeposit > 0) {
+        finalPaymentStatus = 'deposit_paid';
+      }
     }
 
     const booking: Booking = {
@@ -240,8 +253,8 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       startDate,
       endDate,
       totalPrice: Number(totalPrice) || 0,
-      depositAmount: Number(depositAmount) || 0,
-      paymentStatus,
+      depositAmount: finalDeposit,
+      paymentStatus: finalPaymentStatus,
       paymentMethod,
       stayStatus,
       notes: notes.trim(),
@@ -851,6 +864,48 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm p-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none resize-none"
             />
           </div>
+
+          {/* Checkout Debt Warning Prompt */}
+          {showDebtCheckoutConfirm && (
+            <div className="p-3.5 bg-red-50 border-2 border-red-300 rounded-2xl text-slate-900 space-y-2 animate-in fade-in">
+              <div className="flex items-center gap-2 text-red-700 font-black text-sm">
+                <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+                <span>שים לב: סימנת את הכלב כמשוחרר, אך נותר חוב פתוח של ₪{remainingDebt.toLocaleString('he-IL')}!</span>
+              </div>
+              <p className="text-xs text-slate-600">
+                האם ברצונך לסמן את ההזמנה כשולמה במלואה ולסגור שחרור, או לשחרר עם יתרת חוב פתוחה?
+              </p>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDepositAmount(totalPrice);
+                    doSave(totalPrice, 'fully_paid');
+                  }}
+                  className="bg-green-600 hover:bg-green-700 text-white font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1 shadow-xs cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>סמן כשולם מלא וסגור שחרור</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    doSave(depositAmount, depositAmount > 0 ? 'deposit_paid' : 'unpaid');
+                  }}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs px-3.5 py-2 rounded-xl cursor-pointer"
+                >
+                  שמור ושחרר עם חוב פתוח
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDebtCheckoutConfirm(false)}
+                  className="text-xs text-slate-500 hover:text-slate-800 underline pr-1 cursor-pointer"
+                >
+                  חזור לעריכה
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Form Action Buttons */}
           <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
