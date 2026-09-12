@@ -1215,7 +1215,12 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-[11px] text-slate-700 space-y-1">
                 <span className="font-bold text-slate-500 block">תצוגה מקדימה של הודעת הוואטסאפ שתשלח:</span>
                 <div className="text-slate-800 whitespace-pre-wrap font-sans bg-white p-2.5 rounded-xl border border-slate-200">
-                  {`היי ${paymentPromptRequest.ownerName}, שמחנו לשוחח! 🐾🐶\nשמחים לעדכן שהמקום עבור *${paymentPromptRequest.dogName}* נשמר ${paymentPromptRequest.serviceType === 'training' ? `לתכנית אילוף בריזורט לכלב החל מתאריך ${paymentPromptRequest.startDate}` : `בריזורט לכלב בין התאריכים ${paymentPromptRequest.startDate} עד ${paymentPromptRequest.endDate}`}.${paymentAmount ? `\n💰 *הסכום שסוכם הוא:* ₪${paymentAmount}\n` : ''}\nלהשלמת השריון, מצורף הקישור המאובטח לתשלום${paymentAmount ? ` (יש להזין ₪${paymentAmount} בעמוד התשלום)` : ''}:\n👉 ${customPaymentLink}\n\n(בתוך הקישור ניתן לשלם בנוחות ב-Bit, Apple Pay, Google Pay או כרטיס אשראי)\n\n⏰ *נהלי שהות ושירות בסופ״ש וחגים:*\n• כניסה עד שעה 14:00 בשישי / ערב חג, והיציאה היא ביום ראשון / למחרת החג בשעה 09:30 (היציאה לא יכולה להיות ביום שבת).\n• בסוף שבוע אין שירות לקוחות, הצוות מתמקד בטיפול בכלבים בלבד. על הבעלים להתגבר ולהתאפק עד לחידוש שירות הלקוחות למחרת השבת / חג.\n\nבברכה חמה,\nצוות הריזורט לכלב 🐕🤍`}
+                  {formatClientPaymentLinkMessage(
+                    paymentPromptRequest,
+                    settings,
+                    parseFloat(paymentAmount) || 0,
+                    customPaymentLink
+                  )}
                 </div>
               </div>
 

@@ -109,7 +109,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
     if (d.getDay() === 6 && serviceType === 'boarding') {
       const sun = addDays(val, 1);
       setEndDate(sun);
-      setSaturdayWarning('⚠️ היציאה אינה יכולה להיות ביום שבת (אין שחרורים בשבת). תאריך היציאה עודכן ליום ראשון בשעה 09:30.');
+      setSaturdayWarning('⚠️ היציאה אינה יכולה להיות ביום שבת (אין שחרורים בשבת). תאריך היציאה עודכן ליום ראשון בשעה 09:00.');
     } else {
       setEndDate(val);
       setSaturdayWarning(null);
@@ -196,7 +196,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       if (serviceType === 'boarding') {
         const endD = new Date(endDate + 'T00:00:00');
         if (endD.getDay() === 6) {
-          setErrorMessage('היציאה לא יכולה להיות ביום שבת (אין שחרורים בשבת). היציאה מסופ״ש הינה ביום ראשון בשעה 09:30.');
+          setErrorMessage('היציאה לא יכולה להיות ביום שבת (אין שחרורים בשבת). היציאה מסופ״ש הינה ביום ראשון בשעה 09:00.');
           return false;
         }
       }
@@ -548,7 +548,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                     ☀️ בחר את תאריך יום הכיף המבוקש *
                   </label>
                   <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
-                    שעות פעילות: 08:00 - 18:00
+                    שעות פעילות: 09:00 - 19:00
                   </span>
                 </div>
 
@@ -766,7 +766,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                         id: 'weekend', 
                         icon: '🌟', 
                         title: 'סופ״ש הקרוב', 
-                        subtitle: 'שישי 14:00 ➔ ראשון 09:30', 
+                        subtitle: 'שישי 14:00 ➔ ראשון 09:00', 
                         detail: '2 לילות',
                         matches: nightsCount === 2 && getDayNameHebrew(startDate) === 'שישי' && getDayNameHebrew(endDate) === 'ראשון'
                       },
@@ -861,22 +861,32 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                   </div>
                 </div>
 
-                {/* 4. Mandatory Weekend & Holiday Schedule & Customer Service Policy */}
-                <div className="bg-amber-50/95 border-2 border-amber-300/90 rounded-2xl p-3.5 sm:p-4 text-xs text-amber-950 space-y-2 shadow-2xs">
+                {/* 4. Mandatory Operating Hours & Customer Service Policy */}
+                <div className="bg-amber-50/95 border-2 border-amber-300/90 rounded-2xl p-3.5 sm:p-4 text-xs text-amber-950 space-y-2.5 shadow-2xs">
                   <div className="font-black text-amber-950 flex items-center gap-2 text-xs sm:text-sm">
                     <span className="text-base">⏰</span>
-                    <span>נהלי שעות כניסה, יציאה ושירות לקוחות בסופ״ש וחגים:</span>
+                    <span>שעות פעילות, נהלי כניסה/יציאה ושירות לקוחות:</span>
                   </div>
                   <div className="space-y-1.5 font-bold leading-relaxed pr-1">
                     <p>
-                      • <strong>כניסה:</strong> עד שעה 14:00 בשישי / ערב חג.
+                      • <strong>אמצע שבוע (ראשון – חמישי):</strong> שעות פעילות ושירות לקוחות הינן <strong>09:00 – 19:00</strong>.
                     </p>
                     <p>
-                      • <strong>יציאה:</strong> ביום ראשון / למחרת החג בשעה 09:30 (היציאה לא יכולה להיות ביום שבת).
+                      • <strong>כניסה בסופ״ש/ערב חג:</strong> עד שעה 14:00 בשישי / ערב חג.
                     </p>
-                    <p className="text-amber-950 bg-amber-100/80 p-2.5 rounded-xl border border-amber-300/80 font-black">
-                      📢 בסוף שבוע אין שירות לקוחות, הצוות מתמקד בטיפול בכלבים בלבד. על הבעלים להתגבר ולהתאפק עד לחידוש שירות הלקוחות למחרת השבת / חג.
+                    <p>
+                      • <strong>יציאה מסופ״ש/חג:</strong> ביום ראשון / למחרת החג בשעה <strong>09:00</strong> בלבד (היציאה אינה יכולה להיות ביום שבת).
                     </p>
+                    <div className="text-amber-950 bg-amber-100/90 p-2.5 sm:p-3 rounded-xl border border-amber-300/90 font-black leading-relaxed space-y-1 mt-1">
+                      <div className="flex items-center gap-1.5">
+                        <span>📢</span>
+                        <span>שימו לב — שירות לקוחות וטיפול בכלבים:</span>
+                      </div>
+                      <p className="text-[11px] sm:text-xs font-bold">
+                        גם באמצע השבוע מעבר לשעות הפעילות (לפני 09:00 ואחרי 19:00), ובסופי שבוע וחגים — <strong>אין שירות לקוחות</strong>.<br />
+                        על הבעלים להתגבר ולהתאפק! בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐾
+                      </p>
+                    </div>
                   </div>
                 </div>
 

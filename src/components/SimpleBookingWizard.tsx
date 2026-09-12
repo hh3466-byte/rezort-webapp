@@ -119,8 +119,8 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const [pricingMode, setPricingMode] = useState<'daily' | 'period'>('daily');
   const [startDate, setStartDate] = useState(initialData?.startDate || todayStr);
   const [endDate, setEndDate] = useState(initialData?.endDate || addDays(todayStr, 3));
-  const [arrivalTime, setArrivalTime] = useState(initialData?.arrivalTime || '08:00 - 10:00');
-  const [pickupTime, setPickupTime] = useState(initialData?.pickupTime || '16:00 - 18:00');
+  const [arrivalTime, setArrivalTime] = useState(initialData?.arrivalTime || '09:00 - 11:00');
+  const [pickupTime, setPickupTime] = useState(initialData?.pickupTime || '17:00 - 19:00');
   
   // Daily rate
   const [dailyRate, setDailyRate] = useState<number>(() => {
@@ -1996,11 +1996,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     onChange={(e) => setArrivalTime(e.target.value)}
                     className="w-full bg-slate-50 text-xs font-medium text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none cursor-pointer"
                   >
-                    <option value="08:00 - 10:00">08:00 - 10:00 (בוקר מוקדם)</option>
-                    <option value="10:00 - 12:00">10:00 - 12:00 (בוקר)</option>
-                    <option value="12:00 - 14:00">12:00 - 14:00 (צהריים)</option>
-                    <option value="16:00 - 18:00">16:00 - 18:00 (אחר הצהריים)</option>
-                    <option value="18:00 - 20:00">18:00 - 20:00 (ערב)</option>
+                    <option value="09:00 - 11:00">09:00 - 11:00 (בוקר)</option>
+                    <option value="11:00 - 13:00">11:00 - 13:00 (צהריים מוקדמים)</option>
+                    <option value="13:00 - 15:00">13:00 - 15:00 (צהריים)</option>
+                    <option value="15:00 - 17:00">15:00 - 17:00 (אחר הצהריים)</option>
+                    <option value="17:00 - 19:00">17:00 - 19:00 (ערב)</option>
                   </select>
                 </div>
 
@@ -2013,11 +2013,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     onChange={(e) => setPickupTime(e.target.value)}
                     className="w-full bg-slate-50 text-xs font-medium text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none cursor-pointer"
                   >
-                    <option value="08:00 - 10:00">08:00 - 10:00 (בוקר מוקדם)</option>
-                    <option value="10:00 - 12:00">10:00 - 12:00 (בוקר)</option>
-                    <option value="12:00 - 14:00">12:00 - 14:00 (צהריים)</option>
-                    <option value="16:00 - 18:00">16:00 - 18:00 (אחר הצהריים)</option>
-                    <option value="18:00 - 20:00">18:00 - 20:00 (ערב)</option>
+                    <option value="09:00 - 11:00">09:00 - 11:00 (בוקר)</option>
+                    <option value="11:00 - 13:00">11:00 - 13:00 (צהריים מוקדמים)</option>
+                    <option value="13:00 - 15:00">13:00 - 15:00 (צהריים)</option>
+                    <option value="15:00 - 17:00">15:00 - 17:00 (אחר הצהריים)</option>
+                    <option value="17:00 - 19:00">17:00 - 19:00 (ערב)</option>
                   </select>
                 </div>
               </div>
