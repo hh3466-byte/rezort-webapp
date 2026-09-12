@@ -592,24 +592,25 @@ export default function App() {
           
           {/* Action Buttons (Left in RTL) */}
           <div className="flex flex-wrap items-center gap-2 order-3 xl:order-1">
+            {/* 1. Primary: New Booking */}
             <button
               onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
               id="btn-new-booking-top"
-              className="bg-[#065f46] hover:bg-[#044e45] active:scale-98 text-white font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+              className="bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
             >
-              <span>+</span>
+              <span className="text-base font-bold">+</span>
               <span>הזמנה חדשה</span>
             </button>
 
-            {/* Intake Requests Modal Button */}
+            {/* 2. Intake Requests Modal (with prominent live count) */}
             <button
               type="button"
               onClick={() => setIsIntakeModalOpen(true)}
               id="btn-intake-requests-top"
-              className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative ${
+              className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-2xs ${
                 pendingIntakeCount > 0
                   ? 'bg-gradient-to-r from-emerald-50 via-white to-emerald-50 hover:from-emerald-100 hover:to-emerald-50 border-2 border-emerald-600 text-emerald-950 shadow-md shadow-emerald-700/15 ring-2 ring-emerald-500/25 hover:scale-[1.02] active:scale-95'
-                  : 'bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 hover:border-emerald-300 text-slate-800 shadow-2xs'
+                  : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-emerald-300 text-slate-800'
               }`}
               title="צפייה בבקשות קליטה חדשות מלקוחות, חיוג לתיאום, ושליחת קישור לתשלום"
             >
@@ -625,55 +626,51 @@ export default function App() {
               )}
             </button>
 
-            {/* Reports Button */}
-            <button
-              type="button"
-              onClick={() => setIsReportsOpen(true)}
-              className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 hover:border-amber-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-              title="דוחות כספיים ותפוסה"
-            >
-              <span>💰</span>
-              <span>דוחות</span>
-            </button>
-
-            {/* Public Intake Link Button */}
+            {/* 3. Public Intake Form Link */}
             <button
               type="button"
               onClick={() => setShowPublicIntake(true)}
-              className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 text-slate-600 hover:text-emerald-700 font-semibold px-2.5 py-2 rounded-xl text-xs shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
+              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-emerald-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
               title="פתיחת שאלון הקליטה המקוון (אותו שולחים ללקוחות פונים בוואטסאפ)"
             >
-              <span>🔗 שאלון</span>
+              <span className="text-base">🔗</span>
+              <span>שאלון קליטה</span>
             </button>
 
-            {/* Notification button for pending review requests (dogs checked out yesterday) */}
+            {/* 4. Reports Button */}
+            <button
+              type="button"
+              onClick={() => setIsReportsOpen(true)}
+              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-amber-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="דוחות כספיים ותפוסה"
+            >
+              <span className="text-base">💰</span>
+              <span>דוחות</span>
+            </button>
+
+            {/* 5. Settings Button */}
+            <button
+              onClick={handleOpenSettingsWithAuth}
+              id="btn-settings-top"
+              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="הגדרות תפוסה, תעריפים, ביט וגיבוי (אישור מנהל)"
+            >
+              <span className="text-base">⚙️</span>
+              <span>הגדרות</span>
+            </button>
+
+            {/* 6. Pending Review Requests (Conditional notification button) */}
             {pendingReviewBookings.length > 0 && (
               <button
                 type="button"
                 onClick={() => setIsReviewModalDismissed(false)}
-                className="bg-amber-50 hover:bg-amber-100 active:scale-98 border border-amber-300 text-amber-900 font-bold px-3 py-1.5 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer animate-pulse"
+                className="bg-amber-50 hover:bg-amber-100 active:scale-95 border border-amber-300 text-amber-900 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer animate-pulse"
                 title="לחץ לפתיחת בקשת חוות דעת לכלבים שהשתחררו אתמול"
               >
                 <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
                 <span>⭐ {pendingReviewBookings.length} חוות דעת</span>
               </button>
             )}
-
-            {/* Settings Button */}
-            <button
-              onClick={handleOpenSettingsWithAuth}
-              id="btn-settings-top"
-              className="bg-white hover:bg-slate-50 active:scale-98 border border-slate-200 hover:border-slate-300 text-slate-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-              title="הגדרות תפוסה, תעריפים, ביט וגיבוי (אישור מנהל)"
-            >
-              <SettingsIcon className="w-4 h-4 text-emerald-700" />
-              <span>⚙️ הגדרות</span>
-            </button>
-
-            <div className="hidden sm:flex items-center gap-1.5 bg-[#eff6ff] border border-blue-100 text-blue-700 px-2.5 py-1.5 rounded-full text-xs font-semibold shadow-2xs">
-              <span>🔮</span>
-              <span>משותף</span>
-            </div>
           </div>
 
           {/* Main View Navigation Tabs (Center in RTL) */}
