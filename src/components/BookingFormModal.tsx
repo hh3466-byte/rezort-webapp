@@ -80,8 +80,6 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   const handleServiceTypeChange = (newType: ServiceType) => {
     setServiceType(newType);
     if (newType === 'training') {
-      const newEndDate = addDays(startDate, 50);
-      setEndDate(newEndDate);
       setPricingMode('period');
       setTotalPrice(settings.defaultDailyRateTraining || 6500);
     } else {
@@ -99,7 +97,9 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   // Recompute total price
   useEffect(() => {
     if (serviceType === 'training') {
-      setTotalPrice(settings.defaultDailyRateTraining || 6500);
+      if (!totalPrice || totalPrice === 0) {
+        setTotalPrice(settings.defaultDailyRateTraining || 6500);
+      }
     } else if (pricingMode === 'daily') {
       const days = calculateDaysCount(startDate, endDate);
       setTotalPrice(days * dailyRate);
@@ -491,10 +491,10 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               >
                 <div className="flex items-center justify-between">
                   <span className="text-base">🎓</span>
-                  <span className="text-[10px] font-bold text-amber-700">₪{settings.defaultDailyRateTraining || 6500}</span>
+                  <span className="text-[10px] font-bold text-amber-700">מחיר כולל ₪{settings.defaultDailyRateTraining || 6500}</span>
                 </div>
-                <div className="text-xs font-bold mt-1">תהליך אילוף (50 יום)</div>
-                <div className="text-[10px] text-slate-500 font-normal">תכנית מלאה ל-50 יום</div>
+                <div className="text-xs font-bold mt-1">תהליך אילוף</div>
+                <div className="text-[10px] text-slate-500 font-normal">לינה ואילוף מלא</div>
               </button>
 
               <button
@@ -585,6 +585,50 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               </div>
             </div>
 
+            {/* If Training: Dedicated Estimated Days Input */}
+            {serviceType === 'training' && (
+              <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                    <span>🎓 מספר ימי אילוף משוערים</span>
+                  </span>
+                  <p className="text-[11px] text-amber-800">
+                    הזן את הערכת הימים לאילוף הכלב — תאריך הסיום יתעדכן בהתאם:
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (daysCount > 1) setEndDate(addDays(startDate, daysCount - 2));
+                    }}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 font-black text-amber-900 flex items-center justify-center cursor-pointer text-sm"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={daysCount}
+                    onChange={(e) => {
+                      const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                      setEndDate(addDays(startDate, val - 1));
+                    }}
+                    className="w-16 bg-white border border-amber-300 rounded-lg py-1.5 text-center font-black text-amber-950 text-sm focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEndDate(addDays(startDate, daysCount))}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 font-black text-amber-900 flex items-center justify-center cursor-pointer text-sm"
+                  >
+                    +
+                  </button>
+                  <span className="text-xs font-bold text-amber-900 mr-1">ימים</span>
+                </div>
+              </div>
+            )}
+
             {/* Quick Days Selector & Stepper */}
             <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-1 text-xs">
@@ -619,8 +663,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                   { label: '3 ימים', days: 3 },
                   { label: 'שבוע (7)', days: 7 },
                   { label: 'שבועיים (14)', days: 14 },
-                  { label: 'חודש (30)', days: 30 },
-                  { label: '50 יום 🎓', days: 50 }
+                  { label: 'חודש (30)', days: 30 }
                 ].map(p => (
                   <button
                     key={p.days}
@@ -639,48 +682,112 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
             </div>
           </div>
 
-          {/* Section 5: Pricing Strategy (Per Day vs Fixed Period) & Payment */}
+          {/* Section 5: Pricing Strategy & Payment */}
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3.5">
             
             {/* Top row: Pricing Mode Tabs */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200">
               <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                 <DollarSign className="w-4 h-4 text-emerald-600" />
-                חיוב, מקדמה ותשלום (קביעת צבע ביומן)
+                {serviceType === 'training' ? 'תמחור תהליך אילוף (מחיר כולל)' : 'חיוב, מקדמה ותשלום'}
               </h4>
 
-              {/* Toggle Mode: Daily Rate vs Period Rate */}
-              <div className="inline-flex p-0.5 bg-slate-200 rounded-lg text-xs font-semibold">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPricingMode('daily');
-                    setTotalPrice(daysCount * dailyRate);
-                  }}
-                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
-                    pricingMode === 'daily'
-                      ? 'bg-white text-emerald-900 shadow-xs font-bold'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  📅 תשלום לפי מחיר ליום
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPricingMode('period')}
-                  className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
-                    pricingMode === 'period'
-                      ? 'bg-white text-indigo-900 shadow-xs font-bold'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  🏷️ מחיר פיקס / לתקופה
-                </button>
-              </div>
+              {/* Toggle Mode: Daily Rate vs Period Rate (Hidden for training since training has NO daily rate) */}
+              {serviceType !== 'training' ? (
+                <div className="inline-flex p-0.5 bg-slate-200 rounded-lg text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPricingMode('daily');
+                      setTotalPrice(daysCount * dailyRate);
+                    }}
+                    className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                      pricingMode === 'daily'
+                        ? 'bg-white text-emerald-900 shadow-xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    📅 תשלום לפי מחיר ליום
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPricingMode('period')}
+                    className={`px-3 py-1 rounded-md transition-all cursor-pointer ${
+                      pricingMode === 'period'
+                        ? 'bg-white text-indigo-900 shadow-xs font-bold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    🏷️ מחיר פיקס / לתקופה
+                  </button>
+                </div>
+              ) : (
+                <span className="text-[11px] font-bold text-amber-800 bg-amber-100/80 px-2.5 py-1 rounded-lg border border-amber-200">
+                  🎓 באילוף אין מחיר ליום — יש רק מחיר כולל
+                </span>
+              )}
             </div>
 
             {/* Inputs based on pricing mode */}
-            {pricingMode === 'daily' ? (
+            {serviceType === 'training' ? (
+              /* Training: Pure Total Price, no daily rate */
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs text-slate-700 font-bold block mb-1">
+                    מחיר כולל לתהליך האילוף (₪) *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={totalPrice === 0 ? '' : totalPrice}
+                    onChange={(e) => setTotalPrice(e.target.value === '' ? 0 : Number(e.target.value) || 0)}
+                    placeholder="6500"
+                    className="w-full bg-white text-amber-950 font-black text-base px-3.5 py-2.5 rounded-xl border-2 border-amber-400 focus:border-amber-600 focus:outline-none shadow-2xs"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">
+                    ברירת מחדל ₪6,500 — ניתן לעריכה לפי הסיכום עם הלקוח
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-700 font-bold block mb-1">
+                    מקדמה ששולמה (₪)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={totalPrice}
+                    value={depositAmount === 0 ? '' : depositAmount}
+                    onChange={(e) => setDepositAmount(e.target.value === '' ? 0 : Number(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-full bg-white text-green-600 font-black text-base px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">
+                    {depositAmount > 0 
+                      ? (depositAmount >= totalPrice ? '🟢 שולם במלואו' : `יתרת חוב לתשלום: ₪${Math.max(0, totalPrice - depositAmount)}`)
+                      : '🔴 טרם שולם (חוב פתוח)'}
+                  </span>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-700 font-bold block mb-1">
+                    אמצעי תשלום
+                  </label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                    className="w-full bg-white text-slate-900 text-sm font-semibold px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none cursor-pointer"
+                  >
+                    <option value="bit">ביט (Bit)</option>
+                    <option value="paybox">פייבוקס (PayBox)</option>
+                    <option value="cash">מזומן</option>
+                    <option value="credit">כרטיס אשראי / Grow</option>
+                    <option value="bank_transfer">העברה בנקאית</option>
+                    <option value="other">אחר</option>
+                  </select>
+                </div>
+              </div>
+            ) : pricingMode === 'daily' ? (
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="text-xs text-slate-600 font-semibold block mb-1">
@@ -757,7 +864,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                 </div>
               </div>
             ) : (
-              /* Period / Global Price Mode */
+              /* Period / Global Price Mode for other services */
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs text-slate-600 font-semibold block mb-1">

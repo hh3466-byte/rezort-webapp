@@ -97,7 +97,7 @@ export function getClarificationQuestions(
     rawLower.includes('יום כיף');
 
   const currentServiceLabel = booking.serviceType === 'training'
-    ? 'תהליך אילוף (50 יום)'
+    ? 'תהליך אילוף'
     : booking.serviceType === 'day_training'
     ? 'אילוף ביומיות (ללא לינה)'
     : booking.serviceType === 'daycare'
@@ -107,16 +107,16 @@ export function getClarificationQuestions(
   questions.push({
     id: 'service',
     title: 'פנסיון או תהליך אילוף?',
-    question: 'האם מדובר על פנסיון (לינה), תהליך אילוף מלא (50 יום), אילוף ביומיות או יום כיף?',
+    question: 'האם מדובר על פנסיון (לינה), תהליך אילוף מלא, אילוף ביומיות או יום כיף?',
     description: serviceMentioned
       ? `נבחר שירות: ${currentServiceLabel}`
-      : 'בחר האם הכלב מגיע לפנסיון (לינה), תהליך אילוף מלא (50 יום), אילוף ביומיות ללא לינה, או יום כיף.',
+      : 'בחר האם הכלב מגיע לפנסיון (לינה), תהליך אילוף מלא, אילוף ביומיות ללא לינה, או יום כיף.',
     iconType: 'service',
     currentValueDisplay: currentServiceLabel,
     isComplete: serviceMentioned,
     quickOptions: [
       { label: '🏨 פנסיון (לינה)', voiceSample: 'זה לפנסיון לינה' },
-      { label: '🎓 תהליך אילוף (50 יום)', voiceSample: 'זה תהליך אילוף מלא של 50 יום' },
+      { label: '🎓 תהליך אילוף', voiceSample: 'זה תהליך אילוף' },
       { label: '🦮 אילוף ביומיות (ללא לינה)', voiceSample: 'זה אילוף ביומיות ללא לינה' },
       { label: '✂️ יום כיף (דייקר)', voiceSample: 'זה יום כיף ללא לינה' }
     ]

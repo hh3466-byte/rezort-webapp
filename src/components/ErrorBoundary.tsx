@@ -26,11 +26,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   public handleReset = () => {
     try {
-      localStorage.clear();
+      localStorage.removeItem('dog_resort_bookings');
+      localStorage.removeItem('dog_resort_settings');
     } catch (e) {
       // ignore
     }
-    window.location.reload();
+    this.setState({ hasError: false, error: null });
+    window.location.href = window.location.origin + window.location.pathname;
   };
 
   override render() {
@@ -42,6 +44,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               <AlertTriangle className="w-8 h-8" />
             </div>
             <h2 className="text-xl font-black text-slate-900">טעינת האפליקציה חודשה</h2>
+            {this.state.error?.message && (
+              <div className="text-xs text-red-600 font-mono bg-red-50 p-2 rounded-xl text-left overflow-auto max-h-32" dir="ltr">
+                {this.state.error.message}
+                {this.state.error.stack && (
+                  <pre className="text-[10px] text-slate-500 mt-1 whitespace-pre-wrap">{this.state.error.stack}</pre>
+                )}
+              </div>
+            )}
             <p className="text-sm text-slate-600 leading-relaxed">
               האפליקציה מוכנה לעבודה. לחץ על הכפתור למטה כדי לרענן ולהיכנס ישירות ליומן.
             </p>

@@ -215,7 +215,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
           >
             <option value="all">כל השירותים</option>
             <option value="boarding">🏨 פנסיון</option>
-            <option value="training">🎓 תהליך אילוף (50 יום)</option>
+            <option value="training">🎓 תהליך אילוף</option>
             <option value="day_training">🦮 אילוף ביומיות</option>
             <option value="daycare">✂️ יום כיף</option>
           </select>

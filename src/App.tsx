@@ -853,7 +853,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Card 3: אילוף (מחולק ל: תהליך אילוף 50 יום | אילוף ביומיות) */}
+          {/* Card 3: אילוף (מחולק ל: תהליך אילוף | אילוף ביומיות) */}
           <div 
             onClick={() => setActiveHeaderMetric('training')}
             role="button"
@@ -870,7 +870,7 @@ export default function App() {
               </span>
             </div>
 
-            {/* Split: תהליך אילוף (50 יום) vs אילוף ביומיות */}
+            {/* Split: תהליך אילוף vs אילוף ביומיות */}
             <div className="grid grid-cols-2 gap-1.5 my-1 pt-0.5 divide-x divide-x-reverse divide-slate-100">
               
               {/* Right Side: תהליך אילוף מלא */}
@@ -885,7 +885,7 @@ export default function App() {
                   🎓 תהליך אילוף
                 </div>
                 <div className="text-[9px] text-slate-400 font-medium">
-                  (50 יום)
+                  (לינה ואילוף)
                 </div>
               </div>
 
@@ -1052,14 +1052,6 @@ export default function App() {
             />
           )}
         </main>
-
-        {/* Bottom Voice & Typing Bar matching image */}
-        <footer className="pt-2">
-          <VoiceAgentBar
-            onProcessCommand={handleAgentProcess}
-          />
-        </footer>
-
       </div>
 
       {/* Modals & Dialogs */}

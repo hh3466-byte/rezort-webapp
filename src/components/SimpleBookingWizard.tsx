@@ -342,10 +342,10 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const handleServiceTypeSelect = (type: ServiceType) => {
     setServiceType(type);
     if (type === 'training') {
-      const newEndDate = addDays(startDate, 50);
-      setEndDate(newEndDate);
       setPricingMode('period');
-      setTotalPrice((settings.defaultDailyRateTraining || 6500) + extrasTotal);
+      if (!totalPrice || totalPrice === 0) {
+        setTotalPrice((settings.defaultDailyRateTraining || 6500) + extrasTotal);
+      }
     } else {
       setPricingMode('daily');
       let rate = settings.defaultDailyRateBoarding;
@@ -361,7 +361,9 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
   useEffect(() => {
     if (serviceType === 'training') {
-      setTotalPrice((settings.defaultDailyRateTraining || 6500) + extrasTotal);
+      if (!totalPrice || totalPrice === 0) {
+        setTotalPrice((settings.defaultDailyRateTraining || 6500) + extrasTotal);
+      }
     } else if (pricingMode === 'daily') {
       const base = daysCount * dailyRate;
       setTotalPrice(base + extrasTotal);
@@ -933,9 +935,9 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-base">🎓</span>
-                      <span className="text-[10px] font-bold text-amber-700">₪{settings.defaultDailyRateTraining || 6500}</span>
+                      <span className="text-[10px] font-bold text-amber-700">מחיר כולל ₪{settings.defaultDailyRateTraining || 6500}</span>
                     </div>
-                    <div className="text-xs font-bold mt-1">תהליך אילוף (50 יום)</div>
+                    <div className="text-xs font-bold mt-1">תהליך אילוף</div>
                   </button>
 
                   <button
@@ -1053,24 +1055,24 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     <>
                       <button
                         type="button"
-                        onClick={() => setEndDate(addDays(startDate, 50))}
+                        onClick={() => setEndDate(addDays(startDate, 30))}
                         className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg text-xs font-bold text-amber-900 transition-colors cursor-pointer"
                       >
-                        תהליך 50 יום ⭐
+                        חודש (30 יום)
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEndDate(addDays(startDate, 40))}
+                        onClick={() => setEndDate(addDays(startDate, 45))}
                         className="px-2.5 py-1 bg-white hover:bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-800 transition-colors cursor-pointer"
                       >
-                        40 יום
+                        45 יום
                       </button>
                       <button
                         type="button"
                         onClick={() => setEndDate(addDays(startDate, 60))}
                         className="px-2.5 py-1 bg-white hover:bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-800 transition-colors cursor-pointer"
                       >
-                        60 יום
+                        חודשיים (60 יום)
                       </button>
                     </>
                   )}
@@ -1081,13 +1083,13 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   <div className="w-full bg-amber-50/80 border border-amber-200 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-2 shadow-2xs">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2 font-black text-amber-950 text-xs sm:text-sm">
-                        <span>🎓 תקופת תהליך האילוף (בימים)</span>
+                        <span>🎓 מספר ימי אילוף משוערים</span>
                         <span className="bg-amber-200 text-amber-900 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                          ברירת מחדל: 50 יום
+                          הערכת זמן לפי צורכי הכלב
                         </span>
                       </div>
                       <p className="text-[11px] text-amber-800/80">
-                        שנה את התקופה בקלות — תאריך הסיום יתעדכן אוטומטית לפי מספר הימים שתבחר:
+                        שמוליק קובע את הערכת הימים — תאריך הסיום יתעדכן אוטומטית לפי מספר הימים:
                       </p>
                     </div>
 
@@ -1281,48 +1283,22 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
               {/* ======================================================== */}
               <div className="bg-slate-50 border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-4">
                 
-                {/* 1. Daily Rate & Total Price Calculation */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                      <DollarSign className="w-4 h-4 text-emerald-600" />
-                      <span>חישוב מחיר ותעריף ליום</span>
-                    </span>
-                    <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
-                      🧮 {daysCount} {daysCount === 1 ? 'יום' : 'ימים'} × ₪{dailyRate} = ₪{(daysCount * dailyRate).toLocaleString()}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    {/* Daily Rate Input */}
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-600 block">
-                        מחיר ליום (₪)
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          value={dailyRate || ''}
-                          onChange={(e) => {
-                            const newRate = Number(e.target.value) || 0;
-                            setDailyRate(newRate);
-                            setPricingMode('daily');
-                            setTotalPrice(daysCount * newRate + extrasTotal);
-                            if (paymentType === 'full') {
-                              setDepositAmount(daysCount * newRate + extrasTotal);
-                            }
-                          }}
-                          placeholder="180"
-                          className="w-full bg-white text-sm font-black text-slate-900 px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none"
-                        />
-                        <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">₪ / יום</span>
-                      </div>
+                {/* 1. Daily Rate & Total Price Calculation (or Fixed Training Total Price) */}
+                {serviceType === 'training' ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                        <DollarSign className="w-4 h-4 text-amber-600" />
+                        <span>מחיר כולל לתהליך האילוף (ללא מחיר ליום)</span>
+                      </span>
+                      <span className="text-xs font-bold text-amber-800 bg-amber-100/90 px-2.5 py-0.5 rounded-full border border-amber-200">
+                        🎓 מחיר כולל בלבד
+                      </span>
                     </div>
 
-                    {/* Total Price Input */}
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-600 block">
-                        סה״כ לתשלום (₪)
+                    <div className="space-y-1 pt-1">
+                      <label className="text-[11px] font-bold text-slate-700 block">
+                        מחיר סה״כ לתהליך האילוף (₪) *
                       </label>
                       <div className="relative">
                         <input
@@ -1331,21 +1307,86 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                           onChange={(e) => {
                             const newTotal = Number(e.target.value) || 0;
                             setTotalPrice(newTotal);
-                            if (daysCount > 0) {
-                              setDailyRate(Math.max(0, Math.round((newTotal - extrasTotal) / daysCount)));
-                            }
                             if (paymentType === 'full') {
                               setDepositAmount(newTotal);
                             }
                           }}
-                          placeholder="0"
-                          className="w-full bg-white text-base font-black text-slate-900 px-3 py-2 rounded-xl border-2 border-indigo-200 focus:border-indigo-600 focus:outline-none"
+                          placeholder="6500"
+                          className="w-full bg-white text-lg font-black text-amber-950 px-3.5 py-2.5 rounded-xl border-2 border-amber-300 focus:border-amber-600 focus:outline-none shadow-xs"
                         />
-                        <span className="absolute left-3 top-2.5 text-xs text-indigo-600 font-extrabold">₪ סה״כ</span>
+                        <span className="absolute left-3 top-3 text-xs text-amber-800 font-extrabold">₪ מחיר כולל</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 pt-0.5">
+                        ברירת מחדל: ₪6,500. ניתן לעריכה חופשית לפי הסיכום עם הלקוח ולינק התשלום.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                        <DollarSign className="w-4 h-4 text-emerald-600" />
+                        <span>חישוב מחיר ותעריף ליום</span>
+                      </span>
+                      <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                        🧮 {daysCount} {daysCount === 1 ? 'יום' : 'ימים'} × ₪{dailyRate} = ₪{(daysCount * dailyRate).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      {/* Daily Rate Input */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-600 block">
+                          מחיר ליום (₪)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={dailyRate || ''}
+                            onChange={(e) => {
+                              const newRate = Number(e.target.value) || 0;
+                              setDailyRate(newRate);
+                              setPricingMode('daily');
+                              setTotalPrice(daysCount * newRate + extrasTotal);
+                              if (paymentType === 'full') {
+                                setDepositAmount(daysCount * newRate + extrasTotal);
+                              }
+                            }}
+                            placeholder="180"
+                            className="w-full bg-white text-sm font-black text-slate-900 px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none"
+                          />
+                          <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-bold">₪ / יום</span>
+                        </div>
+                      </div>
+
+                      {/* Total Price Input */}
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-600 block">
+                          סה״כ לתשלום (₪)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={totalPrice || ''}
+                            onChange={(e) => {
+                              const newTotal = Number(e.target.value) || 0;
+                              setTotalPrice(newTotal);
+                              if (daysCount > 0) {
+                                setDailyRate(Math.max(0, Math.round((newTotal - extrasTotal) / daysCount)));
+                              }
+                              if (paymentType === 'full') {
+                                setDepositAmount(newTotal);
+                              }
+                            }}
+                            placeholder="0"
+                            className="w-full bg-white text-base font-black text-slate-900 px-3 py-2 rounded-xl border-2 border-indigo-200 focus:border-indigo-600 focus:outline-none"
+                          />
+                          <span className="absolute left-3 top-2.5 text-xs text-indigo-600 font-extrabold">₪ סה״כ</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* 2. Payment Type Selection: Full Payment vs Deposit vs Unpaid */}
                 <div className="space-y-2 pt-2 border-t border-slate-200/80">
