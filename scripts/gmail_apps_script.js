@@ -16,6 +16,7 @@ function processResortEmails() {
   syncGrowPaymentsAndNotify();
   cleanupMorningResortInvoices();
   checkUpcomingDeparturesWithDebtAndAlert();
+  ensureTaliEmailDraftCreated();
 }
 
 /**
@@ -353,4 +354,131 @@ function checkUpcomingDeparturesWithDebtAndAlert() {
   } catch (e) {
     Logger.log("שגיאה בפונקציית התראת שחרור עם חוב: " + e.toString());
   }
+}
+
+/**
+ * בדיקה ויצירה חד-פעמית של טיוטת המייל לטלינקה (דיגיטלינקה)
+ */
+function ensureTaliEmailDraftCreated() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    if (props.getProperty("tali_draft_created_v3") === "true") {
+      return;
+    }
+    createTaliEmailDraft();
+    props.setProperty("tali_draft_created_v3", "true");
+  } catch (e) {
+    Logger.log("שגיאה ב-ensureTaliEmailDraftCreated: " + e.toString());
+  }
+}
+
+/**
+ * יצירת טיוטת מייל (Draft) לטלינקה (דיגיטלינקה) בתיבת הדואר של Gmail
+ * כולל עותק (CC) לשמוליק ולכותב, תיאום ציפיות מדויק, מערך הטבות וגישה לאפליקציה.
+ */
+function createTaliEmailDraft() {
+  var recipient = "tali@digitalinka.co.il";
+  var ccRecipients = "hh3466@gmail.com, shinshin1964@gmail.com";
+  var subject = "שיתוף פעולה אסטרטגי, שדרוגי מערכת הריזורט, קהילת לקוחות ומערך הטבות דיגיטלי / עדכון מחמ״ל הריזורט לכלב 🐾";
+
+  var plainText = "היי טלינקה יקרה, מה שלומך?\n\n"
+    + "אני פונה אלייך ולצוות המהמם של דיגיטלינקה מתוך הערכה גדולה לעבודה ולקידום שאתם עושים עבורנו בדיגיטל.\n\n"
+    + "כפי שאת יודעת, אני כרגע בשירות מילואים פעיל ומגן על המולדת, ולכן הזמינות השוטפת שלי נמוכה ואני נמצא לעיתים קרובות בפעילות. בדיוק מהסיבה הזו – אני לא יכול לדאוג לזה כפי שאת והצוות המהמם שלך יכולים. אתם הכוח המניע שמוביל את השיווק, התוכן והקהילה של הריזורט.\n\n"
+    + "מהצד שלי, אני מפתח ומנהל את כל התשתית הטכנולוגית ואפליקציית הניהול של הריזורט. סיימתי לפתח ולהטמיע במערכת מנגנונים מתקדמים שנועדו לתמוך ישירות בקמפיינים ובמשפכים שלכם.\n\n"
+    + "1. סוגיית עדכונים בשבתות ובחגים (חשוב להבהיר מול הלקוחות):\n"
+    + "לאחרונה נתקלנו בתסכול של בעל כלב שלא ידע מה קורה עם הכלב שלו בשבת, פירש שקט תקשורתי כמצוקה והוציא פוסט הכפשה בפייסבוק.\n"
+    + "חשוב להבהיר באופן חד-משמעי: אין לנו שום התחייבות לספק עדכונים שוטפים או סרטונים בשבת ובחג! שום דבר לא מובטח או מוגדר כחובה. זה תלוי אך ורק ברצון הטוב של שמוליק. ובכל מקרה, אם נשלח משהו – זה אך ורק פעם אחת בשבת בבוקר, וללא סרטון (אלא אם שמוליק מחליט בעצמו לצלם).\n"
+    + "בנוסף, הצוות שלכם ממילא מזרים תוכן שוטף לרשתות החברתיות – לכן חשוב מאוד שתזרימו את התוכן המעולה הזה גם ישירות לערוץ הוואטסאפ של הלקוחות והקהילה!\n\n"
+    + "2. בניית מועדון הלקוחות והקהילה (VIP Retention):\n"
+    + "אנחנו צריכים שתבנו ותיישמו אצלנו קהילת הורים לכלבים של הריזורט (ערוץ וואטסאפ / קהילת סושיאל). תזרימו לשם תכנים, סרטונים, טיפים משמוליק ופעילויות שמייצרות גאוות יחידה ונאמנות.\n\n"
+    + "3. מערך שוברים דיגיטליים מתקדם שהוטמע באפליקציה (קודים חד-חד-ערכיים ללא שימוש לרעה):\n"
+    + "א. תפריט 7 פינוקי VIP לבחירת הלקוח (בשהות של 3 ימים ומעלה, ללא כפל מבצעים):\n"
+    + "• 100 ₪ הנחה ישירה על החופשה\n"
+    + "• צ'ק-אאוט VIP רגוע במוצאי שבת או חג (19:00-21:00) ללא עלות\n"
+    + "• שיחת ייעוץ והדרכת התנהגות 1-על-1 עם שמוליק (שווי ₪250)\n"
+    + "• יום כיף ושהות יומית VIP במתחם הדשא (09:00-19:00) מתנה לכלב\n"
+    + "• מארז שף גורמה: עצם לעיסה טבעית מעושנת + מעדני בריאות מובחרים\n"
+    + "• בוק צילומי VIP מקצועי מהחופשה לשיתוף בסטורי\n"
+    + "• סשן משחקי חשיבה, רחרוח והעשרה מנטלית (Brain Games) ע״י צוות הריזורט\n\n"
+    + "ב. לקוחות VIP ותיקים (4 אירוחים ומעלה):\n"
+    + "מקבלים הטבה ישירה מיוחדת במתנה: יום כיף ושהות יומית במתחם הדשא (09:00-19:00) ללא תשלום! ובנוסף זכאות לתוכנית חבר מביא חבר.\n\n"
+    + "ג. תוכנית חבר מביא חבר:\n"
+    + "הלקוח שולח שובר לחבר עם כלב. החבר נהנה מפינוק VIP בשהות ראשונה (3 ימים ומעלה), וברגע שהחבר משלים שהות ראשונה – הלקוח המפנה זוכה ב-100 ₪ זיכוי לחופשה הבאה שלו!\n\n"
+    + "4. גישה לבדיקת האפליקציה:\n"
+    + "קישור ישיר למערכת: https://rezort-webapp.vercel.app\n"
+    + "קישור לטופס הקליטה המקוון: https://rezort-webapp.vercel.app/?intake=true\n"
+    + "כמובן שאני פה על מנת לעדכן את אפליקציית הניהול שלנו לפי ההנחיות והצרכים שלך. כל הערה או שיפור שיש לך – תכתבי לי, ואני איישם בכל פעם שאני לא בפעילות מבצעית במילואים.\n\n"
+    + "(ובמאמר מוסגר: אם אהבת את האפליקציה, תמורת סכום צנוע של 5 ספרות אשמח לבנות מערכות ניהול דומות גם ללקוחות האחרים שלכם בדיגיטלינקה – כמובן בנישות אחרות, לא לכלביות).\n\n"
+    + "שלחתי העתק גם אלי ולשמוליק.\n"
+    + "מחכים לפידבק שלך,\nשמוליק וצוות הריזורט לכלב 🐾";
+
+  var htmlBody = '<div dir="rtl" style="font-family: Arial, Helvetica, sans-serif; line-height: 1.6; color: #1e293b; max-width: 680px; margin: 0 auto; background-color: #ffffff; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px;">'
+    + '<div style="background: linear-gradient(135deg, #0f4c3a 0%, #15803d 100%); color: #ffffff; padding: 20px; border-radius: 12px; margin-bottom: 24px; text-align: center;">'
+    + '<h1 style="margin: 0; font-size: 22px; font-weight: 900;">הריזורט לכלב 🐾 | עדכון שיווקי ומערכתי לטלינקה</h1>'
+    + '<p style="margin: 6px 0 0 0; font-size: 14px; color: #dcfce7;">שיתוף פעולה אסטרטגי, שדרוגי מערכת, קהילת לקוחות ומערך הטבות דיגיטלי</p>'
+    + '</div>'
+    + '<p style="font-size: 15px;">היי <strong>טלינקה</strong> יקרה, מה שלומך? 🌸</p>'
+    + '<p style="font-size: 15px;">אני פונה אלייך ולצוות המהמם של <strong>דיגיטלינקה</strong> מתוך הערכה גדולה לעבודה ולקידום שאתם עושים עבורנו בדיגיטל.</p>'
+    + '<div style="background-color: #f0fdf4; border-right: 4px solid #16a34a; padding: 14px; border-radius: 8px; margin: 18px 0; font-size: 14px; color: #166534;">'
+    + '🎖️ <strong>חשוב לי לשתף:</strong> אני כרגע בשירות מילואים פעיל ומגן על המולדת 🇮🇱. הזמינות השוטפת שלי נמוכה ואני נמצא לעיתים קרובות בפעילות, ולכן אני לא יכול לדאוג לתקשורת, לקמפיינים ולתוכן כפי שאת והצוות המהמם שלך יכולים. אתם הכוח המניע שמוביל את זה קדימה!'
+    + '</div>'
+    + '<p style="font-size: 15px;">מהצד שלי, אני מפתח ומנהל את כל התשתית הטכנולוגית ואפליקציית הניהול של הריזורט. סיימתי לפתח ולהטמיע במערכת מנגנונים מתקדמים שנועדו לתמוך ישירות בקמפיינים ובמשפכים שלכם. להלן הנקודות המרכזיות והתהליכים:</p>'
+    + '<hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />'
+    + '<h2 style="color: #0f4c3a; font-size: 18px; margin-bottom: 10px;">1. סוגיית עדכונים בשבתות ובחגים (תיאום ציפיות חד-משמעי)</h2>'
+    + '<p style="font-size: 14px;">לאחרונה נתקלנו בתסכול של בעל כלב שלא ידע מה קורה עם הכלב בשבת, פירש שקט תקשורתי כמצוקה והכפיש אותנו בפייסבוק. כדי למנוע הישנות של מקרים כאלו, חשוב להבהיר:</p>'
+    + '<ul style="font-size: 14px; color: #334155; padding-right: 20px;">'
+    + '<li style="margin-bottom: 8px;"><strong>אין לנו שום התחייבות לעדכונים שוטפים בשבת/חג:</strong> בשום מקום אין התחייבות לשעות עדכון ספציפיות, והדבר תלוי אך ורק ברצון הטוב של שמוליק.</li>'
+    + '<li style="margin-bottom: 8px;"><strong>בכל מקרה – עדכון אחד בלבד בשבת בבוקר:</strong> אם נשלח משהו, זה אך ורק פעם אחת בשבת בבוקר.</li>'
+    + '<li style="margin-bottom: 8px;"><strong>ללא סרטון:</strong> אין התחייבות לסרטונים, אלא רק אם שמוליק יחליט על דעת עצמו לצלם. חיוני שהשיווק והתכנים לא ייצרו ציפייה בלתי ריאלית אצל לקוחות לשידורים חיים בשבתות.</li>'
+    + '<li style="margin-bottom: 8px;"><strong>הזרמת תוכן לערוץ הוואטסאפ:</strong> הצוות המהמם שלכם ממילא מזרים תוכן שוטף ואיכותי לרשתות החברתיות – לכן נשמח מאוד שתזרימו את התוכן הזה גם ישירות לערוץ הוואטסאפ של הלקוחות והקהילה! (אין לזה קשר למילואים שלי – אני בכל מקרה לא מזרים תוכן, אלא אתם מומחי התוכן).</li>'
+    + '</ul>'
+    + '<hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />'
+    + '<h2 style="color: #0f4c3a; font-size: 18px; margin-bottom: 10px;">2. בניית מועדון הלקוחות והקהילה של הריזורט (VIP Retention)</h2>'
+    + '<p style="font-size: 14px;">אנחנו צריכים שאת והצוות של דיגיטלינקה תבנו ותיישמו אצלנו את מועדון הלקוחות וקהילת הריזורט. המטרה היא להפוך לקוחות מזדמנים לקהילה גאה ומחוברת שנשארת איתנו לאורך שנים, משתפת תכנים ומביאה חברים.</p>'
+    + '<hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />'
+    + '<h2 style="color: #0f4c3a; font-size: 18px; margin-bottom: 10px;">3. מערך השוברים הדיגיטליים המשודרג שהוטמע באפליקציה</h2>'
+    + '<p style="font-size: 14px;">הקמתי במערכת מחולל שוברים אישיים עם <strong>קודים חד-חד-ערכיים</strong> (למניעת שימוש לרעה ומעקב פעיל/נוצל):</p>'
+    + '<div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 10px; padding: 16px; margin: 14px 0;">'
+    + '<h3 style="color: #92400e; margin: 0 0 8px 0; font-size: 15px;">🌟 תפריט 7 פינוקי VIP לבחירת הלקוח (בשהות של 3 ימים ומעלה / סופ״ש ארוך, ללא כפל הטבות):</h3>'
+    + '<ol style="font-size: 13px; color: #78350f; margin: 0; padding-right: 20px;">'
+    + '<li style="margin-bottom: 6px;"><strong>💰 100 ₪ הנחה ישירה על החופשה</strong> – חיסכון ישיר במזומן בשהות של 3 ימים ומעלה.</li>'
+    + '<li style="margin-bottom: 6px;"><strong>🌙 צ\'ק-אאוט VIP רגוע במוצאי שבת או חג (19:00–21:00)</strong> – איסוף גמיש בערב ללא עלות נוספת (שווי ₪100).</li>'
+    + '<li style="margin-bottom: 6px;"><strong>🐾 שיחת ייעוץ והדרכת התנהגות 1-על-1 עם שמוליק</strong> – שיחה אישית ומעמיקה עם מומחה ההתנהגות בריזורט (שווי ₪250).</li>'
+    + '<li style="margin-bottom: 6px;"><strong>☀️ יום כיף ושהות יומית VIP במתחם הדשא (09:00–19:00) מתנה</strong> – 10 שעות של דשא, מים וחברים במתנה.</li>'
+    + '<li style="margin-bottom: 6px;"><strong>🦴 מארז שף גורמה לכלב</strong> – עצם לעיסה טבעית מעושנת + מעדני בריאות מובחרים שמחכים לו בסוויטה.</li>'
+    + '<li style="margin-bottom: 6px;"><strong>📸 בוק צילומי VIP מקצועי מהחופשה</strong> – תמונות אקשן ודיוקן מרהיבות לשיתוף בסטורי ולמזכרת לתמיד.</li>'
+    + '<li style="margin-bottom: 6px;"><strong>🧠 סשן משחקי חשיבה, רחרוח והעשרה מנטלית (Brain Games)</strong> – מוענק ע״י צוות הריזורט.</li>'
+    + '</ol>'
+    + '</div>'
+    + '<div style="background-color: #fdf4ff; border: 1px solid #fae8ff; border-radius: 10px; padding: 14px; margin: 14px 0; font-size: 13.5px; color: #86198f;">'
+    + '👑 <strong>הטבה ייעודית ללקוחות 4 פעמים ומעלה:</strong> זכאים להטבת VIP ישירה של <strong>יום כיף שלם ומשחקים בריזורט במתנה (09:00–19:00)</strong>! בנוסף, זכאים להעביר שובר חבר מביא חבר.'
+    + '</div>'
+    + '<div style="background-color: #ecfdf5; border: 1px solid #d1fae5; border-radius: 10px; padding: 14px; margin: 14px 0; font-size: 13.5px; color: #065f46;">'
+    + '🤝 <strong>תוכנית "חבר מביא חבר":</strong> הלקוח מעביר שובר לחבר עם כלב. החבר מקבל הטבת הצטרפות בשהות ראשונה (3 ימים ומעלה), וברגע שהוא מבצע שהות ראשונה – הלקוח המפנה מקבל אוטומטית <strong>100 ₪ זיכוי לשהות הבאה</strong> שלו בריזורט!'
+    + '</div>'
+    + '<hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />'
+    + '<h2 style="color: #0f4c3a; font-size: 18px; margin-bottom: 10px;">4. גישה לבדיקת האפליקציה ושיתוף פעולה</h2>'
+    + '<p style="font-size: 14px;">מוזמנת להיכנס ולבדוק ישירות את האפליקציה:</p>'
+    + '<div style="text-align: center; margin: 18px 0;">'
+    + '<a href="https://rezort-webapp.vercel.app" style="background-color: #0f4c3a; color: white; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block; margin: 4px;">🚀 כניסה לאפליקציית הניהול</a>'
+    + '<a href="https://rezort-webapp.vercel.app/?intake=true" style="background-color: #d97706; color: white; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block; margin: 4px;">📝 צפייה בטופס הקליטה הציבורי</a>'
+    + '</div>'
+    + '<p style="font-size: 14px;"><strong>אני כאן כדי לעדכן את האפליקציה לפי ההנחיות שלך:</strong> כל הערה, שינוי או צורך שיווקי שעולה – תכתבי לי, ואני איישם במערכת בכל זמן שאני לא בפעילות מבצעית במילואים.</p>'
+    + '<p style="font-size: 13px; color: #64748b; font-style: italic; background-color: #f8fafc; padding: 12px; border-radius: 8px; border: 1px dashed #cbd5e1;">'
+    + '(ובמאמר מוסגר: אם אהבת את האפליקציה, תמורת סכום צנוע של 5 ספרות אשמח לבנות מערכות ניהול ופורטלים דומים בהתאמה אישית גם ללקוחות האחרים שלכם בדיגיטלינקה – כמובן בנישות אחרות, לא לכלביות 😉).'
+    + '</p>'
+    + '<p style="font-size: 14px; margin-top: 20px;">'
+    + 'נשלח העתק גם אלי ולשמוליק.<br />'
+    + 'מחכים לפידבק שלך,<br />'
+    + '<strong>שמוליק וצוות הריזורט לכלב 🐾</strong>'
+    + '</p>'
+    + '</div>';
+
+  var draft = GmailApp.createDraft(recipient, subject, plainText, {
+    cc: ccRecipients,
+    htmlBody: htmlBody
+  });
+
+  Logger.log("טיוטת מייל לטלינקה נוצרה בהצלחה ב-Gmail! מזהה: " + draft.getId());
+  return draft;
 }
