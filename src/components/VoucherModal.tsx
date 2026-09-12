@@ -39,48 +39,53 @@ export interface VoucherModalProps {
 
 const BENEFIT_PRESETS = [
   { 
+    id: 'frequent_daycare_gift', 
+    label: '👑 יום כיף VIP בריזורט במתנה 09:00-19:00 (הטבת VIP לקוח 4+)', 
+    valueText: 'יום כיף ושהות יומית VIP במתחם הדשא (09:00-19:00) במתנה' 
+  },
+  { 
     id: 'customer_choice', 
-    label: '🌟 לבחירת הלקוח מתוך תפריט ההטבות (מומלץ!)', 
-    valueText: 'שובר לבחירה אישית מתוך תפריט ההטבות בריזורט' 
+    label: '🌟 לבחירת הלקוח מתוך תפריט הפינוקים (מומלץ ביותר!)', 
+    valueText: 'שובר VIP לבחירה אישית מתוך תפריט הפינוקים בריזורט' 
   },
   { 
     id: 'discount_100_long_weekend', 
-    label: '100 ₪ הנחה בשהות של 3 ימים (סופ"ש ארוך)', 
-    valueText: '100 ₪ הנחה בשהות של 3 ימים ומעלה' 
+    label: '💰 100 ₪ הנחה ישירה על החופשה (בשהות 3+ ימים)', 
+    valueText: '100 ₪ הנחה ישירה בהזמנת שהות של 3 ימים ומעלה (סופ״ש ארוך)' 
   },
   { 
     id: 'late_checkout', 
-    label: 'צ\'ק-אאוט במוצאי שבת או חג (19:00-21:00 - שווי ₪100)', 
-    valueText: 'צ\'ק-אאוט במוצאי שבת או חג (19:00-21:00)' 
+    label: '🌙 צ\'ק-אאוט VIP רגוע במוצאי שבת או חג (19:00-21:00)', 
+    valueText: 'צ\'ק-אאוט VIP במוצאי שבת או חג (19:00-21:00) ללא עלות נוספת' 
   },
   { 
     id: 'training_consultation', 
-    label: 'שיחת ייעוץ אילוף והתנהגות אישית עם שמוליק (שווי ₪250)', 
-    valueText: 'שיחת ייעוץ אילוף והתנהגות אישית עם שמוליק מתנה' 
+    label: '🐾 שיחת ייעוץ והדרכת התנהגות 1-על-1 עם שמוליק (שווי ₪250)', 
+    valueText: 'שיחת ייעוץ והדרכת התנהגות אישית 1-על-1 עם שמוליק במתנה' 
   },
   { 
     id: 'daycare_free', 
-    label: '☀️ יום שהות יומי (Daycare) / יום כיף 09:00-19:00 מתנה', 
-    valueText: 'יום שהות יומי (Daycare) / יום כיף 09:00-19:00 מתנה' 
-  },
-  { 
-    id: 'vip_photo', 
-    label: 'מזכרת צילום VIP מהחופשה לשיתוף ברשתות', 
-    valueText: 'מזכרת צילום VIP מהחופשה לשיתוף' 
+    label: '☀️ יום כיף ושהות יומית VIP במתחם הדשא (09:00-19:00) מתנה', 
+    valueText: 'יום כיף ושהות יומית VIP במתחם הדשא (09:00-19:00) מתנה' 
   },
   { 
     id: 'premium_treat', 
-    label: 'מארז פינוק: עצם לעיסה טבעית + חטיפי בריאות', 
-    valueText: 'מארז חטיפי בריאות פרימיום ועצם טבעית' 
+    label: '🦴 מארז שף גורמה: עצם לעיסה טבעית מעושנת + מעדני בריאות', 
+    valueText: 'מארז שף גורמה: עצם לעיסה טבעית מעושנת + מעדני בריאות מובחרים' 
+  },
+  { 
+    id: 'vip_photo', 
+    label: '📸 בוק צילומי VIP מקצועי מהרגעים היפים בריזורט לסטורי', 
+    valueText: 'בוק צילומי VIP מקצועי מהחופשה לשיתוף ברשתות' 
   },
   { 
     id: 'brain_games', 
-    label: '🧠 סשן משחקי חשיבה והעשרה מנטלית אישי (Brain Games)', 
-    valueText: 'סשן משחקי חשיבה והעשרה מנטלית אישי (Brain Games) - מוענק על ידי צוות הריזורט' 
+    label: '🧠 סשן משחקי חשיבה, רחרוח והעשרה מנטלית (Brain Games)', 
+    valueText: 'סשן משחקי חשיבה, רחרוח והעשרה מנטלית (Brain Games) מוענק ע״י צוות הריזורט' 
   },
   { 
     id: 'custom', 
-    label: 'הטבה מותאמת אישית (טקסט חופשי)...', 
+    label: '✨ פינוק מותאם אישית (טקסט חופשי)...', 
     valueText: '' 
   }
 ];
@@ -102,23 +107,23 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
   const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
 
   // Form State
-  const [voucherType, setVoucherType] = useState<VoucherType>(isFrequentClient ? 'refer_friend' : 'loyalty');
+  const [voucherType, setVoucherType] = useState<VoucherType>('loyalty');
   const [customerName, setCustomerName] = useState(initialCustomerName);
   const [dogName, setDogName] = useState(initialDogName);
   const [phone, setPhone] = useState(initialPhone);
 
-  const [selectedPresetId, setSelectedPresetId] = useState('customer_choice');
+  const [selectedPresetId, setSelectedPresetId] = useState(() => isFrequentClient ? 'frequent_daycare_gift' : 'customer_choice');
   const [customBenefitText, setCustomBenefitText] = useState('');
 
   // Auto-generate code based on dog/owner name
   const generateInitialCode = (type: VoucherType, dog: string) => {
     const cleanD = (dog || 'VIP').replace(/[^a-zA-Z0-9\u0590-\u05FF]/g, '').slice(0, 8);
-    const prefix = type === 'refer_friend' ? 'FRIEND' : 'VIP';
+    const prefix = type === 'refer_friend' ? 'FRIEND' : (isFrequentClient ? 'VIP-DAY' : 'VIP');
     const rand = Math.floor(100 + Math.random() * 900);
     return `${prefix}-${cleanD ? cleanD : 'REWARD'}-${rand}`;
   };
 
-  const [voucherCode, setVoucherCode] = useState(() => generateInitialCode(isFrequentClient ? 'refer_friend' : 'loyalty', initialDogName));
+  const [voucherCode, setVoucherCode] = useState(() => generateInitialCode('loyalty', initialDogName));
   
   // Expiry date (default: 6 months from now)
   const defaultExpiry = () => {
@@ -159,35 +164,70 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
   const currentHost = typeof window !== 'undefined' ? window.location.origin : 'https://rezort-webapp.vercel.app';
   const intakeUrl = `${currentHost}/?intake=true&voucher=${encodeURIComponent(voucherCode)}`;
 
-  // Formulate WhatsApp message text
-  const messageText = voucherType === 'loyalty'
-    ? (selectedPresetId === 'customer_choice'
-      ? `היי ${firstName}! 🐾🤍
-היה לנו תענוג אמיתי לארח את ${displayDog} אצלנו בריזורט לכלב!
+  const greetingIntro = isFrequentClient
+    ? `תודה על הנאמנות והאירוחים הרבים של ${displayDog} אצלנו בריזורט! 👑`
+    : `שמחנו מאוד לארח את ${displayDog} בריזורט לכלב!`;
 
-כדי לפנק אתכם לקראת הפעם הבאה, הכנו עבורכם שובר שבו *אתם בוחרים* את ההטבה שהכי מתאימה לכם:
-🎁 *שובר הטבה VIP לבחירתכם (אחת מתוך ההטבות):*
- • 💰 100 ₪ הנחה בשהות של 3 ימים ומעלה (סופ״ש ארוך)
- • 🌙 צ'ק-אאוט במוצאי שבת או חג (19:00-21:00) ללא תוספת
- • 🐾 שיחת ייעוץ אילוף והתנהגות אישית עם שמוליק (שווי ₪250)
- • ☀️ יום שהות יומי (Daycare) / יום כיף 09:00-19:00 מתנה
- • 🦴 מארז פינוק: עצם לעיסה טבעית + חטיפי בריאות פרימיום
- • 📸 מזכרת צילום VIP מהחופשה לשיתוף ברשתות
- • 🧠 סשן משחקי חשיבה והעשרה מנטלית אישי (Brain Games) - מוענק ע״י צוות הריזורט
+  // Formulate WhatsApp message text
+  const getWhatsAppMessageText = (): string => {
+    if (voucherType === 'loyalty') {
+      if (isFrequentClient && selectedPresetId === 'frequent_daycare_gift') {
+        return `היי ${firstName}! 🐾👑
+תודה ענקית מכל הלב על הנאמנות והאירוחים הרבים של ${displayDog} אצלנו בריזורט (${staysCount} פעמים שאתם חלק בלתי נפרד מהמשפחה שלנו)! ❤️
+
+כאות הערכה עמוקה ללקוחותינו הנאמנים (4 אירוחים ומעלה), הכנו עבור ${displayDog} מתנת VIP מכל הלב ישירות מאיתנו:
+☀️ *יום כיף שלם ומשחקים בריזורט – במתנה מאיתנו (09:00-19:00)!* 🐕✨
+
+מה מחכה ל-${displayDog} ביום הכיף?
+🌿 מרחבי דשא ירוקים ומגודרים למשחקים חופשיים
+🎾 פעילות חברתית מבוקרת ומשחקי כדור
+💦 שכשוך במתקני מים ומשחקים מרעננים
+🛋️ מנוחה בסוויטות ממוזגות עם שפע אהבה ופינוקים מצוות הריזורט!
+*(שווי ההטבה: ₪90–120 – עבורכם ב-₪0 מלאים!)*
+
+🏷️ *קוד שובר אישי:* ${voucherCode}
+📅 *תוקף:* עד ${formatDateIL(expiryDate)}
+
+לשריון יום הכיף המושלם של ${displayDog} ביומן:
+👉 ${intakeUrl}
+
+🎁 *הטבה כפולה:* בנוסף, עומדת לרשותכם תוכנית "חבר מביא חבר" – ספרו לחברים עם כלב, הם ייהנו מהטבת הצטרפות, ואתם תצברו 100 ₪ זיכוי לחופשה הבאה!
+
+מחכים לפנק ולחבק את ${displayDog}! 🐾🤍
+${settings.managerName || 'שמוליק'} וצוות ${settings.resortName || 'הריזורט לכלב'} 🐾`;
+      }
+
+      if (selectedPresetId === 'customer_choice') {
+        return `היי ${firstName}! 🐾🤍
+היה לנו תענוג אמיתי וכיף ענק לארח את ${displayDog} אצלנו בריזורט לכלב!
+
+כדי לפנק אתכם לקראת החופשה הבאה, הכנו עבורכם שובר VIP שבו *אתם בוחרים* את הפינוק שהכי יעשה לכם ול-${displayDog} טוב על הלב:
+
+🎁 *תפריט פינוקי VIP לבחירתכם (אחת מתוך הרשימה):*
+ • 💰 *100 ₪ הנחה ישירה* בהזמנת שהות של 3 ימים ומעלה (סופ״ש ארוך)
+ • 🌙 *צ'ק-אאוט VIP רגוע במוצאי שבת או חג (19:00-21:00)* – איסוף גמיש ללא עלות
+ • 🐾 *שיחת ייעוץ והדרכת התנהגות 1-על-1 עם שמוליק* (שווי ₪250)
+ • ☀️ *יום כיף ושהות יומית VIP (09:00-19:00)* – 10 שעות של דשא, מים וחברים במתנה
+ • 🦴 *מארז שף גורמה:* עצם לעיסה טבעית מעושנת + מעדני בריאות מובחרים
+ • 📸 *בוק צילומי VIP מקצועי מהחופשה* – תמונות אקשן מרהיבות מוכנות לסטורי
+ • 🧠 *סשן משחקי חשיבה, רחרוח והעשרה (Brain Games)* – מוענק ע״י צוות הריזורט
+
 🏷️ *קוד שובר אישי:* ${voucherCode}
 📅 *תוקף:* עד ${formatDateIL(expiryDate)}
 📌 *תנאי השובר:* לבחירת הטבה אחת | בשהות של 3 ימים ומעלה (סופ"ש ארוך) | אין כפל הטבות ומבצעים.
 
-לשריון ובחירת ההטבה שלכם ביומן:
+לבחירת הפינוק שלכם ושריון מקום ביומן:
 👉 ${intakeUrl}
 
-מחכים לראותכם שוב! 🐕
-${settings.managerName || 'שמוליק'} וצוות ${settings.resortName || 'הריזורט לכלב'} 🐾`
-      : `היי ${firstName}! 🐾🤍
+מחכים לראותכם שוב! 🐕✨
+${settings.managerName || 'שמוליק'} וצוות ${settings.resortName || 'הריזורט לכלב'} 🐾`;
+      }
+
+      return `היי ${firstName}! 🐾🤍
 היה לנו תענוג אמיתי לארח את ${displayDog} אצלנו בריזורט לכלב!
 
 כדי לפנק אתכם לקראת הפעם הבאה, הכנו עבורכם שובר הטבה אישי:
-🎁 *הטבה בלעדית:* ${currentBenefit}
+🎁 *פינוק בלעדי:* ${currentBenefit}
 🏷️ *קוד שובר אישי:* ${voucherCode}
 📅 *תוקף:* עד ${formatDateIL(expiryDate)}
 📌 *תנאי השובר:* תקף בהזמנת שהות של 3 ימים ומעלה (סופ"ש ארוך) | אין כפל הטבות ומבצעים.
@@ -196,32 +236,40 @@ ${settings.managerName || 'שמוליק'} וצוות ${settings.resortName || '�
 👉 ${intakeUrl}
 
 מחכים לראותכם שוב! 🐕
-${settings.managerName || 'שמוליק'} וצוות ${settings.resortName || 'הריזורט לכלב'} 🐾`
-    )
-    : `היי ${firstName}! 🐾🐶
-${isFrequentClient ? `תודה על הנאמנות והאירוחים הרבים של ${displayDog} אצלנו בריזורט! 👑` : `שמחנו מאוד לארח את ${displayDog} בריזורט לכלב!`}
+${settings.managerName || 'שמוליק'} וצוות ${settings.resortName || 'הריזורט לכלב'} 🐾`;
+    }
+
+    // voucherType === 'refer_friend'
+    return `היי ${firstName}! 🐾🐶
+${greetingIntro}
 אהבתם את האירוח? נשמח לפנק גם את החברים שלכם שיש להם כלב!
 
-הנה שובר מתנה שתוכלו להעביר לחברים עם כלב:
+הנה שובר מתנה מפנק שתוכלו להעביר לחברים:
 👇👇👇
-"היי! הכלב שלי ${displayDog} מתארח בריזורט לכלב של שמוליק וממש נהנה שם.
-הם נתנו לי שובר מתנה מיוחד להעביר לחברים לבחירת הטבה בהזמנה ראשונה:
-🎁 *שובר הטבה VIP לבחירתכם בהזמנה ראשונה:*
- • 💰 100 ₪ הנחה בשהות של 3 ימים ומעלה (סופ״ש ארוך)
- • 🌙 צ'ק-אאוט במוצאי שבת או חג (19:00-21:00) ללא תוספת
- • 🐾 שיחת ייעוץ אילוף והתנהגות אישית עם שמוליק (שווי ₪250)
- • ☀️ יום שהות יומי (Daycare) / יום כיף 09:00-19:00 מתנה
- • 🦴 מארז פינוק: עצם לעיסה טבעית + חטיפי בריאות
- • 📸 מזכרת צילום VIP מהחופשה לשיתוף
- • 🧠 סשן משחקי חשיבה והעשרה מנטלית אישי (Brain Games) - מוענק ע״י צוות הריזורט
-🏷️ קוד שובר להזמנה: *${voucherCode}*
-📌 תנאי השובר: לבחירת הטבה אחת | תקף בהזמנת שהות ראשונה של 3 ימים ומעלה (סופ"ש ארוך) | אין כפל הטבות ומבצעים.
-קישור ישיר להתרשמות, בחירת הטבה והזמנה:
-👉 ${intakeUrl}
-מומלץ בחום! 🐕🤍"
+"היי! הכלב שלי ${displayDog} מתארח בריזורט לכלב של שמוליק וממש נהנה שם 🐕❤️
+הם נתנו לי שובר VIP בלעדי להעביר לחברים טובים, שמאפשר לכם לבחור מתנת קבלת פנים מדהימה בהזמנה ראשונה:
 
-*פינוק הדדי: ברגע שהחבר יבצע שהות משלמת ראשונה של 3 ימים עם השובר שלך, גם אתם מקבלים שובר הטבה לשהות הבאה של ${displayDog} (בשהות של 3 ימים ומעלה, אין כפל הטבות)! 🎉
+🎁 *תפריט פינוקי VIP לבחירתכם בהזמנה ראשונה:*
+ • 💰 100 ₪ הנחה ישירה בשהות של 3 ימים ומעלה (סופ״ש ארוך)
+ • 🌙 צ'ק-אאוט VIP רגוע במוצאי שבת או חג (19:00-21:00) ללא תוספת
+ • 🐾 שיחת ייעוץ והדרכת התנהגות אישית 1-על-1 עם שמוליק (שווי ₪250)
+ • ☀️ יום כיף ושהות יומית VIP (09:00-19:00) מתנה לכלב
+ • 🦴 מארז שף גורמה: עצם לעיסה טבעית מעושנת + מעדני בריאות מובחרים
+ • 📸 בוק צילומי VIP מקצועי מהחופשה לשיתוף בסטורי
+ • 🧠 סשן משחקי חשיבה, רחרוח והעשרה מנטלית (Brain Games) – ע״י צוות הריזורט
+
+🏷️ קוד שובר אישי להזמנה: *${voucherCode}*
+📌 תנאי השובר: לבחירת הטבה אחת | תקף בהזמנת שהות ראשונה של 3 ימים ומעלה (סופ"ש ארוך) | אין כפל הטבות ומבצעים.
+
+להתרשמות, בחירת המתנה שלכם ושריון מקום בקליק:
+👉 ${intakeUrl}
+מומלץ מכל הלב! 🐕🤍"
+
+*פינוק הדדי: ברגע שהחבר יבצע שהות משלמת ראשונה של 3 ימים עם השובר שלך, גם אתם מקבלים 100 ₪ זיכוי לשהות הבאה של ${displayDog}! 🎉
 ${settings.managerName || 'שמוליק'} - ${settings.resortName || 'הריזורט לכלב'} 🐾`;
+  };
+
+  const messageText = getWhatsAppMessageText();
 
   // Save current voucher to DB
   const handleSaveVoucher = async () => {
@@ -236,7 +284,9 @@ ${settings.managerName || 'שמוליק'} - ${settings.resortName || 'הריזו
       status: 'active',
       createdAt: new Date().toISOString(),
       expiryDate: expiryDate,
-      notes: isFrequentClient ? 'שובר לקוח ותיק 4+ (מותנה בחבר משלם)' : 'הופק ידנית במערכת'
+      notes: isFrequentClient 
+        ? (voucherType === 'loyalty' ? 'הטבת VIP יום כיף 09:00-19:00 מתנה ללקוח 4+' : 'שובר חבר מביא חבר (לקוח ותיק 4+)')
+        : 'הופק ידנית במערכת'
     };
     await saveVoucherToDb(newVoucher);
     setSaveSuccess(true);
@@ -268,14 +318,13 @@ ${settings.managerName || 'שמוליק'} - ${settings.resortName || 'הריזו
   };
 
   const handleTypeChange = (type: VoucherType) => {
-    if (type === 'loyalty' && isFrequentClient) {
-      const confirmDirect = window.confirm(
-        'שים לב: לפי מדיניות הריזורט, לקוחות החוזרים בפעם הרביעית ומעלה זכאים להטבה אך ורק בעת העברת שובר לחבר שמבצע שהות משלמת.\n\nהאם אתה בטוח שברצונך לאשר הטבה ישירה?'
-      );
-      if (!confirmDirect) return;
-    }
     setVoucherType(type);
     setVoucherCode(generateInitialCode(type, dogName));
+    if (type === 'loyalty' && isFrequentClient) {
+      setSelectedPresetId('frequent_daycare_gift');
+    } else if (type === 'refer_friend') {
+      setSelectedPresetId('customer_choice');
+    }
   };
 
   // Filtered vouchers history
@@ -374,8 +423,13 @@ ${settings.managerName || 'שמוליק'} - ${settings.resortName || 'הריזו
                     : 'text-slate-600 hover:bg-white/70'
                 }`}
               >
-                <span>💎</span>
-                <span>שובר לפעם הבאה (נאמנות ללקוח חוזר)</span>
+                <span>{isFrequentClient ? '👑' : '💎'}</span>
+                <span>{isFrequentClient ? 'הטבת VIP: יום כיף מתנה (09:00-19:00)' : 'שובר לפעם הבאה (נאמנות ללקוח חוזר)'}</span>
+                {isFrequentClient && (
+                  <span className="bg-amber-500 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold shadow-2xs">
+                    מתנה לכלב
+                  </span>
+                )}
               </button>
 
               <button
@@ -390,8 +444,8 @@ ${settings.managerName || 'שמוליק'} - ${settings.resortName || 'הריזו
                 <span>🤝</span>
                 <span>חבר מביא חבר (שלח לחבר עם כלב)</span>
                 {isFrequentClient && (
-                  <span className="bg-amber-100 text-amber-900 text-[10px] px-1.5 py-0.2 rounded-full font-bold border border-amber-300">
-                    VIP 4+
+                  <span className="bg-emerald-100 text-emerald-900 text-[10px] px-1.5 py-0.2 rounded-full font-bold border border-emerald-300">
+                    זיכוי 100 ₪
                   </span>
                 )}
               </button>
@@ -405,12 +459,18 @@ ${settings.managerName || 'שמוליק'} - ${settings.resortName || 'הריזו
                 <div className="p-3 bg-gradient-to-r from-amber-500/15 via-amber-400/20 to-emerald-500/10 border-2 border-amber-400/70 rounded-2xl flex items-start gap-2.5 text-xs text-amber-950 animate-in fade-in">
                   <Crown className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                   <div className="leading-snug">
-                    <div className="font-black text-amber-950 text-xs sm:text-sm">
-                      🌟 לקוח VIP ותיק (התארח {staysCount} פעמים בריזורט!)
+                    <div className="font-black text-amber-950 text-xs sm:text-sm flex items-center gap-2">
+                      <span>🌟 לקוח VIP ותיק ({staysCount} אירוחים בריזורט!)</span>
+                      <span className="bg-amber-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold shadow-2xs">
+                        2 הטבות מיוחדות
+                      </span>
                     </div>
                     <p className="text-[11px] text-amber-900 mt-1">
-                      עבור לקוחות שחוזרים בפעם הרביעית ומעלה, ההטבה ניתנת במסלול <strong>״חבר מביא חבר״</strong> בלבד:
-                      הלקוח מעביר שובר מתנה לחבר, וכאשר החבר מבצע שהות משלמת ראשונה (3 ימים ומעלה), הלקוח הוותיק זוכה ב-100 ₪ זיכוי לשהות הבאה!
+                      ללקוחות של 4 פעמים ומעלה מוענקות 2 הטבות:
+                      <br />
+                      1. <strong>☀️ יום כיף לכלב בריזורט במתנה (09:00-19:00)</strong> – שובר נאמנות אישי ישיר ללא עלות!
+                      <br />
+                      2. <strong>🤝 חבר מביא חבר</strong> – שובר מתנה לחברים (החבר מקבל הטבה, והלקוח הוותיק זוכה ב-100 ₪ זיכוי לשהות הבאה).
                     </p>
                   </div>
                 </div>

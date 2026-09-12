@@ -655,7 +655,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                       <Sparkles className="w-4 h-4 text-amber-600" />
-                      <span>בחרו את ההטבה המועדפת עליכם לשהות זו (לבחירה 1 מתוך ההטבות):</span>
+                      <span>בחרו את פינוק ה-VIP שלכם לשהות זו (לבחירתכם מתנה 1 מתוך התפריט):</span>
                     </label>
                     <span className="text-[10px] font-bold text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded-lg border border-amber-300">
                       ללא כפל הטבות
