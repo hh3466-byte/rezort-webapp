@@ -119,17 +119,15 @@ const RequestedDatesCalendar: React.FC<{
         </div>
       </div>
 
-      {/* Days Strip / Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+      {/* Days Strip / Grid with Pulsing and Blinking Borders */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
         {dayStats.map((st) => (
           <div
             key={st.dateStr}
-            className={`rounded-xl border p-2 text-xs flex flex-col justify-between transition-all ${
+            className={`rounded-xl p-2.5 text-xs flex flex-col justify-between transition-all ${
               st.isFull
-                ? 'bg-red-50 border-red-200 text-red-900'
-                : st.free <= 2
-                ? 'bg-amber-50/70 border-amber-200 text-amber-900'
-                : 'bg-white border-slate-200 text-slate-800 shadow-2xs'
+                ? 'pulse-border-red bg-red-50/90 text-red-950 shadow-sm'
+                : 'pulse-border-green bg-emerald-50/40 text-slate-800 shadow-xs'
             }`}
           >
             {/* Day Title */}
@@ -273,7 +271,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 
   const handleOpenPaymentPrompt = (request: IntakeRequest) => {
     setPaymentPromptRequest(request);
-    setPaymentAmount(request.depositRequested ? String(request.depositRequested) : '');
+    const calculatedDefault = Math.max(1, calculateDaysCount(request.startDate, request.endDate)) * (Number(settings.defaultDailyRateBoarding) || 180);
+    setPaymentAmount(request.depositRequested ? String(request.depositRequested) : String(calculatedDefault));
     setCustomPaymentLink(settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg');
   };
 
@@ -560,8 +559,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Quick Dates Badge */}
-                    <div className="flex flex-col items-start gap-0.5 self-start sm:self-center bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 shadow-2xs" dir="rtl">
+                    {/* Quick Dates Badge with Required Payment Calculation */}
+                    <div className="flex flex-col items-start gap-1 self-start sm:self-center bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 shadow-2xs" dir="rtl">
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                         <span>
@@ -570,9 +569,31 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                             : `${formatDateIL(req.startDate)} עד ${formatDateIL(req.endDate)}`}
                         </span>
                       </div>
-                      {req.serviceType !== 'training' && (
-                        <div className="text-[11px] text-slate-500 font-semibold mr-5">
-                          סה"כ {daysCount} {daysCount === 1 ? 'יום' : 'ימים'}
+                      
+                      {req.serviceType !== 'training' ? (
+                        <>
+                          <div className="text-[11px] text-slate-500 font-semibold mr-5">
+                            סה"כ {daysCount} {daysCount === 1 ? 'יום' : 'ימים'}
+                          </div>
+                          <div className="text-[11px] font-black text-emerald-900 bg-emerald-100/70 border border-emerald-300/80 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs mr-5 mt-0.5">
+                            <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                            <span>חישוב לתשלום:</span>
+                            <span className="font-mono text-xs text-emerald-950 font-black">
+                              ₪{(daysCount * (Number(settings?.defaultDailyRateBoarding) || 180)).toLocaleString('he-IL')}
+                            </span>
+                            <span className="text-[10px] text-emerald-800 font-medium">
+                              ({daysCount} ימים × ₪{Number(settings?.defaultDailyRateBoarding) || 180})
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-[11px] font-black text-emerald-900 bg-emerald-100/70 border border-emerald-300/80 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-2xs mr-5 mt-0.5">
+                          <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                          <span>חישוב לתשלום:</span>
+                          <span className="font-mono text-xs text-emerald-950 font-black">
+                            ₪{(Number(settings?.defaultDailyRateTraining) || 6500).toLocaleString('he-IL')}
+                          </span>
+                          <span className="text-[10px] text-emerald-800 font-medium">(מחיר תהליך)</span>
                         </div>
                       )}
                     </div>

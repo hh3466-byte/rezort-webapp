@@ -576,13 +576,20 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                 <Calendar className="w-4 h-4 text-emerald-600" />
                 <span>תאריכי השהות המבוקשים <span className="text-red-500">*</span></span>
               </div>
-              <span className="text-xs font-black text-emerald-800 bg-white px-3 py-1 rounded-full border border-emerald-200 shadow-2xs self-start sm:self-auto">
-                {serviceType === 'training' 
-                  ? 'תחילת אילוף (משך יקבע בשיחה)' 
-                  : serviceType === 'daycare' 
-                  ? 'שהות יומית (ללא לינה)' 
-                  : `סה״כ ${daysCount} ${daysCount === 1 ? 'יום' : 'ימים'} (${nightsCount} ${nightsCount === 1 ? 'לילה' : 'לילות'})`}
-              </span>
+              <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto">
+                <span className="text-xs font-black text-emerald-800 bg-white px-3 py-1 rounded-full border border-emerald-200 shadow-2xs">
+                  {serviceType === 'training' 
+                    ? 'תחילת אילוף (משך יקבע בשיחה)' 
+                    : serviceType === 'daycare' 
+                    ? 'שהות יומית (ללא לינה)' 
+                    : `סה״כ ${daysCount} ${daysCount === 1 ? 'יום' : 'ימים'} (${nightsCount} ${nightsCount === 1 ? 'לילה' : 'לילות'})`}
+                </span>
+                {serviceType === 'boarding' && (
+                  <span className="text-xs font-black text-emerald-950 bg-emerald-100/90 px-2.5 py-1 rounded-full border border-emerald-300 shadow-2xs">
+                    חישוב לתשלום: ₪{(daysCount * (Number(settings?.defaultDailyRateBoarding) || 180)).toLocaleString('he-IL')} (לפי ₪180 ליום)
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* DAYCARE SINGLE-DAY MODE */}
