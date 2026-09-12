@@ -129,17 +129,43 @@ export function getDateShabbatOrHoliday(dateStrOrObj: string | Date): HolidayInf
 }
 
 /**
+ * Helper to determine whether the date is weekend, holiday or both
+ */
+export function getOccasionWord(dateStr?: string): string {
+  if (!dateStr) return 'בסופ"ש';
+  const info = getDateShabbatOrHoliday(dateStr);
+  if (info.isShabbat && info.holidayName) {
+    return 'בסופ"ש ובחג';
+  }
+  if (info.holidayName) {
+    return 'בחג';
+  }
+  return 'בסופ"ש';
+}
+
+/**
  * Format the warm personal dog message as requested by Shmulik:
- * שלום (שם הבעלים) רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב. איזה כיף לי פה גם היום.
+ * שלום (שם הבעלים) למרות שאין שירות לקוחות להולכים על 2 בסופ"ש/חג (לפי הצורך), אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.
+ * אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.
  * (שם הכלב)
  */
-export function formatShabbatHolidayGreeting(ownerName: string, dogName: string, customTemplate?: string): string {
+export function formatShabbatHolidayGreeting(
+  ownerName: string, 
+  dogName: string, 
+  customTemplate?: string,
+  dateStr?: string
+): string {
+  const occasionWord = getOccasionWord(dateStr);
+
   if (customTemplate) {
     return customTemplate
       .replace(/{ownerName}/g, ownerName)
       .replace(/{dogName}/g, dogName)
       .replace(/\(שם הבעלים\)/g, ownerName)
-      .replace(/\(שם הכלב\)/g, dogName);
+      .replace(/\(שם הכלב\)/g, dogName)
+      .replace(/בסופ"ש\/חג \(לפי הצורך\)/g, occasionWord)
+      .replace(/בסופ"ש\/חג/g, occasionWord)
+      .replace(/{occasion}/g, occasionWord);
   }
-  return `שלום ${ownerName} רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב. איזה כיף לי פה גם היום.\n${dogName}`;
+  return `שלום ${ownerName} למרות שאין שירות לקוחות להולכים על 2 ${occasionWord}, אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.\nאז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.\n${dogName}`;
 }

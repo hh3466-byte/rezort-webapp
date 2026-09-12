@@ -3,7 +3,7 @@ import { X, MessageCircle, Copy, Check, Calendar, Sparkles, Dog, Phone, RotateCc
 import { Booking, ResortSettings } from '../types';
 import { getBookingsForDate, formatDateIL, getDayNameHebrew } from '../utils/dateUtils';
 import { cleanPhoneNumber } from '../utils/whatsappUtils';
-import { getDateShabbatOrHoliday, formatShabbatHolidayGreeting } from '../utils/jewishCalendar';
+import { getDateShabbatOrHoliday, formatShabbatHolidayGreeting, getOccasionWord } from '../utils/jewishCalendar';
 
 interface ShabbatHolidayGreetingModalProps {
   dateStr: string;
@@ -23,9 +23,12 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
 
   const holidayInfo = getDateShabbatOrHoliday(dateStr);
   const dayName = getDayNameHebrew(dateStr);
+  const occasionWord = getOccasionWord(dateStr);
 
   // Template state
-  const defaultTemplate = `שלום (שם הבעלים) רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב. איזה כיף לי פה גם היום.\n(שם הכלב)`;
+  const defaultTemplate = `שלום (שם הבעלים) למרות שאין שירות לקוחות להולכים על 2 ${occasionWord}, אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.
+אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.
+(שם הכלב)`;
   const [template, setTemplate] = useState<string>(defaultTemplate);
   const [isEditingTemplate, setIsEditingTemplate] = useState<boolean>(false);
 
@@ -53,7 +56,7 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
   const handleSendWhatsApp = (booking: Booking) => {
     const cleanPhone = cleanPhoneNumber(booking.ownerPhone);
     const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-    const msg = formatShabbatHolidayGreeting(booking.ownerName, booking.dogName, template);
+    const msg = formatShabbatHolidayGreeting(booking.ownerName, booking.dogName, template, dateStr);
     const url = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
 
     // Mark as sent
@@ -64,7 +67,7 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
   };
 
   const handleCopyMessage = (booking: Booking) => {
-    const msg = formatShabbatHolidayGreeting(booking.ownerName, booking.dogName, template);
+    const msg = formatShabbatHolidayGreeting(booking.ownerName, booking.dogName, template, dateStr);
     navigator.clipboard.writeText(msg);
     setCopiedId(booking.id);
     setTimeout(() => setCopiedId(null), 2500);
@@ -166,7 +169,7 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
               </p>
             )}
             <div className="text-[10px] text-slate-400">
-              * המערכת מחליפה אוטומטית את <strong>(שם הבעלים)</strong> ו-<strong>(שם הכלב)</strong> עבור כל לקוח.
+              * המערכת מחליפה אוטומטית את <strong>(שם הבעלים)</strong>, <strong>(שם הכלב)</strong> ומתאימה בין סופ"ש לחג לפי התאריך.
             </div>
           </div>
         </div>
@@ -183,7 +186,7 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
             dayBookings.map((b) => {
               const isSent = !!sentMap[b.id];
               const cleanPhone = cleanPhoneNumber(b.ownerPhone);
-              const previewText = formatShabbatHolidayGreeting(b.ownerName, b.dogName, template);
+              const previewText = formatShabbatHolidayGreeting(b.ownerName, b.dogName, template, dateStr);
 
               return (
                 <div

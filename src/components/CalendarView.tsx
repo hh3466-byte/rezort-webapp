@@ -389,6 +389,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               const freeSpots = Math.max(0, maxCap - occupiedCount);
               const isFull = occupiedCount >= maxCap;
               const occupancyPercent = Math.min(100, Math.round((occupiedCount / maxCap) * 100));
+              const holidayInfo = getDateShabbatOrHoliday(day.dateStr);
 
               return (
                 <div
@@ -399,12 +400,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       : 'bg-slate-50/50 border-slate-200 hover:border-slate-300 shadow-2xs hover:shadow-xs'
                   }`}
                 >
-                  {/* Header: Day Name + Date + Today Badge */}
+                  {/* Header: Day Name + Date + Today Badge + Holiday Badge */}
                   <div className="pb-2 border-b border-slate-200 flex items-center justify-between">
                     <div>
-                      <span className="font-extrabold text-sm text-slate-900 block">
-                        יום {day.dayName}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-extrabold text-sm text-slate-900 block">
+                          יום {day.dayName}
+                        </span>
+                        {holidayInfo.isSpecial && (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-900 border border-emerald-300 font-black px-1.5 py-0.2 rounded-full shadow-2xs">
+                            {holidayInfo.icon} {holidayInfo.label}
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs text-slate-500 font-medium">
                         {formatDateIL(day.dateStr)}
                       </span>
