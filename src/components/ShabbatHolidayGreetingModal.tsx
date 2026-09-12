@@ -48,6 +48,7 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
   useEffect(() => {
     try {
       localStorage.setItem(storageKey, JSON.stringify(sentMap));
+      window.dispatchEvent(new CustomEvent('shabbat-greetings-updated'));
     } catch (e) {
       // ignore storage errors
     }

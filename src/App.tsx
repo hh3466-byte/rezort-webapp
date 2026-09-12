@@ -35,7 +35,7 @@ import { GrowPaymentsModal } from './components/GrowPaymentsModal';
 import { PaymentModal } from './components/PaymentModal';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
-import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown } from 'lucide-react';
+import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell } from 'lucide-react';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
 import { Guide } from './components/Guide';
@@ -45,6 +45,8 @@ import { IntakeRequestsModal } from './components/IntakeRequestsModal';
 import { CheckoutDebtAlertModal } from './components/CheckoutDebtAlertModal';
 import { PublicIntakePage } from './components/PublicIntakePage';
 import { SendIntakeModal } from './components/SendIntakeModal';
+import { getDateShabbatOrHoliday } from './utils/jewishCalendar';
+import { ShabbatHolidayGreetingModal } from './components/ShabbatHolidayGreetingModal';
 
 export default function App() {
   // Core application state with live Cloud synchronization
@@ -58,6 +60,14 @@ export default function App() {
 
   // Modals state
   const [selectedDateForDetails, setSelectedDateForDetails] = useState<string | null>(null);
+  const [greetingModalDate, setGreetingModalDate] = useState<string | null>(null);
+  const [isGreetingBannerDismissed, setIsGreetingBannerDismissed] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission;
+    }
+    return 'default';
+  });
   const [agentProposal, setAgentProposal] = useState<AgentActionProposal | null>(null);
   const [bookingWizardOpen, setBookingWizardOpen] = useState<{
     isOpen: boolean;
@@ -182,6 +192,110 @@ export default function App() {
   const dayTrainingToday = todayBookings.filter(b => b.serviceType === 'day_training').length;
   const trainingToday = fullTrainingToday + dayTrainingToday;
   const freeSlots = Math.max(0, settings.maxCapacity - totalDogsToday);
+
+  // Holiday and Shabbat detection for today
+  const todayHolidayInfo = getDateShabbatOrHoliday(todayStr);
+
+  // Sent greetings count for today
+  const [todayGreetingsSentCount, setTodayGreetingsSentCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(`shabbat_greetings_${todayStr}`);
+      if (!saved) return 0;
+      const map = JSON.parse(saved);
+      return todayBookings.filter(b => map[b.id]).length;
+    } catch {
+      return 0;
+    }
+  });
+
+  const todayUnsentGreetingsCount = Math.max(0, totalDogsToday - todayGreetingsSentCount);
+
+  // Update greetings count on storage or custom event
+  useEffect(() => {
+    const handleUpdate = () => {
+      try {
+        const saved = localStorage.getItem(`shabbat_greetings_${todayStr}`);
+        const map = saved ? JSON.parse(saved) : {};
+        setTodayGreetingsSentCount(todayBookings.filter(b => map[b.id]).length);
+      } catch {
+        // ignore
+      }
+    };
+    handleUpdate();
+    window.addEventListener('shabbat-greetings-updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+    return () => {
+      window.removeEventListener('shabbat-greetings-updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+    };
+  }, [todayStr, todayBookings.length]);
+
+  const requestNotificationPermission = async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        setNotificationPermission(perm);
+        if (perm === 'granted') {
+          new Notification('ריזורט לכלב 🐾', {
+            body: 'מעולה שמוליק! תזכורות שבת וחג יקפצו בשעה 11:00 בבוקר.',
+            icon: '/favicon.ico'
+          });
+        }
+      } catch (e) {
+        console.warn('Notification permission error:', e);
+      }
+    }
+  };
+
+  // 11:00 AM Scheduled Push Reminder for Shabbat / Holiday
+  useEffect(() => {
+    if (!todayHolidayInfo.isSpecial || totalDogsToday === 0) return;
+
+    const checkAndTrigger11AmReminder = () => {
+      const now = new Date();
+      const hour = now.getHours();
+      const notifKey = `shabbat_11am_notif_fired_${todayStr}`;
+
+      // Trigger at 11:00 AM or later today (once per day)
+      if (hour >= 11 && !localStorage.getItem(notifKey)) {
+        let sentCount = 0;
+        try {
+          const saved = localStorage.getItem(`shabbat_greetings_${todayStr}`);
+          const map = saved ? JSON.parse(saved) : {};
+          sentCount = todayBookings.filter(b => map[b.id]).length;
+        } catch {}
+
+        const unsent = todayBookings.length - sentCount;
+        if (unsent > 0) {
+          localStorage.setItem(notifKey, 'true');
+
+          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            try {
+              const notif = new Notification(`🐾 תזכורת לשמוליק: ד״ש ${todayHolidayInfo.label}!`, {
+                body: `השעה 11:00! ישנם ${totalDogsToday} כלבים בריזורט (${unsent} טרם קיבלו ד״ש). לחץ כאן לשליחה בוואטסאפ לבעלים.`,
+                icon: '/favicon.ico',
+                tag: `shabbat-greeting-${todayStr}`,
+                requireInteraction: true
+              });
+              notif.onclick = () => {
+                window.focus();
+                setGreetingModalDate(todayStr);
+                notif.close();
+              };
+            } catch (err) {
+              console.warn('Native notification error:', err);
+            }
+          }
+        }
+      }
+    };
+
+    checkAndTrigger11AmReminder();
+    const interval = setInterval(checkAndTrigger11AmReminder, 30000);
+    return () => clearInterval(interval);
+  }, [todayHolidayInfo.isSpecial, todayHolidayInfo.label, totalDogsToday, todayBookings, todayStr]);
 
   // Accurate real-time money calculation across all bookings
   const totalCollected = activeBookings.reduce((acc, b) => {
@@ -831,6 +945,77 @@ export default function App() {
 
         </div>
 
+        {/* Shabbat / Jewish Holiday Dog Greetings Reminder Banner for Shmulik */}
+        {todayHolidayInfo.isSpecial && totalDogsToday > 0 && !isGreetingBannerDismissed && (
+          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+            {todayUnsentGreetingsCount > 0 ? (
+              <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 text-white rounded-2xl p-3 sm:p-4 shadow-md border border-emerald-600/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl shrink-0 shadow-xs ring-1 ring-white/30">
+                    {todayHolidayInfo.icon || '🕯️'}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-black text-sm sm:text-base tracking-tight">
+                        תזכורת לשמוליק – ד״ש {todayHolidayInfo.label} לבעלי הכלבים!
+                      </span>
+                      <span className="bg-amber-400 text-slate-950 text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-2xs">
+                        נותרו {todayUnsentGreetingsCount} לשליחה
+                      </span>
+                      {notificationPermission === 'granted' ? (
+                        <span className="bg-emerald-500/30 text-emerald-100 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-400/30 flex items-center gap-1">
+                          <span>🔔</span>
+                          <span>תזכורת פוש ב-11:00 פעילה</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={requestNotificationPermission}
+                          className="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/30 flex items-center gap-1 cursor-pointer transition-all"
+                          title="אפשר קבלת התראת פוש ב-11:00 בבוקר"
+                        >
+                          <span>🔔</span>
+                          <span>הפעל תזכורת פוש ב-11:00</span>
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-emerald-100 font-medium mt-0.5">
+                      נוכחים היום {totalDogsToday} כלבים בריזורט ({todayGreetingsSentCount} נשלחו עד כה). שלח להם ד״ש משמח בוואטסאפ בקליק!
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setGreetingModalDate(todayStr)}
+                    className="w-full sm:w-auto bg-white hover:bg-emerald-50 text-emerald-950 font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shrink-0"
+                  >
+                    <MessageCircle className="w-4 h-4 text-emerald-700" />
+                    <span>שלח ד״ש עכשיו לבעלים</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-3.5 py-2.5 text-xs font-bold flex items-center justify-between shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🎉</span>
+                  <span className="font-black text-emerald-950">
+                    מעולה שמוליק! כל {totalDogsToday} הודעות הד״ש ל{todayHolidayInfo.label} נשלחו בהצלחה לבעלים.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGreetingModalDate(todayStr)}
+                  className="text-emerald-700 hover:text-emerald-900 underline font-black text-xs cursor-pointer"
+                >
+                  פתח רשימה
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Header Metrics Section: Ultra-Compact & Space-Efficient with Collapse Option */}
         {isMetricsRowCollapsed ? (
           /* Collapsed Single-Line Summary Bar (~36px height) */
@@ -1421,6 +1606,16 @@ export default function App() {
         settings={settings}
         onOpenFormPreview={() => setShowPublicIntake(true)}
       />
+
+      {/* Shabbat & Jewish Holiday Greetings Modal */}
+      {greetingModalDate && (
+        <ShabbatHolidayGreetingModal
+          dateStr={greetingModalDate}
+          bookings={bookings}
+          settings={settings}
+          onClose={() => setGreetingModalDate(null)}
+        />
+      )}
 
       {/* Floating Toast Notification */}
       {toastMessage && (
