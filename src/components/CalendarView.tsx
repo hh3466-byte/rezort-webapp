@@ -544,11 +544,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Complete List of Dogs (בצורה מלאה ולא מוסתרת - כל הכלבים ללא slice וללא הגבלת גובה מוסתרת) */}
-                  <div className="space-y-2 my-1">
+                  {/* Clean List of Dogs (שם הכלב בלבד ללא עומס) */}
+                  <div className="space-y-1.5 my-1">
                     {dayBookings.length === 0 ? (
                       <div className="text-center py-4 px-2 bg-white/70 rounded-xl border border-dashed border-slate-200">
-                        <span className="text-xs text-slate-400 font-bold block">אין כלבים רשומים ליום זה</span>
+                        <span className="text-xs text-slate-400 font-bold block">אין כלבים ביום זה</span>
                         <span className="text-[11px] text-emerald-600 font-medium">כל {maxCap} המקומות פנויים</span>
                       </div>
                     ) : (
@@ -556,72 +556,34 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                         const isPaid = b.paymentStatus === 'fully_paid';
                         const isDeposit = b.paymentStatus === 'deposit_paid';
-                        const isArrival = b.startDate === day.dateStr;
-                        const isDeparture = b.endDate === day.dateStr;
-                        const remainingDebt = Math.max(0, Math.round(b.totalPrice - b.depositAmount));
 
                         return (
                           <div
                             key={b.id}
                             onClick={() => onSelectBooking(b)}
-                            className={`border rounded-xl p-2.5 text-xs transition-all cursor-pointer shadow-2xs hover:shadow-xs ${
+                            className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer text-xs font-black flex items-center justify-between shadow-2xs hover:shadow-xs ${
                               isEnded
-                                ? 'bg-slate-100/80 border-slate-200 text-slate-500 opacity-75'
-                                : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-900'
+                                ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-70'
+                                : 'bg-white hover:bg-emerald-50 border-slate-200 hover:border-emerald-300 text-slate-900'
                             }`}
+                            title={`${b.dogName} (${getServiceTypeHebrew(b.serviceType)}) - לחץ לפרטים מלאים`}
                           >
-                            <div className="flex items-center justify-between font-bold">
-                              <span className="flex items-center gap-1.5 min-w-0">
-                                <Dog className={`w-3.5 h-3.5 shrink-0 ${isEnded ? 'text-slate-400' : 'text-emerald-600'}`} />
-                                <span className="truncate font-black text-slate-900">{b.dogName}</span>
-                                {b.dogBreed && (
-                                  <span className="text-[10px] text-slate-500 font-normal truncate">({b.dogBreed})</span>
-                                )}
-                              </span>
-                              <span className="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold shrink-0">
-                                {isEnded ? '🏁 הסתיים' : getServiceTypeHebrew(b.serviceType)}
-                              </span>
-                            </div>
-
-                            <div className="text-[11px] text-slate-600 mt-1 flex items-center justify-between font-medium">
-                              <span className="truncate">{b.ownerName}</span>
-                              <div className="flex items-center gap-1 shrink-0">
-                                {!isEnded && isArrival && (
-                                  <span className="text-[10px] bg-blue-50 text-blue-800 border border-blue-200 font-bold px-1.5 py-0.2 rounded">
-                                    📥 כניסה
-                                  </span>
-                                )}
-                                {!isEnded && isDeparture && (
-                                  <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 font-bold px-1.5 py-0.2 rounded">
-                                    📤 יציאה
-                                  </span>
-                                )}
-                                {!isEnded && !isArrival && !isDeparture && (
-                                  <span className="text-[10px] bg-slate-50 text-slate-600 border border-slate-200 font-medium px-1.5 py-0.2 rounded">
-                                    🐾 שוהה
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="mt-1.5 flex items-center justify-between text-[10px] pt-1 border-t border-slate-100">
-                              <span className={`px-1.5 py-0.5 rounded font-bold ${
+                            <span className="flex items-center gap-1.5 truncate">
+                              <span className="text-emerald-600 text-xs">🐾</span>
+                              <span className="truncate">{b.dogName}</span>
+                            </span>
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${
                                 isEnded
-                                  ? 'bg-slate-200 text-slate-600'
+                                  ? 'bg-slate-300'
                                   : isPaid
-                                  ? 'bg-emerald-100 text-emerald-800'
+                                  ? 'bg-emerald-500'
                                   : isDeposit
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {isEnded ? 'הסתיים' : isPaid ? 'שולם מלא' : isDeposit ? `מקדמה ₪${b.depositAmount}` : `חוב ₪${remainingDebt}`}
-                              </span>
-                              {b.ownerPhone && (
-                                <span className="text-slate-400 font-mono text-[9px]" dir="ltr">
-                                  {b.ownerPhone}
-                                </span>
-                              )}
-                            </div>
+                                  ? 'bg-amber-400'
+                                  : 'bg-red-500'
+                              }`}
+                              title={isPaid ? 'שולם מלא' : isDeposit ? 'שולמה מקדמה' : 'חוב פתוח'}
+                            />
                           </div>
                         );
                       })

@@ -21,7 +21,7 @@ import {
   clearAllBookingsFromDb
 } from './services/dbService';
 import { parseVoiceOrWhatsAppText } from './services/agentService';
-import { getTodayStr, getBookingsForDate, addDays } from './utils/dateUtils';
+import { getTodayStr, getBookingsForDate, addDays, HEBREW_MONTHS } from './utils/dateUtils';
 
 import { CalendarView } from './components/CalendarView';
 import { OccupancyForecast } from './components/OccupancyForecast';
@@ -198,6 +198,47 @@ export default function App() {
     return acc + (Number(b.depositAmount) || 0);
   }, 0);
   const monthPaidCount = currentMonthBookings.filter(b => (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid').length;
+
+  // Active stays and dogs in current month
+  const currentMonthStart = `${todayStr.substring(0, 7)}-01`;
+  const [curY, curM] = todayStr.split('-').map(Number);
+  const curMonthLastDay = new Date(curY, curM, 0).getDate();
+  const currentMonthEnd = `${todayStr.substring(0, 7)}-${String(curMonthLastDay).padStart(2, '0')}`;
+  const currentMonthActiveStays = activeBookings.filter(b => b.startDate <= currentMonthEnd && b.endDate >= currentMonthStart);
+  const currentMonthUniqueDogs = new Set(currentMonthActiveStays.map(b => b.dogName)).size;
+
+  // Mini columns data for the last 4 months (עמודות לחודשים אחרונים)
+  const recentMonthsMiniData = React.useMemo(() => {
+    const list = [];
+    const dateObj = new Date(todayStr + 'T12:00:00');
+    const thisYear = dateObj.getFullYear();
+    const thisMonth = dateObj.getMonth();
+
+    for (let i = 3; i >= 0; i--) {
+      let m = thisMonth - i;
+      let y = thisYear;
+      while (m < 0) {
+        m += 12;
+        y -= 1;
+      }
+      const mStr = String(m + 1).padStart(2, '0');
+      const ymPrefix = `${y}-${mStr}`;
+      const rev = activeBookings
+        .filter(b => (b.startDate || '').startsWith(ymPrefix))
+        .reduce((sum, b) => {
+          if (b.paymentStatus === 'fully_paid') return sum + (Number(b.totalPrice) || 0);
+          return sum + (Number(b.depositAmount) || 0);
+        }, 0);
+      list.push({
+        label: HEBREW_MONTHS[m].slice(0, 3),
+        fullName: `${HEBREW_MONTHS[m]} ${y}`,
+        revenue: rev,
+        isCurrent: i === 0
+      });
+    }
+    return list;
+  }, [activeBookings, todayStr]);
+  const maxRecentMiniRev = Math.max(1, ...recentMonthsMiniData.map(d => d.revenue));
 
   const openDebtTotal = activeBookings.reduce((acc, b) => {
     if (b.paymentStatus === 'fully_paid') return acc;
@@ -794,8 +835,8 @@ export default function App() {
 
         </div>
 
-        {/* 4 Metric Stat Cards: תפוסה כללית | פנסיון | אילוף | חוב פתוח (כולן לחיצות לעיון ועריכה, הכנסות חודשיות מאוחדות בלוח השנה) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* 5 Metric Stat Cards: תפוסה כללית | פנסיון | אילוף | חוב פתוח | הכנסות מתחילת החודש ועמודות */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           
           {/* Card 1 (Right in RTL): תפוסה כללית */}
           <div 
@@ -944,6 +985,70 @@ export default function App() {
               <span className="truncate">{openDebtTotal === 0 ? 'הכול שולם 🥳' : `${unpaidCount} הזמנות עם יתרה`}</span>
               <span className="text-[10px] text-red-600 font-bold opacity-80 group-hover:opacity-100 flex items-center gap-0.5">
                 עיון ועריכה 🔍
+              </span>
+            </div>
+          </div>
+
+          {/* Card 5 (Left in RTL): הכנסות מתחילת החודש ועמודות לחודשים אחרונים */}
+          <div 
+            onClick={() => setActiveHeaderMetric('revenue')}
+            role="button"
+            tabIndex={0}
+            className="bg-white border border-slate-200 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all active:scale-[0.99] group"
+            title="לחץ לצפייה בגרפי עמודות חודשיים ושנתיים וייצוא לאקסל"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-bold text-slate-500 text-right group-hover:text-emerald-700 transition-colors">
+                הכנסות מתחילת החודש
+              </div>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                💳 מתחילת החודש
+              </span>
+            </div>
+
+            {/* Big Revenue Amount */}
+            <div className="text-2xl sm:text-3xl font-black text-[#0f766e] my-1 text-right">
+              ₪{monthToDateCollected.toLocaleString('he-IL')}
+            </div>
+
+            {/* Combined Month Stays & Dogs */}
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 bg-slate-50/80 px-2 py-1 rounded-lg border border-slate-100 my-1">
+              <span>🐾 {currentMonthActiveStays.length} שהויות בחודש</span>
+              <span className="text-slate-400 font-medium">({currentMonthUniqueDogs} כלבים)</span>
+            </div>
+
+            {/* Mini Column Chart: עמודות לחודשים אחרונים */}
+            <div className="my-1 pt-1 border-t border-slate-100">
+              <div className="text-[10px] text-slate-400 font-bold mb-1 flex items-center justify-between">
+                <span>עמודות לחודשים אחרונים:</span>
+                <span className="text-emerald-700 group-hover:underline">גרפים 📊</span>
+              </div>
+              <div className="flex items-end gap-1.5 h-6">
+                {recentMonthsMiniData.map((mItem, idx) => {
+                  const barHeight = Math.max(18, Math.round((mItem.revenue / maxRecentMiniRev) * 100));
+                  return (
+                    <div key={idx} className="flex-1 flex flex-col items-center gap-0.5 h-full justify-end" title={`${mItem.fullName}: ₪${mItem.revenue.toLocaleString('he-IL')}`}>
+                      <div
+                        className={`w-full rounded-t-xs transition-all ${
+                          mItem.isCurrent
+                            ? 'bg-emerald-600 group-hover:bg-emerald-700'
+                            : 'bg-slate-300 group-hover:bg-slate-400'
+                        }`}
+                        style={{ height: `${barHeight}%` }}
+                      />
+                      <span className={`text-[8px] font-bold ${mItem.isCurrent ? 'text-emerald-900 font-black' : 'text-slate-400'}`}>
+                        {mItem.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] font-medium text-slate-400 pt-1 border-t border-slate-50">
+              <span className="truncate">{monthPaidCount} שולמו החודש</span>
+              <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100 flex items-center gap-0.5">
+                עיון וגרפים 🔍
               </span>
             </div>
           </div>
