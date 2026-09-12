@@ -1080,8 +1080,6 @@ export default function App() {
                   initialData: { startDate: dStr, endDate: addDays(dStr, 3) },
                 });
               }}
-              monthToDateRevenue={monthToDateCollected}
-              onOpenRevenueMetric={() => setActiveHeaderMetric('revenue')}
             />
           )}
 

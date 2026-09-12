@@ -47,8 +47,6 @@ interface CalendarViewProps {
   onSetMonth?: (month: number) => void;
   onSetYear?: (year: number) => void;
   onJumpToToday?: () => void;
-  monthToDateRevenue?: number;
-  onOpenRevenueMetric?: () => void;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -64,8 +62,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onSetMonth,
   onSetYear,
   onJumpToToday,
-  monthToDateRevenue,
-  onOpenRevenueMetric,
 }) => {
   const todayStr = getTodayStr();
   const [displayMode, setDisplayMode] = useState<CalendarDisplayMode>('two_weeks');
@@ -373,100 +369,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <CalendarDays className="w-3.5 h-3.5" />
             <span>יום בודד</span>
           </button>
-        </div>
-      </div>
-
-      {/* Dynamic Period Header Banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-l from-emerald-50/70 via-slate-50 to-emerald-50/30 p-3 sm:p-4 rounded-2xl border border-emerald-100/80 mb-5 shadow-2xs">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2.5 bg-emerald-700 text-white rounded-xl shadow-2xs">
-            <CalendarIcon className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
-              {displayMode === 'month' && (
-                <span>חודש {HEBREW_MONTHS[currentMonth]} {currentYear}</span>
-              )}
-              {displayMode === 'two_weeks' && (
-                <span>שבועיים קרובים ({formatDateIL(twoWeeksStart)} עד {formatDateIL(twoWeeksEnd)})</span>
-              )}
-              {displayMode === 'week' && (
-                <span>שבוע {formatDateIL(weekDays[0].dateStr)} עד {formatDateIL(weekDays[6].dateStr)}</span>
-              )}
-              {displayMode === 'day' && (
-                <span>{formatFullHebrewDate(focusedDate)}</span>
-              )}
-            </h2>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
-              {displayMode === 'month' && (
-                <span>סה״כ {monthActiveBookings.length} הזמנות פעילות בחודש זה ({monthUniqueDogs} כלבים שונים)</span>
-              )}
-              {displayMode === 'two_weeks' && (
-                <span>סה״כ {twoWeeksActiveBookings.length} הזמנות פעילות ב-14 הימים ({twoWeeksUniqueDogs} כלבים שונים)</span>
-              )}
-              {displayMode === 'week' && (
-                <span>סה״כ {weekActiveBookings.length} הזמנות פעילות בשבוע זה ({weekUniqueDogs} כלבים שונים)</span>
-              )}
-              {displayMode === 'day' && (
-                <span>תפוסה ביום זה: {dayBreakdown.total} / {settings.maxCapacity} כלבים ({Math.max(0, settings.maxCapacity - dayBreakdown.total)} מקומות פנויים)</span>
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {displayMode === 'month' && (
-            <>
-              <span className="text-xs font-bold text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
-                🐾 {monthActiveBookings.length} שהויות בחודש
-              </span>
-              {monthToDateRevenue !== undefined && (
-                <button
-                  type="button"
-                  onClick={onOpenRevenueMetric}
-                  className="flex items-center gap-2 bg-white hover:bg-emerald-50 text-emerald-950 border border-emerald-300 hover:border-emerald-500 text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs group active:scale-98"
-                  title="לחץ לצפייה בגרפי עמודות חודשיים ושנתיים וייצוא לאקסל"
-                >
-                  <span>💳 הכנסות מתחילת החודש:</span>
-                  <span className="font-mono text-sm font-black text-emerald-700">₪{monthToDateRevenue.toLocaleString('he-IL')}</span>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md font-bold group-hover:bg-emerald-200">
-                    גרפים 📊
-                  </span>
-                </button>
-              )}
-            </>
-          )}
-          {displayMode === 'two_weeks' && (
-            <>
-              <span className="text-xs font-bold text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
-                🐾 {twoWeeksActiveBookings.length} שהויות בשבועיים הקרובים
-              </span>
-              {monthToDateRevenue !== undefined && (
-                <button
-                  type="button"
-                  onClick={onOpenRevenueMetric}
-                  className="flex items-center gap-2 bg-white hover:bg-emerald-50 text-emerald-950 border border-emerald-300 hover:border-emerald-500 text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs group active:scale-98"
-                  title="לחץ לצפייה בגרפי עמודות חודשיים ושנתיים וייצוא לאקסל"
-                >
-                  <span>💳 הכנסות מתחילת החודש:</span>
-                  <span className="font-mono text-sm font-black text-emerald-700">₪{monthToDateRevenue.toLocaleString('he-IL')}</span>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md font-bold group-hover:bg-emerald-200">
-                    גרפים 📊
-                  </span>
-                </button>
-              )}
-            </>
-          )}
-          {displayMode === 'week' && (
-            <span className="text-xs font-bold text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
-              🐾 {weekActiveBookings.length} שהויות בשבוע
-            </span>
-          )}
-          {displayMode === 'day' && (
-            <span className="text-xs font-bold text-emerald-900 bg-white border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
-              🐾 {dayBreakdown.total} כלבים ביום
-            </span>
-          )}
         </div>
       </div>
 
