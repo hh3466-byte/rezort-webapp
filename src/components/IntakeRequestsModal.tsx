@@ -491,6 +491,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 hour: '2-digit',
                 minute: '2-digit'
               });
+              const daysCount = Math.max(1, calculateDaysCount(req.startDate, req.endDate));
 
               return (
                 <div
@@ -536,10 +537,23 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                           </span>
                         </div>
 
-                        <div className="text-xs text-slate-600 font-medium flex items-center gap-2 mt-0.5">
+                        <div className="text-xs text-slate-600 font-medium flex flex-wrap items-center gap-2 mt-1">
                           <span className="font-bold text-slate-800">בעלים: {req.ownerName}</span>
                           <span>·</span>
-                          <span className="font-mono">{req.ownerPhone}</span>
+                          <span className="font-mono font-bold text-slate-800" dir="ltr">{req.ownerPhone}</span>
+                          
+                          {/* Quick WhatsApp Call / Chat Button */}
+                          <a
+                            href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(`שלום ${req.ownerName}, כאן שמוליק מ${settings.resortName} 🐾 בהמשך לטופס בקשת הקליטה ששלחתם עבור ${req.dogName}`)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black px-2.5 py-0.5 rounded-lg text-xs transition-all shadow-xs cursor-pointer hover:shadow-md"
+                            title="חייג לוואטסאפ של הלקוח"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5 fill-white/20" />
+                            <span>חייג לוואטסאפ של הלקוח</span>
+                          </a>
+
                           <span>·</span>
                           <span className="text-[11px] text-slate-400">התקבל: {formattedDate}</span>
                         </div>
@@ -547,13 +561,20 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     </div>
 
                     {/* Quick Dates Badge */}
-                    <div className="flex items-center gap-2 self-start sm:self-center bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700" dir="rtl">
-                      <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>
-                        {serviceLabel}: {req.serviceType === 'training' 
-                          ? `כניסה החל מ-${formatDateIL(req.startDate)}` 
-                          : `${formatDateIL(req.startDate)} עד ${formatDateIL(req.endDate)}`}
-                      </span>
+                    <div className="flex flex-col items-start gap-0.5 self-start sm:self-center bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 shadow-2xs" dir="rtl">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>
+                          {serviceLabel}: {req.serviceType === 'training' 
+                            ? `כניסה החל מ-${formatDateIL(req.startDate)}` 
+                            : `${formatDateIL(req.startDate)} עד ${formatDateIL(req.endDate)}`}
+                        </span>
+                      </div>
+                      {req.serviceType !== 'training' && (
+                        <div className="text-[11px] text-slate-500 font-semibold mr-5">
+                          סה"כ {daysCount} {daysCount === 1 ? 'יום' : 'ימים'}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -678,18 +699,6 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     
                     {/* Left: Contact actions */}
                     <div className="flex items-center gap-2">
-                      {/* WhatsApp Call & Chat - Primary Green Button */}
-                      <a
-                        href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(`שלום ${req.ownerName}, כאן שמוליק מ${settings.resortName} 🐾 בהמשך לטופס בקשת הקליטה ששלחתם עבור ${req.dogName}`)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-                        title="שיחה לוואטסאפ של הריזורט"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        <span>שיחה לוואטסאפ של הריזורט</span>
-                      </a>
-
                       {/* Regular SIM Phone Call */}
                       <a
                         href={`tel:${cleanPhone}`}
