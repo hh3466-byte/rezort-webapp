@@ -23,7 +23,6 @@ import {
 import { parseVoiceOrWhatsAppText } from './services/agentService';
 import { getTodayStr, getBookingsForDate, addDays } from './utils/dateUtils';
 
-import { VoiceAgentBar } from './components/VoiceAgentBar';
 import { CalendarView } from './components/CalendarView';
 import { OccupancyForecast } from './components/OccupancyForecast';
 import { BookingsList } from './components/BookingsList';
@@ -637,17 +636,7 @@ export default function App() {
           
           {/* Action Buttons (Left in RTL) */}
           <div className="flex flex-wrap items-center gap-2 order-3 xl:order-1">
-            {/* 1. Primary: New Booking */}
-            <button
-              onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
-              id="btn-new-booking-top"
-              className="bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <span className="text-base font-bold">+</span>
-              <span>הזמנה חדשה</span>
-            </button>
-
-            {/* 2. Intake Requests Modal (with prominent live count) */}
+            {/* 1. First from right: Intake Requests Modal (with prominent live count) */}
             <button
               type="button"
               onClick={() => setIsIntakeModalOpen(true)}
@@ -669,6 +658,16 @@ export default function App() {
                   </span>
                 </span>
               )}
+            </button>
+
+            {/* 2. Immediately after: New Booking */}
+            <button
+              onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
+              id="btn-new-booking-top"
+              className="bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <span className="text-base font-bold">+</span>
+              <span>הזמנה חדשה</span>
             </button>
 
             {/* 3. Public Intake Form Link & Proactive Send to Callers */}
@@ -786,7 +785,7 @@ export default function App() {
                 <span>🐕</span>
               </h1>
               <p className="text-[11px] sm:text-xs text-slate-500 font-medium">
-                דבר אליי — ואני אנהל את היומן: הזמנות, תשלומים ותפוסה
+                ניהול יומן פנסיון ואילוף, בקשות קליטה ותקבולים
               </p>
             </div>
           </div>
@@ -976,8 +975,7 @@ export default function App() {
 
         </div>
 
-        {/* Voice & Text Smart Assistant Input Bar */}
-        <VoiceAgentBar onProcessCommand={handleAgentProcess} />
+
 
 
 
