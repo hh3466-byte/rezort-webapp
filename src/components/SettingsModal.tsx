@@ -374,7 +374,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
                   />
                   <span className="text-[10px] text-slate-400 mt-1 block">
-                    קישור זה יישלח ללקוח בלחיצה על "שלח קישור תשלום Grow 💬" במסך בקשות הקליטה (הלקוח משלם ב-Bit ובאשראי ישירות בתוך הקישור).
+                    קישור זה יישלח ללקוח בלחיצה על "שלח קישור לתשלום 💬" במסך בקשות הקליטה (הלקוח משלם ב-Bit ובאשראי ישירות בתוך הקישור).
                   </span>
                 </div>
 

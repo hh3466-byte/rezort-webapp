@@ -406,7 +406,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
             {[
               { id: 'pending', label: 'ממתינות לבדיקה', count: pendingCount, color: 'emerald' },
-              { id: 'payment_requested', label: 'נשלח קישור תשלום', count: paymentRequestedCount, color: 'blue' },
+              { id: 'payment_requested', label: 'נשלח קישור לתשלום', count: paymentRequestedCount, color: 'blue' },
               { id: 'approved', label: 'נקלטו ביומן', count: approvedCount, color: 'slate' },
               { id: 'rejected', label: 'נדחו', count: requests.filter(r => r.status === 'rejected').length, color: 'slate' },
               { id: 'all', label: 'הכול', count: requests.length, color: 'slate' },
@@ -719,10 +719,10 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         type="button"
                         onClick={() => handleOpenPaymentPrompt(req)}
                         className="bg-blue-50 hover:bg-blue-100 active:scale-98 text-blue-900 border border-blue-300 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                        title="הגדר סכום שסוכם ושלח קישור תשלום Grow ישירות לוואטסאפ של הלקוח"
+                        title="הגדר סכום שסוכם ושלח קישור לתשלום ישירות לוואטסאפ של הלקוח"
                       >
                         <CreditCard className="w-3.5 h-3.5 text-blue-600" />
-                        <span>שלח קישור תשלום Grow 💬</span>
+                        <span>שלח קישור לתשלום 💬</span>
                       </button>
 
                       {/* Approve and Book on calendar */}
