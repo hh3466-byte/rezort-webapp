@@ -16,7 +16,8 @@ import {
   Clock,
   ShieldAlert,
   Edit2,
-  Trash2
+  Trash2,
+  Gift
 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
 import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr } from '../utils/dateUtils';
@@ -36,6 +37,7 @@ interface DayDetailsModalProps {
   onOpenPaymentModal: (booking: Booking) => void;
   onToggleStayStatus: (bookingId: string, newStatus: Booking['stayStatus']) => void;
   onInitiateRelease?: (booking: Booking) => void;
+  onOpenVoucher?: (data: { customerName: string; dogName: string; phone: string }) => void;
 }
 
 export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
@@ -176,6 +178,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
+                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone })}
                     actionType="arrival"
                   />
                 ))}
@@ -208,6 +211,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
+                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone })}
                     actionType="staying"
                   />
                 ))}
@@ -240,6 +244,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
+                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone })}
                     actionType="departure"
                   />
                 ))}
@@ -272,6 +277,7 @@ interface DogBookingCardProps {
   onMarkPaid: () => void;
   onOpenPayment: () => void;
   onInitiateRelease?: () => void;
+  onOpenVoucher?: () => void;
   actionType: 'arrival' | 'staying' | 'departure';
 }
 
@@ -283,6 +289,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   onMarkPaid,
   onOpenPayment,
   onInitiateRelease,
+  onOpenVoucher,
 }) => {
   const todayStr = getTodayStr();
   const isEnded = booking.stayStatus === 'checked_out' || (booking.endDate < todayStr);
@@ -404,6 +411,22 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             >
               <Home className="w-3.5 h-3.5" />
               <span>שחרר הביתה</span>
+            </button>
+          )}
+
+          {/* Send Voucher Button */}
+          {onOpenVoucher && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenVoucher();
+              }}
+              title="הפק ושלח שובר הטבה לפעם הבאה או חבר מביא חבר"
+              className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95 shrink-0"
+            >
+              <Gift className="w-3.5 h-3.5 text-amber-600" />
+              <span>שובר</span>
             </button>
           )}
 

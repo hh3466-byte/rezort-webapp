@@ -21,7 +21,10 @@ import {
   Clock,
   MessageCircle,
   Copy,
-  Check
+  Check,
+  Gift,
+  Users,
+  Tag
 } from 'lucide-react';
 import { SendIntakeModal } from './SendIntakeModal';
 
@@ -62,6 +65,26 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   const [saturdayWarning, setSaturdayWarning] = useState<string | null>(null);
   const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
   const [copiedDirectLink, setCopiedDirectLink] = useState(false);
+
+  // Client Relationship & Voucher Code State
+  type ClientOriginType = 'new' | 'returning' | 'referral';
+  const [clientOrigin, setClientOrigin] = useState<ClientOriginType>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const v = (params.get('voucher') || '').toUpperCase();
+      if (v.startsWith('FRIEND-')) return 'referral';
+      if (v.startsWith('VIP-')) return 'returning';
+    }
+    return 'new';
+  });
+  const [referralFriendName, setReferralFriendName] = useState('');
+  const [voucherCode, setVoucherCode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return (params.get('voucher') || '').trim().toUpperCase();
+    }
+    return '';
+  });
 
   // Auto adjust dates when service is selected
   const handleServiceChange = (st: ServiceType) => {
@@ -250,6 +273,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       notes: [
         isCallbackOnly ? '[בקשת שיחה חוזרת טלפונית]' : '',
         isFlexibleDates ? '[תאריכים גמישים / בירור זמינות כללי]' : '',
+        clientOrigin === 'returning' ? '[💎 לקוח חוזר]' : '',
+        clientOrigin === 'referral' ? `[🤝 חבר מביא חבר${referralFriendName.trim() ? `: הופנה ע״י ${referralFriendName.trim()}` : ''}]` : '',
+        voucherCode.trim() ? `[🎁 קוד שובר: ${voucherCode.trim()} - 100 ₪ הנחה בשהות 3+ ימים, אין כפל הטבות]` : '',
         freeText.trim()
       ].filter(Boolean).join(' | ') || undefined,
     };
@@ -364,45 +390,73 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
             טופס בקשת קליטה ושריון מקום 🐾 מלאו את פרטי הבקשה ונחזור אליכם טלפונית לתיאום והסדרת השריון.
           </p>
 
-          {/* Proactive Send Form to Callers Banner */}
-          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl p-3.5 sm:p-4 text-emerald-950 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-right mt-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-2xs shrink-0">
-                📲
+          {/* Proactive Send Form to Callers Banner (For staff preview only) */}
+          {onBackToApp && (
+            <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl p-3.5 sm:p-4 text-emerald-950 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-right mt-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-2xs shrink-0">
+                  📲
+                </div>
+                <div>
+                  <div className="font-black text-xs sm:text-sm text-emerald-950">
+                    לקוח התקשר זה עתה? שלחו לו את הטופס ישירות למילוי
+                  </div>
+                  <div className="text-[11px] text-emerald-800 font-medium">
+                    שליחת הודעת וואטסאפ מנומסת מוכנה מראש עם קישור ישיר לטופס בקשת קליטה זה
+                  </div>
+                </div>
               </div>
-              <div>
-                <div className="font-black text-xs sm:text-sm text-emerald-950">
-                  לקוח התקשר זה עתה? שלחו לו את הטופס ישירות למילוי
-                </div>
-                <div className="text-[11px] text-emerald-800 font-medium">
-                  שליחת הודעת וואטסאפ מנומסת מוכנה מראש עם קישור ישיר לטופס בקשת קליטה זה
-                </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsSendIntakeModalOpen(true)}
+                  className="w-full sm:w-auto bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>שלח טופס ללקוח בוואטסאפ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/?intake=true`);
+                    setCopiedDirectLink(true);
+                    setTimeout(() => setCopiedDirectLink(false), 2500);
+                  }}
+                  className="bg-white hover:bg-emerald-100/60 border border-emerald-300 text-emerald-900 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center gap-1 shadow-2xs cursor-pointer transition-all shrink-0"
+                >
+                  {copiedDirectLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedDirectLink ? 'הועתק!' : 'העתק קישור'}</span>
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsSendIntakeModalOpen(true)}
-                className="w-full sm:w-auto bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>שלח טופס ללקוח בוואטסאפ</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/?intake=true`);
-                  setCopiedDirectLink(true);
-                  setTimeout(() => setCopiedDirectLink(false), 2500);
-                }}
-                className="bg-white hover:bg-emerald-100/60 border border-emerald-300 text-emerald-900 font-bold px-3 py-2 rounded-xl text-xs flex items-center justify-center gap-1 shadow-2xs cursor-pointer transition-all shrink-0"
-              >
-                {copiedDirectLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedDirectLink ? 'הועתק!' : 'העתק קישור'}</span>
-              </button>
+          )}
+        </header>
+
+        {/* Active Voucher Detected Banner */}
+        {voucherCode && (
+          <div className="bg-gradient-to-r from-amber-500/15 via-amber-400/25 to-emerald-500/15 border-2 border-amber-400/60 rounded-3xl p-4 sm:p-5 shadow-md flex items-center gap-3.5 animate-in fade-in slide-in-from-top-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-400 text-white flex items-center justify-center shrink-0 shadow-xs text-2xl">
+              🎁
+            </div>
+            <div className="flex-1 min-w-0 text-right">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-black text-amber-950 uppercase tracking-wide">שובר הטבה מופעל:</span>
+                <span className="font-mono font-black text-sm text-amber-950 bg-white/90 px-3 py-1 rounded-xl border border-amber-300 shadow-2xs">
+                  {voucherCode}
+                </span>
+                <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-lg border border-emerald-300">
+                  100 ₪ הנחה
+                </span>
+              </div>
+              <p className="text-xs text-amber-950 font-bold mt-1">
+                ההטבה תקפה בהזמנת שהות של 3 ימים ומעלה (סופ״ש ארוך) · אין כפל הטבות ומבצעים
+              </p>
+              <p className="text-[11px] text-slate-600 mt-0.5">
+                קוד השובר יישמר בטופס וצוות הריזורט יעדכן את ההנחה בשריון ההזמנה 🐾
+              </p>
             </div>
           </div>
-        </header>
+        )}
 
         {/* Error Alert if validation fails */}
         {errorMessage && (
@@ -420,6 +474,140 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
           }} 
           className="bg-white rounded-3xl border border-slate-200/90 shadow-md p-5 sm:p-7 space-y-6"
         >
+          
+          {/* Section 0: Client Type & Benefit Voucher */}
+          <div className="bg-gradient-to-br from-emerald-50/70 via-slate-50 to-amber-50/50 border border-slate-200/90 rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
+            <div>
+              <label className="text-xs sm:text-sm font-black text-slate-800 block mb-2.5 flex items-center gap-2">
+                <Users className="w-4 h-4 text-emerald-700" />
+                <span>האם התארחתם אצלנו בעבר?</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setClientOrigin('new')}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    clientOrigin === 'new'
+                      ? 'bg-white border-emerald-600 text-emerald-950 shadow-xs ring-2 ring-emerald-500/20 font-black'
+                      : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  <span>🐶</span>
+                  <span>פעם ראשונה שלנו</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setClientOrigin('returning')}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    clientOrigin === 'returning'
+                      ? 'bg-white border-amber-500 text-amber-950 shadow-xs ring-2 ring-amber-500/20 font-black'
+                      : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  <span>💎</span>
+                  <span>לקוח חוזר (התארחנו)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setClientOrigin('referral')}
+                  className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    clientOrigin === 'referral'
+                      ? 'bg-white border-teal-600 text-teal-950 shadow-xs ring-2 ring-teal-500/20 font-black'
+                      : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-white'
+                  }`}
+                >
+                  <span>🤝</span>
+                  <span>חבר מביא חבר</span>
+                </button>
+              </div>
+
+              {/* Context notes */}
+              {clientOrigin === 'returning' && (
+                <div className="mt-2.5 p-3 bg-amber-50/90 border border-amber-200/80 rounded-xl text-xs text-amber-950 flex items-center gap-2 animate-in fade-in">
+                  <span className="text-base">🐾</span>
+                  <div className="leading-snug">
+                    <strong className="font-black">ברוכים השבים לריזורט!</strong> אם פרטי הכלב, החיסונים והבריאות ללא שינוי, נשתמש בתיק הקיים שלכם במערכת.
+                  </div>
+                </div>
+              )}
+
+              {clientOrigin === 'referral' && (
+                <div className="mt-2.5 p-3 bg-teal-50/90 border border-teal-200 rounded-xl text-xs text-teal-950 space-y-2 animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🎉</span>
+                    <span className="font-bold leading-snug">
+                      איזה כיף שהגעתם דרך חבר! גם אתם וגם החבר שהפנה אתכם תיהנו מ-100 ₪ הנחה לשהות של 3 ימים ומעלה (סופ״ש ארוך).
+                    </span>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-black text-teal-900 block mb-1">
+                      מי החבר/ה שהמליצו לכם? (שם בעלים או שם כלב):
+                    </label>
+                    <input
+                      type="text"
+                      value={referralFriendName}
+                      onChange={(e) => setReferralFriendName(e.target.value)}
+                      placeholder="למשל: דנה כהן (הכלב מקס)"
+                      className="w-full bg-white border border-teal-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-teal-500 shadow-2xs"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Voucher Code Input */}
+            <div className="pt-2.5 border-t border-slate-200/80">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                  <Gift className="w-4 h-4 text-amber-600" />
+                  <span>קוד שובר הטבה / קופון (אופציונלי):</span>
+                </label>
+                {voucherCode && (
+                  <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>הקוד הוזן בהצלחה</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={voucherCode}
+                  onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                  placeholder="הזינו קוד שובר (למשל: VIP-..., FRIEND-...)"
+                  className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-slate-900 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none uppercase tracking-wider font-mono placeholder:font-sans placeholder:font-normal shadow-2xs"
+                />
+                {voucherCode && (
+                  <button
+                    type="button"
+                    onClick={() => setVoucherCode('')}
+                    className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 bg-white border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
+                  >
+                    נקה
+                  </button>
+                )}
+              </div>
+
+              {voucherCode ? (
+                <div className="mt-2 p-2.5 bg-amber-50 border border-amber-300/90 rounded-xl text-xs text-amber-950 flex items-start gap-2 animate-in fade-in">
+                  <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="leading-snug">
+                    <span className="font-black">הטבת שובר פעילה:</span> 100 ₪ הנחה בשהות של 3 ימים ומעלה (סופ״ש ארוך).
+                    <div className="text-[10px] text-amber-900 font-medium mt-0.5">
+                      * תנאי המבצע: בהזמנת מינימום 3 ימים (סופ״ש ארוך) · אין כפל הטבות ומבצעים · ההנחה תעודכן ע״י הריזורט בתיאום ההזמנה.
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 mt-1 leading-normal">
+                  שובר פינוק ללקוח חוזר או שובר ״חבר מביא חבר״ מעניק 100 ₪ הנחה בשהות של 3 ימים ומעלה (ללא כפל הטבות).
+                </p>
+              )}
+            </div>
+          </div>
           
           {/* Section 1: Owner Details */}
           <div className="space-y-3">

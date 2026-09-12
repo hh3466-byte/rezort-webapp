@@ -47,6 +47,7 @@ import { PublicIntakePage } from './components/PublicIntakePage';
 import { SendIntakeModal } from './components/SendIntakeModal';
 import { getDateShabbatOrHoliday } from './utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './components/ShabbatHolidayGreetingModal';
+import { VoucherModal } from './components/VoucherModal';
 
 export default function App() {
   // Core application state with live Cloud synchronization
@@ -119,6 +120,14 @@ export default function App() {
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Digital Loyalty & Referral Voucher Modal
+  const [voucherModalData, setVoucherModalData] = useState<{
+    isOpen: boolean;
+    customerName?: string;
+    dogName?: string;
+    phone?: string;
+  } | null>(null);
 
   // Metrics Row Collapse State
   const [isMetricsRowCollapsed, setIsMetricsRowCollapsed] = useState(false);
@@ -1343,6 +1352,7 @@ export default function App() {
               bookings={bookings}
               settings={settings}
               onSelectBooking={(b) => setSelectedDateForDetails(b.startDate)}
+              onOpenVoucher={(data) => setVoucherModalData({ isOpen: true, ...data })}
               onNewBookingForCustomer={(customer) => {
                 const firstDog = customer.dogs[0];
                 setBookingWizardOpen({
@@ -1368,6 +1378,7 @@ export default function App() {
           bookings={bookings}
           settings={settings}
           onClose={() => setSelectedDateForDetails(null)}
+          onOpenVoucher={(data) => setVoucherModalData({ isOpen: true, ...data })}
           onSelectBooking={(booking) => {
             setSelectedDateForDetails(null);
             setBookingFormModal({ isOpen: true, initialData: booking });
@@ -1614,6 +1625,18 @@ export default function App() {
           bookings={bookings}
           settings={settings}
           onClose={() => setGreetingModalDate(null)}
+        />
+      )}
+
+      {/* Digital Loyalty & Referral Voucher Modal */}
+      {voucherModalData?.isOpen && (
+        <VoucherModal
+          isOpen={voucherModalData.isOpen}
+          initialCustomerName={voucherModalData.customerName}
+          initialDogName={voucherModalData.dogName}
+          initialPhone={voucherModalData.phone}
+          settings={settings}
+          onClose={() => setVoucherModalData(null)}
         />
       )}
 

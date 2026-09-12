@@ -11,7 +11,8 @@ import {
   MessageSquare, 
   AlertCircle,
   Clock,
-  Sparkles
+  Sparkles,
+  Gift
 } from 'lucide-react';
 import { Booking, Customer, ResortSettings } from '../types';
 import { extractCustomers } from '../utils/storage';
@@ -23,6 +24,7 @@ interface CustomersViewProps {
   settings: ResortSettings;
   onNewBookingForCustomer: (customer: Customer) => void;
   onSelectBooking: (booking: Booking) => void;
+  onOpenVoucher?: (data: { customerName: string; dogName: string; phone: string }) => void;
 }
 
 export const CustomersView: React.FC<CustomersViewProps> = ({
@@ -30,6 +32,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   settings,
   onNewBookingForCustomer,
   onSelectBooking,
+  onOpenVoucher,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [vipFilter, setVipFilter] = useState<'all' | 'vip' | 'debt'>('all');
@@ -208,16 +211,32 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   </span>
                 </div>
 
-                {/* Action Buttons: New Booking for this Customer, WhatsApp, Call */}
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                {/* Action Buttons: New Booking for this Customer, Voucher, WhatsApp, Call */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
                   <button
                     type="button"
                     onClick={() => onNewBookingForCustomer(customer)}
                     className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold text-xs py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4 stroke-[3]" />
-                    <span>הזמנה חדשה ללקוח זה</span>
+                    <span>הזמנה חדשה</span>
                   </button>
+
+                  {onOpenVoucher && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenVoucher({
+                        customerName: customer.name,
+                        dogName: customer.dogs[0]?.name || '',
+                        phone: customer.phone
+                      })}
+                      className="py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 shrink-0"
+                      title="הפק ושלח שובר הטבה לפעם הבאה או חבר מביא חבר"
+                    >
+                      <Gift className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>שובר מתנה</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
