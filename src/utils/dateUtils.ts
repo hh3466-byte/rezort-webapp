@@ -271,3 +271,51 @@ export function getWeekDays(dateStr: string) {
   return days;
 }
 
+/**
+ * Calculate actual money collected for a booking in a specific YYYY-MM month (Cash Basis / תקבולים שנפרעו בפועל)
+ * Ensures that only payments that were actually cleared/received in that month are counted.
+ */
+export function getBookingPaymentsInMonth(b: Booking, targetMonthKey: string): number {
+  if (b.stayStatus === 'cancelled' || b.paymentStatus === 'unpaid') {
+    return 0;
+  }
+
+  let collectedInMonth = 0;
+  const depAmount = Number(b.depositAmount) || 0;
+  const totalPrice = Number(b.totalPrice) || 0;
+
+  // 1. Determine date of deposit / initial payment
+  const depositDate = (b as any).depositPaidAt || b.createdAt || b.startDate || '';
+  const depositMonth = depositDate.substring(0, 7);
+
+  if (b.paymentStatus === 'fully_paid') {
+    // If booking was paid in full upfront upon creation
+    const isPaidUpfront = !b.updatedAt || 
+      b.updatedAt === b.createdAt || 
+      (b as any).fullyPaidAt === (b as any).depositPaidAt || 
+      (b.notes && b.notes.includes('עסקת Grow')) || 
+      (depAmount >= totalPrice);
+
+    if (isPaidUpfront || depAmount >= totalPrice) {
+      if (depositMonth === targetMonthKey) {
+        collectedInMonth += totalPrice;
+      }
+    } else {
+      // Split: deposit paid at depositMonth, remainder paid at fullyPaidAt / updatedAt
+      if (depositMonth === targetMonthKey) {
+        collectedInMonth += depAmount;
+      }
+      const finalDate = (b as any).fullyPaidAt || b.updatedAt || b.endDate || '';
+      const finalMonth = finalDate.substring(0, 7);
+      if (finalMonth === targetMonthKey) {
+        collectedInMonth += Math.max(0, totalPrice - depAmount);
+      }
+    }
+  } else if (b.paymentStatus === 'deposit_paid') {
+    if (depositMonth === targetMonthKey) {
+      collectedInMonth += depAmount;
+    }
+  }
+
+  return collectedInMonth;
+}

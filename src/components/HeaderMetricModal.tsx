@@ -23,7 +23,7 @@ import {
   Home
 } from 'lucide-react';
 import { Booking, ResortSettings, StayStatus } from '../types';
-import { getTodayStr, calculateDaysCount, formatDateIL, getBookingsForDate } from '../utils/dateUtils';
+import { getTodayStr, calculateDaysCount, formatDateIL, getBookingsForDate, getBookingPaymentsInMonth } from '../utils/dateUtils';
 import { generatePaymentReminderMessage, openWhatsAppMessage, getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { exportRevenueChartsToExcel, ChartPeriodItem } from '../utils/exportUtils';
 
@@ -78,38 +78,12 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
     let totalAllTime = 0;
     let totalThisMonth = 0;
 
+    // Calculate total all time
     activeBookings.forEach(b => {
-      const start = b.startDate || '';
-      const mKey = start.substring(0, 7);
-      const yKey = start.substring(0, 4);
-
-      const collected = b.paymentStatus === 'fully_paid'
+      const col = b.paymentStatus === 'fully_paid'
         ? (Number(b.totalPrice) || 0)
         : (Number(b.depositAmount) || 0);
-
-      const expected = Number(b.totalPrice) || 0;
-      const debt = Math.max(0, expected - collected);
-
-      totalAllTime += collected;
-      if (mKey === currentMonthKey) {
-        totalThisMonth += collected;
-      }
-
-      if (mKey && mKey.length === 7) {
-        if (!monthlyMap[mKey]) monthlyMap[mKey] = { count: 0, collected: 0, expected: 0, debt: 0 };
-        monthlyMap[mKey].count += 1;
-        monthlyMap[mKey].collected += collected;
-        monthlyMap[mKey].expected += expected;
-        monthlyMap[mKey].debt += debt;
-      }
-
-      if (yKey && yKey.length === 4) {
-        if (!yearlyMap[yKey]) yearlyMap[yKey] = { count: 0, collected: 0, expected: 0, debt: 0 };
-        yearlyMap[yKey].count += 1;
-        yearlyMap[yKey].collected += collected;
-        yearlyMap[yKey].expected += expected;
-        yearlyMap[yKey].debt += debt;
-      }
+      totalAllTime += col;
     });
 
     // Build last 12 months sequence
@@ -121,6 +95,57 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const m = String(d.getMonth() + 1).padStart(2, '0');
       recentKeys.push(`${y}-${m}`);
     }
+
+    // Compute actual collections per month (Cash Basis)
+    recentKeys.forEach(mKey => {
+      let mCollected = 0;
+      let mExpected = 0;
+      let mDebt = 0;
+      let mCount = 0;
+
+      activeBookings.forEach(b => {
+        const amt = getBookingPaymentsInMonth(b, mKey);
+        if (amt > 0) {
+          mCollected += amt;
+          mCount += 1;
+        }
+        if (b.startDate && b.startDate.startsWith(mKey)) {
+          const exp = Number(b.totalPrice) || 0;
+          mExpected += exp;
+          const col = b.paymentStatus === 'fully_paid' ? exp : (Number(b.depositAmount) || 0);
+          mDebt += Math.max(0, exp - col);
+        }
+      });
+
+      monthlyMap[mKey] = {
+        count: mCount,
+        collected: mCollected,
+        expected: mExpected,
+        debt: mDebt
+      };
+
+      if (mKey === currentMonthKey) {
+        totalThisMonth = mCollected;
+      }
+    });
+
+    // Compute yearly collections
+    activeBookings.forEach(b => {
+      const yKey = (b.createdAt || b.startDate || '').substring(0, 4);
+      const collected = b.paymentStatus === 'fully_paid'
+        ? (Number(b.totalPrice) || 0)
+        : (Number(b.depositAmount) || 0);
+      const expected = Number(b.totalPrice) || 0;
+      const debt = Math.max(0, expected - collected);
+
+      if (yKey && yKey.length === 4) {
+        if (!yearlyMap[yKey]) yearlyMap[yKey] = { count: 0, collected: 0, expected: 0, debt: 0 };
+        yearlyMap[yKey].count += 1;
+        yearlyMap[yKey].collected += collected;
+        yearlyMap[yKey].expected += expected;
+        yearlyMap[yKey].debt += debt;
+      }
+    });
 
     // Merge any other months that have bookings
     Object.keys(monthlyMap).forEach(k => {
@@ -239,11 +264,11 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       // Filter by chart column click if selected
       if (selectedChartPeriod) {
         filteredItems = filteredItems.filter(b => {
-          const start = b.startDate || '';
           if (chartMode === 'monthly') {
-            return start.startsWith(selectedChartPeriod);
+            return getBookingPaymentsInMonth(b, selectedChartPeriod) > 0;
           } else {
-            return start.startsWith(selectedChartPeriod);
+            return (b.createdAt && b.createdAt.startsWith(selectedChartPeriod)) || 
+                   (b.startDate && b.startDate.startsWith(selectedChartPeriod));
           }
         });
       }

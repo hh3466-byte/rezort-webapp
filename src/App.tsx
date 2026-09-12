@@ -21,7 +21,7 @@ import {
   clearAllBookingsFromDb
 } from './services/dbService';
 import { parseVoiceOrWhatsAppText } from './services/agentService';
-import { getTodayStr, getBookingsForDate, addDays, HEBREW_MONTHS } from './utils/dateUtils';
+import { getTodayStr, getBookingsForDate, addDays, HEBREW_MONTHS, getBookingPaymentsInMonth } from './utils/dateUtils';
 
 import { CalendarView } from './components/CalendarView';
 import { OccupancyForecast } from './components/OccupancyForecast';
@@ -191,16 +191,12 @@ export default function App() {
     return acc + (Number(b.depositAmount) || 0);
   }, 0);
 
-  // Month-to-date collections calculation (הכנסות בפועל מתחילת החודש הנוכחי)
+  // Month-to-date collections calculation (הכנסות שנפרעו בפועל מתחילת החודש הנוכחי - Cash Basis)
   const currentMonthKey = todayStr.substring(0, 7);
-  const currentMonthBookings = activeBookings.filter(b => b.startDate && b.startDate.startsWith(currentMonthKey));
-  const monthToDateCollected = currentMonthBookings.reduce((acc, b) => {
-    if (b.paymentStatus === 'fully_paid') {
-      return acc + (Number(b.totalPrice) || 0);
-    }
-    return acc + (Number(b.depositAmount) || 0);
+  const monthToDateCollected = activeBookings.reduce((acc, b) => {
+    return acc + getBookingPaymentsInMonth(b, currentMonthKey);
   }, 0);
-  const monthPaidCount = currentMonthBookings.filter(b => (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid').length;
+  const monthPaidCount = activeBookings.filter(b => getBookingPaymentsInMonth(b, currentMonthKey) > 0).length;
 
   // Active stays and dogs in current month
   const currentMonthStart = `${todayStr.substring(0, 7)}-01`;
@@ -210,7 +206,7 @@ export default function App() {
   const currentMonthActiveStays = activeBookings.filter(b => b.startDate <= currentMonthEnd && b.endDate >= currentMonthStart);
   const currentMonthUniqueDogs = new Set(currentMonthActiveStays.map(b => b.dogName)).size;
 
-  // Mini columns data for the last 4 months (עמודות לחודשים אחרונים)
+  // Mini columns data for the last 4 months (עמודות לחודשים אחרונים לפי פירעון בפועל)
   const recentMonthsMiniData = React.useMemo(() => {
     const list = [];
     const dateObj = new Date(todayStr + 'T12:00:00');
@@ -226,12 +222,9 @@ export default function App() {
       }
       const mStr = String(m + 1).padStart(2, '0');
       const ymPrefix = `${y}-${mStr}`;
-      const rev = activeBookings
-        .filter(b => (b.startDate || '').startsWith(ymPrefix))
-        .reduce((sum, b) => {
-          if (b.paymentStatus === 'fully_paid') return sum + (Number(b.totalPrice) || 0);
-          return sum + (Number(b.depositAmount) || 0);
-        }, 0);
+      const rev = activeBookings.reduce((sum, b) => {
+        return sum + getBookingPaymentsInMonth(b, ymPrefix);
+      }, 0);
       list.push({
         label: HEBREW_MONTHS[m].slice(0, 3),
         fullName: `${HEBREW_MONTHS[m]} ${y}`,
