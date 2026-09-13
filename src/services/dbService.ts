@@ -20,13 +20,20 @@ export const getDeletedBookingIds = (): Set<string> => {
   try {
     const raw = localStorage.getItem(DELETED_BOOKINGS_KEY);
     if (raw) {
-      return new Set(JSON.parse(raw));
+      const parsed: string[] = JSON.parse(raw);
+      // Ensure canonical ledger IDs (b-grow-*, b-aug-*, etc.) are never treated as deleted!
+      const filtered = parsed.filter(id => !id.startsWith('b-grow-') && !id.startsWith('b-aug-') && id !== 'b-173783725');
+      return new Set(filtered);
     }
   } catch (e) {}
   return new Set();
 };
 
 export const markBookingAsDeleted = (id: string) => {
+  if (id.startsWith('b-grow-') || id.startsWith('b-aug-') || id === 'b-173783725') {
+    // Never mark real payment ledger transactions as deleted!
+    return;
+  }
   const set = getDeletedBookingIds();
   set.add(id);
   try {
@@ -273,31 +280,28 @@ export const subscribeToBookings = (
         }
 
         const rawBookings: Booking[] = data.map((row: any) => {
-          let b: Booking;
-          if (row.data && typeof row.data === 'object') {
-            b = { ...row.data, id: row.id || row.data.id };
-          } else {
-            b = {
-              id: row.id,
-              dogName: row.dog_name || row.dogName,
-              dogBreed: row.dog_breed || row.dogBreed || '',
-              ownerName: row.owner_name || row.ownerName,
-              ownerPhone: row.owner_phone || row.ownerPhone,
-              ownerEmail: row.owner_email || row.ownerEmail || '',
-              serviceType: row.service_type || row.serviceType || 'boarding',
-              startDate: row.start_date || row.startDate,
-              endDate: row.end_date || row.endDate,
-              totalPrice: Number(row.total_price ?? row.totalPrice ?? 0),
-              depositAmount: Number(row.deposit_amount ?? row.depositAmount ?? 0),
-              paymentStatus: row.payment_status || row.paymentStatus || 'unpaid',
-              paymentMethod: row.payment_method || row.paymentMethod || 'bit',
-              stayStatus: row.stay_status || row.stayStatus || 'booked',
-              notes: row.notes || '',
-              vaccinationValid: Boolean(row.vaccination_valid ?? row.vaccinationValid ?? true),
-              createdAt: row.created_at || row.createdAt || new Date().toISOString(),
-              updatedAt: row.updated_at || row.updatedAt || new Date().toISOString(),
-            } as Booking;
-          }
+          const rowData = (row.data && typeof row.data === 'object') ? row.data : {};
+          const b: Booking = {
+            ...rowData,
+            id: row.id || rowData.id,
+            dogName: row.dog_name || rowData.dogName || '',
+            dogBreed: row.dog_breed || rowData.dogBreed || '',
+            ownerName: row.owner_name || rowData.ownerName || '',
+            ownerPhone: row.owner_phone || rowData.ownerPhone || '',
+            ownerEmail: row.owner_email || rowData.ownerEmail || '',
+            serviceType: row.service_type || rowData.serviceType || 'boarding',
+            startDate: row.start_date || rowData.startDate || '',
+            endDate: row.end_date || rowData.endDate || '',
+            totalPrice: Number(row.total_price ?? rowData.totalPrice ?? 0),
+            depositAmount: Number(row.deposit_amount ?? rowData.depositAmount ?? 0),
+            paymentStatus: row.payment_status || rowData.paymentStatus || 'unpaid',
+            paymentMethod: row.payment_method || rowData.paymentMethod || 'bit',
+            stayStatus: row.stay_status || rowData.stayStatus || 'booked',
+            notes: row.notes || rowData.notes || '',
+            vaccinationValid: Boolean(row.vaccination_valid ?? rowData.vaccinationValid ?? true),
+            createdAt: row.created_at || rowData.createdAt || new Date().toISOString(),
+            updatedAt: row.updated_at || rowData.updatedAt || new Date().toISOString(),
+          };
 
           if (b.id === 'b-103' || b.dogName === 'ברונו') {
             if (b.serviceType === 'boarding' || (b as any).serviceType === 'combined') {
@@ -311,21 +315,26 @@ export const subscribeToBookings = (
           return b;
         });
 
-        // 1. Filter out any bookings known to be deleted
+        // 1. Filter out any bookings known to be deleted (never delete ledger transactions)
         const activeBookings = rawBookings.filter(b => {
+          if (b.id.startsWith('b-grow-') || b.id.startsWith('b-aug-') || b.id.startsWith('b-tx-') || b.id === 'b-173783725') {
+            return true;
+          }
           if (localDeletedIds.has(b.id)) {
-            // Silently purge from Supabase in background
-            Promise.resolve(supabase.from(BOOKINGS_TABLE).delete().eq('id', b.id)).catch(() => {});
             return false;
           }
           return true;
         });
 
-        // 2. Automatic Deduplication Guard (e.g. duplicate Joy or Theo)
+        // 2. In-memory Deduplication Guard for clean display (NO destructive background deletes)
         const dedupMap = new Map<string, Booking>();
-        const duplicateIdsToDelete: string[] = [];
 
         for (const b of activeBookings) {
+          if (b.id.startsWith('b-grow-') || b.id.startsWith('b-aug-') || b.id.startsWith('b-tx-') || b.id === 'b-173783725') {
+            dedupMap.set(b.id, b);
+            continue;
+          }
+
           const normDog = (b.dogName || '').trim().toLowerCase();
           const normOwner = (b.ownerName || '').trim().toLowerCase();
           const dedupKey = `${normDog}___${normOwner}___${b.startDate}___${b.endDate}`;
@@ -337,20 +346,9 @@ export const subscribeToBookings = (
 
             if (currentPaid && !existingPaid) {
               dedupMap.set(dedupKey, b);
-              duplicateIdsToDelete.push(existing.id);
-            } else {
-              duplicateIdsToDelete.push(b.id);
             }
           } else {
             dedupMap.set(dedupKey, b);
-          }
-        }
-
-        // Purge duplicates from Supabase in background
-        if (duplicateIdsToDelete.length > 0) {
-          for (const dupId of duplicateIdsToDelete) {
-            markBookingAsDeleted(dupId);
-            Promise.resolve(supabase.from(BOOKINGS_TABLE).delete().eq('id', dupId)).catch(() => {});
           }
         }
 
