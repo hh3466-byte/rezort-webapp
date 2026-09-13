@@ -22,7 +22,7 @@ export const getDeletedBookingIds = (): Set<string> => {
     if (raw) {
       const parsed: string[] = JSON.parse(raw);
       // Ensure canonical ledger IDs (b-grow-*, b-aug-*, etc.) are never treated as deleted!
-      const filtered = parsed.filter(id => !id.startsWith('b-grow-') && !id.startsWith('b-aug-') && id !== 'b-173783725');
+      const filtered = parsed.filter(id => !id.startsWith('b-grow-') && !id.startsWith('b-aug-') && !id.startsWith('b-tx-') && !id.startsWith('b-pay-') && id !== 'b-173783725');
       return new Set(filtered);
     }
   } catch (e) {}
@@ -30,7 +30,7 @@ export const getDeletedBookingIds = (): Set<string> => {
 };
 
 export const markBookingAsDeleted = (id: string) => {
-  if (id.startsWith('b-grow-') || id.startsWith('b-aug-') || id === 'b-173783725') {
+  if (id.startsWith('b-grow-') || id.startsWith('b-aug-') || id.startsWith('b-tx-') || id.startsWith('b-pay-') || id === 'b-173783725') {
     // Never mark real payment ledger transactions as deleted!
     return;
   }
@@ -317,7 +317,7 @@ export const subscribeToBookings = (
 
         // 1. Filter out any bookings known to be deleted (never delete ledger transactions)
         const activeBookings = rawBookings.filter(b => {
-          if (b.id.startsWith('b-grow-') || b.id.startsWith('b-aug-') || b.id.startsWith('b-tx-') || b.id === 'b-173783725') {
+          if (b.id.startsWith('b-grow-') || b.id.startsWith('b-aug-') || b.id.startsWith('b-tx-') || b.id.startsWith('b-pay-') || b.id === 'b-173783725') {
             return true;
           }
           if (localDeletedIds.has(b.id)) {
@@ -330,7 +330,7 @@ export const subscribeToBookings = (
         const dedupMap = new Map<string, Booking>();
 
         for (const b of activeBookings) {
-          if (b.id.startsWith('b-grow-') || b.id.startsWith('b-aug-') || b.id.startsWith('b-tx-') || b.id === 'b-173783725') {
+          if (b.id.startsWith('b-grow-') || b.id.startsWith('b-aug-') || b.id.startsWith('b-tx-') || b.id.startsWith('b-pay-') || b.id === 'b-173783725') {
             dedupMap.set(b.id, b);
             continue;
           }

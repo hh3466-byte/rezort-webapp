@@ -67,7 +67,7 @@ async function syncAll() {
     if (matchNote) {
       existingByRef.set(matchNote[1], b);
     }
-    const matchId = b.id.replace(/^b-(grow-|aug-)?/, '');
+    const matchId = b.id.replace(/^b-(grow-|aug-|tx-|pay-)?/, '');
     if (/^[0-9]+$/.test(matchId)) {
       existingByRef.set(matchId, b);
     }
@@ -96,7 +96,7 @@ async function syncAll() {
       console.log(`[EXISTS] Ref ${item.ref}: ${existing.owner_name} (ID: ${existing.id})`);
     } else {
       console.log(`[MISSING] Ref ${item.ref}: ${item.name} (${item.date}) -> Inserting now...`);
-      const bookingId = `b-grow-${item.ref}`;
+      const bookingId = `b-tx-${item.ref}`;
       const payload = {
         id: bookingId,
         dog_name: item.dog,
