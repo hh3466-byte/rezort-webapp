@@ -24,12 +24,12 @@ export function formatIntakeNotification(request: IntakeRequest): string {
 --------------------------------
 👤 *בעלים:* ${request.ownerName}
 📞 *טלפון:* ${request.ownerPhone}
-🐶 *כלב:* ${request.dogName} (${request.dogBreed || 'מעורב'})
+🐶 *כלב:* ${request.dogName} (${request.dogBreed || 'מעורב'}) | *מין:* ${request.dogGender === 'female' ? 'נקבה ♀️' : 'זכר ♂️'}
 🎂 *גיל/גודל:* ${request.dogAge || 'לא צוין'} | ${request.dogSize === 'small' ? 'קטן' : request.dogSize === 'medium' ? 'בינוני' : request.dogSize === 'large' ? 'גדול' : 'ענק'}
 🏨 *שירות מבוקש:* ${serviceName}
 ${datesLine}
 🐕 *מסתדר עם כלבים:* ${friendlyLabel}
-✂️ *מסורס/מעוקרת:* ${neuteredLabel}
+✂️ *${request.dogGender === 'female' ? 'מעוקרת:' : 'מסורס:'}* ${neuteredLabel}
 💉 *חיסונים בתוקף:* ${vaccinatedLabel}
 🚽 *מחונך לצרכים:* ${houseTrainedLabel}
 🛡️ *טיפול נגד קרציות ופשפשים:* ${parasitesLabel}
@@ -196,6 +196,7 @@ export async function sendResortEmailNotification(
       'שם הלקוח': request.ownerName,
       'טלפון': request.ownerPhone,
       'שם הכלב': request.dogName || 'לא צוין',
+      'מין': request.dogGender === 'female' ? 'נקבה' : 'זכר',
       'גזע': request.dogBreed || 'מעורב',
       'גיל / גודל': `${request.dogAge || 'לא צוין'} | ${request.dogSize || 'בינוני'}`,
       'סוג שירות': serviceName,

@@ -88,6 +88,7 @@ export interface IntakeRequest {
   dogName: string;
   dogBreed: string;
   dogAge?: string;
+  dogGender?: 'male' | 'female';
   dogSize?: 'small' | 'medium' | 'large' | 'giant';
   serviceType: ServiceType;
   startDate: string; // YYYY-MM-DD

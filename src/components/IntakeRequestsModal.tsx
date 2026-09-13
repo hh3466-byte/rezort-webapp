@@ -426,20 +426,20 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               type="button"
               onClick={() => setIsSendIntakeModalOpen(true)}
               className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-              title="שליחת טופס בקשת קליטה ישירות לוואטסאפ של לקוח שהתקשר"
+              title="שליחת שאלון בקשה לקליטה ישירות לוואטסאפ של לקוח שהתקשר"
             >
               <MessageCircle className="w-3.5 h-3.5" />
-              <span>שלח טופס ללקוח</span>
+              <span>שלח שאלון ללקוח</span>
             </button>
 
             <button
               type="button"
               onClick={handleCopyIntakeLink}
               className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-              title="העתקת הקישור לטופס בקשת הקליטה לשליחה מהירה ללקוחות בוואטסאפ"
+              title="העתקת הקישור לשאלון בקשת הקליטה לשליחה מהירה ללקוחות בוואטסאפ"
             >
               {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedLink ? 'הקישור הועתק!' : 'העתק קישור לטופס'}</span>
+              <span>{copiedLink ? 'הקישור הועתק!' : 'העתק קישור לשאלון'}</span>
             </button>
 
             <button
@@ -530,7 +530,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 אין בקשות קליטה {filter === 'pending' ? 'ממתינות לבדיקה' : 'להצגה כעת'}
               </h3>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                לקוחות שימלאו את טופס בקשת הקליטה המקוון יופיעו כאן מיד עם כל הפרטים לצורך תיאום טלפוני ושליחת קישור לתשלום.
+                לקוחות שימלאו את שאלון בקשת הקליטה המקוון יופיעו כאן מיד עם כל הפרטים לצורך תיאום טלפוני ושליחת קישור לתשלום.
               </p>
             </div>
           ) : (
@@ -618,7 +618,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         {/* שורה שלישית: לחץ לוואטסאפ איתו */}
                         <div className="pt-0.5">
                           <a
-                            href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(`שלום ${getFirstName(req.ownerName)}, כאן שמוליק מ${settings.resortName} 🐾 בהמשך לטופס בקשת הקליטה ששלחתם עבור ${req.dogName}`)}`}
+                            href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(`שלום ${getFirstName(req.ownerName)}, כאן שמוליק מ${settings.resortName} 🐾 בהמשך לשאלון בקשת הקליטה ששלחתם עבור ${req.dogName}`)}`}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black px-4 py-2 rounded-xl text-sm transition-all shadow-xs cursor-pointer hover:shadow-md"
@@ -699,7 +699,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   </div>
 
                   {/* Card Middle: Key Vetting Indicators */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 text-xs">
                     {/* Friendly with dogs */}
                     <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                       <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
@@ -714,10 +714,22 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       </span>
                     </div>
 
+                    {/* Dog Gender */}
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                      <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
+                        מין:
+                      </span>
+                      <span className={`font-bold ${
+                        req.dogGender === 'female' ? 'text-pink-700' : 'text-blue-700'
+                      }`}>
+                        {req.dogGender === 'female' ? 'נקבה ♀️' : 'זכר ♂️'}
+                      </span>
+                    </div>
+
                     {/* Neutered */}
                     <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                       <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
-                        מסורס / מעוקרת:
+                        {req.dogGender === 'female' ? 'מעוקרת:' : 'מסורס:'}
                       </span>
                       <span className="font-bold text-slate-800">
                         {req.isNeutered ? 'כן ✂️' : 'לא'}
@@ -1172,6 +1184,35 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   </div>
                 </div>
 
+                {/* Dog Gender */}
+                <div>
+                  <span className="text-[11px] text-slate-600 font-bold block mb-1">מין הכלב/ה:</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingRequest({ ...editingRequest, dogGender: 'male' })}
+                      className={`py-1.5 px-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                        editingRequest.dogGender !== 'female'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      זכר ♂️
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingRequest({ ...editingRequest, dogGender: 'female' })}
+                      className={`py-1.5 px-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                        editingRequest.dogGender === 'female'
+                          ? 'bg-pink-600 text-white border-pink-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      נקבה ♀️
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <span className="text-[11px] text-slate-600 font-bold block mb-1">גודל כלב:</span>
                   <div className="grid grid-cols-4 gap-1.5">
@@ -1268,7 +1309,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   {/* Booleans: Neutered, Vaccinated, House-trained, Parasites */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200">
-                      <span className="font-bold text-slate-700">מסורס / מעוקרת:</span>
+                      <span className="font-bold text-slate-700">
+                        {editingRequest.dogGender === 'female' ? 'מעוקרת:' : 'מסורס:'}
+                      </span>
                       <div className="flex items-center gap-1">
                         <button
                           type="button"

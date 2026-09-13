@@ -47,10 +47,10 @@ export const SendIntakeModal: React.FC<SendIntakeModalProps> = ({
     return `${greeting}
 שמחנו לשוחח איתך ב${resortTitle}!
 
-כדי שנוכל לבדוק התאמה, תפוסה פנויה ולשריין מקום ${forDog}, אנא מלא/י את טופס בקשת הקליטה הקצר בקישור הבא:
+כדי שנוכל לבדוק התאמה, תפוסה פנויה ולשריין מקום ${forDog}, אנא מלא/י את שאלון בקשת הקליטה הקצר בקישור הבא:
 👉 ${intakeUrl}
 
-מיד עם קבלת הטופס, נחזור אליך להשלמת התיאום! 🙏
+מיד עם קבלת השאלון, נחזור אליך להשלמת התיאום! 🙏
 
 בברכה חמה,
 צוות ${resortTitle} 🐕🤍`;
@@ -98,7 +98,7 @@ export const SendIntakeModal: React.FC<SendIntakeModalProps> = ({
               </div>
               <div>
                 <h3 className="text-base sm:text-lg font-black text-white">
-                  שליחת טופס בקשת קליטה ללקוח
+                  שליחת שאלון בקשה לקליטה ללקוח
                 </h3>
                 <p className="text-xs text-emerald-100 font-medium">
                   עבור לקוח שהתקשר — שליחת קישור ישיר לוואטסאפ עם הודעה מוכנה
@@ -217,7 +217,7 @@ export const SendIntakeModal: React.FC<SendIntakeModalProps> = ({
               className="bg-white hover:bg-slate-100 text-slate-700 font-bold px-3.5 py-2 rounded-xl border border-slate-300 text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              <span>צפה בטופס</span>
+              <span>צפה בשאלון</span>
             </button>
           ) : (
             <button

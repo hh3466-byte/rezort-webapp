@@ -842,15 +842,15 @@ export default function App() {
               )}
             </button>
 
-            {/* 2. Attached right next to Intake Requests: Send Intake Form */}
+            {/* 2. Attached right next to Intake Requests: Send Intake Questionnaire */}
             <button
               type="button"
               onClick={() => setIsSendIntakeModalOpen(true)}
               className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-emerald-300 text-slate-800 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
-              title="שליחת טופס בקשת קליטה בוואטסאפ ללקוח שהתקשר, או העתקת הקישור"
+              title="שליחת שאלון בקשה לקליטה בוואטסאפ ללקוח שהתקשר, או העתקת הקישור"
             >
               <span className="text-base">🔗</span>
-              <span>שלח טופס בקשת קליטה</span>
+              <span>שלח שאלון בקשה לקליטה</span>
             </button>
 
             {/* 3. New Booking */}
@@ -1587,6 +1587,9 @@ export default function App() {
               initialData: {
                 dogName: req.dogName,
                 dogBreed: req.dogBreed,
+                dogGender: req.dogGender === 'female'
+                  ? (req.isNeutered ? 'female_spayed' : 'female_intact')
+                  : (req.isNeutered ? 'male_neutered' : 'male_intact'),
                 ownerName: req.ownerName,
                 ownerPhone: req.ownerPhone,
                 ownerEmail: req.ownerEmail,

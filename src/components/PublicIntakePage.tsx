@@ -93,6 +93,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   const [dogName, setDogName] = useState('');
   const [dogBreed, setDogBreed] = useState('');
   const [dogAge, setDogAge] = useState('');
+  const [dogGender, setDogGender] = useState<'male' | 'female'>('male');
   const [dogSize, setDogSize] = useState<'small' | 'medium' | 'large' | 'giant'>('medium');
   const [serviceType, setServiceType] = useState<ServiceType>('boarding');
   const [startDate, setStartDate] = useState(today);
@@ -379,6 +380,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
       dogName: dogName.trim(),
       dogBreed: dogBreed.trim(),
       dogAge: dogAge.trim() || undefined,
+      dogGender,
       dogSize,
       serviceType,
       startDate,
@@ -445,7 +447,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
 
           <div className="space-y-2.5">
             <h2 className="text-xl sm:text-2xl font-black text-[#0f4c3a] leading-snug">
-              תודה על משלוח הטופס, בבקשה להמתין לתשובה. 🐾
+              תודה על משלוח שאלון בקשת הקליטה, בבקשה להמתין לתשובה. 🐾
             </h2>
             <p className="text-sm font-bold text-slate-700">
               פרטי הבקשה עבור {dogName} נקלטו בהצלחה בריזורט לכלב.
@@ -454,7 +456,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
 
           <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-4 text-center space-y-2 text-xs text-slate-700">
             <p className="text-emerald-950 font-bold leading-relaxed text-sm">
-              צוות הריזורט קיבל את הטופס ויחזור אליכם בהקדם למספר <span className="font-mono font-black text-emerald-800">{ownerPhone}</span>.
+              צוות הריזורט קיבל את השאלון ויחזור אליכם בהקדם למספר <span className="font-mono font-black text-emerald-800">{ownerPhone}</span>.
             </p>
           </div>
 
@@ -514,7 +516,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
             הריזורט לכלב
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 font-medium max-w-md mx-auto">
-            טופס בקשת קליטה ושריון מקום 🐾 מלאו את פרטי הבקשה ונחזור אליכם טלפונית לתיאום והסדרת השריון.
+            שאלון בקשה לקליטה ושריון מקום 🐾 מלאו את פרטי הבקשה ונחזור אליכם טלפונית לתיאום והסדרת השריון.
           </p>
 
           {/* Proactive Send Form to Callers Banner (For staff preview only) */}
@@ -526,10 +528,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                 </div>
                 <div>
                   <div className="font-black text-xs sm:text-sm text-emerald-950">
-                    לקוח התקשר זה עתה? שלחו לו את הטופס ישירות למילוי
+                    לקוח התקשר זה עתה? שלחו לו את השאלון ישירות למילוי
                   </div>
                   <div className="text-[11px] text-emerald-800 font-medium">
-                    שליחת הודעת וואטסאפ מנומסת מוכנה מראש עם קישור ישיר לטופס בקשת קליטה זה
+                    שליחת הודעת וואטסאפ מנומסת מוכנה מראש עם קישור ישיר לשאלון בקשה לקליטה זה
                   </div>
                 </div>
               </div>
@@ -540,7 +542,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                   className="w-full sm:w-auto bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all"
                 >
                   <MessageCircle className="w-4 h-4" />
-                  <span>שלח טופס ללקוח בוואטסאפ</span>
+                  <span>שלח שאלון ללקוח בוואטסאפ</span>
                 </button>
                 <button
                   type="button"
@@ -579,7 +581,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                 ההטבה תקפה בהזמנת שהות של 3 ימים ומעלה (סופ״ש ארוך) · תוקף השובר הינו ל-6 חודשים · אין כפל הטבות ומבצעים
               </p>
               <p className="text-[11px] text-slate-600 mt-0.5">
-                קוד השובר יישמר בטופס וצוות הריזורט יעדכן את ההנחה בשריון ההזמנה 🐾
+                קוד השובר יישמר בשאלון וצוות הריזורט יעדכן את ההנחה בשריון ההזמנה 🐾
               </p>
             </div>
           </div>
@@ -955,31 +957,68 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1.5">
-                גודל ומשקל משוער <span className="text-red-500">*</span>
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  { id: 'small', label: 'קטן', desc: 'עד 10 ק״ג' },
-                  { id: 'medium', label: 'בינוני', desc: '10-25 ק״ג' },
-                  { id: 'large', label: 'גדול', desc: '25-45 ק״ג' },
-                  { id: 'giant', label: 'ענק', desc: 'מעל 45 ק״ג' },
-                ].map((s) => (
+            {/* Gender and Size row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Dog Gender */}
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                  מין הכלב/ה <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
                   <button
-                    key={s.id}
                     type="button"
-                    onClick={() => setDogSize(s.id as any)}
-                    className={`py-2 px-1 rounded-xl border text-center transition-all cursor-pointer ${
-                      dogSize === s.id
-                        ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold shadow-xs'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    onClick={() => setDogGender('male')}
+                    className={`py-2 px-2 rounded-xl border text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      dogGender === 'male'
+                        ? 'bg-blue-600 text-white font-extrabold border-blue-600 shadow-xs ring-2 ring-blue-400/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 font-bold'
                     }`}
                   >
-                    <div className="text-xs font-bold">{s.label}</div>
-                    <div className="text-[10px] text-slate-400 font-normal">{s.desc}</div>
+                    <span className="text-sm">זכר</span>
+                    <span>♂️</span>
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => setDogGender('female')}
+                    className={`py-2 px-2 rounded-xl border text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      dogGender === 'female'
+                        ? 'bg-pink-600 text-white font-extrabold border-pink-600 shadow-xs ring-2 ring-pink-400/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 font-bold'
+                    }`}
+                  >
+                    <span className="text-sm">נקבה</span>
+                    <span>♀️</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Dog Size */}
+              <div className="sm:col-span-2">
+                <label className="text-xs font-bold text-slate-700 block mb-1.5">
+                  גודל ומשקל משוער <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { id: 'small', label: 'קטן', desc: 'עד 10 ק״ג' },
+                    { id: 'medium', label: 'בינוני', desc: '10-25 ק״ג' },
+                    { id: 'large', label: 'גדול', desc: '25-45 ק״ג' },
+                    { id: 'giant', label: 'ענק', desc: 'מעל 45 ק״ג' },
+                  ].map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setDogSize(s.id as any)}
+                      className={`py-2 px-1 rounded-xl border text-center transition-all cursor-pointer ${
+                        dogSize === s.id
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold shadow-xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{s.label}</div>
+                      <div className="text-[10px] text-slate-400 font-normal">{s.desc}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -1438,7 +1477,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                 {/* 2. Neutered */}
                 <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-emerald-200/80 flex items-center justify-between">
                   <span className="font-extrabold text-slate-900 text-xs">
-                    ✂️ 2. מסורס / מעוקרת? <span className="text-red-500">*</span>
+                    ✂️ 2. {dogGender === 'female' ? 'מעוקרת?' : 'מסורס?'} <span className="text-red-500">*</span>
                   </span>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -1648,11 +1687,11 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
               className="w-full bg-[#065f46] hover:bg-[#044e45] active:scale-[0.99] text-white font-black py-4 rounded-2xl text-base shadow-lg shadow-emerald-950/10 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
             >
               {isSubmitting ? (
-                <span>שולח טופס לריזורט...</span>
+                <span>שולח שאלון לריזורט...</span>
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  <span>שלח טופס</span>
+                  <span>שלח שאלון בקשה לקליטה</span>
                 </>
               )}
             </button>
