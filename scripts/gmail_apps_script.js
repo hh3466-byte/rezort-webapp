@@ -650,3 +650,144 @@ function createTaliEmailDraft() {
   Logger.log("טיוטת מייל לטלינקה נוצרה בהצלחה ב-Gmail! מזהה: " + draft.getId());
   return draft;
 }
+
+/**
+ * 6. Webhook לקבלת הודעות וואטסאפ מ-Green-API ומענה אוטומטי חכם:
+ *    - מסנן קבוצות, שידורים והודעות עצמיות.
+ *    - מזהה האם השולח הוא לקוח קיים או לקוח חדש מתוך Supabase.
+ *    - מזהה האם עכשיו שעות סגור (שישי מ-14:00, שבתות, חגים, וראשון עד 09:30).
+ *    - מענה אוטומטי מדויק לפי הכללים שהוגדרו.
+ */
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var payload = JSON.parse(e.postData.contents);
+    if (!payload || payload.typeWebhook !== "incomingMessageReceived") {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, ignored: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var senderData = payload.senderData || {};
+    var chatId = senderData.chatId || "";
+    var sender = senderData.sender || "";
+
+    // 1. התעלם מקבוצות ושידורים
+    if (!chatId || chatId.indexOf("@c.us") === -1 || chatId.indexOf("status@broadcast") !== -1) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, reason: "group or broadcast ignored" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 2. התעלם מהודעות שהריזורט שלח לעצמו
+    var wid = (payload.instanceData && payload.instanceData.wid) ? payload.instanceData.wid : "972548765888@c.us";
+    if (sender === wid || chatId === wid) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, reason: "self message ignored" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var cleanPhone = chatId.replace("@c.us", "").replace(/[^0-9]/g, "");
+    var phoneSuffix = cleanPhone.slice(-7);
+
+    // 3. מניעת ספאם (Cooldown של 6 שעות לאותו מספר)
+    var cache = CacheService.getScriptCache();
+    var cacheKey = "wa_reply_" + cleanPhone;
+    if (cache.get(cacheKey)) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, reason: "cooldown active" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 4. בדיקת זמנים ושבתות/חגים
+    var israelTz = "Asia/Jerusalem";
+    var now = new Date();
+    var hour = parseInt(Utilities.formatDate(now, israelTz, "H"), 10);
+    var minute = parseInt(Utilities.formatDate(now, israelTz, "m"), 10);
+    var timeInMinutes = hour * 60 + minute;
+    var dayOfWeek = parseInt(Utilities.formatDate(now, israelTz, "u"), 10); // 1=Mon .. 5=Fri, 6=Sat, 7=Sun
+    var todayStr = Utilities.formatDate(now, israelTz, "yyyy-MM-dd");
+
+    var isFridayAfternoon = (dayOfWeek === 5 && timeInMinutes >= 14 * 60);
+    var isSaturday = (dayOfWeek === 6);
+    var isSundayMorning = (dayOfWeek === 7 && timeInMinutes < 9 * 60 + 30);
+    var isWeekendClosed = isFridayAfternoon || isSaturday || isSundayMorning;
+
+    var isHolidayClosed = false;
+    try {
+      var hebcalUrl = "https://www.hebcal.com/converter?cfg=json&date=" + todayStr + "&g2h=1";
+      var hRes = UrlFetchApp.fetch(hebcalUrl, { muteHttpExceptions: true });
+      if (hRes.getResponseCode() === 200) {
+        var hData = JSON.parse(hRes.getContentText());
+        if (hData && hData.events && hData.events.length > 0) {
+          isHolidayClosed = true;
+        }
+      }
+    } catch (eH) {
+      Logger.log("Hebcal error: " + eH.toString());
+    }
+
+    var isClosedHours = isWeekendClosed || isHolidayClosed;
+
+    // 5. בדיקת לקוח קיים מול Supabase
+    var isExisting = false;
+    try {
+      var bUrl = SUPABASE_URL + "/rest/v1/bookings?owner_phone=ilike.*" + phoneSuffix + "*&select=id&limit=1";
+      var bRes = UrlFetchApp.fetch(bUrl, {
+        headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY },
+        muteHttpExceptions: true
+      });
+      if (bRes.getResponseCode() === 200) {
+        var bData = JSON.parse(bRes.getContentText());
+        if (bData && bData.length > 0) isExisting = true;
+      }
+      if (!isExisting) {
+        var cUrl = SUPABASE_URL + "/rest/v1/customers?phone=ilike.*" + phoneSuffix + "*&select=id&limit=1";
+        var cRes = UrlFetchApp.fetch(cUrl, {
+          headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY },
+          muteHttpExceptions: true
+        });
+        if (cRes.getResponseCode() === 200) {
+          var cData = JSON.parse(cRes.getContentText());
+          if (cData && cData.length > 0) isExisting = true;
+        }
+      }
+    } catch (eDb) {
+      Logger.log("Supabase error: " + eDb.toString());
+    }
+
+    // סימון ב-Cache ל-6 שעות
+    cache.put(cacheKey, "sent", 21600);
+
+    var closedMsg = "תודה על פנייתך, בחגים וסופי שבוע שירות הלקוחות שלנו סגור משעה 14:00 בשישי/ערב החג ועד למחרת השבת/או החג בשעה 09:30. כמובן שהמקום מאוייש והכלבים מקבלים טיפול מלא ומפנק. רק הבעלים שלהם צריכים להתגבר ולהתאפק עד ששרות הלקוחות יחזור לפעילות.תודה על ההבנה.";
+    var intakeMsg = "שלום ותודה שפניתם לריזורט לכלב! 🐾🐶\nכדי שנוכל להתאים את השירות המדויק לכלבכם, לבדוק זמינות ולחסוך לכם זמן יקר בטלפון, אנא מלאו שאלון קליטה קצר (דקה אחת בלבד):\n👉 https://rezort-webapp.vercel.app/?request=true\n\nמיד לאחר קבלת הפרטים צוות הריזורט ייצור עמכם קשר לתיאום סופי! 🦴";
+
+    var greenId = "710722735421";
+    var greenTok = "ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b";
+
+    function sendGreenMessage(text) {
+      var sendUrl = "https://api.green-api.com/waInstance" + greenId + "/sendMessage/" + greenTok;
+      UrlFetchApp.fetch(sendUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ chatId: chatId, message: text }),
+        muteHttpExceptions: true
+      });
+    }
+
+    if (isClosedHours) {
+      if (isExisting) {
+        sendGreenMessage(closedMsg);
+      } else {
+        sendGreenMessage(closedMsg);
+        Utilities.sleep(1200);
+        sendGreenMessage(intakeMsg);
+      }
+    } else {
+      if (!isExisting) {
+        sendGreenMessage(intakeMsg);
+      }
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, sent: true })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    Logger.log("doPost error: " + err.toString());
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
