@@ -302,7 +302,8 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                   {/* Left Column: Dog & Service Details */}
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2.5">
-                      <span className={`font-extrabold text-lg sm:text-xl ${isEnded ? 'text-slate-700' : 'text-slate-900'}`}>
+                      <span className="text-xl shrink-0">🐾</span>
+                      <span className={`font-black text-lg sm:text-xl ${isEnded ? 'text-slate-700' : 'text-slate-900'}`}>
                         {b.dogName}
                       </span>
                       {b.dogBreed && (
@@ -342,10 +343,11 @@ export const BookingsList: React.FC<BookingsListProps> = ({
 
                     {/* Metadata: Owner, Phone, Dates, Days count */}
                     <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600">
-                      <span className="flex items-center gap-1 text-slate-800 font-medium">
-                        <User className="w-3.5 h-3.5 text-indigo-500" /> {b.ownerName}
+                      <span className="flex items-center gap-1 text-slate-800 font-bold">
+                        <User className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>בעלים: <strong className="text-slate-900">{b.ownerName}</strong></span>
                       </span>
-                      <span className="flex items-center gap-1 font-mono text-slate-800">
+                      <span className="flex items-center gap-1 font-mono text-slate-800" dir="ltr">
                         <Phone className="w-3.5 h-3.5 text-green-600" /> {b.ownerPhone}
                       </span>
                       <span className="flex items-center gap-1 text-slate-800">

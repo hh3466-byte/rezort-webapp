@@ -282,7 +282,9 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
             </div>
             <div>
               <h3 className="font-extrabold text-lg sm:text-xl text-slate-900">
-                {initialData?.id ? 'עריכת הזמנה' : 'שריון הזמנה חדשה ביומן'}
+                {initialData?.id 
+                  ? `עריכת שהות: 🐾 ${initialData.dogName || 'כלב'} (בעלים: ${initialData.ownerName || 'לקוח'})`
+                  : 'שריון הזמנה חדשה ביומן'}
               </h3>
               <p className="text-xs text-slate-500">
                 מלא את הפרטים או הכרז בקולך לסוכן החכם

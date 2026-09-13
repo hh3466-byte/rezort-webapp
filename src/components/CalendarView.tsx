@@ -658,7 +658,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between ${chipStyle}`}
                           title={`${b.dogName} (${getServiceTypeHebrew(b.serviceType)})${isEnded ? ' - הסתיים' : ''}`}
                         >
-                          <span className="truncate">{b.dogName}</span>
+                          <span className="truncate">🐾 {b.dogName}</span>
                           {isEnded && <span className="text-[9px] opacity-70 shrink-0">🏁</span>}
                         </div>
                       );
@@ -802,7 +802,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             </div>
 
                             <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
-                              <span>{b.ownerName}</span>
+                              <span>בעלים: <strong className="text-slate-700">{b.ownerName}</strong></span>
                               {!isEnded && isArrival && <span className="text-emerald-700 font-bold">📥 כניסה</span>}
                               {!isEnded && isDeparture && <span className="text-amber-700 font-bold">📤 יציאה</span>}
                             </div>
@@ -943,9 +943,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-base text-slate-900">{booking.dogName}</span>
+                            <span className="text-base shrink-0">🐾</span>
+                            <span className="font-black text-base text-slate-900">{booking.dogName}</span>
                             {booking.dogBreed && (
-                              <span className="text-xs text-slate-500">({booking.dogBreed})</span>
+                              <span className="text-xs text-slate-500 font-normal">({booking.dogBreed})</span>
                             )}
                             <span className="bg-slate-100 text-slate-700 text-[11px] font-bold px-2 py-0.5 rounded-md">
                               {getServiceTypeHebrew(booking.serviceType)}
@@ -953,8 +954,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           </div>
 
                           <div className="flex items-center gap-3 text-xs text-slate-600 mt-1">
-                            <span className="flex items-center gap-1">
-                              <User className="w-3 h-3 text-indigo-500" /> {booking.ownerName}
+                            <span className="flex items-center gap-1 font-bold text-slate-800">
+                              <User className="w-3 h-3 text-indigo-500" />
+                              <span>בעלים: <strong className="text-slate-900">{booking.ownerName}</strong></span>
                             </span>
                             <span className="flex items-center gap-1 font-mono" dir="ltr">
                               <Phone className="w-3 h-3 text-emerald-600" /> {booking.ownerPhone}

@@ -3,6 +3,7 @@ import {
   Users, 
   Search, 
   Dog, 
+  User,
   Phone, 
   Calendar, 
   DollarSign, 
@@ -145,11 +146,21 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   customer.openDebt > 0 ? 'border-red-300 ring-1 ring-red-100' : customer.isVip ? 'border-amber-300 ring-1 ring-amber-100' : 'border-slate-200'
                 }`}
               >
-                {/* Header: Name, VIP Tag, Debt Tag */}
+                {/* Header: Dog Name(s) in Big Title (Shmulik remembers dogs!), VIP Tag, Debt Tag */}
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-black text-lg text-slate-900">{customer.name}</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0">
+                        <Dog className="w-4 h-4 text-emerald-600" />
+                      </div>
+                      <h3 className="font-black text-xl text-slate-900">
+                        {customer.dogs.map(d => d.name).join(', ') || 'כלב ללא שם'}
+                      </h3>
+                      {customer.dogs.some(d => d.breed) && (
+                        <span className="text-xs text-slate-500 font-normal">
+                          ({customer.dogs.map(d => d.breed).filter(Boolean).join(', ')})
+                        </span>
+                      )}
                       {customer.isVip && (
                         <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[11px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
                           <Crown className="w-3 h-3 text-amber-600" /> לקוח קבוע (VIP)
@@ -157,12 +168,17 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                      <span className="flex items-center gap-1 font-mono text-slate-800">
+                    {/* Subtitle: Owner name clearly labeled, phone, last visit */}
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 mt-2">
+                      <span className="flex items-center gap-1 font-bold text-slate-800">
+                        <User className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>בעלים: <span className="font-extrabold text-slate-900">{customer.name}</span></span>
+                      </span>
+                      <span className="flex items-center gap-1 font-mono text-slate-700" dir="ltr">
                         <Phone className="w-3 h-3 text-green-600" /> {customer.phone}
                       </span>
                       {customer.lastVisit && (
-                        <span className="flex items-center gap-1">
+                        <span className="flex items-center gap-1 text-slate-500">
                           <Clock className="w-3 h-3 text-slate-400" /> ביקור אחרון: {formatDateIL(customer.lastVisit)}
                         </span>
                       )}
@@ -170,7 +186,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   </div>
 
                   {/* Financial Overview Tag */}
-                  <div className="text-left">
+                  <div className="text-left shrink-0">
                     <span className="text-xs text-slate-500 block">סה״כ שילם</span>
                     <span className="font-extrabold text-sm text-green-600">
                       ₪{customer.totalSpent.toLocaleString()}
@@ -183,11 +199,16 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   </div>
                 </div>
 
-                {/* Dogs Info Chips */}
+                {/* Dog Details & History */}
                 <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5">
-                  <span className="text-[11px] text-slate-500 block font-semibold">
-                    כלבים רשומים ({customer.dogs.length}):
-                  </span>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500 font-semibold">
+                      כלבים רשומים ({customer.dogs.length}):
+                    </span>
+                    <span className="text-slate-700 font-bold">
+                      ביקורים בריזורט: <strong className="text-green-600">{customer.totalVisits}</strong>
+                    </span>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {customer.dogs.map((dog, i) => (
                       <div
@@ -199,16 +220,14 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                         {dog.breed && (
                           <span className="text-slate-500 text-[11px]">({dog.breed})</span>
                         )}
+                        {dog.specialDiet && (
+                          <span className="text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded text-[10px] font-bold border border-amber-200">
+                            מזון: {dog.specialDiet}
+                          </span>
+                        )}
                       </div>
                     ))}
                   </div>
-                </div>
-
-                {/* Stays History preview */}
-                <div className="text-xs space-y-1 text-slate-500">
-                  <span className="font-semibold block text-slate-700">
-                    ביקורים בריזורט: <span className="text-green-600 font-bold">{customer.totalVisits}</span>
-                  </span>
                 </div>
 
                 {/* Action Buttons: New Booking for this Customer, Voucher, WhatsApp, Call */}

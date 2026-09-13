@@ -352,7 +352,8 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
         {/* Dog & Owner Info */}
         <div className="space-y-1 flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`font-extrabold text-base ${isEnded ? 'text-slate-700' : 'text-slate-900'}`}>{booking.dogName}</span>
+            <span className="text-base shrink-0">🐾</span>
+            <span className={`font-black text-base sm:text-lg ${isEnded ? 'text-slate-700' : 'text-slate-900'}`}>{booking.dogName}</span>
             {booking.dogBreed && (
               <span className="text-xs text-slate-500 font-normal">({booking.dogBreed})</span>
             )}
@@ -366,9 +367,10 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
-            <span className="flex items-center gap-1 font-medium">
-              <User className="w-3.5 h-3.5 text-indigo-500" /> {booking.ownerName}
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 mt-1">
+            <span className="flex items-center gap-1 font-bold text-slate-800">
+              <User className="w-3.5 h-3.5 text-indigo-500" />
+              <span>בעלים: <strong className="text-slate-900">{booking.ownerName}</strong></span>
             </span>
             <span className="flex items-center gap-1 font-mono text-slate-700 font-semibold" dir="ltr">
               <Phone className="w-3.5 h-3.5 text-green-600" /> {booking.ownerPhone}
