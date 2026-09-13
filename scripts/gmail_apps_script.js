@@ -17,6 +17,7 @@ function processResortEmails() {
   cleanupMorningResortInvoices();
   checkUpcomingDeparturesWithDebtAndAlert();
   checkAndSend11AmShabbatHolidayAlert();
+  sendDayAfterDepartureReviewRequests();
   ensureTaliEmailDraftCreated();
 }
 
@@ -521,6 +522,121 @@ function checkAndSend11AmShabbatHolidayAlert() {
     Logger.log("נשלח מייל תזכורת 11:00 לשמוליק בהצלחה עבור " + totalDogs + " כלבים.");
   } catch (e) {
     Logger.log("שגיאה בפונקציית תזכורת 11:00 שבת/חג: " + e.toString());
+  }
+}
+
+/**
+ * 5. שליחת הודעות בקשת חוות דעת והטבות VIP יום לאחר שחרור הכלב:
+ *    - רץ אוטומטית בכל בוקר בין 10:00 ל-14:00 (לא בשבתות וחגים).
+ *    - שולף מ-Supabase כלבים שסיימו שהייה אתמול (end_date = yesterday).
+ *    - שולח לבעלים בוואטסאפ דרך Green-API הודעת התעניינות חמה + כניסה למועדון VIP + קישור לביקורת גוגל.
+ *    - מונע כפילויות ע"י רישום מזהה ההזמנה ב-PropertiesService.
+ */
+function sendDayAfterDepartureReviewRequests() {
+  try {
+    var israelTz = "Asia/Jerusalem";
+    var now = new Date();
+    var hour = parseInt(Utilities.formatDate(now, israelTz, "H"), 10);
+
+    // מופעל בשעות הבוקר/צהריים בלבד (בין 10:00 ל-14:00)
+    if (hour < 10 || hour > 14) {
+      return;
+    }
+
+    var dayOfWeek = parseInt(Utilities.formatDate(now, israelTz, "u"), 10); // 1=Mon .. 6=Sat, 7=Sun
+    // לא שולחים הודעות שיווקיות בשבת
+    if (dayOfWeek === 6) {
+      return;
+    }
+
+    // חישוב תאריך אתמול
+    var yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    var yesterdayStr = Utilities.formatDate(yesterday, israelTz, "yyyy-MM-dd");
+
+    // שאילתת Supabase לשליפת כלבים שסיימו אתמול
+    var queryUrl = SUPABASE_URL + "/rest/v1/bookings?end_date=eq." + yesterdayStr + "&stay_status=neq.cancelled&select=*";
+    var response = UrlFetchApp.fetch(queryUrl, {
+      method: "get",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": "Bearer " + SUPABASE_KEY
+      },
+      muteHttpExceptions: true
+    });
+
+    if (response.getResponseCode() !== 200) {
+      Logger.log("שגיאה בשליפת שחרורי אתמול מ-Supabase: " + response.getContentText());
+      return;
+    }
+
+    var departures = JSON.parse(response.getContentText());
+    if (!departures || departures.length === 0) {
+      return;
+    }
+
+    var scriptProperties = PropertiesService.getScriptProperties();
+    var greenId = "710722735421";
+    var greenTok = "ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b";
+
+    for (var i = 0; i < departures.length; i++) {
+      var b = departures[i];
+      var bookingKey = "review_request_sent_" + b.id;
+      if (scriptProperties.getProperty(bookingKey)) {
+        continue; // כבר נשלח
+      }
+
+      var ownerName = b.owner_name || "לקוח יקר";
+      var dogName = b.dog_name || "הכלב";
+      var ownerPhone = (b.owner_phone || "").replace(/[^0-9]/g, '');
+      if (!ownerPhone) continue;
+
+      var intlPhone = ownerPhone.indexOf('0') === 0 ? '972' + ownerPhone.substring(1) : ownerPhone;
+      var chatId = intlPhone + "@c.us";
+
+      var cleanDog = dogName.replace(/[^a-zA-Z0-9\u0590-\u05FF]/g, '').slice(0, 8);
+      var friendCode = "חבר-" + (cleanDog || "ריזורט") + "-" + Math.floor(100 + Math.random() * 900);
+
+      var reviewMsg = "היי " + ownerName + " 😊\n"
+        + "שמחנו ממש לארח את " + dogName + " אצלנו בריזורט לכלב! 🐾🤍\n"
+        + "איך " + dogName + " התאקלם בחזרה בבית? התגעגענו אליו כבר!\n\n"
+        + "💎 מעכשיו אתם רשמית חלק ממועדון ה-VIP של הריזורט לכלב!\n"
+        + "באירוח הבא שלכם (3 ימים ומעלה), יחכה לכם פינוק VIP מתנה לבחירתכם:\n"
+        + "✨ 100 ₪ הנחה ישירה\n"
+        + "✨ יום כיף ושהות יומית VIP מתנה (09:00–19:00)\n"
+        + "✨ סשן משחקי חשיבה והעשרה מנטלית (Brain Games)\n"
+        + "✨ ספא חפיפה, פתיחת קשרים ובישום יוקרתי\n"
+        + "✨ צ'ק אאוט מאוחר מוארך עד 19:00\n"
+        + "✨ מארז שף גורמה: עצם לעיסה טבעית מעושנת ומעדני בריאות\n"
+        + "(בהזמנה הבאה שלכם, פשוט מזינים את מספר הנייד בטופס והתפריט נפתח אוטומטית לבחירתכם!)\n\n"
+        + "🤝 רוצים לפנק חברים עם כלב?\n"
+        + "שתפו אותם בהודעה הזו – הם ייהנו מ-100 ₪ הנחה לשהות ראשונה (תוקף ל-6 חודשים), ואתם תצברו 100 ₪ הנחה לשהות הבאה שלכם!\n"
+        + "קוד שובר חבר מביא חבר שלכם: *" + friendCode + "*\n\n"
+        + "נשמח מאוד אם תפרגנו לנו בכמה מילים על החוויה שלכם:\n"
+        + "⭐ ביקורת בגוגל: https://maps.app.goo.gl/G31uwaQXP6Ln5myX9\n"
+        + "👍 פייסבוק: https://www.facebook.com/profile.php?id=61576998315714&sk=reviews\n"
+        + "📸 אינסטגרם: https://www.instagram.com/dogz.resort/\n\n"
+        + "מחכים לראותכם שוב!\n"
+        + "שמוליק וצוות הריזורט לכלב 🐾🐶";
+
+      var sendUrl = "https://api.green-api.com/waInstance" + greenId + "/sendMessage/" + greenTok;
+      var sendRes = UrlFetchApp.fetch(sendUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ chatId: chatId, message: reviewMsg }),
+        muteHttpExceptions: true
+      });
+
+      if (sendRes.getResponseCode() === 200) {
+        scriptProperties.setProperty(bookingKey, new Date().toISOString());
+        Logger.log("נשלחה בקשת חוות דעת בהצלחה עבור " + dogName + " (" + ownerName + ")");
+      } else {
+        Logger.log("שגיאה בשליחת חוות דעת עבור " + dogName + ": " + sendRes.getContentText());
+      }
+
+      Utilities.sleep(1500); // השהייה קלה בין שליחות
+    }
+  } catch (err) {
+    Logger.log("sendDayAfterDepartureReviewRequests error: " + err.toString());
   }
 }
 
