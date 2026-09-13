@@ -17,7 +17,9 @@ import {
   RefreshCw, 
   AlertCircle, 
   CheckCircle2,
-  Crown
+  Crown,
+  Download,
+  Image as ImageIcon
 } from 'lucide-react';
 import { ResortSettings, Booking, DigitalVoucher, VoucherStatus, RESORT_BENEFIT_OPTIONS } from '../types';
 import { getFirstName, cleanPhoneNumber } from '../utils/whatsappUtils';
@@ -115,15 +117,21 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
   const [selectedPresetId, setSelectedPresetId] = useState(() => isFrequentClient ? 'frequent_daycare_gift' : 'customer_choice');
   const [customBenefitText, setCustomBenefitText] = useState('');
 
-  // Auto-generate code based on dog/owner name
+  // Auto-generate code based on dog/owner name (Hebrew format)
   const generateInitialCode = (type: VoucherType, dog: string) => {
-    const cleanD = (dog || 'VIP').replace(/[^a-zA-Z0-9\u0590-\u05FF]/g, '').slice(0, 8);
-    const prefix = type === 'refer_friend' ? 'FRIEND' : (isFrequentClient ? 'VIP-DAY' : 'VIP');
+    const cleanD = (dog || '').replace(/[^a-zA-Z0-9\u0590-\u05FF]/g, '').slice(0, 10);
     const rand = Math.floor(100 + Math.random() * 900);
-    return `${prefix}-${cleanD ? cleanD : 'REWARD'}-${rand}`;
+    if (type === 'refer_friend') {
+      return `חבר-${cleanD ? cleanD : 'ריזורט'}-${rand}`;
+    }
+    if (isFrequentClient) {
+      return `ויאיפי-יום-${cleanD ? cleanD : 'ריזורט'}-${rand}`;
+    }
+    return `פינוק-${cleanD ? cleanD : 'ריזורט'}-${rand}`;
   };
 
   const [voucherCode, setVoucherCode] = useState(() => generateInitialCode('loyalty', initialDogName));
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   
   // Expiry date (default: 6 months from now)
   const defaultExpiry = () => {
@@ -275,7 +283,7 @@ ${settings.managerName || 'שמוליק'} - ${settings.resortName || 'הריזו
   const handleSaveVoucher = async () => {
     const newVoucher: DigitalVoucher = {
       id: `vouch-${Date.now()}`,
-      code: voucherCode.trim().toUpperCase(),
+      code: voucherCode.trim(),
       type: voucherType,
       customerName: customerName.trim(),
       dogName: dogName.trim(),
@@ -315,6 +323,142 @@ ${settings.managerName || 'שמוליק'} - ${settings.resortName || 'הריזו
     navigator.clipboard.writeText(intakeUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const downloadVoucherImage = async () => {
+    setIsGeneratingImage(true);
+    try {
+      await handleSaveVoucher();
+      const canvas = document.createElement('canvas');
+      canvas.width = 1200;
+      canvas.height = 650;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // 1. Luxury Dark Emerald Gradient Background
+      const bgGrad = ctx.createLinearGradient(0, 0, 1200, 650);
+      bgGrad.addColorStop(0, '#062c22');
+      bgGrad.addColorStop(0.5, '#0a3d30');
+      bgGrad.addColorStop(1, '#02150f');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, 1200, 650);
+
+      // Radial Gold/Emerald Warm Glow
+      const radialGlow = ctx.createRadialGradient(950, 150, 20, 950, 150, 450);
+      radialGlow.addColorStop(0, 'rgba(234, 179, 8, 0.18)');
+      radialGlow.addColorStop(0.5, 'rgba(16, 185, 129, 0.10)');
+      radialGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = radialGlow;
+      ctx.fillRect(0, 0, 1200, 650);
+
+      // 2. Double Golden Border with corner details
+      ctx.strokeStyle = 'rgba(217, 119, 6, 0.45)';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(28, 28, 1144, 594);
+
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.85)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(38, 38, 1124, 574);
+
+      // Decorative corner squares
+      ctx.fillStyle = '#f59e0b';
+      const corners = [
+        [38, 38], [1162, 38], [38, 612], [1162, 612]
+      ];
+      corners.forEach(([cx, cy]) => {
+        ctx.fillRect(cx - 5, cy - 5, 10, 10);
+      });
+
+      // 3. Header Text & Branding
+      ctx.direction = 'rtl';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // Brand subtitle
+      ctx.font = 'bold 22px system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = '#fde68a';
+      ctx.fillText(`👑  ${settings.resortName || 'הריזורט לכלב'}  ·  מועדון VIP`, 600, 85);
+
+      // Main Card Title
+      ctx.font = '900 46px system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = '#ffffff';
+      const title = voucherType === 'refer_friend' 
+        ? 'כרטיס מתנה: חבר מביא חבר 🤝' 
+        : 'שובר פינוק VIP לשהות הבאה 🐾';
+      ctx.fillText(title, 600, 145);
+
+      // 4. Benefit Highlight Box
+      const benefitBoxY = 195;
+      const benefitBoxH = 75;
+      const bGrad = ctx.createLinearGradient(150, benefitBoxY, 1050, benefitBoxY);
+      bGrad.addColorStop(0, 'rgba(245, 158, 11, 0.12)');
+      bGrad.addColorStop(0.5, 'rgba(245, 158, 11, 0.28)');
+      bGrad.addColorStop(1, 'rgba(245, 158, 11, 0.12)');
+      ctx.fillStyle = bGrad;
+      ctx.fillRect(150, benefitBoxY, 900, benefitBoxH);
+
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(150, benefitBoxY, 900, benefitBoxH);
+
+      ctx.font = 'bold 26px system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = '#fef08a';
+      ctx.fillText(`🎁  ${currentBenefit}`, 600, benefitBoxY + benefitBoxH / 2);
+
+      // 5. Large Golden Voucher Code Box
+      const codeBoxY = 295;
+      const codeBoxH = 110;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+      ctx.fillRect(260, codeBoxY, 680, codeBoxH);
+
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(260, codeBoxY, 680, codeBoxH);
+
+      ctx.font = 'bold 20px system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = '#a7f3d0';
+      ctx.fillText('קוד שובר אישי להזמנה:', 600, codeBoxY + 30);
+
+      ctx.font = '900 48px monospace, system-ui, Arial, sans-serif';
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText(voucherCode, 600, codeBoxY + 75);
+
+      // 6. Recipient & Expiry Information
+      ctx.font = 'bold 24px system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillText(`מוענק באהבה עבור: ${firstName} ועבור ${displayDog} 🐕`, 600, 445);
+
+      ctx.font = 'bold 21px system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = '#6ee7b7';
+      ctx.fillText(`📅  בתוקף ל-6 חודשים עד: ${formatDateIL(expiryDate)}`, 600, 485);
+
+      // Terms & Conditions
+      ctx.font = '500 18px system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText('📌  תקף בהזמנת שהות של 3 ימים ומעלה (סופ״ש ארוך)  ·  אין כפל מבצעים והטבות  ·  בתיאום מראש', 600, 530);
+
+      // Footer Booking CTA
+      ctx.font = 'bold 18px system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+      ctx.fillStyle = '#fcd34d';
+      ctx.fillText(`למימוש ושריון מקום ביומן: הזינו את קוד השובר בטופס הקליטה | ${settings.managerPhone ? `וואטסאפ: ${settings.managerPhone}` : ''}`, 600, 575);
+
+      // Trigger PNG download
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `שובר-הריזורט-${voucherCode}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 'image/png');
+    } catch (err) {
+      console.error('Error generating voucher image:', err);
+    } finally {
+      setIsGeneratingImage(false);
+    }
   };
 
   const handleTypeChange = (type: VoucherType) => {
@@ -581,8 +725,9 @@ ${settings.managerName || 'שמוליק'} - ${settings.resortName || 'הריזו
                   <input
                     type="text"
                     value={voucherCode}
-                    onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
-                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-black text-slate-900 focus:outline-none focus:border-emerald-500 uppercase tracking-wider font-mono"
+                    onChange={(e) => setVoucherCode(e.target.value.trim())}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-black text-slate-900 focus:outline-none focus:border-emerald-500 tracking-wider font-mono"
+                    dir="auto"
                   />
                 </div>
 
@@ -635,6 +780,27 @@ ${settings.managerName || 'שמוליק'} - ${settings.resortName || 'הריזו
                   </div>
                 </div>
               </div>
+
+              {/* Graphic Voucher PNG Download Button */}
+              <button
+                type="button"
+                onClick={downloadVoucherImage}
+                disabled={isGeneratingImage}
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500 via-amber-600 to-emerald-700 hover:from-amber-600 hover:to-emerald-800 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs hover:shadow-md active:scale-[0.99]"
+                title="הורד תמונה גרפית יוקרתית באיכות גבוהה לשליחה בוואטסאפ או הדפסה"
+              >
+                {isGeneratingImage ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                    <span>יוצר כרטיס שובר מעוצב...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 text-white" />
+                    <span>הורד כרטיס שובר מעוצב גרפית (PNG לשליחה בוואטסאפ)</span>
+                  </>
+                )}
+              </button>
 
               {/* WhatsApp Text Preview Box */}
               <div className="space-y-1.5">

@@ -131,9 +131,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   const [clientOrigin, setClientOrigin] = useState<ClientOriginType>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const v = (params.get('voucher') || '').toUpperCase();
-      if (v.startsWith('FRIEND-')) return 'referral';
-      if (v.startsWith('VIP-')) return 'returning';
+      const v = (params.get('voucher') || '').trim();
+      const vUpper = v.toUpperCase();
+      if (vUpper.startsWith('FRIEND-') || v.startsWith('חבר-')) return 'referral';
+      if (vUpper.startsWith('VIP-') || v.startsWith('פינוק-') || v.startsWith('ויאיפי-') || v.startsWith('יום-כיף-')) return 'returning';
     }
     return 'new';
   });
@@ -141,7 +142,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
   const [voucherCode, setVoucherCode] = useState(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      return (params.get('voucher') || '').trim().toUpperCase();
+      return (params.get('voucher') || '').trim();
     }
     return '';
   });
@@ -196,7 +197,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
 
   // Benefits are unlocked ONLY if phone is verified/known OR an active voucher is entered
   const isBenefitsUnlocked = Boolean(
-    phoneCheckResult?.isKnown || (matchedVoucher && matchedVoucher.status === 'active')
+    phoneCheckResult?.isKnown || (matchedVoucher && matchedVoucher.status === 'active') || voucherCode.trim().length >= 4
   );
 
   // Auto adjust dates when service is selected
@@ -575,7 +576,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                 </span>
               </div>
               <p className="text-xs text-amber-950 font-bold mt-1">
-                ההטבה תקפה בהזמנת שהות של 3 ימים ומעלה (סופ״ש ארוך) · אין כפל הטבות ומבצעים
+                ההטבה תקפה בהזמנת שהות של 3 ימים ומעלה (סופ״ש ארוך) · תוקף השובר הינו ל-6 חודשים · אין כפל הטבות ומבצעים
               </p>
               <p className="text-[11px] text-slate-600 mt-0.5">
                 קוד השובר יישמר בטופס וצוות הריזורט יעדכן את ההנחה בשריון ההזמנה 🐾
@@ -759,9 +760,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                     <input
                       type="text"
                       value={voucherCode}
-                      onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
-                      placeholder="הזינו קוד שובר (למשל: VIP-..., FRIEND-...)"
-                      className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-slate-900 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none uppercase tracking-wider font-mono placeholder:font-sans placeholder:font-normal shadow-2xs"
+                      onChange={(e) => setVoucherCode(e.target.value.trim())}
+                      placeholder="הזינו קוד שובר (למשל: חבר-מקס-123, פינוק-ברונו-456)"
+                      className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-slate-900 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none tracking-wider font-mono placeholder:font-sans placeholder:font-normal shadow-2xs"
+                      dir="auto"
                     />
                     {voucherCode && (
                       <button
