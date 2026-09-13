@@ -125,7 +125,7 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
       return `חבר-${cleanD ? cleanD : 'ריזורט'}-${rand}`;
     }
     if (isFrequentClient) {
-      return `ויאיפי-יום-${cleanD ? cleanD : 'ריזורט'}-${rand}`;
+      return `VIP-יום-${cleanD ? cleanD : 'ריזורט'}-${rand}`;
     }
     return `פינוק-${cleanD ? cleanD : 'ריזורט'}-${rand}`;
   };

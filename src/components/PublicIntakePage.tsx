@@ -761,7 +761,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
                       type="text"
                       value={voucherCode}
                       onChange={(e) => setVoucherCode(e.target.value.trim())}
-                      placeholder="הזינו קוד שובר (למשל: חבר-מקס-123, פינוק-ברונו-456)"
+                      placeholder="הזינו קוד שובר (למשל: חבר-מקס-123, VIP-מקס-456, פינוק-789)"
                       className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-slate-900 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none tracking-wider font-mono placeholder:font-sans placeholder:font-normal shadow-2xs"
                       dir="auto"
                     />
