@@ -12,12 +12,15 @@ import {
   Upload, 
   RotateCcw,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  Volume2
 } from 'lucide-react';
 import { ResortSettings, Booking } from '../types';
 import { exportDataAsJSON, importDataFromJSON } from '../utils/exportUtils';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './ExtremeChangeModal';
 import { ManagerAuthModal } from './ManagerAuthModal';
+import { testSystemNotification } from '../utils/soundUtils';
+import { testGreenApiConnection } from '../services/notificationService';
 
 interface SettingsModalProps {
   settings: ResortSettings;
@@ -75,6 +78,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [settings]);
   const [activeTab, setActiveTab] = useState<'general' | 'rates' | 'whatsapp' | 'backup'>('general');
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [testingGreenApi, setTestingGreenApi] = useState(false);
+  const [greenApiStatus, setGreenApiStatus] = useState<{ success?: boolean; message?: string } | null>(null);
 
   const [extremeAlert, setExtremeAlert] = useState<{
     isOpen: boolean;
@@ -259,7 +264,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               activeTab === 'whatsapp' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'
             }`}
           >
-            💬 תבניות וואטסאפ
+            🤖 וואטסאפ ו-Green-API
           </button>
           <button
             type="button"
@@ -401,6 +406,43 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     המספר המשמש להתראות מערכת, שיחות ושליחת וואטסאפ ללקוחות.
                   </span>
                 </div>
+
+                {/* 11:00 Shabbat & Holiday Alert Settings */}
+                <div className="p-4 bg-gradient-to-r from-red-50 via-rose-50 to-amber-50 border border-red-200 rounded-2xl space-y-2.5 mt-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🔔</span>
+                      <div>
+                        <div className="text-xs font-black text-slate-900">
+                          תזכורות שעה 11:00 (ד״ש שבת וחג לשמוליק)
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          חלון קופץ במסך + צליל התראה + התראת פוש לדפדפן
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await testSystemNotification();
+                        if (res.permission === 'granted' && res.notificationSent) {
+                          alert('מעולה שמוליק! צליל ההתראה והתראת הפוש פועלים בהצלחה.');
+                        } else if (res.permission === 'denied') {
+                          alert('צליל ההתראה הושמע בהצלחה. שים לב: התראות הדפדפן חסומות כרגע בהגדרות הדפדפן שלך.');
+                        } else {
+                          alert('צליל ההתראה הושמע בהצלחה!');
+                        }
+                      }}
+                      className="bg-white hover:bg-red-50 text-red-900 border border-red-300 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95 shrink-0"
+                    >
+                      <Volume2 className="w-3.5 h-3.5 text-red-600" />
+                      <span>בדוק צליל והתראה</span>
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-slate-600 bg-white/80 p-2.5 rounded-xl border border-red-100 leading-relaxed">
+                    💡 <strong>איך זה עובד:</strong> בכל שבת וחג בשעה 11:00 בבוקר (או ברגע ששמוליק פותח את היומן לאחר שעה זו), המערכת משמיעה צליל ופותחת אוטומטית את חלון שליחת הד״ש לבעלי הכלבים הנוכחים בריזורט, כך ששמוליק לא מפספס אף לקוח.
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -484,11 +526,114 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           )}
 
-          {/* Tab 3: WhatsApp Templates */}
+          {/* Tab 3: WhatsApp Templates & Green-API */}
           {activeTab === 'whatsapp' && (
-            <div className="space-y-3">
+            <div className="space-y-3.5">
+              {/* Green-API Configuration Card */}
+              <div className="p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-green-50 border border-emerald-200 rounded-2xl space-y-3 shadow-2xs">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl">🤖</span>
+                    <div>
+                      <div className="text-xs font-black text-emerald-950 flex items-center gap-2">
+                        <span>חיבור Green-API לשליחה אוטומטית ברקע</span>
+                        <span className="bg-emerald-200/80 text-emerald-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                          אוטומציות ודיוורים
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-emerald-800 leading-relaxed mt-0.5">
+                        מאפשר שליחת ד״ש שבת/חג בלחיצה אחת לכל הכלבים, אישורי הזמנה וקליטה אוטומטיים ודיוורים.
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href="https://console.green-api.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] font-bold text-emerald-700 bg-white/90 hover:bg-white border border-emerald-300 px-2.5 py-1 rounded-lg shadow-2xs hover:underline inline-flex items-center gap-1"
+                  >
+                    <span>לוח הבקרה של Green-API</span>
+                    <span>↗</span>
+                  </a>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      Instance ID (לדוגמה: 1101...)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.greenApiIdInstance || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, greenApiIdInstance: e.target.value.trim() }))}
+                      placeholder="1101987654"
+                      className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                      API Token Instance (קוד אסימון)
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.greenApiToken || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, greenApiToken: e.target.value.trim() }))}
+                      placeholder="d41d8cd98f00b204e9800998ecf8427e..."
+                      className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={testingGreenApi || !formData.greenApiIdInstance || !formData.greenApiToken}
+                    onClick={async () => {
+                      setTestingGreenApi(true);
+                      setGreenApiStatus(null);
+                      try {
+                        const res = await testGreenApiConnection(
+                          formData.greenApiIdInstance || '',
+                          formData.greenApiToken || '',
+                          formData.whatsappNotificationPhone || formData.managerPhone
+                        );
+                        setGreenApiStatus({ success: res.success, message: res.message });
+                      } catch (err: any) {
+                        setGreenApiStatus({ success: false, message: 'שגיאה בבדיקת חיבור: ' + (err.message || String(err)) });
+                      } finally {
+                        setTestingGreenApi(false);
+                      }
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+                  >
+                    {testingGreenApi ? <span>בודק חיבור...</span> : <span>בדוק חיבור Green-API</span>}
+                  </button>
+
+                  {greenApiStatus && (
+                    <div className={`text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 ${
+                      greenApiStatus.success ? 'bg-green-100 text-green-900 border border-green-300' : 'bg-red-100 text-red-900 border border-red-300'
+                    }`}>
+                      <span>{greenApiStatus.success ? '🟢' : '🔴'}</span>
+                      <span>{greenApiStatus.message}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-[10px] text-emerald-900 bg-white/70 p-2 rounded-xl border border-emerald-100 leading-relaxed">
+                  💡 <strong>הוראות חיבור מהירות:</strong> נרשמים ב-<code>green-api.com</code>, פותחים אינסטנס (מנוי חודשי), סורקים את ה-QR שמופיע שם עם הטלפון של הריזורט/שמוליק, ומעתיקים את ה-ID וה-Token לכאן.
+                </div>
+              </div>
+
+              {/* WhatsApp Web Fallback Info */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-700 flex items-start gap-2.5">
+                <span className="text-xl shrink-0">💻</span>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  <strong>גיבוי ידני (בחינם):</strong> אם גרין API לא מחובר או חסרים פרטים, המערכת תמיד מאפשרת פתיחה ישירה של WhatsApp Web בחינם לכל הודעה.
+                </p>
+              </div>
+
               <div className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                <span className="font-bold text-slate-800 block mb-0.5">משתנים דינמיים שניתן לשלב:</span>
+                <span className="font-bold text-slate-800 block mb-0.5">משתנים דינמיים שניתן לשלב בתבניות:</span>
                 <span className="font-mono text-green-700">
                   {'{שם_לקוח}'}, {'{שם_הכלב}'}, {'{סוג_שירות}'}, {'{תאריך_התחלה}'}, {'{תאריך_סיום}'}, {'{סכום_כולל}'}, {'{מקדמה}'}, {'{יתרה_לתשלום}'}, {'{שם_ריזורט}'}
                 </span>

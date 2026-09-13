@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, MessageCircle, Copy, Check, Calendar, Sparkles, Dog, Phone, RotateCcw, AlertCircle } from 'lucide-react';
+import { X, MessageCircle, Copy, Check, Calendar, Sparkles, Dog, Phone, RotateCcw, AlertCircle, Send, Zap, CheckCircle2 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
 import { getBookingsForDate, formatDateIL, getDayNameHebrew } from '../utils/dateUtils';
 import { cleanPhoneNumber } from '../utils/whatsappUtils';
 import { getDateShabbatOrHoliday, formatShabbatHolidayGreeting, getOccasionWord } from '../utils/jewishCalendar';
+import { sendGreenApiDirectMessage } from '../services/notificationService';
 
 interface ShabbatHolidayGreetingModalProps {
   dateStr: string;
@@ -74,6 +75,78 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
     setTimeout(() => setCopiedId(null), 2500);
   };
 
+  const hasGreenApi = Boolean(settings.greenApiIdInstance && settings.greenApiToken);
+  const [isBulkSending, setIsBulkSending] = useState<boolean>(false);
+  const [bulkStatusText, setBulkStatusText] = useState<string | null>(null);
+  const [singleSendingId, setSingleSendingId] = useState<string | null>(null);
+
+  const handleSendGreenApiSingle = async (b: Booking) => {
+    if (!settings.greenApiIdInstance || !settings.greenApiToken) {
+      handleSendWhatsApp(b);
+      return;
+    }
+    setSingleSendingId(b.id);
+    const msg = formatShabbatHolidayGreeting(b.ownerName, b.dogName, template, dateStr);
+    const res = await sendGreenApiDirectMessage(
+      b.ownerPhone,
+      msg,
+      settings.greenApiIdInstance,
+      settings.greenApiToken
+    );
+    setSingleSendingId(null);
+    if (res.success) {
+      setSentMap(prev => ({ ...prev, [b.id]: true }));
+    } else {
+      alert(`שגיאה בשליחת Green-API: ${res.error || 'בדוק את הגדרות המערכת'}\n\nפותח את WhatsApp Web במקום...`);
+      handleSendWhatsApp(b);
+    }
+  };
+
+  const handleBulkSendGreenApi = async () => {
+    if (!settings.greenApiIdInstance || !settings.greenApiToken) return;
+    const unsentBookings = dayBookings.filter(b => !sentMap[b.id]);
+    if (unsentBookings.length === 0) {
+      alert('כל הד״שים להיום כבר נשלחו!');
+      return;
+    }
+
+    if (!confirm(`לשלוח עכשיו ברקע ד״ש ל-${unsentBookings.length} כלבים דרך Green-API?`)) {
+      return;
+    }
+
+    setIsBulkSending(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < unsentBookings.length; i++) {
+      const booking = unsentBookings[i];
+      setBulkStatusText(`שולח ד״ש עבור ${booking.dogName} (${i + 1}/${unsentBookings.length})...`);
+
+      const msg = formatShabbatHolidayGreeting(booking.ownerName, booking.dogName, template, dateStr);
+      const res = await sendGreenApiDirectMessage(
+        booking.ownerPhone,
+        msg,
+        settings.greenApiIdInstance,
+        settings.greenApiToken
+      );
+
+      if (res.success) {
+        setSentMap(prev => ({ ...prev, [booking.id]: true }));
+        successCount++;
+      } else {
+        failCount++;
+      }
+
+      if (i < unsentBookings.length - 1) {
+        await new Promise(r => setTimeout(r, 1200));
+      }
+    }
+
+    setIsBulkSending(false);
+    setBulkStatusText(null);
+    alert(`סיום שליחה: ${successCount} הודעות נשלחו בהצלחה!${failCount > 0 ? ` (${failCount} נכשלו)` : ''}`);
+  };
+
   const sentCount = dayBookings.filter(b => sentMap[b.id]).length;
   const progressPercent = dayBookings.length > 0 ? Math.round((sentCount / dayBookings.length) * 100) : 0;
 
@@ -115,13 +188,27 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
 
         {/* Progress Bar & Template Customizer */}
         <div className="bg-slate-50 px-4 sm:px-5 py-3 border-b border-slate-200 space-y-2.5 text-xs">
-          {/* Progress Bar */}
-          <div className="flex items-center justify-between font-bold">
-            <span className="text-slate-700 font-extrabold flex items-center gap-1.5">
-              <span>מעקב שליחת הודעות:</span>
-              <span className="text-emerald-700">{sentCount} מתוך {dayBookings.length} נשלחו</span>
-            </span>
-            <span className="text-slate-500 font-mono">{progressPercent}%</span>
+          {/* Progress Bar & Bulk Action */}
+          <div className="flex items-center justify-between font-bold flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-700 font-extrabold flex items-center gap-1.5">
+                <span>התקדמות שליחה:</span>
+                <span className="text-emerald-700">{sentCount} מתוך {dayBookings.length} נשלחו</span>
+              </span>
+              <span className="text-slate-500 font-mono">({progressPercent}%)</span>
+            </div>
+
+            {hasGreenApi && (
+              <button
+                type="button"
+                disabled={isBulkSending || (dayBookings.length > 0 && sentCount === dayBookings.length)}
+                onClick={handleBulkSendGreenApi}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black px-3.5 py-1.5 rounded-xl shadow-xs text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+              >
+                <Zap className="w-3.5 h-3.5 fill-amber-300 text-amber-300 shrink-0" />
+                <span>{isBulkSending ? (bulkStatusText || 'שולח ברקע...') : 'שלח לכל הכלבים ברקע (Green-API)'}</span>
+              </button>
+            )}
           </div>
           <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
             <div
@@ -228,7 +315,7 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex items-center gap-2 self-end sm:self-center">
+                    <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
                       <button
                         type="button"
                         onClick={() => handleCopyMessage(b)}
@@ -248,17 +335,35 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
                         )}
                       </button>
 
+                      {hasGreenApi && (
+                        <button
+                          type="button"
+                          disabled={singleSendingId === b.id || isBulkSending}
+                          onClick={() => handleSendGreenApiSingle(b)}
+                          className={`font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
+                            isSent
+                              ? 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-300'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+                          }`}
+                          title="שליחה מיידית ברקע ללא פתיחת לשונית בדפדפן"
+                        >
+                          <Zap className="w-3.5 h-3.5 fill-amber-300 text-amber-300 shrink-0" />
+                          <span>{singleSendingId === b.id ? 'שולח...' : isSent ? 'שלח שוב ברקע' : 'שלח ברקע (API)'}</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => handleSendWhatsApp(b)}
-                        className={`font-black px-4 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer shadow-xs active:scale-95 ${
+                        className={`font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
                           isSent
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                             : 'bg-[#25D366] hover:bg-[#1EBE5D] text-white shadow-emerald-500/20'
                         }`}
+                        title="פתח ב-WhatsApp Web"
                       >
                         <MessageCircle className="w-4 h-4 fill-white/20 shrink-0" />
-                        <span>{isSent ? 'שלח שוב בוואטסאפ' : 'שלח ד״ש בוואטסאפ'}</span>
+                        <span>{isSent ? 'שלח שוב בוואטסאפ' : 'פתח בוואטסאפ'}</span>
                       </button>
                     </div>
                   </div>

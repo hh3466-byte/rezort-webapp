@@ -16,6 +16,7 @@ function processResortEmails() {
   syncGrowPaymentsAndNotify();
   cleanupMorningResortInvoices();
   checkUpcomingDeparturesWithDebtAndAlert();
+  checkAndSend11AmShabbatHolidayAlert();
   ensureTaliEmailDraftCreated();
 }
 
@@ -353,6 +354,173 @@ function checkUpcomingDeparturesWithDebtAndAlert() {
     }
   } catch (e) {
     Logger.log("שגיאה בפונקציית התראת שחרור עם חוב: " + e.toString());
+  }
+}
+
+/**
+ * 4. תזכורת אוטומטית במייל לשמוליק בשעה 11:00 בשבתות ובחגים:
+ *    בודק האם היום שבת או חג, שולף כלבים שנוכחים כעת בריזורט מ-Supabase,
+ *    ושולח מייל מרוכז ומעוצב לשמוליק ולמנהל עם כפתורי וואטסאפ מהירים לכל בעלים.
+ *    פועל 24/7 בענן של גוגל - גם אם המחשב והיומן סגורים לחלוטין!
+ */
+function checkAndSend11AmShabbatHolidayAlert() {
+  try {
+    var israelTz = "Asia/Jerusalem";
+    var now = new Date();
+    var hour = parseInt(Utilities.formatDate(now, israelTz, "H"), 10);
+    
+    // מופעל רק החל מהשעה 11:00 בבוקר (בין 11:00 ל-19:00)
+    if (hour < 11 || hour > 19) {
+      return;
+    }
+
+    var todayStr = Utilities.formatDate(now, israelTz, "yyyy-MM-dd");
+    var dayOfWeek = parseInt(Utilities.formatDate(now, israelTz, "u"), 10); // 1=Mon .. 6=Sat, 7=Sun
+
+    var scriptProperties = PropertiesService.getScriptProperties();
+    var alertKey = "shabbat_11am_alert_email_" + todayStr;
+    if (scriptProperties.getProperty(alertKey)) {
+      return; // כבר נשלח היום
+    }
+
+    // זיהוי שבת או חג
+    var isSpecial = (dayOfWeek === 6); // שבת
+    var holidayLabel = (dayOfWeek === 6) ? "שבת שלום" : "";
+
+    // בדיקת חגים עבריים דרך Hebcal API
+    try {
+      var hebcalUrl = "https://www.hebcal.com/converter?cfg=json&date=" + todayStr + "&g2h=1";
+      var hRes = UrlFetchApp.fetch(hebcalUrl, { muteHttpExceptions: true });
+      if (hRes.getResponseCode() === 200) {
+        var hData = JSON.parse(hRes.getContentText());
+        if (hData && hData.events && hData.events.length > 0) {
+          var hebrewTitle = hData.hebrew || "";
+          var eventName = hData.events[0];
+          isSpecial = true;
+          holidayLabel = holidayLabel ? (holidayLabel + " • " + hebrewTitle) : (hebrewTitle || eventName);
+        }
+      }
+    } catch (eH) {
+      Logger.log("Hebcal check error: " + eH.toString());
+    }
+
+    if (!isSpecial) {
+      return; // היום אינו שבת ואינו חג
+    }
+
+    // שליפת נמענים: שמוליק ובעל התיבה
+    var myEmail = "";
+    try {
+      myEmail = Session.getEffectiveUser().getEmail() || Session.getActiveUser().getEmail() || "hh3466@gmail.com";
+    } catch (eUser) {
+      myEmail = "hh3466@gmail.com";
+    }
+    var shmulikEmail = "shinshin1964@gmail.com";
+
+    var recipientsList = [];
+    if (myEmail) recipientsList.push(myEmail);
+    if (shmulikEmail && recipientsList.indexOf(shmulikEmail) === -1) recipientsList.push(shmulikEmail);
+    var targetRecipients = recipientsList.join(", ");
+
+    // שאילתת Supabase לשליפת כלבים שנוכחים כעת בריזורט
+    var queryUrl = SUPABASE_URL + "/rest/v1/bookings?start_date=lte." + todayStr + "&end_date=gte." + todayStr + "&stay_status=neq.cancelled&stay_status=neq.checked_out&select=*";
+    var response = UrlFetchApp.fetch(queryUrl, {
+      method: "get",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": "Bearer " + SUPABASE_KEY
+      },
+      muteHttpExceptions: true
+    });
+
+    if (response.getResponseCode() !== 200) {
+      Logger.log("שגיאה בשליפת הזמנות פעילות מ-Supabase: " + response.getContentText());
+      return;
+    }
+
+    var bookings = JSON.parse(response.getContentText());
+    if (!bookings || bookings.length === 0) {
+      return; // אין כלבים פעילים כרגע בריזורט
+    }
+
+    var totalDogs = bookings.length;
+    var occasionWord = (dayOfWeek === 6) ? "בסופ\"ש" : "בחג";
+    var subject = "🐾 תזכורת 11:00 לשמוליק: ד״ש " + (holidayLabel || "שבת/חג") + " לבעלי " + totalDogs + " כלבים בריזורט";
+
+    var rowsHtml = "";
+    var plainDogsList = "";
+
+    for (var i = 0; i < bookings.length; i++) {
+      var b = bookings[i];
+      var dog = b.dog_name || "כלב";
+      var owner = b.owner_name || "לקוח";
+      var phone = b.owner_phone || "";
+      
+      // חילוץ שם פרטי
+      var firstName = owner.trim().replace(/^(מר|גב'|גברת|ד"ר)\s+/i, '').split(/\s+/)[0] || owner;
+      
+      // נוסח הברכה האישית
+      var greetingText = "שלום " + firstName + " למרות שאין שירות לקוחות להולכים על 2 " + occasionWord + ", אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.\nאז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.\n" + dog;
+      
+      var waPhone = phone.replace(/[^0-9]/g, '');
+      if (waPhone.indexOf('0') === 0) waPhone = '972' + waPhone.substring(1);
+      var waUrl = waPhone ? ("https://wa.me/" + waPhone + "?text=" + encodeURIComponent(greetingText)) : "";
+
+      rowsHtml += '<tr style="border-bottom: 1px solid #e2e8f0;">'
+        + '<td style="padding: 12px; font-weight: bold; color: #0f172a; font-size: 16px;">🐶 ' + dog + '</td>'
+        + '<td style="padding: 12px; color: #334155; font-size: 14px;">' + owner + '</td>'
+        + '<td style="padding: 12px; color: #64748b; font-size: 13px;">' + phone + '</td>'
+        + '<td style="padding: 12px; text-align: center;">'
+        + (waUrl ? '<a href="' + waUrl + '" target="_blank" style="background-color: #22c55e; color: white; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 13px; display: inline-block;">💬 שלח ד״ש בוואטסאפ</a>' : '<span style="color: #94a3b8;">אין טלפון</span>')
+        + '</td>'
+        + '</tr>';
+
+      plainDogsList += (i + 1) + ". " + dog + " (" + owner + " - " + phone + ")\n";
+    }
+
+    var appUrl = "https://hh3466-byte.github.io/rezort-webapp/";
+
+    var htmlBody = '<div dir="rtl" style="font-family: Arial, sans-serif; background-color: #f8fafc; padding: 25px; border-radius: 16px; border: 1px solid #e2e8f0; max-width: 650px; color: #1e293b; margin: auto;">'
+      + '<div style="background: linear-gradient(135deg, #15803d, #16a34a); border-radius: 14px; padding: 20px; text-align: center; color: white; margin-bottom: 20px;">'
+      + '<div style="font-size: 32px; margin-bottom: 6px;">🐾 🕯️</div>'
+      + '<h2 style="margin: 0 0 6px 0; font-size: 22px; font-weight: 900;">תזכורת לשמוליק – שעה 11:00 בבוקר!</h2>'
+      + '<p style="margin: 0; font-size: 15px; opacity: 0.95;">' + (holidayLabel ? 'ד״ש ' + holidayLabel : 'ד״ש סופ״ש וחג') + ' לבעלי ' + totalDogs + ' הכלבים השוהים כעת בריזורט</p>'
+      + '</div>'
+      + '<p style="font-size: 14px; color: #475569; margin-bottom: 16px; line-height: 1.5;">'
+      + 'שלום שמוליק,<br />'
+      + 'השעה 11:00 הגיעה! להלן הכלבים הנוכחים היום בריזורט. ניתן ללחוץ על כפתור הוואטסאפ הירוק ליד כל לקוח ישירות מהסמארטפון כדי לשלוח לו ברכה חמה מוכנה מראש:'
+      + '</p>'
+      + '<table style="width: 100%; border-collapse: collapse; background-color: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 22px;">'
+      + '<thead style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">'
+      + '<tr>'
+      + '<th style="padding: 10px 12px; text-align: right; color: #475569; font-size: 13px;">כלב</th>'
+      + '<th style="padding: 10px 12px; text-align: right; color: #475569; font-size: 13px;">בעלים</th>'
+      + '<th style="padding: 10px 12px; text-align: right; color: #475569; font-size: 13px;">טלפון</th>'
+      + '<th style="padding: 10px 12px; text-align: center; color: #475569; font-size: 13px;">שליחה ישירה</th>'
+      + '</tr>'
+      + '</thead>'
+      + '<tbody>'
+      + rowsHtml
+      + '</tbody>'
+      + '</table>'
+      + '<div style="text-align: center; margin-bottom: 15px;">'
+      + '<a href="' + appUrl + '" style="background-color: #0f172a; color: white; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: bold; font-size: 14px; display: inline-block;">📱 פתח את יומן הריזורט המלא</a>'
+      + '</div>'
+      + '<p style="color: #94a3b8; font-size: 12px; text-align: center; margin-top: 15px; border-top: 1px dashed #e2e8f0; padding-top: 12px;">'
+      + 'הודעה אוטומטית זו נשלחת על ידי מערכת הריזורט לכלב בכל שבת וחג בשעה 11:00 בדיוק.'
+      + '</p>'
+      + '</div>';
+
+    var plainText = "🐾 תזכורת 11:00 לשמוליק: ד״ש " + (holidayLabel || "שבת/חג") + "\n\n"
+      + "שלום שמוליק, השעה 11:00! להלן הכלבים השוהים כעת בריזורט:\n\n"
+      + plainDogsList + "\n"
+      + "לפתיחת היומן המלא: " + appUrl;
+
+    GmailApp.sendEmail(targetRecipients, subject, plainText, { htmlBody: htmlBody });
+    scriptProperties.setProperty(alertKey, new Date().toISOString());
+    Logger.log("נשלח מייל תזכורת 11:00 לשמוליק בהצלחה עבור " + totalDogs + " כלבים.");
+  } catch (e) {
+    Logger.log("שגיאה בפונקציית תזכורת 11:00 שבת/חג: " + e.toString());
   }
 }
 

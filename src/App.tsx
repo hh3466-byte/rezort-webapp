@@ -36,7 +36,7 @@ import { GrowPaymentsModal } from './components/GrowPaymentsModal';
 import { PaymentModal } from './components/PaymentModal';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
-import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell } from 'lucide-react';
+import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2 } from 'lucide-react';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
 import { Guide } from './components/Guide';
@@ -49,6 +49,7 @@ import { SendIntakeModal } from './components/SendIntakeModal';
 import { getDateShabbatOrHoliday } from './utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './components/ShabbatHolidayGreetingModal';
 import { VoucherModal } from './components/VoucherModal';
+import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
 
 export default function App() {
   // Core application state with live Cloud synchronization
@@ -64,6 +65,7 @@ export default function App() {
   const [selectedDateForDetails, setSelectedDateForDetails] = useState<string | null>(null);
   const [greetingModalDate, setGreetingModalDate] = useState<string | null>(null);
   const [isGreetingBannerDismissed, setIsGreetingBannerDismissed] = useState(false);
+  const [isGreetingFloatingSnoozed, setIsGreetingFloatingSnoozed] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
       return Notification.permission;
@@ -244,33 +246,37 @@ export default function App() {
   }, [todayStr, todayBookings.length]);
 
   const requestNotificationPermission = async () => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      try {
-        const perm = await Notification.requestPermission();
-        setNotificationPermission(perm);
-        if (perm === 'granted') {
-          new Notification('ריזורט לכלב 🐾', {
-            body: 'מעולה שמוליק! תזכורות שבת וחג יקפצו בשעה 11:00 בבוקר.',
-            icon: '/favicon.ico'
-          });
-        }
-      } catch (e) {
-        console.warn('Notification permission error:', e);
-      }
+    const res = await testSystemNotification();
+    setNotificationPermission(res.permission);
+    if (res.permission === 'granted') {
+      showToast('מעולה שמוליק! התראות פוש וצלילים הופעלו בהצלחה.');
+    } else if (res.permission === 'denied') {
+      showToast('התראות דפדפן חסומות. לחץ על סמל המנעול ליד כתובת האתר ואפשר התראות.');
     }
   };
 
-  // 11:00 AM Scheduled Push Reminder for Shabbat / Holiday
+  const handleTestNotification = async () => {
+    const res = await testSystemNotification();
+    setNotificationPermission(res.permission);
+    if (res.permission === 'granted' && res.notificationSent) {
+      showToast('🔔 צליל ההתראה והתראת פוש נבדקו בהצלחה!');
+    } else if (res.permission === 'denied') {
+      showToast('⚠️ התראות דפדפן חסומות בדפדפן (צליל הושמע בהצלחה).');
+    } else {
+      showToast('🔊 צליל ההתראה הושמע בהצלחה!');
+    }
+  };
+
+  // 11:00 AM Scheduled Push & In-App Auto Reminder for Shabbat / Holiday
   useEffect(() => {
     if (!todayHolidayInfo.isSpecial || totalDogsToday === 0) return;
 
     const checkAndTrigger11AmReminder = () => {
       const now = new Date();
       const hour = now.getHours();
-      const notifKey = `shabbat_11am_notif_fired_${todayStr}`;
 
-      // Trigger at 11:00 AM or later today (once per day)
-      if (hour >= 11 && !localStorage.getItem(notifKey)) {
+      // Trigger at 11:00 AM or later today
+      if (hour >= 11) {
         let sentCount = 0;
         try {
           const saved = localStorage.getItem(`shabbat_greetings_${todayStr}`);
@@ -280,9 +286,18 @@ export default function App() {
 
         const unsent = todayBookings.length - sentCount;
         if (unsent > 0) {
-          localStorage.setItem(notifKey, 'true');
+          // 1. In-App Auto Popup: Pop up greeting modal directly on screen with audio chime
+          const inAppOpenedKey = `shabbat_11am_inapp_opened_${todayStr}`;
+          if (!sessionStorage.getItem(inAppOpenedKey)) {
+            sessionStorage.setItem(inAppOpenedKey, 'true');
+            playNotificationChime();
+            setGreetingModalDate(todayStr);
+            showToast(`🔔 שעה 11:00! נפתחה רשימת ד״ש ${todayHolidayInfo.label} לשליחה בוואטסאפ ל-${unsent} כלבים.`);
+          }
 
-          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          // 2. Browser Native Push Notification (fires if browser/tab is in background)
+          const pushSentKey = `shabbat_11am_push_sent_${todayStr}`;
+          if (!localStorage.getItem(pushSentKey) && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
             try {
               const notif = new Notification(`🐾 תזכורת לשמוליק: ד״ש ${todayHolidayInfo.label}!`, {
                 body: `השעה 11:00! ישנם ${totalDogsToday} כלבים בריזורט (${unsent} טרם קיבלו ד״ש). לחץ כאן לשליחה בוואטסאפ לבעלים.`,
@@ -292,9 +307,11 @@ export default function App() {
               });
               notif.onclick = () => {
                 window.focus();
+                playNotificationChime();
                 setGreetingModalDate(todayStr);
                 notif.close();
               };
+              localStorage.setItem(pushSentKey, 'true');
             } catch (err) {
               console.warn('Native notification error:', err);
             }
@@ -304,7 +321,7 @@ export default function App() {
     };
 
     checkAndTrigger11AmReminder();
-    const interval = setInterval(checkAndTrigger11AmReminder, 30000);
+    const interval = setInterval(checkAndTrigger11AmReminder, 15000);
     return () => clearInterval(interval);
   }, [todayHolidayInfo.isSpecial, todayHolidayInfo.label, totalDogsToday, todayBookings, todayStr]);
 
@@ -982,13 +999,22 @@ export default function App() {
                         <button
                           type="button"
                           onClick={requestNotificationPermission}
-                          className="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/30 flex items-center gap-1 cursor-pointer transition-all"
+                          className="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/30 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                           title="אפשר קבלת התראת פוש ב-11:00 בבוקר"
                         >
                           <span>🔔</span>
                           <span>הפעל תזכורת פוש ב-11:00</span>
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={handleTestNotification}
+                        className="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/30 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                        title="בדוק השמעת צליל והתראת פוש עכשיו"
+                      >
+                        <Volume2 className="w-3 h-3" />
+                        <span>בדוק צליל והתראה</span>
+                      </button>
                     </div>
                     <p className="text-xs text-red-100 font-medium mt-0.5">
                       נוכחים היום {totalDogsToday} כלבים בריזורט ({todayGreetingsSentCount} נשלחו עד כה). שלח להם ד״ש משמח בוואטסאפ בקליק!
@@ -1693,6 +1719,56 @@ export default function App() {
         }}
         onClose={() => setIsManagerAuthOpen(false)}
       />
+
+      {/* Persistent Floating 11:00 Alert Bar for Shabbat / Holiday */}
+      {todayHolidayInfo.isSpecial && todayUnsentGreetingsCount > 0 && new Date().getHours() >= 11 && !greetingModalDate && !isGreetingFloatingSnoozed && (
+        <div 
+          className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-6 sm:w-[420px] z-40 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-3.5 rounded-2xl shadow-2xl border-2 border-white/40 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-5 duration-300 ring-4 ring-red-600/20"
+          dir="rtl"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl shrink-0 backdrop-blur-xs ring-1 ring-white/30">
+              ⏰
+            </div>
+            <div className="min-w-0">
+              <div className="font-black text-xs sm:text-sm tracking-tight flex items-center gap-1.5">
+                <span>שמוליק, שעה 11:00 חלפה!</span>
+                <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded-full">
+                  {todayUnsentGreetingsCount}
+                </span>
+              </div>
+              <p className="text-[11px] text-red-100 font-medium truncate mt-0.5">
+                נותרו {todayUnsentGreetingsCount} כלבים ללא ד״ש {todayHolidayInfo.label}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                playNotificationChime();
+                setGreetingModalDate(todayStr);
+              }}
+              className="bg-white hover:bg-red-50 text-red-950 font-black px-3.5 py-2 rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+            >
+              <MessageCircle className="w-3.5 h-3.5 text-red-600" />
+              <span>שלח עכשיו</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsGreetingFloatingSnoozed(true);
+                setTimeout(() => setIsGreetingFloatingSnoozed(false), 15 * 60 * 1000);
+                showToast('התזכורת תושתק ל-15 דקות ⏳');
+              }}
+              className="text-white/70 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition-colors cursor-pointer text-xs"
+              title="השתק ל-15 דקות"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

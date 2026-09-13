@@ -233,3 +233,89 @@ export async function sendResortEmailNotification(
     return false;
   }
 }
+
+/**
+ * Send direct message via Green-API and return result
+ */
+export async function sendGreenApiDirectMessage(
+  phone: string,
+  message: string,
+  idInstance: string,
+  apiToken: string
+): Promise<{ success: boolean; error?: string }> {
+  const cleanId = (idInstance || '').trim();
+  const cleanTok = (apiToken || '').trim();
+  if (!cleanId || !cleanTok) {
+    return { success: false, error: 'חסרים פרטי חיבור Green-API' };
+  }
+
+  const cleanP = cleanPhoneNumber(phone);
+  const intlPhone = cleanP.startsWith('0') ? '972' + cleanP.substring(1) : cleanP;
+  const greenApiUrl = `https://api.green-api.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
+  const chatId = `${intlPhone}@c.us`;
+
+  try {
+    const res = await fetch(greenApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message })
+    });
+    if (res.ok) {
+      return { success: true };
+    }
+    const errText = await res.text();
+    return { success: false, error: `שגיאה (${res.status}): ${errText}` };
+  } catch (err: any) {
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+/**
+ * Test Green-API credentials and instance state
+ */
+export async function testGreenApiConnection(
+  idInstance: string,
+  apiToken: string,
+  testPhone?: string
+): Promise<{ success: boolean; state?: string; message: string }> {
+  const cleanId = (idInstance || '').trim();
+  const cleanTok = (apiToken || '').trim();
+  if (!cleanId || !cleanTok) {
+    return { success: false, message: 'נא להזין idInstance ו-apiTokenInstance' };
+  }
+
+  try {
+    const stateUrl = `https://api.green-api.com/waInstance${cleanId}/getStateInstance/${cleanTok}`;
+    const res = await fetch(stateUrl);
+    if (!res.ok) {
+      return { success: false, message: `שגיאה בגישה ל-Green-API (קוד ${res.status}). בדוק את ה-id וה-Token שהזנת.` };
+    }
+    const data = await res.json();
+    const state = data.stateInstance || 'unknown';
+
+    if (state !== 'authorized') {
+      return {
+        success: false,
+        state,
+        message: `האינסטנס קיים, אך טרם מקושר לוואטסאפ (סטטוס: ${state}). יש לסרוק QR באתר Green-API.`
+      };
+    }
+
+    // Send test message if testPhone provided
+    if (testPhone) {
+      const sendRes = await sendGreenApiDirectMessage(
+        testPhone,
+        '🐾 בדיקת חיבור Green-API – הריזורט לכלב! החיבור פועל בצורה מושלמת.',
+        cleanId,
+        cleanTok
+      );
+      if (sendRes.success) {
+        return { success: true, state: 'authorized', message: 'מעולה! Green-API מחובר ומאושר, ונשלחה הודעת בדיקה בהצלחה!' };
+      }
+    }
+
+    return { success: true, state: 'authorized', message: 'מעולה! החיבור ל-Green-API מאושר ותקין (authorized) 🟢' };
+  } catch (err: any) {
+    return { success: false, message: 'שגיאת תקשורת: ' + (err.message || String(err)) };
+  }
+}
