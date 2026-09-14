@@ -49,13 +49,14 @@ import { getDateShabbatOrHoliday } from './utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './components/ShabbatHolidayGreetingModal';
 import { VoucherModal } from './components/VoucherModal';
 import { DailyDogUpdatesModal } from './components/DailyDogUpdatesModal';
+import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
 
 export default function App() {
   // Core application state with live Cloud synchronization
   const [bookings, setBookings] = useState<Booking[]>(() => loadStoredBookings());
   const [settings, setSettings] = useState<ResortSettings>(() => loadStoredSettings());
-  const [activeTab, setActiveTab] = useState<'calendar' | 'forecast' | 'bookings' | 'customers'>('calendar');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'forecast' | 'bookings' | 'customers' | 'whatsapp'>('calendar');
 
   // Calendar year/month state
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
@@ -1012,6 +1013,19 @@ export default function App() {
               <span>⭐</span>
               <span>לקוחות</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('whatsapp')}
+              className={`text-xs sm:text-sm font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'whatsapp'
+                  ? 'bg-[#065f46] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+            >
+              <span>💬</span>
+              <span>וואטסאפ ופניות</span>
+            </button>
           </div>
 
         </div>
@@ -1436,6 +1450,24 @@ export default function App() {
                     dogName: firstDog?.name || '',
                     dogBreed: firstDog?.breed || '',
                   },
+                });
+              }}
+            />
+          )}
+
+          {activeTab === 'whatsapp' && (
+            <WhatsAppLeadsView
+              bookings={bookings}
+              intakeRequests={intakeRequests}
+              settings={settings}
+              onOpenNewBookingWithData={(data) => {
+                setBookingWizardOpen({
+                  isOpen: true,
+                  initialData: {
+                    ownerName: data.ownerName,
+                    ownerPhone: data.ownerPhone,
+                    dogName: data.dogName || '',
+                  }
                 });
               }}
             />
