@@ -9,6 +9,9 @@ export interface WhatsAppChat {
   lastMessage?: string;
   timestamp?: number;
   lastMessageType?: 'incoming' | 'outgoing';
+  incomingCount?: number;
+  outgoingCount?: number;
+  isOngoingDialogue?: boolean;
 }
 
 export interface WhatsAppMessage {
@@ -122,7 +125,9 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
           unreadCount: direction === 'incoming' && !m.isRead ? 1 : 0,
           lastMessage: msgText,
           timestamp: msgTime || Date.now(),
-          lastMessageType: direction
+          lastMessageType: direction,
+          incomingCount: direction === 'incoming' ? 1 : 0,
+          outgoingCount: direction === 'outgoing' ? 1 : 0
         });
       } else {
         const existing = chatMap.get(chatId)!;
@@ -130,8 +135,13 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
           if (m.senderName) existing.name = m.senderName;
           else if (nameMap[chatId]) existing.name = nameMap[chatId];
         }
-        if (direction === 'incoming' && !m.isRead) {
-          existing.unreadCount = (existing.unreadCount || 0) + 1;
+        if (direction === 'incoming') {
+          existing.incomingCount = (existing.incomingCount || 0) + 1;
+          if (!m.isRead) {
+            existing.unreadCount = (existing.unreadCount || 0) + 1;
+          }
+        } else {
+          existing.outgoingCount = (existing.outgoingCount || 0) + 1;
         }
         if (msgTime > (existing.timestamp || 0)) {
           existing.timestamp = msgTime;
@@ -143,6 +153,12 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
 
     incoming.forEach(m => processMessage(m, 'incoming'));
     outgoing.forEach(m => processMessage(m, 'outgoing'));
+
+    // Set isOngoingDialogue for each chat:
+    // מתבצעת התכתבות = יש מעל הודעה נכנסת אחת או שהתפתח דו-שיח בין שני הצדדים
+    for (const chat of chatMap.values()) {
+      chat.isOngoingDialogue = (chat.incomingCount || 0) > 1 || ((chat.incomingCount || 0) >= 1 && (chat.outgoingCount || 0) > 1);
+    }
 
     // Convert map to array sorted by latest message, excluding non-business emoji contacts
     const result = Array.from(chatMap.values())
@@ -263,6 +279,19 @@ export function extractSelfIdentifiedName(text: string): string | null {
   }
   return null;
 }
+
+/**
+ * Generates a warm, friendly follow-up message for leads who received an intake link but haven't replied
+ */
+export function generateFollowUpReminderText(ownerName?: string, dogName?: string): string {
+  const greeting = ownerName && ownerName !== 'לקוח' && !ownerName.startsWith('05') ? `היי ${ownerName}! 🐾` : 'היי! 🐾';
+  const dogPart = dogName ? ` את ${dogName}` : '';
+  return `${greeting}
+רצינו לבדוק אם הסתדרתם עם מילוי שאלון הקליטה, או אם יש שאלות לגבי הפנסיון והתאריכים שלכם?
+אנחנו ממש נשמח לארח${dogPart} אצלנו בריזורט ולדאוג לו מכל הלב 🐶❤️
+מזכירים שהקישור זמין כאן תמיד, ואנחנו כאן לכל שאלה!`;
+}
+
 
 /**
  * Cross-references a WhatsApp chat with existing bookings and intake requests

@@ -34,13 +34,15 @@ import {
   sendGreenApiChatMessage, 
   enrichChatWithSystemData,
   formatFullMessageDateIL,
-  extractSelfIdentifiedName
+  extractSelfIdentifiedName,
+  generateFollowUpReminderText
 } from '../services/whatsappCrmService';
 
-export const CRM_PRIORITY_ORDER: Record<'new' | 'needs_treatment' | 'handled', number> = {
+export const CRM_PRIORITY_ORDER: Record<'new' | 'in_chat' | 'waiting_reply' | 'handled', number> = {
   'new': 1,
-  'needs_treatment': 2,
-  'handled': 3
+  'in_chat': 2,
+  'waiting_reply': 3,
+  'handled': 4
 };
 
 interface WhatsAppLeadsViewProps {
@@ -65,10 +67,10 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState<'new' | 'needs_treatment'>('new');
+  const [filter, setFilter] = useState<'new' | 'in_chat' | 'waiting_reply'>('new');
   
-  // Status Overrides per phone (חדשים למענה -> בטיפול -> טופל)
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, 'new' | 'needs_treatment' | 'handled'>>(() => {
+  // Status Overrides per phone (חדשים למענה -> בהתכתבות -> ממתין לתגובה -> טופל)
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, 'new' | 'in_chat' | 'waiting_reply' | 'handled'>>(() => {
     try {
       const raw = localStorage.getItem('crm_status_overrides');
       return raw ? JSON.parse(raw) : {};
@@ -104,7 +106,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
     }
   };
 
-  const updateChatStatus = (phone: string, newStatus: 'new' | 'needs_treatment' | 'handled') => {
+  const updateChatStatus = (phone: string, newStatus: 'new' | 'in_chat' | 'waiting_reply' | 'handled') => {
     setStatusOverrides(prev => {
       const updated = { ...prev, [phone]: newStatus };
       try {
@@ -119,23 +121,25 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
     }
   };
 
-  // Cycle status on card click: חדש -> לטיפול -> טופל (הסרה מהרשימה)
+  // Cycle status on card click: חדש -> בהתכתבות -> ממתין לתגובה -> טופל
   const cycleChatStatus = (chat: EnrichedWhatsAppChat, e: React.MouseEvent) => {
     e.stopPropagation();
     const current = getChatTreatmentStatus(chat);
     if (current === 'new') {
-      updateChatStatus(chat.cleanPhone, 'needs_treatment');
-    } else if (current === 'needs_treatment') {
+      updateChatStatus(chat.cleanPhone, 'in_chat');
+    } else if (current === 'in_chat') {
+      updateChatStatus(chat.cleanPhone, 'waiting_reply');
+    } else if (current === 'waiting_reply') {
       updateChatStatus(chat.cleanPhone, 'handled');
     } else {
       updateChatStatus(chat.cleanPhone, 'new');
     }
   };
 
-  const getChatTreatmentStatus = (chat: EnrichedWhatsAppChat): 'new' | 'needs_treatment' | 'handled' => {
+  const getChatTreatmentStatus = (chat: EnrichedWhatsAppChat): 'new' | 'in_chat' | 'waiting_reply' | 'handled' => {
     // 1. קביעה ידנית מפורשת של שמוליק תמיד קודמת
     if (statusOverrides[chat.cleanPhone]) {
-      return statusOverrides[chat.cleanPhone];
+      return statusOverrides[chat.cleanPhone] as any;
     }
 
     // 2. לקוח שיש לו כבר הזמנה קיימת ביומן -> תמיד טופל (handled)
@@ -145,25 +149,44 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
 
     // 3. לקוח שמילא שאלון קליטה:
     //    אם אושר כבר כהזמנה ביומן -> טופל
-    //    אחרת -> בסטטוס "לטיפול" (ממתין לבדיקת פרטי השאלון וקליטה)
+    //    אחרת -> שיחה בהתכתבות פעילה
     if (chat.classification === 'intake_submitted') {
       if (chat.matchedIntake?.status === 'approved') {
         return 'handled';
       }
-      return 'needs_treatment';
+      return 'in_chat';
     }
 
-    // 4. הודעה שלא נקראה או הודעה נכנסת אחרונה מהלקוח -> חדש (ממתין למענה מצוות הריזורט)
-    if ((chat.unreadCount && chat.unreadCount > 0) || chat.lastMessageType === 'incoming') {
+    const incCount = chat.incomingCount || 0;
+    const outCount = chat.outgoingCount || 0;
+    const now = Date.now();
+    const ageHours = (now - (chat.timestamp || now)) / (1000 * 60 * 60);
+
+    // 4. מתבצעת התכתבות פעילה (מעל הודעה נכנסת 1, או שהיו הודעות משני הצדדים) -> בהתכתבות!
+    if (chat.isOngoingDialogue || incCount > 1 || (incCount >= 1 && outCount > 1)) {
+      return 'in_chat';
+    }
+
+    // 5. פנייה חדשה לגמרי: הודעה נכנסת ראשונה מהלקוח שטרם התפתחה להתכתבות
+    if (chat.lastMessageType === 'incoming' && incCount === 1 && outCount <= 1) {
       return 'new';
     }
 
-    // 5. אם ההודעה האחרונה הייתה הודעה יוצאת מאיתנו (נשלח שאלון או ענינו והלקוח טרם השיב) -> לטיפול
-    if (chat.lastMessageType === 'outgoing') {
-      return 'needs_treatment';
+    // 6. שלחנו שאלון או הודעה ראשונה והלקוח טרם השיב:
+    if (chat.lastMessageType === 'outgoing' && incCount <= 1) {
+      // אם עברו מעל 72 שעות (3 ימים) ללא תגובה -> עובר לארכיון רדום כדי לנקות את המסך
+      if (ageHours > 72) {
+        return 'handled';
+      }
+      // בטווח של 0-72 שעות -> ממתין לתגובה (הזדמנות לפולו-אפ חם!)
+      return 'waiting_reply';
     }
 
-    // 6. ברירת מחדל לפנייה -> חדש
+    // הודעה שלא נקראה -> חדש
+    if (chat.unreadCount && chat.unreadCount > 0) {
+      return 'new';
+    }
+
     return 'new';
   };
 
@@ -378,7 +401,8 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
 
   // מונים לטאבים הפעילים
   const newCount = chats.filter(c => getChatTreatmentStatus(c) === 'new').length;
-  const needsTreatmentCount = chats.filter(c => getChatTreatmentStatus(c) === 'needs_treatment').length;
+  const inChatCount = chats.filter(c => getChatTreatmentStatus(c) === 'in_chat').length;
+  const waitingReplyCount = chats.filter(c => getChatTreatmentStatus(c) === 'waiting_reply').length;
 
   // Render individual chat list item
   const renderChatCard = (chat: EnrichedWhatsAppChat) => {
@@ -457,15 +481,19 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               onClick={(e) => cycleChatStatus(chat, e)}
               title={
                 status === 'new'
-                  ? 'פנייה חדשה. לחץ להעברה ל-🟡 לטיפול'
-                  : status === 'needs_treatment'
-                  ? 'בטיפול. לחץ להעברה ל-🟢 טופל'
+                  ? 'פנייה חדשה. לחץ להעברה ל-💬 בהתכתבות'
+                  : status === 'in_chat'
+                  ? 'בהתכתבות. לחץ להעברה ל-⏳ ממתינים לתגובה'
+                  : status === 'waiting_reply'
+                  ? 'ממתין לתגובה. לחץ לסימון כטופל'
                   : 'טופל. לחץ להחזרה ל-🔴 חדש'
               }
               className={`text-[10px] font-black px-2 py-0.5 rounded-md inline-flex items-center gap-1 border transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-2xs ${
                 status === 'new'
                   ? 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
-                  : status === 'needs_treatment'
+                  : status === 'in_chat'
+                  ? 'bg-blue-100 text-blue-900 border-blue-300 hover:bg-blue-200'
+                  : status === 'waiting_reply'
                   ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
                   : 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
               }`}
@@ -560,19 +588,20 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               />
             </div>
 
-            {/* Classification Filter Tabs - 2 focused tabs: חדשים (למענה) & לטיפול */}
-            <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+            {/* Classification Filter Tabs - 3 focused tabs: חדשים למענה, בהתכתבות, ממתינים לתגובה */}
+            <div className="grid grid-cols-3 gap-1 pt-0.5">
               {[
-                { id: 'new', label: '🔴 חדשים (למענה)', count: newCount },
-                { id: 'needs_treatment', label: '🟡 לטיפול', count: needsTreatmentCount },
+                { id: 'new', label: '🔴 חדשים', count: newCount },
+                { id: 'in_chat', label: '💬 בהתכתבות', count: inChatCount },
+                { id: 'waiting_reply', label: '⏳ ממתינים לתגובה', count: waitingReplyCount },
               ].map(tab => (
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setFilter(tab.id as 'new' | 'needs_treatment')}
-                  className={`py-2 px-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 ${
+                  onClick={() => setFilter(tab.id as any)}
+                  className={`py-2 px-1 rounded-xl text-[11px] sm:text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 ${
                     filter === tab.id
-                      ? 'bg-[#065f46] text-white shadow-2xs'
+                      ? 'bg-[#065f46] text-white shadow-2xs scale-[1.02]'
                       : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
                   }`}
                 >
@@ -599,10 +628,20 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
             ) : filteredChats.length === 0 ? (
               <div className="p-8 text-center text-slate-400 text-xs font-medium space-y-1">
                 <p className="font-bold text-sm text-slate-600">
-                  {filter === 'new' ? 'אין פניות חדשות שממתינות למענה 🎉' : 'אין פניות בטיפול כרגע'}
+                  {filter === 'new'
+                    ? 'אין פניות חדשות שממתינות למענה 🎉'
+                    : filter === 'in_chat'
+                    ? 'אין שיחות פעילות בהתכתבות כרגע'
+                    : 'אין פניות שממתינות לתגובה ב-72 השעות האחרונות 👍'}
                 </p>
                 <p className="text-[11px] text-slate-400">
-                  {searchQuery ? 'לא נמצאו תוצאות התואמות את החיפוש' : filter === 'new' ? 'כל הפניות החדשות נענו או הועברו לטיפול' : 'פניות שנענו או שאלונים שנשלחו יופיעו כאן'}
+                  {searchQuery
+                    ? 'לא נמצאו תוצאות התואמות את החיפוש'
+                    : filter === 'new'
+                    ? 'כל הפניות החדשות נענו או הועברו להתכתבות'
+                    : filter === 'in_chat'
+                    ? 'שיחות עם דו-שיח יוצגו כאן'
+                    : 'שיחות שנשלח אליהן שאלון ב-3 הימים האחרונים וטרם ענו יופיעו כאן'}
                 </p>
               </div>
             ) : (
@@ -750,7 +789,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     <span>וואטסאפ</span>
                   </a>
 
-                  {/* Priority Status Changer for Shmulik */}
+                  {/* Status Changer */}
                   <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
                     <button
                       type="button"
@@ -766,15 +805,27 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => updateChatStatus(selectedChat.cleanPhone, 'needs_treatment')}
+                      onClick={() => updateChatStatus(selectedChat.cleanPhone, 'in_chat')}
                       className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
-                        getChatTreatmentStatus(selectedChat) === 'needs_treatment'
+                        getChatTreatmentStatus(selectedChat) === 'in_chat'
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="סמן כשיחה בהתכתבות פעילה"
+                    >
+                      💬 בהתכתבות
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateChatStatus(selectedChat.cleanPhone, 'waiting_reply')}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
+                        getChatTreatmentStatus(selectedChat) === 'waiting_reply'
                           ? 'bg-amber-500 text-white shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
-                      title="סמן כבטיפול"
+                      title="סמן כממתין לתגובת הלקוח"
                     >
-                      🟡 לטיפול
+                      ⏳ ממתין לתגובה
                     </button>
                     <button
                       type="button"
@@ -1052,6 +1103,19 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   title="שליחת הודעת התנצלות חמה ומזמינה: היינו עסוקים עם הכלבים, עכשיו אפשר להתקדם"
                 >
                   <span>🐾 סליחה שלא חזרנו מהר</span>
+                </button>
+
+                {/* 6. Friendly Follow-up for unanswered questionnaire */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = generateFollowUpReminderText(selectedChat.name, selectedChat.matchedDogName);
+                    setMessageInput(text);
+                  }}
+                  className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="מלא בתיבת ההודעה תזכורת חמה וידידותית למילוי שאלון הקליטה"
+                >
+                  <span>🔔 תזכורת חמה לשאלון</span>
                 </button>
               </div>
 

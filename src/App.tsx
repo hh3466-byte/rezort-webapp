@@ -922,10 +922,10 @@ export default function App() {
                   ? 'bg-gradient-to-r from-amber-50 via-white to-amber-50 hover:from-amber-100 hover:to-amber-50 border-2 border-amber-500 text-amber-950 shadow-md shadow-amber-600/15 ring-2 ring-amber-400/25 hover:scale-[1.02] active:scale-95'
                   : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700'
               }`}
-              title="צפייה בבקשות שנמצאות כעת בטיפול (שיחות, הודעות או קישור תשלום שנשלח)"
+              title="צפייה בשאלוני קליטה שמולאו על ידי לקוחות וממתינים לבדיקה וקליטה ליומן"
             >
-              <span className="text-base">⏳</span>
-              <span className="font-black">בתהליך טיפול</span>
+              <span className="text-base">📋</span>
+              <span className="font-black">שאלונים לבדיקה</span>
               {inProgressIntakeCount > 0 ? (
                 <span className="relative inline-flex items-center justify-center min-w-[24px] h-[24px] px-1.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white text-xs sm:text-sm font-black font-mono rounded-full shadow-md ring-2 ring-white">
                   {inProgressIntakeCount}
