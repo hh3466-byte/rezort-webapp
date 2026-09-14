@@ -1068,6 +1068,22 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   <CreditCard className="w-3.5 h-3.5 text-purple-700" />
                   <span>💳 שלח קישור Grow</span>
                 </button>
+
+                {/* 5. Apology for Delay Response */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const firstName = getFirstName(selectedChat.name);
+                    const nameGreeting = firstName && firstName !== selectedChat.cleanPhone ? `היי ${firstName}, ` : 'היי, ';
+                    const dogMention = selectedChat.matchedDogName ? ` עבור ${selectedChat.matchedDogName}` : '';
+                    const text = `${nameGreeting}סליחה שלקח לנו זמן לחזור אלייך! 🙏🐾\nהיינו ממש עסוקים עם הכלבים בריזורט, לקח לנו זמן לחזור ואנחנו ממש מתנצלים על ההמתנה.\n\nעכשיו אנחנו כאן איתך ובמלוא תשומת הלב – אפשר להתקדם! במה נוכל לעזור${dogMention}? 😊`;
+                    handleSendMessage(text);
+                  }}
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-950 border border-rose-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="שליחת הודעת התנצלות חמה ומזמינה: היינו עסוקים עם הכלבים, עכשיו אפשר להתקדם"
+                >
+                  <span>🐾 סליחה שלא חזרנו מהר</span>
+                </button>
               </div>
 
               {/* Message Composer & Dictation Input */}
