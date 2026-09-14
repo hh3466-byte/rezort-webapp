@@ -292,6 +292,123 @@ export function generateFollowUpReminderText(ownerName?: string, dogName?: strin
 מזכירים שהקישור זמין כאן תמיד, ואנחנו כאן לכל שאלה!`;
 }
 
+/**
+ * Generates a comprehensive, premium marketing message for leads detailing:
+ * 1. The boutique boarding resort and its luxury amenities (מרחבי דשא, סוויטות ממוזגות, עדכונים יומיים).
+ * 2. The professional dog training program led by Shmulik (משמעת, פנסיון אילוף, חינוך גורים, הדרכת בעלים).
+ * 3. Warm CTA and intake questionnaire link.
+ */
+export function generateResortMarketingValueText(
+  ownerName?: string,
+  dogName?: string,
+  intakeUrl?: string
+): string {
+  const firstName = ownerName && ownerName !== 'לקוח' && !ownerName.startsWith('05')
+    ? ownerName.trim().split(' ')[0]
+    : '';
+  const greeting = firstName ? `היי ${firstName}! 🐾` : 'היי! 🐾';
+  const dogMention = dogName ? ` עבור ${dogName}` : '';
+
+  let text = `${greeting}
+שמחים שפנית אלינו ל"ריזורט לכלב" (מגדל דנילוב)! 🐶👑
+רצינו לשתף אתכם בכמה מילים על החוויה המיוחדת שמחכה${dogMention} אצלנו בריזורט:
+
+🏡 **פנסיון בוטיק בתנאי VIP:**
+• סוויטות שינה אישיות, מרווחות וממוזגות – ללא כלובים!
+• מדשאות ענק ירוקות, מוצלות ומאובטחות למשחקים חופשיים ולהוצאת אנרגיה
+• טיולי טבע יומיים מודרכים באוויר הפתוח
+• השגחה צמודה, יחס אישי חם והמון אהבה מסביב לשעון
+• עדכון יומי מפורט בוואטסאפ בכל ערב (כולל תמונות וסרטונים) – כדי שתוכלו לבלות בראש שקט ב-100%!
+• התאמה מלאה לאופי הכלב (כלבים חברותיים בקבוצות משחק / כלבים שקטים ביחס VIP פרטי 1-על-1)
+
+🎓 **אילוף מקצועי וחינוך משמעת בהובלת שמוליק:**
+• שילוב אילוף במהלך השהות בפנסיון (Board & Train) או בתהליכים ממוקדים
+• עבודה על פקודות משמעת, הליכה רגועה ברצועה, גבולות בבית ומחוצה לו
+• חינוך גורים ופתרון בעיות התנהגות מורכבות בשיטות חיוביות ומתקדמות
+• ליווי והדרכה מעשית לבעלים בסיום התהליך להצלחה מובטחת גם בבית!
+
+`;
+
+  if (intakeUrl) {
+    text += `📋 **לשריון מקום ובדיקת התאמה, מלאו כאן את שאלון הקליטה הקצר:**\n${intakeUrl}\n\n`;
+  }
+
+  text += `נשמח לעמוד לרשותכם לכל שאלה ולתת לכם ול${dogName || 'חבר על 4'} את החוויה המושלמת ביותר! ❤️🐾`;
+  return text;
+}
+
+/**
+ * Generates marketing message focused specifically on dog training (אילוף מקצועי)
+ */
+export function generateTrainingOnlyMarketingText(
+  ownerName?: string,
+  dogName?: string,
+  intakeUrl?: string
+): string {
+  const firstName = ownerName && ownerName !== 'לקוח' && !ownerName.startsWith('05')
+    ? ownerName.trim().split(' ')[0]
+    : '';
+  const greeting = firstName ? `היי ${firstName}! 🐾` : 'היי! 🐾';
+  const dogMention = dogName ? ` של ${dogName}` : '';
+
+  let text = `${greeting}
+שמחים שפנית אלינו לגבי תוכנית האילוף בריזורט לכלב! 🎓🐶
+שמוליק, מאלף כלבים מקצועי ומנוסה, מוביל אצלנו תהליכי אילוף מותאמים אישית:
+
+🌟 **מה כוללת תוכנית האילוף שלנו?**
+• פנסיון אילוף (Board & Train): תהליך מעמיק שבו הכלב מתגורר בתנאי ריזורט מפנקים ומתרגל יום-יום
+• משמעת בסיסית ומתקדמת (פקודות "אליי", "שב", "ארצה", "הישאר", גבולות)
+• הליכה רגועה ברצועה ללא משיכות וטיולים מהנים בנחת
+• חינוך גורים, גמילה מצרכים ומניעת הרגלים לא רצויים
+• פתרון בעיות התנהגות (חרדות, ריאקטיביות, קפיצות, הרס בבית)
+• מפגשי הדרכה מעשיים עם הבעלים לקבלת כלים ושימור ההצלחה בבית!
+
+`;
+
+  if (intakeUrl) {
+    text += `📋 **לתיאום והתחלת תהליך${dogMention}, מוזמנים למלא שאלון קצר:**\n${intakeUrl}\n\n`;
+  }
+
+  text += `נשמח לדבר ולהתאים ל${dogName || 'כלב שלכם'} את התוכנית המדויקת ביותר! 🐕✨`;
+  return text;
+}
+
+/**
+ * Generates marketing message focused specifically on luxury boarding (פנסיון בוטיק)
+ */
+export function generateBoardingOnlyMarketingText(
+  ownerName?: string,
+  dogName?: string,
+  intakeUrl?: string
+): string {
+  const firstName = ownerName && ownerName !== 'לקוח' && !ownerName.startsWith('05')
+    ? ownerName.trim().split(' ')[0]
+    : '';
+  const greeting = firstName ? `היי ${firstName}! 🐾` : 'היי! 🐾';
+  const dogMention = dogName ? ` עבור ${dogName}` : '';
+
+  let text = `${greeting}
+שמחים שפנית אלינו לגבי אירוח בריזורט לכלב! 🏡🐶👑
+אצלנו הכלב שלכם לא "מוחזק" – הוא יוצא לחופשה אמיתית בתנאי VIP:
+
+✨ **היתרונות הייחודיים של הריזורט שלנו:**
+• סוויטות אישיות ממוזגות, נקיות ומרווחות (ללא כלובים!)
+• מדשאות ענק ירוקות ומגודרות למשחקי כדור וריצה חופשית
+• טיולי טבע יומיים מודרכים באוויר הצלול
+• צוות מקצועי ומסור שנמצא עם הכלבים סביב השעון
+• עדכון יומי מפורט בוואטסאפ בכל ערב עם תמונות וסרטונים – כדי שתוכלו לנסוע בראש שקט
+• הפרדה קפדנית לפי גודל, אופי ורמת אנרגיה (כולל אגף שקט לכלבים שזקוקים למרחב פרטי 1-על-1)
+
+`;
+
+  if (intakeUrl) {
+    text += `📋 **לשריון מקום ובדיקת זמינות${dogMention}:**\n${intakeUrl}\n\n`;
+  }
+
+  text += `מחכים לכם ול${dogName || 'חבר על 4'} באהבה גדולה! ❤️🐾`;
+  return text;
+}
+
 
 /**
  * Cross-references a WhatsApp chat with existing bookings and intake requests

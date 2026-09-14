@@ -51,6 +51,7 @@ import { VoucherModal } from './components/VoucherModal';
 import { DailyDogUpdatesModal } from './components/DailyDogUpdatesModal';
 import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
+import { initDailyDogAutoSender } from './services/dailyDogAutoSender';
 
 export default function App() {
   // Core application state with live Cloud synchronization
@@ -333,6 +334,17 @@ export default function App() {
     const interval = setInterval(checkAndTrigger11AmReminder, 15000);
     return () => clearInterval(interval);
   }, [todayHolidayInfo.isSpecial, todayHolidayInfo.label, totalDogsToday, todayBookings, todayStr]);
+
+  // 20:00 Daily Dog Evening Updates Auto-Sender Background Runner (Fail-safe auto dispatch)
+  useEffect(() => {
+    const cleanup = initDailyDogAutoSender(
+      () => bookings,
+      () => settings,
+      () => intakeRequests,
+      showToast
+    );
+    return cleanup;
+  }, [bookings, settings, intakeRequests]);
 
   // Accurate real-time money calculation across all bookings
   const totalCollected = activeBookings.reduce((acc, b) => {

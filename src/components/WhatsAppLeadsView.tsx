@@ -35,7 +35,10 @@ import {
   enrichChatWithSystemData,
   formatFullMessageDateIL,
   extractSelfIdentifiedName,
-  generateFollowUpReminderText
+  generateFollowUpReminderText,
+  generateResortMarketingValueText,
+  generateTrainingOnlyMarketingText,
+  generateBoardingOnlyMarketingText
 } from '../services/whatsappCrmService';
 
 export const CRM_PRIORITY_ORDER: Record<'new' | 'in_chat' | 'waiting_reply' | 'handled', number> = {
@@ -500,17 +503,38 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
                   <span>🔴 חדש</span>
                 </>
-              ) : status === 'needs_treatment' ? (
+              ) : status === 'in_chat' ? (
                 <>
-                  <span>🟡 לטיפול</span>
+                  <span>💬 בהתכתבות</span>
+                </>
+              ) : status === 'waiting_reply' ? (
+                <>
+                  <span>⏳ ממתין לתגובה</span>
                 </>
               ) : (
                 <>
-                  <span>🟢 טופל</span>
+                  <span>✓ טופל</span>
                 </>
               )}
               <span className="text-[8px] text-slate-400 mr-0.5 font-sans">↺</span>
             </button>
+
+            {status === 'waiting_reply' && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedChat(chat);
+                  const intakeUrl = `${window.location.origin}/?intake=true`;
+                  const text = generateResortMarketingValueText(chat.name, chat.matchedDogName, intakeUrl);
+                  setMessageInput(text);
+                }}
+                className="text-[10px] font-black bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs"
+                title="טען הודעת שיווק מקיפה המפרטת על יתרונות הפנסיון והאילוף"
+              >
+                <span>🌟 שיווק פנסיון ואילוף</span>
+              </button>
+            )}
 
             <div className="flex items-center gap-1">
               {chat.classification === 'intake_submitted' && (
@@ -629,7 +653,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     ? 'אין פניות חדשות שממתינות למענה 🎉'
                     : filter === 'in_chat'
                     ? 'אין שיחות פעילות בהתכתבות כרגע'
-                    : 'אין פניות שממתינות לתגובה ב-72 השעות האחרונות 👍'}
+                    : 'אין פניות שממתינות לתגובה כרגע 👍'}
                 </p>
                 <p className="text-[11px] text-slate-400">
                   {searchQuery
@@ -637,8 +661,8 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     : filter === 'new'
                     ? 'כל הפניות החדשות נענו או הועברו להתכתבות'
                     : filter === 'in_chat'
-                    ? 'שיחות עם דו-שיח יוצגו כאן'
-                    : 'שיחות שנשלח אליהן שאלון ב-3 הימים האחרונים וטרם ענו יופיעו כאן'}
+                    ? 'שיחות עם דו-שיח פעיל יוצגו כאן'
+                    : 'שיחות שנשלח אליהן שאלון או הודעה וטרם ענו יופיעו כאן עד לטיפול ידני'}
                 </p>
               </div>
             ) : (
@@ -1113,6 +1137,49 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   title="מלא בתיבת ההודעה תזכורת חמה וידידותית למילוי שאלון הקליטה"
                 >
                   <span>🔔 תזכורת חמה לשאלון</span>
+                </button>
+
+                {/* 7. Marketing Value Proposition (Resort Advantages & Professional Training) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const intakeUrl = `${window.location.origin}/?intake=true`;
+                    const text = generateResortMarketingValueText(selectedChat.name, selectedChat.matchedDogName, intakeUrl);
+                    setMessageInput(text);
+                  }}
+                  className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black px-3 py-1 rounded-xl text-xs flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
+                  title="הודעה שיווקית עשירה: פירוט יתרונות הריזורט (סוויטות VIP, מדשאות, עדכונים יומיים) ותוכנית האילוף של שמוליק!"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                  <span>🌟 יתרונות הריזורט והאילוף</span>
+                </button>
+
+                {/* 8. Training-focused Marketing Message */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const intakeUrl = `${window.location.origin}/?intake=true`;
+                    const text = generateTrainingOnlyMarketingText(selectedChat.name, selectedChat.matchedDogName, intakeUrl);
+                    setMessageInput(text);
+                  }}
+                  className="bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="הודעה שיווקית ממוקדת באילוף כלבים בהובלת שמוליק (משמעת, חינוך גורים, פנסיון אילוף)"
+                >
+                  <span>🎓 שיווק אילוף</span>
+                </button>
+
+                {/* 9. Boarding-focused Marketing Message */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const intakeUrl = `${window.location.origin}/?intake=true`;
+                    const text = generateBoardingOnlyMarketingText(selectedChat.name, selectedChat.matchedDogName, intakeUrl);
+                    setMessageInput(text);
+                  }}
+                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="הודעה שיווקית ממוקדת בפנסיון הבוטיק ותנאי ה-VIP"
+                >
+                  <span>🏡 שיווק פנסיון</span>
                 </button>
               </div>
 

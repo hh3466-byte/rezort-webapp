@@ -23,6 +23,7 @@ import { sendGreenApiDirectMessage } from '../services/notificationService';
 import { 
   DAILY_DOG_TEMPLATES, 
   isDogIsolationRequired, 
+  isDogInTraining,
   pickDailyDogTemplate, 
   DailyDogTemplate 
 } from '../data/dailyDogTemplates';
@@ -39,6 +40,7 @@ interface DailyDogUpdatesModalProps {
 interface DogEveningState {
   booking: Booking;
   isIsolation: boolean;
+  isTraining: boolean;
   intakeMatch?: IntakeRequest;
   currentTemplate: DailyDogTemplate;
   formattedText: string;
@@ -69,7 +71,7 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
   const [dogStates, setDogStates] = useState<DogEveningState[]>([]);
   const [isBatchSending, setIsBatchSending] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
-  const [filterType, setFilterType] = useState<'all' | 'friendly' | 'isolation'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'training' | 'friendly' | 'isolation'>('all');
   const [editingDogId, setEditingDogId] = useState<string | null>(null);
 
   // Initialize state for each dog
@@ -80,6 +82,13 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
         const reqPhone = cleanPhoneNumber(r.ownerPhone);
         return reqPhone.slice(-7) === cleanPhone.slice(-7);
       });
+
+      const isTraining = isDogInTraining(
+        b.serviceType,
+        b.notes,
+        b.behaviorNotes,
+        intakeMatch?.serviceType
+      );
 
       const isIsolation = isDogIsolationRequired(
         b.notes,
@@ -92,7 +101,8 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
         b.ownerName,
         b.dogName,
         isIsolation,
-        []
+        [],
+        isTraining
       );
 
       // Check if already sent today in localStorage
@@ -102,6 +112,7 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
       return {
         booking: b,
         isIsolation,
+        isTraining,
         intakeMatch,
         currentTemplate: template,
         formattedText,
@@ -124,7 +135,8 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
         item.booking.ownerName,
         item.booking.dogName,
         item.isIsolation,
-        item.usedTemplateIds
+        item.usedTemplateIds,
+        item.isTraining
       );
 
       return {
@@ -251,13 +263,15 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
   };
 
   const filteredDogs = dogStates.filter(d => {
-    if (filterType === 'friendly') return !d.isIsolation;
-    if (filterType === 'isolation') return d.isIsolation;
+    if (filterType === 'training') return d.isTraining;
+    if (filterType === 'friendly') return !d.isIsolation && !d.isTraining;
+    if (filterType === 'isolation') return d.isIsolation && !d.isTraining;
     return true;
   });
 
-  const isolationCount = dogStates.filter(d => d.isIsolation).length;
-  const friendlyCount = dogStates.filter(d => !d.isIsolation).length;
+  const trainingCount = dogStates.filter(d => d.isTraining).length;
+  const isolationCount = dogStates.filter(d => d.isIsolation && !d.isTraining).length;
+  const friendlyCount = dogStates.filter(d => !d.isIsolation && !d.isTraining).length;
   const sentCount = dogStates.filter(d => d.isSent).length;
 
   return (
@@ -305,14 +319,19 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
               מתארחים הלילה: <span className="font-black text-slate-900">{activeTonightBookings.length}</span>
             </span>
 
+            <span className="bg-purple-50 border border-purple-200 text-purple-900 px-3 py-1.5 rounded-xl font-bold shadow-2xs flex items-center gap-1.5">
+              <span>🎓</span>
+              אילוף: <span className="font-black">{trainingCount}</span>
+            </span>
+
             <span className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl font-bold shadow-2xs flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-emerald-600" />
-              חברותיים (מדשאה): <span className="font-black">{friendlyCount}</span>
+              פנסיון (מדשאה): <span className="font-black">{friendlyCount}</span>
             </span>
 
             <span className="bg-amber-50 border border-amber-200 text-amber-900 px-3 py-1.5 rounded-xl font-bold shadow-2xs flex items-center gap-1.5">
               <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
-              בידוד/תוקפני (VIP אישי): <span className="font-black">{isolationCount}</span>
+              בידוד/תוקפני (VIP): <span className="font-black">{isolationCount}</span>
             </span>
 
             <span className="bg-indigo-50 border border-indigo-200 text-indigo-900 px-3 py-1.5 rounded-xl font-bold shadow-2xs flex items-center gap-1.5">
@@ -375,12 +394,20 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
               הכל ({dogStates.length})
             </button>
             <button
+              onClick={() => setFilterType('training')}
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
+                filterType === 'training' ? 'bg-purple-700 text-white' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🎓 אילוף ({trainingCount})
+            </button>
+            <button
               onClick={() => setFilterType('friendly')}
               className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all ${
                 filterType === 'friendly' ? 'bg-emerald-700 text-white' : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              חברותיים ({friendlyCount})
+              פנסיון ({friendlyCount})
             </button>
             <button
               onClick={() => setFilterType('isolation')}
@@ -450,9 +477,14 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Temperament Badge */}
+                      {/* Program & Temperament Badge */}
                       <div>
-                        {item.isIsolation ? (
+                        {item.isTraining ? (
+                          <span className="bg-purple-100 text-purple-900 border border-purple-200 text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1 shadow-2xs" title="כלב בתוכנית אילוף: נשלח נוסח התקדמות ומשמעת עם שמוליק המאלף">
+                            <span>🎓</span>
+                            תוכנית אילוף
+                          </span>
+                        ) : item.isIsolation ? (
                           <span className="bg-amber-100 text-amber-900 border border-amber-200 text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1 shadow-2xs" title="סומן כתוקפני/בידוד: נשלח רק יחס 1-על-1, טיול פרטי בטבע, ללא מדשאה או כלבים אחרים">
                             <ShieldAlert className="w-3 h-3 text-amber-700" />
                             בידוד VIP (פרטי)
@@ -460,7 +492,7 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
                         ) : (
                           <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] px-2.5 py-1 rounded-full font-bold flex items-center gap-1 shadow-2xs" title="כלב חברותי: כולל מדשאת משחקים וחברים על 4">
                             <Users className="w-3 h-3 text-emerald-600" />
-                            חברותי (מדשאה)
+                            פנסיון (מדשאה)
                           </span>
                         )}
                       </div>

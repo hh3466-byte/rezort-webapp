@@ -9,8 +9,8 @@
 
 export interface DailyDogTemplate {
   id: number;
-  type: 'safe' | 'friendly' | 'isolation';
-  category: 'nature' | 'boss_dog' | 'gourmet_meal' | 'sweet_longing' | 'lawn' | 'isolation_vip';
+  type: 'safe' | 'friendly' | 'isolation' | 'training';
+  category: 'nature' | 'boss_dog' | 'gourmet_meal' | 'sweet_longing' | 'lawn' | 'isolation_vip' | 'training_progress';
   text: string;
 }
 
@@ -625,6 +625,128 @@ export const DAILY_DOG_TEMPLATES: DailyDogTemplate[] = [
     type: 'isolation',
     category: 'isolation_vip',
     text: 'ערב טוב {ownerName}! 🐾 יום שקט, שליו ומלא ליטופים אישיים הסתיים. אני ישן כמו מלך אמיתי בסוויטה הפרטית שלי 👑🛋️💤 אוהב תמיד, {dogName} 🐕👑🤍'
+  },
+
+  // קבוצה 6: תוכנית אילוף וחינוך משמעת מקצועית עם שמוליק (101–120) [ייעודי לכלבים באילוף]
+  {
+    id: 101,
+    type: 'training',
+    category: 'training_progress',
+    text: 'היי {ownerName}! 🐾 עבדתי היום קשה עם שמוליק על האילוף! 🎓🐶 תרגלנו פקודות ומשמעת, והוא ממש גאה בי. עכשיו אני שוכב לנוח כמו תלמיד מצטיין! אוהב, {dogName} ❤️'
+  },
+  {
+    id: 102,
+    type: 'training',
+    category: 'training_progress',
+    text: 'ערב טוב {ownerName}! 🐾 שמוליק המאלף עשה איתי היום סשן אילוף של אלופים! 🐕🎓 שיפרתי את הריכוז, תרגלנו הליכה יפה ברצועה ותרגילים מעולים. עכשיו אני נח גאה ומרוצה בסוויטה! {dogName} ✨'
+  },
+  {
+    id: 103,
+    type: 'training',
+    category: 'training_progress',
+    text: 'היי {ownerName}! 🐾 מעדכן ישירות מהשטח: סשן האילוף היום היה פשוט וואו! 🎓🐾 שמוליק אמר שיש לי קליטה מדהימה ושאני תלמיד מצטיין. תיהנו בעניינים שלכם, {dogName} 🐶🌟'
+  },
+  {
+    id: 104,
+    type: 'training',
+    category: 'training_progress',
+    text: 'ערב טוב {ownerName}! 🐾 עוד יום של למידה, התקדמות ומשמעת מאחוריי! שמוליק לא מפסיק לשבח אותי 🎓🏅 שרפתי אנרגיה מנטלית מעולה ועכשיו אני ישן כמו מלך. ד״ש חם מ-{dogName} 🐕✨'
+  },
+  {
+    id: 105,
+    type: 'training',
+    category: 'training_progress',
+    text: 'היי {ownerName}! 🐾 תרגלתי היום עם שמוליק פקודות, שליטה עצמית ומשמעת בכיף גדול ועם מלא חיזוקים חיוביים! 🐾🎓 אתם תהיו כל כך גאים בי כשאחזור הביתה! אוהב, {dogName} 🐶❤️'
+  },
+  {
+    id: 106,
+    type: 'training',
+    category: 'training_progress',
+    text: 'ערב טוב {ownerName}! 🐾 שמוליק שם לי היום אתגרים באילוף, אבל עברתי אותם כמו אלוף אמיתי! 🐕🎯 קיבלתי מלא ליטופים וצ\'ופרים, ועכשיו הראש שלי שקוע עמוק בכרית 🛋️💤 {dogName} 🐶✨'
+  },
+  {
+    id: 107,
+    type: 'training',
+    category: 'training_progress',
+    text: 'היי {ownerName}! 🐾 היום עבדנו על הליכה רגועה ותרגול פקודות בסביבה של גירויים. שמוליק אמר שהפוקוס שלי משתפר מיום ליום! 🎓🐾 תבלו בכיף, {dogName} 🐕👏'
+  },
+  {
+    id: 108,
+    type: 'training',
+    category: 'training_progress',
+    text: 'ערב טוב {ownerName}! 🐾 שילבתי היום בין אימון אילוף מקצועי עם שמוליק לבין מנוחה מפנקת בסוויטה הממוזגת שלי 🛋️🎓 החיים בריזורט פשוט מושלמים! {dogName} 🐶👑'
+  },
+  {
+    id: 109,
+    type: 'training',
+    category: 'training_progress',
+    text: 'היי {ownerName}! 🐾 שיעור האילוף היום עבר בהצלחה מסחררת! הקשבתי, ביצעתי וקיבלתי 100 בתעודה משמוליק 🏆🐶 תמשיכו בעיסוקים שלכם בראש שקט, {dogName} 🐕❤️'
+  },
+  {
+    id: 110,
+    type: 'training',
+    category: 'training_progress',
+    text: 'ערב טוב {ownerName}! 🐾 שמוליק ואני עובדים על הרגלים מעולים ומשמעת ברזל – ובמקביל נהנים מכל רגע! 🎓🐾 מחכה כבר להראות לכם מה למדתי! נשיקות מ-{dogName} 🐶💋✨'
+  },
+  {
+    id: 111,
+    type: 'training',
+    category: 'training_progress',
+    text: 'היי {ownerName}! 🐾 סיימתי עוד יום גדוש בלמידה ותרגול משמעת. מרגיש שאני מבין את שמוליק בחצי מילה! 🎓🐕 עכשיו זמן שנת יופי בסוויטה. אוהב המון, {dogName} 🐶💤'
+  },
+  {
+    id: 112,
+    type: 'training',
+    category: 'training_progress',
+    text: 'ערב טוב {ownerName}! 🐾 שיעור האילוף היום הוציא ממני את כל האנרגיה בכיף ענק! שמוליק מאלף אלוף ואני התלמיד הכי חרוץ בריזורט 🎓🌟 תעשו חיים, {dogName} 🐕✨'
+  },
+  {
+    id: 113,
+    type: 'training',
+    category: 'training_progress',
+    text: 'היי {ownerName}! 🐾 תרגלנו היום הישארות, איפוק ופקודות מתקדמות. שמוליק היה מרוצה עד הגג מההתקדמות שלי! 🐶🎓 מחכה לראות אתכם בקרוב, {dogName} ❤️'
+  },
+  {
+    id: 114,
+    type: 'training',
+    category: 'training_progress',
+    text: 'ערב טוב {ownerName}! 🐾 אילוף בריזורט זה לא רק עבודה, זה גם מלא כיף ופינוקים משמוליק! 🎓🐾 מרגיש הכי מוגן, לומד ונהנה. שיהיה לכם ערב נפלא, {dogName} 🐕🥰'
+  },
+  {
+    id: 115,
+    type: 'training',
+    category: 'training_progress',
+    text: 'היי {ownerName}! 🐾 בזמן שאתם בעניינים שלכם, אני הופך פה לגרסה הכי מחונכת ומאושרת שלי! 🎓🐶 שמוליק דואג לכל פרט. תיהנו בכיף, {dogName} 🐶👑✨'
+  },
+  {
+    id: 116,
+    type: 'training',
+    category: 'training_progress',
+    text: 'ערב טוב {ownerName}! 🐾 עבדנו היום על גבולות, רוגע והקשבה. שמוליק מחלק לי שבחים בלי סוף! 🎓🐾 תמשיכו ביומיום שלכם ברוגע, הכל פה 10 מתוך 10! {dogName} 🐕🏆'
+  },
+  {
+    id: 117,
+    type: 'training',
+    category: 'training_progress',
+    text: 'היי {ownerName}! 🐾 היום פיצחנו תרגיל אילוף חדש שהיה לי קצת מאתגר בהתחלה. עם הסבלנות של שמוליק, ביצעתי אותו מושלם! 🎓👏 גאה בעצמי, {dogName} 🐶❤️'
+  },
+  {
+    id: 118,
+    type: 'training',
+    category: 'training_progress',
+    text: 'ערב טוב {ownerName}! 🐾 אחרי סשן אילוף מעצים ואיכותי, התפנקתי בארוחה טעימה ועכשיו אני חולם על הפקודות שלמדתי 🥣🎓😴 אוהב מלא, {dogName} 🐕💤✨'
+  },
+  {
+    id: 119,
+    type: 'training',
+    category: 'training_progress',
+    text: 'היי {ownerName}! 🐾 תרגלתי היום הליכה לצד שמוליק בשקט ובביטחון מלא. מרגיש שמיום ליום אני נעשה בוגר ומאוזן יותר! 🎓🐶 ד״ש חם מ-{dogName} ✨'
+  },
+  {
+    id: 120,
+    type: 'training',
+    category: 'training_progress',
+    text: 'ערב טוב {ownerName}! 🐾 לסיכום היום: 100% הקשבה באילוף, 100% פינוק ואהבה משמוליק, ו-100% געגוע אליכם! 🎓❤️ נתראה בקרוב, {dogName} 🐶👑✨'
   }
 ];
 
@@ -653,7 +775,40 @@ export function isDogIsolationRequired(
 }
 
 /**
+ * בדיקה האם כלב נמצא בתוכנית אילוף / פנסיון אילוף
+ */
+export function isDogInTraining(
+  serviceType?: string,
+  notes?: string,
+  behaviorNotes?: string,
+  intakeServiceType?: string
+): boolean {
+  if (
+    serviceType === 'training' ||
+    serviceType === 'day_training' ||
+    serviceType === 'combined' ||
+    intakeServiceType === 'training' ||
+    intakeServiceType === 'day_training' ||
+    intakeServiceType === 'combined'
+  ) {
+    return true;
+  }
+  const text = `${notes || ''} ${behaviorNotes || ''}`.toLowerCase();
+  if (
+    text.includes('אילוף') ||
+    text.includes('מאלף') ||
+    text.includes('משמעת') ||
+    text.includes('חינוך גור') ||
+    text.includes('שיעור')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * הגרלת תבנית מתאימה מתוך המאגר בהתאם לסטטוס הכלב
+ * - הפרדה מלאה בין פנסיון לאילוף: כלב באילוף מקבל אך ורק נוסחי אילוף ייעודיים!
  * - מונע שימוש בתבניות שכבר נשלחו במהלך השהות
  * - מסנן הרמטית תבניות מדשאה (81-90) מכלבים בבידוד
  */
@@ -661,18 +816,24 @@ export function pickDailyDogTemplate(
   ownerName: string,
   dogName: string,
   isIsolation: boolean,
-  alreadyUsedTemplateIds: number[] = []
+  alreadyUsedTemplateIds: number[] = [],
+  isTraining: boolean = false
 ): { template: DailyDogTemplate; formattedText: string } {
-  // סינון מאגר זמין
-  const eligibleTemplates = DAILY_DOG_TEMPLATES.filter(t => {
-    if (isIsolation) {
-      // כלב בבידוד: מקבל רק safe או isolation (לעולם לא friendly!)
-      return t.type === 'safe' || t.type === 'isolation';
-    } else {
-      // כלב חברותי: מקבל safe, friendly או isolation
-      return true;
+  let eligibleTemplates: DailyDogTemplate[] = [];
+
+  if (isTraining) {
+    // כלב באילוף: מקבל אך ורק נוסחי אילוף מעצימים עם שמוליק!
+    eligibleTemplates = DAILY_DOG_TEMPLATES.filter(t => t.type === 'training');
+    if (eligibleTemplates.length === 0) {
+      eligibleTemplates = DAILY_DOG_TEMPLATES.filter(t => t.type === 'safe');
     }
-  });
+  } else if (isIsolation) {
+    // כלב בבידוד: מקבל רק safe או isolation (לעולם לא friendly ולא training!)
+    eligibleTemplates = DAILY_DOG_TEMPLATES.filter(t => t.type === 'safe' || t.type === 'isolation');
+  } else {
+    // כלב חברותי בפנסיון: מקבל safe, friendly או isolation (ללא אילוף)
+    eligibleTemplates = DAILY_DOG_TEMPLATES.filter(t => t.type !== 'training');
+  }
 
   // סינון תבניות שכבר נשלחו בשהות הנוכחית
   let unusedTemplates = eligibleTemplates.filter(t => !alreadyUsedTemplateIds.includes(t.id));
