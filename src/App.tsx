@@ -925,18 +925,7 @@ export default function App() {
               </span>
             </button>
 
-            {/* 2. Attached next: Send Intake Questionnaire */}
-            <button
-              type="button"
-              onClick={() => setIsSendIntakeModalOpen(true)}
-              className="bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-emerald-300 text-slate-800 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
-              title="שליחת שאלון בקשה לקליטה בוואטסאפ ללקוח שהתקשר, או העתקת הקישור"
-            >
-              <span className="text-base">🔗</span>
-              <span>שלח שאלון בקשה לקליטה</span>
-            </button>
-
-            {/* 2.5. Daily Evening Dog Update (20:00) */}
+            {/* 2. Daily Evening Dog Update (20:00) */}
             <button
               type="button"
               onClick={() => setIsDailyDogUpdatesOpen(true)}

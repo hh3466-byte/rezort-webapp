@@ -34,6 +34,12 @@ import {
   enrichChatWithSystemData 
 } from '../services/whatsappCrmService';
 
+export const CRM_PRIORITY_ORDER: Record<'new' | 'needs_treatment' | 'handled', number> = {
+  'new': 1,
+  'needs_treatment': 2,
+  'handled': 3
+};
+
 interface WhatsAppLeadsViewProps {
   bookings: Booking[];
   intakeRequests: IntakeRequest[];
@@ -58,7 +64,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'new' | 'needs_treatment' | 'handled'>('all');
   
-  // Status Overrides per phone (חדשים -> נדרש טיפול -> טופל)
+  // Status Overrides per phone (סדר חשיבות מובהק: חדשים -> נדרש טיפול -> טופל)
   const [statusOverrides, setStatusOverrides] = useState<Record<string, 'new' | 'needs_treatment' | 'handled'>>(() => {
     try {
       const raw = localStorage.getItem('crm_status_overrides');
@@ -76,22 +82,40 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
       } catch {}
       return updated;
     });
+
+    // If marked handled, clear unread count locally for smooth UX
+    if (newStatus === 'handled') {
+      setChats(prev => prev.map(c => c.cleanPhone === phone ? { ...c, unreadCount: 0 } : c));
+    }
+  };
+
+  // Cycle status on card click: חדש -> לטיפול -> טופל -> חדש
+  const cycleChatStatus = (chat: EnrichedWhatsAppChat, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const current = getChatTreatmentStatus(chat);
+    const nextMap: Record<'new' | 'needs_treatment' | 'handled', 'new' | 'needs_treatment' | 'handled'> = {
+      'new': 'needs_treatment',
+      'needs_treatment': 'handled',
+      'handled': 'new'
+    };
+    updateChatStatus(chat.cleanPhone, nextMap[current]);
   };
 
   const getChatTreatmentStatus = (chat: EnrichedWhatsAppChat): 'new' | 'needs_treatment' | 'handled' => {
+    // 1. Manual user override
     if (statusOverrides[chat.cleanPhone]) {
       return statusOverrides[chat.cleanPhone];
     }
-    // If unread messages -> new
+    // 2. Any unread messages -> highest priority (חדש)
     if (chat.unreadCount && chat.unreadCount > 0) return 'new';
-    // If new lead -> new
+    // 3. New prospective lead -> חדש
     if (chat.classification === 'new_lead') return 'new';
-    // If intake submitted -> needs treatment (unless approved)
+    // 4. Intake questionnaire submitted -> נדרש טיפול (אלא אם כבר אושר ביומן)
     if (chat.classification === 'intake_submitted') {
       if (chat.matchedIntake?.status === 'approved') return 'handled';
       return 'needs_treatment';
     }
-    // If customer already has a booking -> handled
+    // 5. Customer with existing booking in calendar -> טופל
     if (chat.classification === 'customer_with_booking') return 'handled';
     return 'new';
   };
@@ -112,16 +136,29 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // 1. Fetch chats on load
+  // 1. Fetch chats on load & sort immediately by Priority Order
   const loadChats = async () => {
     setIsLoadingChats(true);
     setChatsError(null);
     try {
       const raw = await fetchGreenApiChats(settings);
       const enriched = raw.map(c => enrichChatWithSystemData(c, bookings, intakeRequests));
-      setChats(enriched);
-      if (enriched.length > 0 && !selectedChat) {
-        setSelectedChat(enriched[0]);
+      
+      const sorted = [...enriched].sort((a, b) => {
+        const statusA = getChatTreatmentStatus(a);
+        const statusB = getChatTreatmentStatus(b);
+        if (CRM_PRIORITY_ORDER[statusA] !== CRM_PRIORITY_ORDER[statusB]) {
+          return CRM_PRIORITY_ORDER[statusA] - CRM_PRIORITY_ORDER[statusB];
+        }
+        const unreadA = a.unreadCount || 0;
+        const unreadB = b.unreadCount || 0;
+        if (unreadA !== unreadB) return unreadB - unreadA;
+        return (b.timestamp || 0) - (a.timestamp || 0);
+      });
+
+      setChats(sorted);
+      if (sorted.length > 0 && !selectedChat) {
+        setSelectedChat(sorted[0]);
       }
     } catch (err: any) {
       console.warn('Error loading Green-API chats:', err);
@@ -145,6 +182,8 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   // 2. Fetch messages when selected chat changes
   const loadChatMessages = async (chat: EnrichedWhatsAppChat) => {
     setIsLoadingMessages(true);
+    // Mark as read locally in chat list for seamless feedback
+    setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
     try {
       const msgs = await fetchGreenApiChatHistory(chat.id, 50, settings);
       setMessages(msgs);
@@ -238,12 +277,6 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
 
   // 5. Filter, Search and Strict Priority Sorting:
   // סדר חשיבות מובהק: 1. חדשים -> 2. נדרש טיפול -> 3. טופל
-  const PRIORITY_ORDER: Record<'new' | 'needs_treatment' | 'handled', number> = {
-    'new': 1,
-    'needs_treatment': 2,
-    'handled': 3
-  };
-
   const filteredChats = chats
     .filter(chat => {
       const status = getChatTreatmentStatus(chat);
@@ -265,8 +298,8 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
       const statusB = getChatTreatmentStatus(b);
 
       // 1. מיון לפי סדר חשיבות מבוקש (חדשים -> נדרש טיפול -> טופל)
-      if (PRIORITY_ORDER[statusA] !== PRIORITY_ORDER[statusB]) {
-        return PRIORITY_ORDER[statusA] - PRIORITY_ORDER[statusB];
+      if (CRM_PRIORITY_ORDER[statusA] !== CRM_PRIORITY_ORDER[statusB]) {
+        return CRM_PRIORITY_ORDER[statusA] - CRM_PRIORITY_ORDER[statusB];
       }
 
       // 2. הודעות שלא נקראו קודמות בתוך אותה קבוצה
@@ -280,10 +313,120 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
       return (b.timestamp || 0) - (a.timestamp || 0);
     });
 
-  // Count metrics for Priority Tabs
+  // Count metrics for Priority Tabs & Groups
   const newCount = chats.filter(c => getChatTreatmentStatus(c) === 'new').length;
   const needsTreatmentCount = chats.filter(c => getChatTreatmentStatus(c) === 'needs_treatment').length;
   const handledCount = chats.filter(c => getChatTreatmentStatus(c) === 'handled').length;
+
+  const newChats = filteredChats.filter(c => getChatTreatmentStatus(c) === 'new');
+  const needsTreatmentChats = filteredChats.filter(c => getChatTreatmentStatus(c) === 'needs_treatment');
+  const handledChats = filteredChats.filter(c => getChatTreatmentStatus(c) === 'handled');
+
+  // Render individual chat list item
+  const renderChatCard = (chat: EnrichedWhatsAppChat) => {
+    const isSelected = selectedChat?.id === chat.id;
+    const status = getChatTreatmentStatus(chat);
+
+    return (
+      <div
+        key={chat.id}
+        onClick={() => setSelectedChat(chat)}
+        className={`p-3 transition-all cursor-pointer flex items-start gap-3 select-none ${
+          isSelected
+            ? 'bg-emerald-50/90 border-r-4 border-r-emerald-600'
+            : 'hover:bg-slate-50'
+        }`}
+      >
+        {/* Status Circle Avatar with Priority Ring */}
+        <div className="relative shrink-0 mt-0.5">
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-2xs ${
+            status === 'new'
+              ? 'bg-rose-100 text-rose-800 border-2 border-rose-300'
+              : status === 'needs_treatment'
+              ? 'bg-amber-100 text-amber-900 border-2 border-amber-300'
+              : 'bg-emerald-100 text-emerald-800 border-2 border-emerald-300'
+          }`}>
+            {chat.matchedDogName ? '🐕' : '👤'}
+          </div>
+          <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white shadow-2xs ${
+            status === 'new' ? 'bg-rose-500' :
+            status === 'needs_treatment' ? 'bg-amber-500' : 'bg-emerald-500'
+          }`} />
+        </div>
+
+        {/* Chat Text Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-1">
+            <h4 className="text-xs sm:text-sm font-black text-slate-900 truncate">
+              {chat.name}
+            </h4>
+            {chat.unreadCount && chat.unreadCount > 0 ? (
+              <span className="bg-rose-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0 animate-pulse">
+                {chat.unreadCount}
+              </span>
+            ) : null}
+          </div>
+
+          {/* Phone & Dog pill */}
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span className="text-[11px] font-mono text-slate-500" dir="ltr">
+              {chat.cleanPhone}
+            </span>
+            {chat.matchedDogName && (
+              <span className="text-[10px] font-black bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded-md truncate max-w-[120px]">
+                🐾 {chat.matchedDogName}
+              </span>
+            )}
+          </div>
+
+          {/* Priority Treatment Badge (Interactive 1-click cycle!) */}
+          <div className="mt-1.5 flex items-center justify-between gap-1 flex-wrap">
+            <button
+              type="button"
+              onClick={(e) => cycleChatStatus(chat, e)}
+              title="לחץ לשינוי מהיר של סטטוס (חדש ⇦ לטיפול ⇦ טופל)"
+              className={`text-[10px] font-black px-2 py-0.5 rounded-md inline-flex items-center gap-1 border transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-2xs ${
+                status === 'new'
+                  ? 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
+                  : status === 'needs_treatment'
+                  ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+                  : 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
+              }`}
+            >
+              {status === 'new' ? (
+                <>
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
+                  <span>🔴 חדש</span>
+                </>
+              ) : status === 'needs_treatment' ? (
+                <>
+                  <span>🟡 לטיפול</span>
+                </>
+              ) : (
+                <>
+                  <span>🟢 טופל</span>
+                </>
+              )}
+              <span className="text-[8px] text-slate-400 mr-0.5 font-sans">↺</span>
+            </button>
+
+            <div className="flex items-center gap-1">
+              {chat.classification === 'intake_submitted' && (
+                <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200">
+                  📋 שאלון
+                </span>
+              )}
+              {chat.classification === 'customer_with_booking' && (
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-200">
+                  📅 ביומן
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="bg-slate-100 rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[calc(100vh-140px)] min-h-[580px]" dir="rtl">
@@ -302,7 +445,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               </span>
             </h2>
             <p className="text-[11px] text-slate-500 font-medium truncate hidden sm:block">
-              ניהול שיחות וואטסאפ, זיהוי לקוחות ומענה ישיר בתבניות מהירות
+              ניהול שיחות וואטסאפ, סדר חשיבות וזיהוי לקוחות מהיר
             </p>
           </div>
         </div>
@@ -380,92 +523,63 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               </div>
             ) : filteredChats.length === 0 ? (
               <div className="p-8 text-center text-slate-400 text-xs font-medium">
-                לא נמצאו שיחות התואמות את החיפוש
+                לא נמצאו שיחות התואמות את הסינון
               </div>
-            ) : (
-              filteredChats.map(chat => {
-                const isSelected = selectedChat?.id === chat.id;
-                const status = getChatTreatmentStatus(chat);
-
-                return (
-                  <div
-                    key={chat.id}
-                    onClick={() => setSelectedChat(chat)}
-                    className={`p-3 transition-all cursor-pointer flex items-start gap-3 select-none ${
-                      isSelected
-                        ? 'bg-emerald-50/90 border-r-4 border-r-emerald-600'
-                        : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    {/* Status Circle Avatar with Priority Ring */}
-                    <div className="relative shrink-0 mt-0.5">
-                      <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-2xs ${
-                        status === 'new'
-                          ? 'bg-rose-100 text-rose-800 border-2 border-rose-300'
-                          : status === 'needs_treatment'
-                          ? 'bg-amber-100 text-amber-900 border-2 border-amber-300'
-                          : 'bg-emerald-100 text-emerald-800 border-2 border-emerald-300'
-                      }`}>
-                        {chat.matchedDogName ? '🐕' : '👤'}
+            ) : filter === 'all' ? (
+              /* Divided strictly into 3 Priority Sections: חדשים -> נדרש טיפול -> טופל */
+              <div>
+                {/* 1. חדשים (Priority 1) */}
+                {newChats.length > 0 && (
+                  <div>
+                    <div className="sticky top-0 z-10 bg-rose-50/95 backdrop-blur-xs px-3 py-1.5 border-y border-rose-200 flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
+                        <span className="text-xs font-black text-rose-950">🔴 פניות חדשות ({newChats.length})</span>
                       </div>
-                      <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white shadow-2xs ${
-                        status === 'new' ? 'bg-rose-500' :
-                        status === 'needs_treatment' ? 'bg-amber-500' : 'bg-emerald-500'
-                      }`} />
+                      <span className="text-[10px] text-rose-700 font-bold">חשיבות 1</span>
                     </div>
-
-                    {/* Chat Text Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <h4 className="text-xs sm:text-sm font-black text-slate-900 truncate">
-                          {chat.name}
-                        </h4>
-                        {chat.unreadCount && chat.unreadCount > 0 ? (
-                          <span className="bg-rose-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0 animate-pulse">
-                            {chat.unreadCount}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {/* Phone & Dog pill */}
-                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        <span className="text-[11px] font-mono text-slate-500" dir="ltr">
-                          {chat.cleanPhone}
-                        </span>
-                        {chat.matchedDogName && (
-                          <span className="text-[10px] font-black bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded-md truncate max-w-[120px]">
-                            🐾 {chat.matchedDogName}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Priority Treatment Badge */}
-                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                        {status === 'new' ? (
-                          <span className="text-[10px] font-black bg-rose-100 text-rose-800 px-2 py-0.5 rounded-md inline-flex items-center gap-1 border border-rose-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
-                            <span>🔴 חדש לטיפול</span>
-                          </span>
-                        ) : status === 'needs_treatment' ? (
-                          <span className="text-[10px] font-black bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md inline-flex items-center gap-1 border border-amber-300">
-                            <span>🟡 נדרש טיפול</span>
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md inline-flex items-center gap-1 border border-emerald-200">
-                            <span>🟢 טופל</span>
-                          </span>
-                        )}
-
-                        {chat.classification === 'intake_submitted' && (
-                          <span className="text-[10px] font-bold text-amber-800">
-                            📋 שאלון
-                          </span>
-                        )}
-                      </div>
+                    <div className="divide-y divide-slate-100">
+                      {newChats.map(renderChatCard)}
                     </div>
                   </div>
-                );
-              })
+                )}
+
+                {/* 2. נדרש טיפול (Priority 2) */}
+                {needsTreatmentChats.length > 0 && (
+                  <div>
+                    <div className="sticky top-0 z-10 bg-amber-50/95 backdrop-blur-xs px-3 py-1.5 border-y border-amber-200 flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                        <span className="text-xs font-black text-amber-950">🟡 נדרש טיפול ({needsTreatmentChats.length})</span>
+                      </div>
+                      <span className="text-[10px] text-amber-700 font-bold">חשיבות 2</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {needsTreatmentChats.map(renderChatCard)}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. טופל (Priority 3) */}
+                {handledChats.length > 0 && (
+                  <div>
+                    <div className="sticky top-0 z-10 bg-emerald-50/95 backdrop-blur-xs px-3 py-1.5 border-y border-emerald-200 flex items-center justify-between shadow-2xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                        <span className="text-xs font-black text-emerald-950">🟢 טופל ({handledChats.length})</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-700 font-bold">חשיבות 3</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {handledChats.map(renderChatCard)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {filteredChats.map(renderChatCard)}
+              </div>
             )}
           </div>
         </div>

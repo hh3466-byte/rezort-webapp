@@ -996,27 +996,58 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       </span>
                     </div>
 
-                    {/* Dog Gender */}
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
-                        מין:
-                      </span>
-                      <span className={`font-bold ${
+                    {/* Dog Gender - 1-click interactive toggle */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const nextGender = req.dogGender === 'female' ? 'male' : 'female';
+                        onSaveRequest({ ...req, dogGender: nextGender });
+                      }}
+                      title="לחץ לעריכה מהירה: החלף בין נקבה לזכר (שומר מיידית)"
+                      className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer hover:scale-[1.02] active:scale-98 shadow-2xs ${
+                        req.dogGender === 'female'
+                          ? 'bg-pink-50/90 hover:bg-pink-100 border-pink-300 text-pink-950'
+                          : 'bg-blue-50/90 hover:bg-blue-100 border-blue-300 text-blue-950'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[10px] text-slate-500 font-bold block mb-0.5">
+                          מין (לחץ לשינוי ✏️):
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-mono">↺</span>
+                      </div>
+                      <span className={`font-black text-xs flex items-center gap-1 ${
                         req.dogGender === 'female' ? 'text-pink-700' : 'text-blue-700'
                       }`}>
-                        {req.dogGender === 'female' ? 'נקבה ♀️' : 'זכר ♂️'}
+                        {req.dogGender === 'female' ? '🌸 נקבה ♀️' : '🔷 זכר ♂️'}
                       </span>
-                    </div>
+                    </button>
 
-                    {/* Neutered */}
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
-                        {req.dogGender === 'female' ? 'מעוקרת:' : 'מסורס:'}
-                      </span>
-                      <span className="font-bold text-slate-800">
+                    {/* Neutered / Spayed - 1-click interactive toggle */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSaveRequest({ ...req, isNeutered: !req.isNeutered });
+                      }}
+                      title="לחץ לעריכה מהירה: סמן מעוקרת/מסורס (שומר מיידית)"
+                      className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer hover:scale-[1.02] active:scale-98 shadow-2xs ${
+                        req.isNeutered
+                          ? 'bg-emerald-50/90 hover:bg-emerald-100 border-emerald-300 text-emerald-950'
+                          : 'bg-slate-50 hover:bg-amber-50 border-slate-200 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-[10px] text-slate-500 font-bold block mb-0.5">
+                          {req.dogGender === 'female' ? 'מעוקרת:' : 'מסורס:'} (לחץ ✏️)
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-mono">↺</span>
+                      </div>
+                      <span className="font-black text-xs text-slate-900">
                         {req.isNeutered ? 'כן ✂️' : 'לא'}
                       </span>
-                    </div>
+                    </button>
 
                     {/* Vaccinated */}
                     <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">

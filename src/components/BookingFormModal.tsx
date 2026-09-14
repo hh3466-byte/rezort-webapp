@@ -44,6 +44,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   // Form state
   const [dogName, setDogName] = useState(initialData?.dogName || '');
   const [dogBreed, setDogBreed] = useState(initialData?.dogBreed || '');
+  const [dogGender, setDogGender] = useState<'male_neutered' | 'female_spayed' | 'male_intact' | 'female_intact' | undefined>(initialData?.dogGender);
   const [ownerName, setOwnerName] = useState(initialData?.ownerName || '');
   const [ownerPhone, setOwnerPhone] = useState(initialData?.ownerPhone || '');
   const [ownerEmail, setOwnerEmail] = useState(initialData?.ownerEmail || '');
@@ -252,6 +253,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       id: initialData?.id || `b-${Date.now()}`,
       dogName: dogName.trim(),
       dogBreed: dogBreed.trim(),
+      dogGender,
       ownerName: ownerName.trim(),
       ownerPhone: ownerPhone.trim(),
       ownerEmail: ownerEmail.trim(),
@@ -421,6 +423,66 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                 placeholder="למשל: גולדן רטריבר, מעורב"
                 className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none"
               />
+            </div>
+
+            {/* מין הכלב/ה */}
+            <div className="col-span-1 sm:col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <label className="text-xs text-slate-700 font-bold block mb-1.5">
+                מין ועיקור / סירוס 🐾
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDogGender('female_spayed')}
+                  className={`py-2 px-2.5 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    dogGender === 'female_spayed'
+                      ? 'bg-pink-600 text-white border-pink-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-pink-50 hover:text-pink-900'
+                  }`}
+                >
+                  <span>🌸</span>
+                  <span>נקבה מעוקרת</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDogGender('female_intact')}
+                  className={`py-2 px-2.5 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    dogGender === 'female_intact'
+                      ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-rose-50 hover:text-rose-900'
+                  }`}
+                >
+                  <span>🌸</span>
+                  <span>נקבה לא מעוקרת</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDogGender('male_neutered')}
+                  className={`py-2 px-2.5 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    dogGender === 'male_neutered'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-blue-50 hover:text-blue-900'
+                  }`}
+                >
+                  <span>🔷</span>
+                  <span>זכר מסורס</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDogGender('male_intact')}
+                  className={`py-2 px-2.5 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    dogGender === 'male_intact'
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-amber-50 hover:text-amber-900'
+                  }`}
+                >
+                  <span>🔷</span>
+                  <span>זכר לא מסורס (בידוד)</span>
+                </button>
+              </div>
             </div>
           </div>
 
