@@ -27,6 +27,8 @@ export interface EnrichedWhatsAppChat extends WhatsAppChat {
   matchedDogName?: string;
   matchedBooking?: Booking;
   matchedIntake?: IntakeRequest;
+  whatsappPushName?: string;
+  isCustomName?: boolean;
 }
 
 const DEFAULT_GREEN_API_ID = '710722735421';
@@ -219,16 +221,63 @@ export async function sendGreenApiChatMessage(
 }
 
 /**
+ * Formats a timestamp into Hebrew Day name, DD/MM and HH:MM
+ * Format: "יום שני | 14/09 | 22:46"
+ */
+export function formatFullMessageDateIL(timestamp?: number): string {
+  if (!timestamp) return '';
+  const d = new Date(timestamp);
+  if (isNaN(d.getTime())) return '';
+  const days = ['יום ראשון', 'יום שני', 'יום שלישי', 'יום רביעי', 'יום חמישי', 'יום שישי', 'יום שבת'];
+  const dayName = days[d.getDay()];
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${dayName} | ${dd}/${mm} | ${hh}:${min}`;
+}
+
+/**
+ * Detects if a message text contains a self-identification pattern in Hebrew
+ * e.g. "היי שמי עדי", "שלום קוראים לי דני", "מדברת שירה", "כאן יואב"
+ */
+export function extractSelfIdentifiedName(text: string): string | null {
+  if (!text) return null;
+  const clean = text.trim();
+  const patterns = [
+    /(?:שמי|קוראים לי|מדבר|מדברת|כאן)\s+([א-ת\w]+(?:\s+[א-ת\w]+)?)/i,
+    /(?:היי|שלום|ערב טוב|בוקר טוב|צהריים טובים)[\s,]+(?:אני|זה|זאת)\s+([א-ת\w]+(?:\s+[א-ת\w]+)?)/i
+  ];
+  for (const regex of patterns) {
+    const match = clean.match(regex);
+    if (match && match[1]) {
+      const candidate = match[1].trim();
+      const stopWords = ['רוצה', 'מעוניין', 'מעוניינת', 'פנסיון', 'לשאול', 'לדעת', 'לגבי', 'אילוף', 'בסדר', 'טוב', 'הכלב', 'הכלבה', 'בנוגע'];
+      if (!stopWords.includes(candidate.toLowerCase()) && candidate.length >= 2 && candidate.length <= 25) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Cross-references a WhatsApp chat with existing bookings and intake requests
- * to classify the lead and extract dog details.
+ * to classify the lead, extract dog details, and resolve the real customer name
+ * instead of just the WhatsApp nickname/pushname.
  */
 export function enrichChatWithSystemData(
   chat: WhatsAppChat,
   bookings: Booking[] = [],
-  intakeRequests: IntakeRequest[] = []
+  intakeRequests: IntakeRequest[] = [],
+  nameOverrides: Record<string, string> = {}
 ): EnrichedWhatsAppChat {
   const cleanPhone = extractPhoneFromChatId(chat.id);
   const normalizedPhone = cleanPhoneNumber(cleanPhone);
+  const rawPushName = chat.name && chat.name !== cleanPhone && chat.name !== chat.id ? chat.name.trim() : '';
+
+  // 0. Manual name override by phone (e.g. edited by user)
+  const manualName = nameOverrides[cleanPhone] || nameOverrides[normalizedPhone];
 
   // 1. Check if matches an existing booking in the calendar
   const matchedBooking = bookings.find(b => {
@@ -238,8 +287,13 @@ export function enrichChatWithSystemData(
   });
 
   if (matchedBooking) {
+    const verifiedName = manualName || matchedBooking.ownerName?.trim();
+    const displayName = verifiedName || rawPushName || cleanPhone;
     return {
       ...chat,
+      name: displayName,
+      whatsappPushName: rawPushName && rawPushName !== displayName ? rawPushName : undefined,
+      isCustomName: Boolean(manualName || (verifiedName && verifiedName !== rawPushName)),
       cleanPhone,
       classification: 'customer_with_booking',
       matchedDogName: matchedBooking.dogName,
@@ -247,15 +301,20 @@ export function enrichChatWithSystemData(
     };
   }
 
-  // 2. Check if matches an intake request
+  // 2. Check if matches an intake request (הלקוח הזדהה בשאלון קליטה)
   const matchedIntake = intakeRequests.find(r => {
     const rClean = cleanPhoneNumber(r.ownerPhone);
     return rClean && (rClean === normalizedPhone || rClean.includes(normalizedPhone) || normalizedPhone.includes(rClean));
   });
 
   if (matchedIntake) {
+    const verifiedName = manualName || matchedIntake.ownerName?.trim();
+    const displayName = verifiedName || rawPushName || cleanPhone;
     return {
       ...chat,
+      name: displayName,
+      whatsappPushName: rawPushName && rawPushName !== displayName ? rawPushName : undefined,
+      isCustomName: Boolean(manualName || (verifiedName && verifiedName !== rawPushName)),
       cleanPhone,
       classification: 'intake_submitted',
       matchedDogName: matchedIntake.dogName,
@@ -264,8 +323,12 @@ export function enrichChatWithSystemData(
   }
 
   // 3. New WhatsApp lead
+  const displayName = manualName || rawPushName || cleanPhone;
   return {
     ...chat,
+    name: displayName,
+    whatsappPushName: rawPushName && rawPushName !== displayName ? rawPushName : undefined,
+    isCustomName: Boolean(manualName),
     cleanPhone,
     classification: 'new_lead'
   };

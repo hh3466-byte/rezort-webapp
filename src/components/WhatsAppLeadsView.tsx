@@ -20,7 +20,8 @@ import {
   AlertCircle,
   PlusCircle,
   Filter,
-  X
+  X,
+  PenTool
 } from 'lucide-react';
 import { Booking, IntakeRequest, ResortSettings } from '../types';
 import { cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
@@ -31,7 +32,9 @@ import {
   fetchGreenApiChats, 
   fetchGreenApiChatHistory, 
   sendGreenApiChatMessage, 
-  enrichChatWithSystemData 
+  enrichChatWithSystemData,
+  formatFullMessageDateIL,
+  extractSelfIdentifiedName
 } from '../services/whatsappCrmService';
 
 export const CRM_PRIORITY_ORDER: Record<'new' | 'needs_treatment' | 'handled', number> = {
@@ -62,7 +65,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState<'all' | 'new' | 'needs_treatment' | 'handled'>('all');
+  const [filter, setFilter] = useState<'all' | 'new' | 'needs_treatment' | 'handled'>('new');
   
   // Status Overrides per phone (סדר חשיבות מובהק: חדשים -> נדרש טיפול -> טופל)
   const [statusOverrides, setStatusOverrides] = useState<Record<string, 'new' | 'needs_treatment' | 'handled'>>(() => {
@@ -73,6 +76,33 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
       return {};
     }
   });
+
+  // Name Overrides per phone (שם לקוח אמיתי לאחר שהזדהה)
+  const [nameOverrides, setNameOverrides] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem('crm_name_overrides');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const updateChatName = (phone: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    setNameOverrides(prev => {
+      const updated = { ...prev, [phone]: trimmed };
+      try {
+        localStorage.setItem('crm_name_overrides', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    setChats(prev => prev.map(c => (c.cleanPhone === phone || c.id.includes(phone)) ? { ...c, name: trimmed, isCustomName: true } : c));
+    if (selectedChat && (selectedChat.cleanPhone === phone || selectedChat.id.includes(phone))) {
+      setSelectedChat(prev => prev ? { ...prev, name: trimmed, isCustomName: true } : null);
+    }
+  };
 
   const updateChatStatus = (phone: string, newStatus: 'new' | 'needs_treatment' | 'handled') => {
     setStatusOverrides(prev => {
@@ -102,21 +132,31 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   };
 
   const getChatTreatmentStatus = (chat: EnrichedWhatsAppChat): 'new' | 'needs_treatment' | 'handled' => {
-    // 1. Manual user override
+    // 1. לקוח שמילא שאלון קליטה -> חד משמעית בסטטוס "לטיפול" (אלא אם אושר ביומן או סומן ידנית כטופל)
+    if (chat.classification === 'intake_submitted') {
+      if (statusOverrides[chat.cleanPhone] === 'handled' || chat.matchedIntake?.status === 'approved') {
+        return 'handled';
+      }
+      return 'needs_treatment';
+    }
+
+    // 2. לקוח שיש לו הזמנה קיימת ביומן -> תמיד טופל (handled)
+    if (chat.classification === 'customer_with_booking') {
+      if (statusOverrides[chat.cleanPhone] === 'needs_treatment') return 'needs_treatment';
+      return 'handled';
+    }
+
+    // 3. קביעה ידנית של המשתמש בעלת עדיפות לשאר הפניות
     if (statusOverrides[chat.cleanPhone]) {
       return statusOverrides[chat.cleanPhone];
     }
-    // 2. Any unread messages -> highest priority (חדש)
+
+    // 4. פנייה חדשה שיש בה הודעה שלא נקראה -> חדש (חשיבות 1)
     if (chat.unreadCount && chat.unreadCount > 0) return 'new';
-    // 3. New prospective lead -> חדש
+
+    // 5. ברירת מחדל לפנייה חדשה -> חדש
     if (chat.classification === 'new_lead') return 'new';
-    // 4. Intake questionnaire submitted -> נדרש טיפול (אלא אם כבר אושר ביומן)
-    if (chat.classification === 'intake_submitted') {
-      if (chat.matchedIntake?.status === 'approved') return 'handled';
-      return 'needs_treatment';
-    }
-    // 5. Customer with existing booking in calendar -> טופל
-    if (chat.classification === 'customer_with_booking') return 'handled';
+
     return 'new';
   };
 
@@ -142,7 +182,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
     setChatsError(null);
     try {
       const raw = await fetchGreenApiChats(settings);
-      const enriched = raw.map(c => enrichChatWithSystemData(c, bookings, intakeRequests));
+      const enriched = raw.map(c => enrichChatWithSystemData(c, bookings, intakeRequests, nameOverrides));
       
       const sorted = [...enriched].sort((a, b) => {
         const statusA = getChatTreatmentStatus(a);
@@ -172,12 +212,32 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
     loadChats();
   }, [settings?.greenApiIdInstance, settings?.greenApiToken]);
 
-  // Re-enrich chats whenever bookings or intakeRequests change
+  // Re-enrich chats whenever bookings, intakeRequests or nameOverrides change
   useEffect(() => {
     if (chats.length > 0) {
-      setChats(prev => prev.map(c => enrichChatWithSystemData(c, bookings, intakeRequests)));
+      setChats(prev => prev.map(c => enrichChatWithSystemData(c, bookings, intakeRequests, nameOverrides)));
     }
-  }, [bookings, intakeRequests]);
+  }, [bookings, intakeRequests, nameOverrides]);
+
+  // Inline editing state for contact name
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+
+  // Detect self-identified name from incoming messages
+  const detectedSenderName = React.useMemo(() => {
+    if (!selectedChat || messages.length === 0) return null;
+    if (selectedChat.isCustomName) return null;
+
+    for (const msg of messages) {
+      if (msg.type === 'incoming') {
+        const found = extractSelfIdentifiedName(msg.textMessage);
+        if (found && found.toLowerCase() !== selectedChat.name.toLowerCase()) {
+          return found;
+        }
+      }
+    }
+    return null;
+  }, [selectedChat, messages]);
 
   // 2. Fetch messages when selected chat changes
   const loadChatMessages = async (chat: EnrichedWhatsAppChat) => {
@@ -357,9 +417,16 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
         {/* Chat Text Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1">
-            <h4 className="text-xs sm:text-sm font-black text-slate-900 truncate">
-              {chat.name}
-            </h4>
+            <div className="min-w-0 flex-1">
+              <h4 className="text-xs sm:text-sm font-black text-slate-900 truncate">
+                {chat.name}
+              </h4>
+              {chat.whatsappPushName && chat.whatsappPushName !== chat.name && (
+                <span className="text-[10px] text-slate-400 block truncate" title={`כינוי בוואטסאפ: ${chat.whatsappPushName}`}>
+                  בוואטסאפ: {chat.whatsappPushName}
+                </span>
+              )}
+            </div>
             {chat.unreadCount && chat.unreadCount > 0 ? (
               <span className="bg-rose-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0 animate-pulse">
                 {chat.unreadCount}
@@ -379,12 +446,24 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
             )}
           </div>
 
+          {/* Timestamp: Day of week, DD/MM, HH:MM */}
+          <div className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5 mt-1.5 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 w-fit shadow-2xs">
+            <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+            <span>{formatFullMessageDateIL(chat.timestamp || Date.now())}</span>
+          </div>
+
           {/* Priority Treatment Badge (Interactive 1-click cycle!) */}
           <div className="mt-1.5 flex items-center justify-between gap-1 flex-wrap">
             <button
               type="button"
               onClick={(e) => cycleChatStatus(chat, e)}
-              title="לחץ לשינוי מהיר של סטטוס (חדש ⇦ לטיפול ⇦ טופל)"
+              title={
+                status === 'new'
+                  ? 'פנייה חדשה. לחץ להעברה ל-🟡 לטיפול'
+                  : status === 'needs_treatment'
+                  ? 'בטיפול. לחץ להעברה ל-🟢 טופל'
+                  : 'טופל. לחץ להחזרה ל-🔴 חדש'
+              }
               className={`text-[10px] font-black px-2 py-0.5 rounded-md inline-flex items-center gap-1 border transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-2xs ${
                 status === 'new'
                   ? 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
@@ -603,9 +682,68 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
 
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-base font-black text-slate-900 truncate">
-                        {selectedChat.name}
-                      </h3>
+                      {isEditingName ? (
+                        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-emerald-300">
+                          <input
+                            type="text"
+                            value={editNameValue}
+                            onChange={(e) => setEditNameValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                updateChatName(selectedChat.cleanPhone, editNameValue);
+                                setIsEditingName(false);
+                              }
+                              if (e.key === 'Escape') setIsEditingName(false);
+                            }}
+                            className="bg-white border border-slate-300 rounded-lg px-2 py-0.5 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 w-44"
+                            placeholder="הזן שם לקוח אמיתי..."
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateChatName(selectedChat.cleanPhone, editNameValue);
+                              setIsEditingName(false);
+                            }}
+                            className="bg-emerald-600 text-white p-1 rounded-lg hover:bg-emerald-700 cursor-pointer"
+                            title="שמור שם לקוח"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingName(false)}
+                            className="bg-slate-200 text-slate-700 p-1 rounded-lg hover:bg-slate-300 cursor-pointer"
+                            title="ביטול"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-base font-black text-slate-900 truncate">
+                            {selectedChat.name}
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditNameValue(selectedChat.name);
+                              setIsEditingName(true);
+                            }}
+                            className="text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 p-1 rounded-lg transition-colors cursor-pointer"
+                            title="ערוך שם לקוח (שנה כינוי וואטסאפ לשם אמיתי)"
+                          >
+                            <PenTool className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+
+                      {selectedChat.whatsappPushName && selectedChat.whatsappPushName !== selectedChat.name && (
+                        <span className="text-[11px] font-medium text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg shrink-0">
+                          כינוי בוואטסאפ: {selectedChat.whatsappPushName}
+                        </span>
+                      )}
+
                       {selectedChat.matchedDogName && (
                         <span className="bg-amber-100 text-amber-900 border border-amber-300 text-xs font-black px-2.5 py-0.5 rounded-lg">
                           הכלב: {selectedChat.matchedDogName}
@@ -623,8 +761,17 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs text-slate-500 font-mono mt-0.5" dir="ltr">
-                      <span>{selectedChat.cleanPhone}</span>
+                    <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
+                      <span className="font-mono font-bold" dir="ltr">{selectedChat.cleanPhone}</span>
+                      {selectedChat.timestamp && (
+                        <>
+                          <span className="text-slate-300">•</span>
+                          <span className="flex items-center gap-1 font-bold text-slate-600">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>מועד אחרון: {formatFullMessageDateIL(selectedChat.timestamp)}</span>
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -715,6 +862,29 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                 </div>
               </div>
 
+              {/* Detected Name Banner */}
+              {detectedSenderName && (
+                <div className="bg-emerald-50/95 border-b border-emerald-200/80 px-4 py-2 flex items-center justify-between gap-3 text-xs shrink-0">
+                  <div className="flex items-center gap-2 text-emerald-950 font-bold min-w-0">
+                    <span className="text-emerald-800 font-black shrink-0">💡 זוהה שם שולח בהודעה:</span>
+                    <span className="bg-white text-emerald-900 px-2 py-0.5 rounded-md border border-emerald-300 font-black">
+                      "{detectedSenderName}"
+                    </span>
+                    <span className="text-slate-500 text-[11px] truncate hidden sm:inline">
+                      (האם תרצה לעדכן את שם השיחה לשם המזוהה במקום כינוי הוואטסאפ?)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateChatName(selectedChat.cleanPhone, detectedSenderName)}
+                    className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold px-3 py-1 rounded-lg text-xs flex items-center gap-1 shadow-2xs transition-all cursor-pointer shrink-0"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>עדכן שם ל-"{detectedSenderName}"</span>
+                  </button>
+                </div>
+              )}
+
               {/* Status Safeguard Banner: Intake Questionnaire Deduplication */}
               {selectedChat.classification === 'new_lead' && (
                 <div className="bg-emerald-50/90 border-b border-emerald-200/80 px-4 py-2 flex items-center justify-between gap-3 text-xs shrink-0">
@@ -790,8 +960,6 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                 ) : (
                   messages.map(msg => {
                     const isOutgoing = msg.type === 'outgoing';
-                    const timeStr = new Date(msg.timestamp).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-                    const dateStr = new Date(msg.timestamp).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
 
                     return (
                       <div
@@ -807,7 +975,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                         >
                           {msg.textMessage}
                           <div className={`flex items-center gap-1 justify-end text-[10px] text-slate-400 pt-1 mt-1 border-t border-black/5`}>
-                            <span>{dateStr} {timeStr}</span>
+                            <span>{formatFullMessageDateIL(msg.timestamp)}</span>
                             {isOutgoing && <Check className="w-3 h-3 text-emerald-600" />}
                           </div>
                         </div>

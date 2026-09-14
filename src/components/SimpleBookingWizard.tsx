@@ -34,7 +34,7 @@ import {
   Volume2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Booking, ResortSettings, ServiceType, PaymentMethod, StayStatus, AgentActionProposal, IntakeRequest } from '../types';
+import { Booking, ResortSettings, ServiceType, PaymentMethod, PaymentStatus, StayStatus, AgentActionProposal, IntakeRequest } from '../types';
 import { 
   getTodayStr, 
   addDays, 
