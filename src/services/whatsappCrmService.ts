@@ -294,7 +294,7 @@ export function generateFollowUpReminderText(ownerName?: string, dogName?: strin
 
 /**
  * Generates a comprehensive, premium marketing message for leads detailing:
- * 1. The boutique boarding resort and its luxury amenities (מרחבי דשא, סוויטות ממוזגות, עדכונים יומיים).
+ * 1. The boutique boarding resort and its luxury amenities (מרחבי דשא, סוויטות מרווחות ומאווררות, עדכונים יומיים).
  * 2. The professional dog training program led by Shmulik (משמעת, פנסיון אילוף, חינוך גורים, הדרכת בעלים).
  * 3. Warm CTA and intake questionnaire link.
  */
@@ -314,7 +314,7 @@ export function generateResortMarketingValueText(
 רצינו לשתף אתכם בכמה מילים על החוויה המיוחדת שמחכה${dogMention} אצלנו בריזורט:
 
 🏡 **פנסיון בוטיק בתנאי VIP:**
-• סוויטות שינה אישיות, מרווחות וממוזגות – ללא כלובים!
+• סוויטות שינה אישיות, מרווחות ומאווררות – ללא כלובים!
 • מדשאות ענק ירוקות, מוצלות ומאובטחות למשחקים חופשיים ולהוצאת אנרגיה
 • טיולי טבע יומיים מודרכים באוויר הפתוח
 • השגחה צמודה, יחס אישי חם והמון אהבה מסביב לשעון
@@ -392,7 +392,7 @@ export function generateBoardingOnlyMarketingText(
 אצלנו הכלב שלכם לא "מוחזק" – הוא יוצא לחופשה אמיתית בתנאי VIP:
 
 ✨ **היתרונות הייחודיים של הריזורט שלנו:**
-• סוויטות אישיות ממוזגות, נקיות ומרווחות (ללא כלובים!)
+• סוויטות אישיות נקיות, מוצלות ומרווחות (ללא כלובים!)
 • מדשאות ענק ירוקות ומגודרות למשחקי כדור וריצה חופשית
 • טיולי טבע יומיים מודרכים באוויר הצלול
 • צוות מקצועי ומסור שנמצא עם הכלבים סביב השעון
