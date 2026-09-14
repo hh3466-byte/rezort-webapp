@@ -43,32 +43,80 @@ interface IntakeRequestsModalProps {
   onSaveRequest?: (request: IntakeRequest) => Promise<void>;
 }
 
+export interface BoardingRateOptions {
+  isFriendlyWithDogs?: 'yes' | 'no' | 'depends' | string | boolean;
+  dogGender?: 'male' | 'female' | 'male_intact' | 'male_neutered' | 'female_spayed' | 'female_intact' | string;
+  isNeutered?: boolean;
+  isolationRate?: number;
+}
+
 /**
- * Calculate boarding daily rate based on duration:
- * - 1 to 7 days: default rate (180 NIS/day)
- * - > 7 days (8 to 29 days): 150 NIS/day
- * - 30+ days (month): 120 NIS/day
+ * Calculate boarding daily rate based on duration and dog profile:
+ * - When dog requires isolation / is aggressive (isFriendlyWithDogs === 'no')
+ *   OR dog is an unneutered male (male intact):
+ *   Fixed rate of 230 NIS/day (or defaultDailyRateIsolation from settings) with NO duration discounts.
+ * - Regular dogs:
+ *   - 1 to 7 days: default rate (180 NIS/day)
+ *   - > 7 days (8 to 29 days): 150 NIS/day
+ *   - 30+ days (month): 120 NIS/day
  */
-export function calculateBoardingRate(days: number, defaultRate: number = 180): { dailyRate: number; totalPrice: number; explanation: string } {
-  if (days >= 30) {
+export function calculateBoardingRate(
+  days: number, 
+  defaultRate: number = 180,
+  optionsOrFriendly?: BoardingRateOptions | 'yes' | 'no' | 'depends' | string | boolean,
+  isolationRateParam: number = 230
+): { dailyRate: number; totalPrice: number; explanation: string; isSpecialRate: boolean } {
+  const isObj = typeof optionsOrFriendly === 'object' && optionsOrFriendly !== null;
+  const isFriendlyWithDogs = isObj ? optionsOrFriendly.isFriendlyWithDogs : optionsOrFriendly;
+  const dogGender = isObj ? optionsOrFriendly.dogGender : undefined;
+  const isNeutered = isObj ? optionsOrFriendly.isNeutered : undefined;
+  const isolationRate = (isObj && optionsOrFriendly.isolationRate) ? optionsOrFriendly.isolationRate : (isolationRateParam || 230);
+
+  const isAggressiveOrIsolation = isFriendlyWithDogs === 'no' || isFriendlyWithDogs === false;
+  const isMaleIntact = dogGender === 'male_intact' || (dogGender === 'male' && isNeutered === false);
+
+  // If dog requires isolation / aggressive OR is an unneutered male: 230 NIS/day, NO duration discounts!
+  if (isAggressiveOrIsolation || isMaleIntact) {
+    const rate = isolationRate || 230;
+    let reason = 'בידוד / תוקפני';
+    if (isAggressiveOrIsolation && isMaleIntact) {
+      reason = 'בידוד / זכר לא מסורס';
+    } else if (isMaleIntact) {
+      reason = 'זכר לא מסורס';
+    }
+    return {
+      dailyRate: rate,
+      totalPrice: days * rate,
+      explanation: `${days} ימים × ₪${rate} (${reason})`,
+      isSpecialRate: true
+    };
+  }
+
+  // מעבר ל-3 שבועות (21 ימים ומעלה): 120 ₪ ללילה
+  if (days >= 21) {
     return {
       dailyRate: 120,
       totalPrice: days * 120,
-      explanation: `${days} ימים × ₪120 (תעריף חודשי)`
+      explanation: `${days} ימים × ₪120 (מעל 3 שבועות)`,
+      isSpecialRate: false
     };
   }
-  if (days > 7) {
+  // 7 לילות ומעלה: 150 ₪ ללילה
+  if (days >= 7) {
     return {
       dailyRate: 150,
       totalPrice: days * 150,
-      explanation: `${days} ימים × ₪150 (מעל 7 ימים)`
+      explanation: `${days} ימים × ₪150 (7 לילות ומעלה)`,
+      isSpecialRate: false
     };
   }
+  // עד 6 לילות: 180 ₪ ללילה (תעריף ברירת מחדל)
   const rate = defaultRate || 180;
   return {
     dailyRate: rate,
     totalPrice: days * rate,
-    explanation: `${days} ימים × ₪${rate} (תעריף רגיל)`
+    explanation: `${days} ימים × ₪${rate} (עד 6 לילות)`,
+    isSpecialRate: false
   };
 }
 
@@ -223,6 +271,10 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 }) => {
   const [filter, setFilter] = useState<'all' | 'pending' | 'payment_requested' | 'approved' | 'rejected'>('pending');
   const [searchQuery, setSearchQuery] = useState('');
+  const [notesInputs, setNotesInputs] = useState<Record<string, string>>({});
+  const [savedNoteSuccess, setSavedNoteSuccess] = useState<Record<string, boolean>>({});
+  const [copiedPaymentMsg, setCopiedPaymentMsg] = useState(false);
+  const [copiedPaymentLink, setCopiedPaymentLink] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<IntakeRequest | null>(null);
@@ -323,40 +375,122 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     } else if (request.serviceType === 'daycare') {
       calculatedDefault = daysCount * (Number(settings?.defaultDailyRateDaycare) || 90);
     } else {
-      calculatedDefault = calculateBoardingRate(daysCount, Number(settings?.defaultDailyRateBoarding) || 180).totalPrice;
+      calculatedDefault = calculateBoardingRate(
+        daysCount, 
+        Number(settings?.defaultDailyRateBoarding) || 180,
+        {
+          isFriendlyWithDogs: request.isFriendlyWithDogs,
+          dogGender: request.dogGender,
+          isNeutered: request.isNeutered,
+          isolationRate: Number(settings?.defaultDailyRateIsolation) || 230
+        }
+      ).totalPrice;
     }
-    const effectiveAmount = customPrices[request.id] ?? request.depositRequested ?? calculatedDefault;
+    const effectiveAmount = customPrices[request.id] ?? (request.depositRequested && request.depositRequested > 0 ? request.depositRequested : calculatedDefault);
     setPaymentAmount(String(effectiveAmount));
     setCustomPaymentLink(settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg');
   };
 
-  const handleConfirmSendPayment = async () => {
+  const sortedRequests = [...filteredRequests].sort((a, b) => {
+    // Unhandled requests (pending) ranked AT THE TOP!
+    const aUnhandled = a.status === 'pending';
+    const bUnhandled = b.status === 'pending';
+    if (aUnhandled && !bUnhandled) return -1;
+    if (!aUnhandled && bUnhandled) return 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  const handleAddQuickNote = async (req: IntakeRequest, tag: string) => {
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const mins = String(now.getMinutes()).padStart(2, '0');
+    const stamp = `[${day}/${month} ${hours}:${mins}] ${tag}`;
+    const existing = notesInputs[req.id] !== undefined ? notesInputs[req.id] : (req.internalNotes || '');
+    const updatedNotes = existing ? `${existing}\n${stamp}` : stamp;
+
+    setNotesInputs(prev => ({ ...prev, [req.id]: updatedNotes }));
+    
+    try {
+      if (onSaveRequest) {
+        await onSaveRequest({ ...req, internalNotes: updatedNotes });
+      } else {
+        await onUpdateStatus(req.id, req.status, updatedNotes);
+      }
+      setSavedNoteSuccess(prev => ({ ...prev, [req.id]: true }));
+      setTimeout(() => setSavedNoteSuccess(prev => ({ ...prev, [req.id]: false })), 2500);
+    } catch (e) {
+      console.warn('Error saving quick note:', e);
+    }
+  };
+
+  const handleSaveFreeTextNote = async (req: IntakeRequest) => {
+    const text = notesInputs[req.id] !== undefined ? notesInputs[req.id] : (req.internalNotes || '');
+    try {
+      if (onSaveRequest) {
+        await onSaveRequest({ ...req, internalNotes: text });
+      } else {
+        await onUpdateStatus(req.id, req.status, text);
+      }
+      setSavedNoteSuccess(prev => ({ ...prev, [req.id]: true }));
+      setTimeout(() => setSavedNoteSuccess(prev => ({ ...prev, [req.id]: false })), 2500);
+    } catch (e) {
+      console.warn('Error saving free text note:', e);
+    }
+  };
+
+  const handleConfirmSendPayment = () => {
     if (!paymentPromptRequest) return;
     setIsSendingPayment(true);
-    try {
-      const numAmount = Number(paymentAmount) || 0;
-      const updated: IntakeRequest = {
-        ...paymentPromptRequest,
-        depositRequested: numAmount,
-        status: 'payment_requested'
-      };
-
-      if (onSaveRequest) {
-        await onSaveRequest(updated);
-      } else {
-        await onUpdateStatus(paymentPromptRequest.id, 'payment_requested');
-      }
-
-      const cleanPhone = cleanPhoneNumber(paymentPromptRequest.ownerPhone);
-      const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-      const msg = formatClientPaymentLinkMessage(updated, settings, numAmount, customPaymentLink);
-      const whatsappUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
-
-      window.open(whatsappUrl, '_blank');
-      setPaymentPromptRequest(null);
-    } finally {
-      setIsSendingPayment(false);
+    
+    const numAmount = Number(paymentAmount) || 0;
+    let linkToUse = (customPaymentLink || '').trim();
+    if (!linkToUse) {
+      linkToUse = settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
     }
+    if (linkToUse.startsWith('//')) {
+      linkToUse = 'https:' + linkToUse;
+    } else if (!linkToUse.startsWith('http://') && !linkToUse.startsWith('https://')) {
+      linkToUse = 'https://' + linkToUse;
+    }
+
+    const updated: IntakeRequest = {
+      ...paymentPromptRequest,
+      depositRequested: numAmount,
+      status: 'payment_requested'
+    };
+
+    const cleanPhone = cleanPhoneNumber(paymentPromptRequest.ownerPhone);
+    const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
+    const msg = formatClientPaymentLinkMessage(updated, settings, numAmount, linkToUse);
+    const whatsappUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
+
+    // Open WhatsApp IMMEDIATELY inside user gesture so browser popup blocker never blocks it!
+    try {
+      const win = window.open(whatsappUrl, '_blank');
+      if (!win) {
+        window.location.href = whatsappUrl;
+      }
+    } catch (e) {
+      window.location.href = whatsappUrl;
+    }
+
+    // Background asynchronous persistence
+    (async () => {
+      try {
+        if (onSaveRequest) {
+          await onSaveRequest(updated);
+        } else {
+          await onUpdateStatus(paymentPromptRequest.id, 'payment_requested');
+        }
+      } catch (err) {
+        console.warn('Error saving payment status:', err);
+      } finally {
+        setIsSendingPayment(false);
+        setPaymentPromptRequest(null);
+      }
+    })();
   };
 
   const handleOpenRejectPrompt = (request: IntakeRequest) => {
@@ -534,7 +668,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               </p>
             </div>
           ) : (
-            filteredRequests.map((req) => {
+            sortedRequests.map((req) => {
               const serviceLabel = getServiceTypeHebrew(req.serviceType);
               const cleanPhone = cleanPhoneNumber(req.ownerPhone);
               const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
@@ -546,7 +680,16 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               const intakeEnteredText = `הזמנה נכנסה ב: ${cDay}.${cMonth} בשעה ${cHours}:${cMins}`;
 
               const daysCount = Math.max(1, calculateDaysCount(req.startDate, req.endDate));
-              const boardingRateInfo = calculateBoardingRate(daysCount, Number(settings?.defaultDailyRateBoarding) || 180);
+              const boardingRateInfo = calculateBoardingRate(
+                daysCount, 
+                Number(settings?.defaultDailyRateBoarding) || 180,
+                {
+                  isFriendlyWithDogs: req.isFriendlyWithDogs,
+                  dogGender: req.dogGender,
+                  isNeutered: req.isNeutered,
+                  isolationRate: Number(settings?.defaultDailyRateIsolation) || 230
+                }
+              );
               let defaultPrice = boardingRateInfo.totalPrice;
               let priceExplanation = boardingRateInfo.explanation;
 
@@ -559,19 +702,19 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 priceExplanation = `${daysCount} ימים × ₪${daycareRate}`;
               }
 
-              const currentReqPrice = customPrices[req.id] !== undefined ? customPrices[req.id] : (req.depositRequested || defaultPrice);
+              const currentReqPrice = customPrices[req.id] !== undefined 
+                ? customPrices[req.id] 
+                : (req.depositRequested && req.depositRequested > 0 ? req.depositRequested : defaultPrice);
+
+              const isUnhandled = req.status === 'pending';
 
               return (
                 <div
                   key={req.id}
-                  className={`bg-white rounded-2xl border p-4 sm:p-5 shadow-xs transition-all space-y-4 ${
-                    req.status === 'pending' 
-                      ? 'border-emerald-300 ring-1 ring-emerald-500/20' 
-                      : req.status === 'payment_requested'
-                      ? 'border-blue-200'
-                      : req.status === 'approved'
-                      ? 'border-slate-200 opacity-90'
-                      : 'border-slate-200 opacity-60'
+                  className={`rounded-3xl border-2 p-4 sm:p-5 transition-all space-y-4 ${
+                    isUnhandled 
+                      ? 'border-emerald-500 bg-emerald-50/25 ring-2 ring-emerald-500/20 shadow-md' 
+                      : 'border-pink-300 bg-pink-50/20 shadow-xs opacity-95'
                   }`}
                 >
                   {/* Card Top: Dog & Owner Header */}
@@ -593,18 +736,27 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                           </span>
                           
                           {/* Status Badge */}
-                          <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-black border ${
-                            req.status === 'pending'
-                              ? 'bg-red-50 text-red-700 border-red-200'
+                          <span className={`text-xs px-3 py-1 rounded-full font-black border shadow-2xs flex items-center gap-1.5 ${
+                            isUnhandled
+                              ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/40 animate-pulse'
                               : req.status === 'payment_requested'
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              ? 'bg-pink-100 text-pink-900 border-pink-300'
                               : req.status === 'approved'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                              ? 'bg-pink-100 text-pink-900 border-pink-300'
+                              : 'bg-slate-200 text-slate-700 border-slate-300'
                           }`}>
-                            {req.status === 'pending' ? 'ממתין לשיחה' :
-                             req.status === 'payment_requested' ? 'נשלח קישור לתשלום' :
-                             req.status === 'approved' ? 'נקלט ביומן' : 'נדחה'}
+                            {isUnhandled ? (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                                <span>🟢 ממתין לטיפול של שמוליק</span>
+                              </>
+                            ) : req.status === 'payment_requested' ? (
+                              <span>🌸 נשלח קישור לתשלום</span>
+                            ) : req.status === 'approved' ? (
+                              <span>🌸 נקלט ביומן הראשי</span>
+                            ) : (
+                              <span>🌸 נדחה / בוטל</span>
+                            )}
                           </span>
                         </div>
 
@@ -797,16 +949,68 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         </div>
                       )}
 
-                      {req.internalNotes && (
-                        <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-2.5 text-xs text-blue-950 space-y-0.5">
-                          <div className="font-bold flex items-center gap-1 text-blue-900">
-                            <span>📌 סיכום שיחה והערות שמוליק:</span>
+                      {/* 📞 Call Progress, Phone Summary & Free-Text Tracking (Always accessible) */}
+                      <div className="bg-white/95 border-2 border-emerald-300/80 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-slate-900">
+                            <Phone className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>📞 מעקב שיחות וסיכום טיפול בבקשה (שמוליק):</span>
                           </div>
-                          <div className="font-medium text-slate-800 pr-1 whitespace-pre-wrap">
-                            {req.internalNotes}
+                          {savedNoteSuccess[req.id] && (
+                            <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-lg animate-in fade-in flex items-center gap-1">
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              ההערה נשמרה בהצלחה! ✨
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Quick Action Stamp Buttons */}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {[
+                            { tag: '📞 לא ענה בטלפון', label: '📞 לא ענה', color: 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900' },
+                            { tag: '🔄 צריך להתקשר אליו שוב', label: '🔄 צריך לחזור אליו', color: 'bg-orange-50 hover:bg-orange-100 border-orange-300 text-orange-900' },
+                            { tag: '💬 שלחתי לו הודעה בוואטסאפ', label: '💬 שלחתי הודעה', color: 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-900' },
+                            { tag: '🤝 שוחחנו בטלפון - סוכמו הפרטים', label: '🤝 שוחחנו - סוכם', color: 'bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-900' },
+                            { tag: '❌ בוטל / לא רלוונטי', label: '❌ לא רלוונטי', color: 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-900' },
+                          ].map((btn, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => handleAddQuickNote(req, btn.tag)}
+                              className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all active:scale-95 cursor-pointer shadow-2xs ${btn.color}`}
+                              title={`הוסף חותמת תאריך ושעה: "${btn.tag}"`}
+                            >
+                              {btn.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Free-Text Editable Textarea */}
+                        <div className="space-y-1.5">
+                          <textarea
+                            rows={3}
+                            value={notesInputs[req.id] !== undefined ? notesInputs[req.id] : (req.internalNotes || '')}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setNotesInputs(prev => ({ ...prev, [req.id]: val }));
+                            }}
+                            onBlur={() => handleSaveFreeTextNote(req)}
+                            placeholder="כתוב כאן מה סוכם בשיחה עם הלקוח, דגשים מיוחדים, תאריכים מבוקשים או הערות מעקב... (נשמר אוטומטית בעת יציאה מהשדה)"
+                            className="w-full bg-slate-50/90 hover:bg-white focus:bg-white text-slate-900 text-xs sm:text-sm p-3 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none resize-y font-medium transition-all"
+                          />
+                          <div className="flex items-center justify-between text-[11px] text-slate-500">
+                            <span>💡 ניתן להקליד בחופשיות או ללחוץ על הכפתורים המהירים למעלה</span>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveFreeTextNote(req)}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1 rounded-lg text-xs flex items-center gap-1 shadow-2xs cursor-pointer active:scale-95 transition-all"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                              <span>שמור הערה</span>
+                            </button>
                           </div>
                         </div>
-                      )}
+                      </div>
 
                       {req.depositRequested && req.depositRequested > 0 ? (
                         <div className="text-xs font-bold text-emerald-900 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200 inline-flex items-center gap-1.5">
@@ -1590,19 +1794,39 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setPaymentPromptRequest(null)}
-                className="bg-white hover:bg-slate-200 text-slate-700 font-bold px-4 py-2 rounded-xl border border-slate-300 cursor-pointer shadow-2xs"
-              >
-                ביטול
-              </button>
+            <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPaymentPromptRequest(null)}
+                  className="bg-white hover:bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-xl border border-slate-300 cursor-pointer shadow-2xs text-xs"
+                >
+                  ביטול
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const msg = formatClientPaymentLinkMessage(
+                      paymentPromptRequest,
+                      settings,
+                      parseFloat(paymentAmount) || 0,
+                      customPaymentLink
+                    );
+                    navigator.clipboard.writeText(msg);
+                    setCopiedPaymentLink(true);
+                    setTimeout(() => setCopiedPaymentLink(false), 2000);
+                  }}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-2 rounded-xl border border-slate-300 cursor-pointer shadow-2xs text-xs flex items-center gap-1"
+                >
+                  {copiedPaymentLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedPaymentLink ? 'ההודעה הועתקה!' : 'העתק הודעה'}</span>
+                </button>
+              </div>
               <button
                 type="button"
                 disabled={isSendingPayment}
                 onClick={handleConfirmSendPayment}
-                className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all"
+                className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-4 sm:px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all text-xs sm:text-sm"
               >
                 <MessageCircle className="w-4 h-4" />
                 <span>{isSendingPayment ? 'מעדכן ושולח...' : '📲 שלח עכשיו בוואטסאפ'}</span>

@@ -26,6 +26,7 @@ export interface Booking {
   specialDiet?: string;
   medications?: string;
   behaviorNotes?: string;
+  placementNotes?: string; // דגשי שיבוץ והוראות מיוחדות (למשל: לשים רק עם ג'נגו / תוקפת דרך גדר)
   emergencyContact?: string;
   // Extended fields from the streamlined wizard
   dogAgeGroup?: 'puppy' | 'young' | 'adult' | 'senior';
@@ -39,6 +40,7 @@ export interface Booking {
   signatureDataUrl?: string;
   pricingMode?: 'daily' | 'period';
   dailyRate?: number;
+  skipReviewRequest?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -117,6 +119,7 @@ export interface ResortSettings {
   managerPhone: string;
   maxCapacity: number;
   defaultDailyRateBoarding: number;
+  defaultDailyRateIsolation?: number; // תעריף יומי לכלב שחייב בידוד / תוקפני (ברירת מחדל 230 ₪ ליום ללא הנחת תקופה)
   defaultDailyRateTraining: number; // Process price (6,500 NIS for 50 days)
   defaultDailyRateDayTraining: number; // אילוף ביומיות (ללא לינה - מחיר ליום)
   defaultDailyRateCombined?: number;

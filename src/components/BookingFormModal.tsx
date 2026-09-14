@@ -54,8 +54,10 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   // Pricing mode: Per Day vs Fixed Period
   const [pricingMode, setPricingMode] = useState<'daily' | 'period'>('daily');
   const [dailyRate, setDailyRate] = useState<number>(() => {
+    if (initialData?.dailyRate && initialData.dailyRate > 0) return initialData.dailyRate;
     if (initialData?.serviceType === 'day_training') return settings.defaultDailyRateDayTraining || 250;
     if (initialData?.serviceType === 'daycare') return settings.defaultDailyRateDaycare;
+    if (initialData?.dogGender === 'male_intact') return settings.defaultDailyRateIsolation || 230;
     return settings.defaultDailyRateBoarding;
   });
   const [totalPrice, setTotalPrice] = useState<number>(initialData?.totalPrice || 0);
@@ -65,6 +67,10 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   const [notes, setNotes] = useState(initialData?.notes || '');
   const [specialDiet, setSpecialDiet] = useState(initialData?.specialDiet || '');
   const [vaccinationValid, setVaccinationValid] = useState(initialData?.vaccinationValid ?? true);
+  const [skipReviewRequest, setSkipReviewRequest] = useState<boolean>(
+    Boolean(initialData?.skipReviewRequest || (initialData?.notes && initialData.notes.indexOf('ללא_סקר') !== -1))
+  );
+  const [placementNotes, setPlacementNotes] = useState(initialData?.placementNotes || '');
   const [showDebtCheckoutConfirm, setShowDebtCheckoutConfirm] = useState(false);
 
   // Voice dictation state inside modal (DEFAULT is voice dictation enabled)
@@ -257,7 +263,11 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       paymentStatus: finalPaymentStatus,
       paymentMethod,
       stayStatus,
-      notes: notes.trim(),
+      skipReviewRequest,
+      placementNotes: placementNotes.trim() || undefined,
+      notes: skipReviewRequest
+        ? (notes.includes('[ללא_סקר]') ? notes.trim() : `${notes.trim()} [ללא_סקר]`.trim())
+        : notes.replace(/\[ללא_סקר\]/g, '').trim(),
       specialDiet: specialDiet.trim(),
       vaccinationValid,
       createdAt: initialData?.createdAt || new Date().toISOString(),
@@ -552,6 +562,28 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                   <option value="checked_out">🏁 הסתיים ושוחרר</option>
                   <option value="cancelled">❌ מבוטל</option>
                 </select>
+              </div>
+
+              {/* Skip Review Request toggle */}
+              <div className={`sm:col-span-2 p-3 rounded-xl border transition-all ${
+                skipReviewRequest ? 'bg-amber-50 border-amber-300' : 'bg-slate-50 border-slate-200'
+              }`}>
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={skipReviewRequest}
+                    onChange={(e) => setSkipReviewRequest(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded text-red-600 focus:ring-red-500 border-slate-300 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 block">
+                      🚫 בטל שליחת בקשת חוות דעת ודירוג בוואטסאפ
+                    </span>
+                    <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                      סמן אפשרות זו אם בעל הכלב לא הסתדר איתנו, או שאין טעם לשלוח לו סקר ומועדון VIP.
+                    </span>
+                  </div>
+                </label>
               </div>
 
               <div>
@@ -972,6 +1004,20 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               placeholder="הערות מיוחדות, מזון, תרופות, אופי הכלב, חיברות..."
               className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm p-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none resize-none"
             />
+
+            {/* 🚩 Dedicated Placement & Special Instructions Field */}
+            <div className="bg-amber-50/80 border border-amber-300 rounded-2xl p-3 space-y-1.5 shadow-2xs">
+              <label className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                <span>🚩 דגש שיבוץ והוראות מיוחדות (מופיע בראש כרטיסיית הכלב ביומן):</span>
+              </label>
+              <input
+                type="text"
+                value={placementNotes}
+                onChange={(e) => setPlacementNotes(e.target.value)}
+                placeholder="למשל: שיבוץ אך ורק עם ג'נגו / לא להוציא עם נקבות / תוקפת דרך גדר..."
+                className="w-full bg-white text-slate-900 text-xs sm:text-sm p-2.5 rounded-xl border border-amber-300 focus:border-amber-600 focus:ring-1 focus:ring-amber-500 focus:outline-none font-bold"
+              />
+            </div>
           </div>
 
           {/* Checkout Debt Warning Prompt */}

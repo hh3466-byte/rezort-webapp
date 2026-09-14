@@ -3,6 +3,7 @@ import { calculateDaysCount, addDays, getTodayStr, checkRangeOccupancy } from '.
 import { parseWithClientHeuristic } from './src/services/agentService';
 import { extractCustomers } from './src/utils/storage';
 import { Booking, ResortSettings } from './src/types';
+import { calculateBoardingRate } from './src/components/IntakeRequestsModal';
 
 async function runQA() {
   console.log('=====================================================');
@@ -28,6 +29,7 @@ async function runQA() {
   assert(defaultSettings.defaultDailyRateTraining === 6500, 'Full Training (70-day) price is 6500 NIS', `Got ${defaultSettings.defaultDailyRateTraining}`);
   assert(defaultSettings.defaultDailyRateDayTraining === 250, 'Day Training price is 250 NIS/day', `Got ${defaultSettings.defaultDailyRateDayTraining}`);
   assert(defaultSettings.defaultDailyRateBoarding === 180, 'Boarding price is 180 NIS/day', `Got ${defaultSettings.defaultDailyRateBoarding}`);
+  assert(defaultSettings.defaultDailyRateIsolation === 230, 'Isolation / Intact Male price is 230 NIS/day', `Got ${defaultSettings.defaultDailyRateIsolation}`);
   assert(defaultSettings.defaultDailyRateDaycare === 90, 'Daycare price is 90 NIS/day', `Got ${defaultSettings.defaultDailyRateDaycare}`);
   assert(defaultSettings.bitNumber === '054-8765888', 'Bit number configured', `Got ${defaultSettings.bitNumber}`);
 
@@ -41,6 +43,40 @@ async function runQA() {
   const trainingEnd = addDays(today, 70);
   const days70 = calculateDaysCount(today, trainingEnd);
   assert(days70 === 70, '70-day training process range calculated correctly', `Got ${days70}`);
+
+  // --- 2b. BOARDING RATE TESTS (ISOLATION & INTACT MALE: 230 NIS, NO DISCOUNTS) ---
+  console.log('\n--- 2b. BOARDING RATE RULES (ISOLATION / AGGRESSIVE & INTACT MALE) ---');
+  // Case A: Aggressive / Requires isolation (Luna - pitbull from screenshot)
+  const lunaRate = calculateBoardingRate(3, 180, { isFriendlyWithDogs: 'no', dogGender: 'female', isNeutered: true });
+  assert(lunaRate.dailyRate === 230, 'Luna (isolation/aggressive): 230 NIS/day', `Got ${lunaRate.dailyRate}`);
+  assert(lunaRate.totalPrice === 690, 'Luna 3 days: 690 NIS total', `Got ${lunaRate.totalPrice}`);
+  assert(lunaRate.explanation.includes('230') && lunaRate.explanation.includes('בידוד / תוקפני'), 'Luna explanation explains isolation/aggressive', lunaRate.explanation);
+
+  // Case B: Aggressive / Isolation long stays (NO duration discounts!)
+  const iso10 = calculateBoardingRate(10, 180, { isFriendlyWithDogs: 'no' });
+  assert(iso10.dailyRate === 230 && iso10.totalPrice === 2300, 'Isolation 10 days: 230 NIS/day, 2300 NIS (no discount to 150)', `Got ${iso10.totalPrice}`);
+  const iso35 = calculateBoardingRate(35, 180, { isFriendlyWithDogs: 'no' });
+  assert(iso35.dailyRate === 230 && iso35.totalPrice === 8050, 'Isolation 35 days: 230 NIS/day, 8050 NIS (no discount to 120)', `Got ${iso35.totalPrice}`);
+
+  // Case C: Unneutered Male Dog (זכר לא מסורס)
+  const intactMale3 = calculateBoardingRate(3, 180, { isFriendlyWithDogs: 'yes', dogGender: 'male', isNeutered: false });
+  assert(intactMale3.dailyRate === 230 && intactMale3.totalPrice === 690, 'Intact Male 3 days: 230 NIS/day, 690 NIS total', `Got ${intactMale3.totalPrice}`);
+  assert(intactMale3.explanation.includes('זכר לא מסורס'), 'Intact Male explanation mentions זכר לא מסורס', intactMale3.explanation);
+
+  const intactMale14 = calculateBoardingRate(14, 180, { dogGender: 'male_intact' });
+  assert(intactMale14.dailyRate === 230 && intactMale14.totalPrice === 3220, 'Intact Male 14 days: 230 NIS/day, 3220 NIS (no duration discount)', `Got ${intactMale14.totalPrice}`);
+
+  // Case D: Both isolation AND intact male
+  const bothRate = calculateBoardingRate(3, 180, { isFriendlyWithDogs: 'no', dogGender: 'male', isNeutered: false });
+  assert(bothRate.dailyRate === 230 && bothRate.totalPrice === 690, 'Both isolation and intact male: 230 NIS/day', `Got ${bothRate.totalPrice}`);
+
+  // Case E: Regular friendly dog (normal tiered discounts)
+  const reg3 = calculateBoardingRate(3, 180, { isFriendlyWithDogs: 'yes', dogGender: 'male', isNeutered: true });
+  assert(reg3.dailyRate === 180 && reg3.totalPrice === 540, 'Regular dog 3 days: 180 NIS/day (540 NIS)', `Got ${reg3.totalPrice}`);
+  const reg10 = calculateBoardingRate(10, 180, { isFriendlyWithDogs: 'yes' });
+  assert(reg10.dailyRate === 150 && reg10.totalPrice === 1500, 'Regular dog 10 days: 150 NIS/day discount (1500 NIS)', `Got ${reg10.totalPrice}`);
+  const reg35 = calculateBoardingRate(35, 180, { isFriendlyWithDogs: 'yes' });
+  assert(reg35.dailyRate === 120 && reg35.totalPrice === 4200, 'Regular dog 35 days: 120 NIS/day monthly discount (4200 NIS)', `Got ${reg35.totalPrice}`);
 
   // --- 3. OVERBOOKING & CAPACITY ENFORCEMENT ---
   console.log('\n--- 3. OVERBOOKING & CAPACITY ENFORCEMENT ---');

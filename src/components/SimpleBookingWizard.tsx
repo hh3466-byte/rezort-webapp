@@ -104,6 +104,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const [specialDiet, setSpecialDiet] = useState(initialData?.specialDiet || '');
   const [medications, setMedications] = useState(initialData?.medications || '');
   const [notes, setNotes] = useState(initialData?.notes || '');
+  const [placementNotes, setPlacementNotes] = useState(initialData?.placementNotes || '');
   const [secondDog, setSecondDog] = useState<{
     hasSecondDog: boolean;
     name: string;
@@ -124,8 +125,10 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   
   // Daily rate
   const [dailyRate, setDailyRate] = useState<number>(() => {
+    if (initialData?.dailyRate && initialData.dailyRate > 0) return initialData.dailyRate;
     if (initialData?.serviceType === 'day_training') return settings.defaultDailyRateDayTraining || 250;
     if (initialData?.serviceType === 'daycare') return settings.defaultDailyRateDaycare;
+    if (initialData?.dogGender === 'male_intact') return settings.defaultDailyRateIsolation || 230;
     return settings.defaultDailyRateBoarding;
   });
 
@@ -398,6 +401,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     if (initialData.endDate) setEndDate(initialData.endDate);
     if (initialData.depositAmount !== undefined) setDepositAmount(initialData.depositAmount);
     if (initialData.notes) setNotes(initialData.notes);
+    if (initialData.placementNotes !== undefined) setPlacementNotes(initialData.placementNotes);
     if (initialData.vaccinationValid !== undefined) setVaccinationValid(initialData.vaccinationValid);
     if (initialData.paymentMethod) setPaymentMethod(initialData.paymentMethod);
   }, [initialData, settings]);
@@ -505,6 +509,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       paymentStatus: finalPaymentStatus,
       paymentMethod,
       stayStatus: initialData?.stayStatus || 'booked',
+      placementNotes: placementNotes.trim() || undefined,
       notes: combinedNotes,
       vaccinationValid,
       specialDiet,
@@ -1767,6 +1772,20 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="אלרגיות, מזון מיוחד, תרופות, התנהגות מול כלבים אחרים וכו'..."
                   className="w-full bg-slate-50 text-xs text-slate-900 p-3 rounded-xl border border-slate-200 focus:border-indigo-600 focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              {/* 🚩 Placement notes & special instructions */}
+              <div className="space-y-1.5 bg-amber-50/80 border border-amber-300 rounded-xl p-3 shadow-2xs">
+                <label className="text-xs font-black text-amber-950 block">
+                  🚩 דגש שיבוץ והוראות מיוחדות (מופיע בראש כרטיסיית הכלב ביומן):
+                </label>
+                <input
+                  type="text"
+                  value={placementNotes}
+                  onChange={(e) => setPlacementNotes(e.target.value)}
+                  placeholder="למשל: שיבוץ אך ורק עם ג'נגו / לא להוציא עם נקבות / תוקפת דרך גדר..."
+                  className="w-full bg-white text-xs font-bold text-slate-900 p-2.5 rounded-xl border border-amber-300 focus:border-amber-600 focus:outline-none"
                 />
               </div>
 

@@ -37,6 +37,7 @@ interface DayDetailsModalProps {
   onOpenPaymentModal: (booking: Booking) => void;
   onToggleStayStatus: (bookingId: string, newStatus: Booking['stayStatus']) => void;
   onInitiateRelease?: (booking: Booking) => void;
+  onToggleReviewRequest?: (booking: Booking) => void;
   onOpenVoucher?: (data: { customerName: string; dogName: string; phone: string; staysCount?: number }) => void;
 }
 
@@ -52,6 +53,8 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   onOpenPaymentModal,
   onToggleStayStatus,
   onInitiateRelease,
+  onToggleReviewRequest,
+  onOpenVoucher,
 }) => {
   if (!dateStr) return null;
 
@@ -184,6 +187,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
+                    onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
                     onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
                     actionType="arrival"
                   />
@@ -217,6 +221,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
+                    onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
                     onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
                     actionType="staying"
                   />
@@ -250,6 +255,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
+                    onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
                     onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
                     actionType="departure"
                   />
@@ -283,6 +289,7 @@ interface DogBookingCardProps {
   onMarkPaid: () => void;
   onOpenPayment: () => void;
   onInitiateRelease?: () => void;
+  onToggleReviewRequest?: () => void;
   onOpenVoucher?: () => void;
   actionType: 'arrival' | 'staying' | 'departure';
 }
@@ -295,6 +302,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   onMarkPaid,
   onOpenPayment,
   onInitiateRelease,
+  onToggleReviewRequest,
   onOpenVoucher,
 }) => {
   const todayStr = getTodayStr();
@@ -381,6 +389,13 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             </span>
           </div>
 
+          {booking.placementNotes && (
+            <div className="bg-amber-100/90 border border-amber-300 text-amber-950 font-black text-xs px-2.5 py-1 rounded-xl inline-flex items-center gap-1.5 shadow-2xs mt-1">
+              <span>🚩 דגש שיבוץ:</span>
+              <span className="text-slate-900 font-bold">{booking.placementNotes}</span>
+            </div>
+          )}
+
           {booking.notes && (
             <p className="text-[11px] text-amber-800/90 italic mt-0.5 line-clamp-1">
               הערות: {booking.notes}
@@ -419,6 +434,25 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             >
               <Home className="w-3.5 h-3.5" />
               <span>שחרר הביתה</span>
+            </button>
+          )}
+
+          {/* Review Request toggle for checked out dogs */}
+          {booking.stayStatus === 'checked_out' && onToggleReviewRequest && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleReviewRequest();
+              }}
+              title={booking.skipReviewRequest ? "בקשת חוות דעת מבוטלת ללקוח זה. לחץ להפעלה מחדש" : "בקשת חוות דעת תשלח מחר ב-19:00. לחץ לביטול (אם הלקוח לא הסתדר)"}
+              className={`text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer border shadow-2xs active:scale-95 shrink-0 ${
+                booking.skipReviewRequest
+                  ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                  : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+              }`}
+            >
+              <span>{booking.skipReviewRequest ? '🚫 סקר בוטל' : '⭐ סקר מתוזמן'}</span>
             </button>
           )}
 

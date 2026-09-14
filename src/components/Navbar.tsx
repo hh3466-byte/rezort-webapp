@@ -25,6 +25,8 @@ interface NavbarProps {
   onOpenNewBooking: () => void;
   onOpenSettings: () => void;
   onOpenGuide: () => void;
+  onOpenDailyDogUpdates?: () => void;
+  activeTonightCount?: number;
   isSidebarOpen?: boolean;
   onToggleSidebar?: () => void;
 }
@@ -37,6 +39,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenNewBooking,
   onOpenSettings,
   onOpenGuide,
+  onOpenDailyDogUpdates,
+  activeTonightCount = 0,
   isSidebarOpen = false,
   onToggleSidebar,
 }) => {
@@ -163,6 +167,24 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => {
+              if (onOpenDailyDogUpdates) onOpenDailyDogUpdates();
+              if (onToggleSidebar) onToggleSidebar();
+            }}
+            className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-amber-500/10 to-emerald-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 rounded-xl font-bold text-sm transition-all cursor-pointer shadow-sm"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-lg">🐶👑</span>
+              <span>עדכון יומי (20:00)</span>
+            </div>
+            {activeTonightCount > 0 && (
+              <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full">
+                {activeTonightCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => {
               onOpenGuide();
               if (onToggleSidebar) onToggleSidebar();
             }}
@@ -261,14 +283,31 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {onOpenDailyDogUpdates && (
+            <button
+              onClick={onOpenDailyDogUpdates}
+              title="עדכון יומי לבעלי כלבים (שעה 20:00)"
+              className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-98 text-slate-950 px-3 sm:px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-black shadow-md shadow-amber-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <span>🐶👑</span>
+              <span className="hidden sm:inline">עדכון 20:00</span>
+              {activeTonightCount > 0 && (
+                <span className="bg-slate-950 text-amber-300 text-[10px] px-1.5 py-0.2 rounded-full font-black">
+                  {activeTonightCount}
+                </span>
+              )}
+            </button>
+          )}
+
           <button
             onClick={onOpenNewBooking}
             id="btn-nav-new-booking"
-            className="bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
+            className="bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white px-3 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-indigo-600/20 flex items-center gap-1.5 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
-            <span>+ הזמנה ידנית</span>
+            <span className="hidden xs:inline">+ הזמנה</span>
+            <span className="hidden sm:inline"> ידנית</span>
           </button>
 
           <button

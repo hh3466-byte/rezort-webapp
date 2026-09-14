@@ -22,7 +22,7 @@ import {
   updateVoucherStatusInDb
 } from './services/dbService';
 import { parseVoiceOrWhatsAppText } from './services/agentService';
-import { getTodayStr, getBookingsForDate, addDays, HEBREW_MONTHS, getBookingPaymentsInMonth } from './utils/dateUtils';
+import { getTodayStr, getBookingsForDate, addDays, HEBREW_MONTHS, getBookingPaymentsInMonth, calculateDaysCount } from './utils/dateUtils';
 
 import { CalendarView } from './components/CalendarView';
 import { OccupancyForecast } from './components/OccupancyForecast';
@@ -41,14 +41,14 @@ import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
 import { Guide } from './components/Guide';
 import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricModal';
-import { ReviewRequestModal } from './components/ReviewRequestModal';
-import { IntakeRequestsModal } from './components/IntakeRequestsModal';
+import { IntakeRequestsModal, calculateBoardingRate } from './components/IntakeRequestsModal';
 import { CheckoutDebtAlertModal } from './components/CheckoutDebtAlertModal';
 import { PublicIntakePage } from './components/PublicIntakePage';
 import { SendIntakeModal } from './components/SendIntakeModal';
 import { getDateShabbatOrHoliday } from './utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './components/ShabbatHolidayGreetingModal';
 import { VoucherModal } from './components/VoucherModal';
+import { DailyDogUpdatesModal } from './components/DailyDogUpdatesModal';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
 
 export default function App() {
@@ -101,6 +101,7 @@ export default function App() {
   const [intakeRequests, setIntakeRequests] = useState<IntakeRequest[]>(() => loadStoredIntakeRequests());
   const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false);
   const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
+  const [isDailyDogUpdatesOpen, setIsDailyDogUpdatesOpen] = useState(false);
   const pendingIntakeCount = intakeRequests.filter(r => r.status === 'pending').length;
 
   // Manager Authentication State (Passcode 3466)
@@ -205,6 +206,7 @@ export default function App() {
   const dayTrainingToday = todayBookings.filter(b => b.serviceType === 'day_training').length;
   const trainingToday = fullTrainingToday + dayTrainingToday;
   const freeSlots = Math.max(0, settings.maxCapacity - totalDogsToday);
+  const activeTonightCount = activeBookings.filter(b => b.startDate <= todayStr && b.endDate > todayStr).length;
 
   // Holiday and Shabbat detection for today
   const todayHolidayInfo = getDateShabbatOrHoliday(todayStr);
@@ -267,9 +269,9 @@ export default function App() {
     }
   };
 
-  // 11:00 AM Scheduled Push & In-App Auto Reminder for Shabbat / Holiday
+  // 11:00 AM Scheduled Push & In-App Auto Reminder for Shabbat / Holiday (Disabled on Yom Kippur)
   useEffect(() => {
-    if (!todayHolidayInfo.isSpecial || totalDogsToday === 0) return;
+    if (!todayHolidayInfo.isSpecial || todayHolidayInfo.isYomKippur || totalDogsToday === 0) return;
 
     const checkAndTrigger11AmReminder = () => {
       const now = new Date();
@@ -402,27 +404,6 @@ export default function App() {
       return [];
     }
   });
-  const [isReviewModalDismissed, setIsReviewModalDismissed] = useState(false);
-
-  // Identify dogs checked out yesterday that haven't been handled yet
-  const pendingReviewBookings = bookings.filter(b => {
-    if (b.stayStatus === 'cancelled') return false;
-    if (handledReviewIds.includes(b.id)) return false;
-    const isCheckoutYesterday = b.stayStatus === 'checked_out' && b.endDate === yesterdayStr;
-    const isEndedYesterday = b.endDate === yesterdayStr;
-    return isCheckoutYesterday || isEndedYesterday;
-  });
-
-  const handleReviewHandled = (bookingId: string) => {
-    setHandledReviewIds(prev => {
-      const next = prev.includes(bookingId) ? prev : [...prev, bookingId];
-      try {
-        localStorage.setItem('shmulik_handled_review_requests', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-    showToast('⭐ בקשת חוות הדעת עודכנה בהצלחה');
-  };
 
   // Jump to today
   const handleJumpToToday = () => {
@@ -754,34 +735,91 @@ export default function App() {
     }
   };
 
-  // Checkout Debt Warning Modal State & Handlers
+  // Checkout Debt Warning & Release Modal State & Handlers
   const [checkoutDebtBooking, setCheckoutDebtBooking] = useState<Booking | null>(null);
 
   const handleInitiateRelease = (booking: Booking) => {
-    const debt = Math.max(0, (Number(booking.totalPrice) || 0) - (Number(booking.depositAmount) || 0));
-    if (debt > 0 && booking.paymentStatus !== 'fully_paid') {
-      setCheckoutDebtBooking(booking);
-    } else {
-      handleToggleStayStatus(booking.id, 'checked_out');
-    }
+    setCheckoutDebtBooking(booking);
   };
 
-  const handleConfirmReleaseWithDebt = async (booking: Booking) => {
+  const handleConfirmReleaseWithDebt = async (booking: Booking, skipReview = false) => {
     setCheckoutDebtBooking(null);
-    await handleToggleStayStatus(booking.id, 'checked_out');
+    const updated: Booking = {
+      ...booking,
+      stayStatus: 'checked_out',
+      skipReviewRequest: skipReview,
+      notes: skipReview
+        ? (booking.notes?.includes('[ללא_סקר]') ? booking.notes : `${booking.notes || ''} [ללא_סקר]`.trim())
+        : (booking.notes?.replace(/\[ללא_סקר\]/g, '').trim()),
+      updatedAt: new Date().toISOString()
+    };
+    setBookings(prev => prev.map(b => b.id === booking.id ? updated : b));
+    if (skipReview) {
+      showToast(`🏡 ${booking.dogName} שוחרר הביתה (בוטלה שליחת סקר חוות דעת)`);
+    } else {
+      showToast(`🏡 ${booking.dogName} שוחרר בהצלחה הביתה`);
+    }
+    await saveBookingToDb(updated);
   };
 
-  const handleMarkPaidAndRelease = async (booking: Booking) => {
+  const handleConfirmReleaseDirect = async (booking: Booking, skipReview = false) => {
+    setCheckoutDebtBooking(null);
+    const updated: Booking = {
+      ...booking,
+      stayStatus: 'checked_out',
+      skipReviewRequest: skipReview,
+      notes: skipReview
+        ? (booking.notes?.includes('[ללא_סקר]') ? booking.notes : `${booking.notes || ''} [ללא_סקר]`.trim())
+        : (booking.notes?.replace(/\[ללא_סקר\]/g, '').trim()),
+      updatedAt: new Date().toISOString()
+    };
+    setBookings(prev => prev.map(b => b.id === booking.id ? updated : b));
+    if (skipReview) {
+      showToast(`🏡 ${booking.dogName} שוחרר הביתה (בוטלה שליחת סקר חוות דעת)`);
+    } else {
+      showToast(`🏡 ${booking.dogName} שוחרר בהצלחה הביתה`);
+    }
+    await saveBookingToDb(updated);
+  };
+
+  const handleMarkPaidAndRelease = async (booking: Booking, skipReview = false) => {
     setCheckoutDebtBooking(null);
     const updated: Booking = {
       ...booking,
       depositAmount: Number(booking.totalPrice) || 0,
       paymentStatus: 'fully_paid',
       stayStatus: 'checked_out',
+      skipReviewRequest: skipReview,
+      notes: skipReview
+        ? (booking.notes?.includes('[ללא_סקר]') ? booking.notes : `${booking.notes || ''} [ללא_סקר]`.trim())
+        : (booking.notes?.replace(/\[ללא_סקר\]/g, '').trim()),
       updatedAt: new Date().toISOString()
     };
     setBookings(prev => prev.map(b => b.id === booking.id ? updated : b));
-    showToast(`🏡 ${booking.dogName} שוחרר בהצלחה! התשלום סומן כשולם במלואו.`);
+    if (skipReview) {
+      showToast(`🏡 ${booking.dogName} שוחרר! סומן כשולם מלא (בוטלה שליחת סקר)`);
+    } else {
+      showToast(`🏡 ${booking.dogName} שוחרר בהצלחה! התשלום סומן כשולם במלואו.`);
+    }
+    await saveBookingToDb(updated);
+  };
+
+  const handleToggleReviewRequest = async (booking: Booking) => {
+    const newSkip = !booking.skipReviewRequest;
+    const updated: Booking = {
+      ...booking,
+      skipReviewRequest: newSkip,
+      notes: newSkip
+        ? (booking.notes?.includes('[ללא_סקר]') ? booking.notes : `${booking.notes || ''} [ללא_סקר]`.trim())
+        : (booking.notes?.replace(/\[ללא_סקר\]/g, '').trim()),
+      updatedAt: new Date().toISOString()
+    };
+    setBookings(prev => prev.map(b => b.id === booking.id ? updated : b));
+    if (newSkip) {
+      showToast(`🚫 בוטלה שליחת בקשת חוות דעת עבור ${booking.dogName}`);
+    } else {
+      showToast(`⭐ הופעלה שליחת בקשת חוות דעת עבור ${booking.dogName}`);
+    }
     await saveBookingToDb(updated);
   };
 
@@ -870,6 +908,23 @@ export default function App() {
               <span>שלח שאלון בקשה לקליטה</span>
             </button>
 
+            {/* 2.5. Daily Evening Dog Update (20:00) */}
+            <button
+              type="button"
+              onClick={() => setIsDailyDogUpdatesOpen(true)}
+              id="btn-daily-dog-updates-top"
+              className="bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 active:scale-95 border border-amber-300 text-amber-950 font-black px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+              title="עדכון יומי לבעלי כלבים בשעה 20:00 - תצוגה מקדימה, החלפת נוסחים ושליחה"
+            >
+              <span className="text-base">🐶👑</span>
+              <span>עדכון 20:00</span>
+              {activeTonightCount > 0 && (
+                <span className="bg-amber-500 text-white text-[11px] font-black px-1.5 py-0.2 rounded-full shadow-2xs font-mono">
+                  {activeTonightCount}
+                </span>
+              )}
+            </button>
+
             {/* 3. New Booking */}
             <button
               onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
@@ -902,18 +957,6 @@ export default function App() {
               <span>הגדרות</span>
             </button>
 
-            {/* 6. Pending Review Requests (Conditional notification button) */}
-            {pendingReviewBookings.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setIsReviewModalDismissed(false)}
-                className="bg-amber-50 hover:bg-amber-100 active:scale-95 border border-amber-300 text-amber-900 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer animate-pulse shrink-0"
-                title="לחץ לפתיחת בקשת חוות דעת לכלבים שהשתחררו אתמול"
-              >
-                <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
-                <span>⭐ {pendingReviewBookings.length} חוות דעת</span>
-              </button>
-            )}
           </div>
 
           {/* Main View Navigation Tabs (Left in RTL) */}
@@ -1372,6 +1415,7 @@ export default function App() {
               onDeleteBooking={handleDeleteBooking}
               onOpenNewBooking={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
               onInitiateRelease={handleInitiateRelease}
+              onToggleReviewRequest={handleToggleReviewRequest}
             />
           )}
 
@@ -1426,6 +1470,7 @@ export default function App() {
           }}
           onToggleStayStatus={handleToggleStayStatus}
           onInitiateRelease={handleInitiateRelease}
+          onToggleReviewRequest={handleToggleReviewRequest}
         />
       )}
 
@@ -1546,14 +1591,6 @@ export default function App() {
         />
       )}
 
-      {/* Review Request Modal (The day after a dog is checked out) */}
-      {!isReviewModalDismissed && pendingReviewBookings.length > 0 && (
-        <ReviewRequestModal
-          pendingBookings={pendingReviewBookings}
-          onClose={() => setIsReviewModalDismissed(true)}
-          onHandled={handleReviewHandled}
-        />
-      )}
 
       {/* Header Metric Drill-down & Edit Modal */}
       {activeHeaderMetric && (
@@ -1576,7 +1613,7 @@ export default function App() {
         />
       )}
 
-      {/* Checkout Debt Warning Modal */}
+      {/* Checkout Debt Warning & Release Modal */}
       <CheckoutDebtAlertModal
         isOpen={!!checkoutDebtBooking}
         booking={checkoutDebtBooking}
@@ -1584,6 +1621,7 @@ export default function App() {
         onClose={() => setCheckoutDebtBooking(null)}
         onMarkPaidAndRelease={handleMarkPaidAndRelease}
         onConfirmReleaseWithDebt={handleConfirmReleaseWithDebt}
+        onConfirmReleaseDirect={handleConfirmReleaseDirect}
         onOpenPaymentModal={(b) => {
           setCheckoutDebtBooking(null);
           setPaymentModalBooking(b);
@@ -1608,6 +1646,25 @@ export default function App() {
             showToast('פרטי בקשת הקליטה עודכנו ונשמרו! ✨');
           }}
           onApproveAndBook={async (req) => {
+            const daysCount = Math.max(1, calculateDaysCount(req.startDate, req.endDate));
+            const boardingRateInfo = calculateBoardingRate(
+              daysCount,
+              Number(settings?.defaultDailyRateBoarding) || 180,
+              {
+                isFriendlyWithDogs: req.isFriendlyWithDogs,
+                dogGender: req.dogGender,
+                isNeutered: req.isNeutered,
+                isolationRate: Number(settings?.defaultDailyRateIsolation) || 230
+              }
+            );
+            const calculatedDefault = req.serviceType === 'training'
+              ? (Number(settings?.defaultDailyRateTraining) || 6500)
+              : req.serviceType === 'daycare'
+              ? (daysCount * (Number(settings?.defaultDailyRateDaycare) || 90))
+              : boardingRateInfo.totalPrice;
+            const finalPrice = req.depositRequested && req.depositRequested > 0 ? req.depositRequested : calculatedDefault;
+            const dailyRateVal = req.serviceType === 'boarding' ? boardingRateInfo.dailyRate : undefined;
+
             setBookingWizardOpen({
               isOpen: true,
               initialData: {
@@ -1624,6 +1681,8 @@ export default function App() {
                 endDate: req.endDate,
                 vaccinationValid: req.isVaccinated,
                 notes: [req.specialNeeds, req.notes, req.internalNotes ? `הערות שמוליק: ${req.internalNotes}` : ''].filter(Boolean).join(' | '),
+                totalPrice: finalPrice,
+                dailyRate: dailyRateVal,
                 depositAmount: req.depositRequested || 0,
                 paymentStatus: req.depositRequested ? 'deposit_paid' : 'fully_paid',
                 stayStatus: 'booked'
@@ -1685,6 +1744,17 @@ export default function App() {
         />
       )}
 
+      {/* Daily Dog Evening Updates Modal (20:00) */}
+      {isDailyDogUpdatesOpen && (
+        <DailyDogUpdatesModal
+          bookings={bookings}
+          settings={settings}
+          intakeRequests={intakeRequests}
+          onClose={() => setIsDailyDogUpdatesOpen(false)}
+          showToast={showToast}
+        />
+      )}
+
       {/* Floating Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-2xl text-xs sm:text-sm font-bold flex items-center gap-2 border border-slate-800 animate-bounce">
@@ -1720,8 +1790,8 @@ export default function App() {
         onClose={() => setIsManagerAuthOpen(false)}
       />
 
-      {/* Persistent Floating 11:00 Alert Bar for Shabbat / Holiday */}
-      {todayHolidayInfo.isSpecial && todayUnsentGreetingsCount > 0 && new Date().getHours() >= 11 && !greetingModalDate && !isGreetingFloatingSnoozed && (
+      {/* Persistent Floating 11:00 Alert Bar for Shabbat / Holiday (Never on Yom Kippur) */}
+      {todayHolidayInfo.isSpecial && !todayHolidayInfo.isYomKippur && todayUnsentGreetingsCount > 0 && new Date().getHours() >= 11 && !greetingModalDate && !isGreetingFloatingSnoozed && (
         <div 
           className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-6 sm:w-[420px] z-40 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-3.5 rounded-2xl shadow-2xl border-2 border-white/40 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-5 duration-300 ring-4 ring-red-600/20"
           dir="rtl"

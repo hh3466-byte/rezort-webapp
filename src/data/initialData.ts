@@ -6,6 +6,7 @@ export const defaultSettings: ResortSettings = {
   managerPhone: '054-8765888',
   maxCapacity: 16,
   defaultDailyRateBoarding: 180,
+  defaultDailyRateIsolation: 230,
   defaultDailyRateTraining: 6500, // תהליך אילוף מלא (מחיר כולל)
   defaultDailyRateDayTraining: 250, // אילוף ביומיות (ללא לינה - מחיר ליום)
   defaultDailyRateCombined: 0,

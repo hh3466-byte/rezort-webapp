@@ -9,6 +9,7 @@ export interface HolidayInfo {
   icon: string;
   isShabbat: boolean;
   holidayName: string | null;
+  isYomKippur?: boolean;
 }
 
 /**
@@ -82,12 +83,23 @@ export function getDateShabbatOrHoliday(dateStrOrObj: string | Date): HolidayInf
   const holiday = getJewishHoliday(d);
 
   if (shabbat && holiday) {
+    if (holiday === 'יום כיפור') {
+      return {
+        isSpecial: false, // יום כיפור קדוש: איסור מוחלט על שליחת הודעות אוטומטיות!
+        label: 'שבת • יום כיפור 🕯️',
+        icon: '🕯️',
+        isShabbat: true,
+        holidayName: holiday,
+        isYomKippur: true
+      };
+    }
     return {
       isSpecial: true,
       label: `שבת • ${holiday}`,
       icon: '🕯️',
       isShabbat: true,
-      holidayName: holiday
+      holidayName: holiday,
+      isYomKippur: false
     };
   }
 
@@ -97,11 +109,35 @@ export function getDateShabbatOrHoliday(dateStrOrObj: string | Date): HolidayInf
       label: 'שבת שלום',
       icon: '🕯️',
       isShabbat: true,
-      holidayName: null
+      holidayName: null,
+      isYomKippur: false
     };
   }
 
   if (holiday) {
+    // יום כיפור: יום קדוש ביותר, אין לשלוח שום הודעות אוטומטיות ללקוחות!
+    if (holiday === 'יום כיפור') {
+      return {
+        isSpecial: false,
+        label: 'יום כיפור 🕯️',
+        icon: '🕯️',
+        isShabbat: false,
+        holidayName: holiday,
+        isYomKippur: true
+      };
+    }
+
+    if (holiday === 'ערב יום כיפור') {
+      return {
+        isSpecial: false,
+        label: 'ערב יום כיפור 🕯️',
+        icon: '🕯️',
+        isShabbat: false,
+        holidayName: holiday,
+        isYomKippur: true
+      };
+    }
+
     // Eves of holidays (like Friday) are busy check-in days (open until 14:00).
     // Greetings are sent on Shabbat (Saturday) and on the holiday itself!
     if (holiday.startsWith('ערב ')) {
@@ -110,7 +146,8 @@ export function getDateShabbatOrHoliday(dateStrOrObj: string | Date): HolidayInf
         label: holiday,
         icon: '🕯️',
         isShabbat: false,
-        holidayName: holiday
+        holidayName: holiday,
+        isYomKippur: false
       };
     }
 
@@ -127,7 +164,8 @@ export function getDateShabbatOrHoliday(dateStrOrObj: string | Date): HolidayInf
       label: holiday,
       icon,
       isShabbat: false,
-      holidayName: holiday
+      holidayName: holiday,
+      isYomKippur: false
     };
   }
 
@@ -136,8 +174,72 @@ export function getDateShabbatOrHoliday(dateStrOrObj: string | Date): HolidayInf
     label: '',
     icon: '',
     isShabbat: false,
-    holidayName: null
+    holidayName: null,
+    isYomKippur: false
   };
+}
+
+/**
+ * Calculate the exact end of Yom Kippur in Israel (40 minutes after sunset)
+ */
+export function getYomKippurSunsetPlus40Minutes(date: Date = new Date()): number {
+  try {
+    const lat = 32.085;
+    const lon = 34.781;
+    const startOfYear = new Date(date.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((date.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+    const gamma = (2 * Math.PI / 365) * (dayOfYear - 1);
+    const eqtime = 229.18 * (0.000075 + 0.001868 * Math.cos(gamma) - 0.032077 * Math.sin(gamma) - 0.014615 * Math.cos(2 * gamma) - 0.040849 * Math.sin(2 * gamma));
+    const decl = 0.006918 - 0.399912 * Math.cos(gamma) + 0.070257 * Math.sin(gamma) - 0.006758 * Math.cos(2 * gamma) + 0.000907 * Math.sin(2 * gamma);
+    const latRad = lat * Math.PI / 180;
+    const zenithRad = 90.8333 * Math.PI / 180;
+    const cosHourAngle = (Math.cos(zenithRad) / (Math.cos(latRad) * Math.cos(decl))) - (Math.tan(latRad) * Math.tan(decl));
+    const hourAngle = Math.acos(cosHourAngle) * 180 / Math.PI;
+    const sunsetUtcMinutes = 720 - 4 * lon - eqtime + hourAngle * 4;
+    const sunsetIsraelMinutes = sunsetUtcMinutes + 180;
+    return Math.round(sunsetIsraelMinutes + 40);
+  } catch (e) {
+    return 19 * 60 + 20; // Safe fallback: 19:20
+  }
+}
+
+/**
+ * Check if Yom Kippur holy period is actively in effect right now
+ * (Starts Erev Yom Kippur at 14:00, ends 40 minutes after sunset on Yom Kippur).
+ */
+export function isYomKippurActiveNow(now: Date = new Date()): boolean {
+  try {
+    const parts = new Intl.DateTimeFormat('en-u-ca-hebrew', { day: 'numeric', month: 'numeric', timeZone: 'Asia/Jerusalem' }).formatToParts(now);
+    const hDay = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
+    const hMonth = new Intl.DateTimeFormat('he-u-ca-hebrew', { month: 'long', timeZone: 'Asia/Jerusalem' }).format(now).trim();
+    if (!hMonth.includes('תשרי')) return false;
+
+    const hour = parseInt(new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hour12: false, timeZone: 'Asia/Jerusalem' }).format(now), 10);
+    const minute = parseInt(new Intl.DateTimeFormat('en-GB', { minute: 'numeric', timeZone: 'Asia/Jerusalem' }).format(now), 10);
+    const currentMinutes = hour * 60 + minute;
+
+    // ערב יום כיפור (ט' בתשרי) החל משעה 14:00
+    if (hDay === 9 && currentMinutes >= 14 * 60) return true;
+
+    // יום כיפור עצמו (י' בתשרי) עד 40 דקות בדיוק אחרי שקיעת השמש
+    if (hDay === 10) {
+      const endMinutes = getYomKippurSunsetPlus40Minutes(now);
+      return currentMinutes < endMinutes;
+    }
+
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Check specifically if a given date is Yom Kippur or Erev Yom Kippur
+ */
+export function isYomKippurDate(dateStrOrObj: string | Date): boolean {
+  const d = typeof dateStrOrObj === 'string' ? new Date(dateStrOrObj + 'T00:00:00') : dateStrOrObj;
+  const holiday = getJewishHoliday(d);
+  return holiday === 'יום כיפור' || holiday === 'ערב יום כיפור';
 }
 
 /**

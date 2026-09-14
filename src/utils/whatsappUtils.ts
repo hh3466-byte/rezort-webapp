@@ -113,7 +113,8 @@ export function generateBookingConfirmationMessage(booking: Booking, settings: R
   msg += `• בשישי וערב חג: עד שעה 14:00, ובצאת השבת / החג (למחרת השבת / חג) משעה 09:00\n`;
   msg += `• מעבר לשעות הפעילות (לפני 09:00 ואחרי 19:00), ובסופי שבוע וחגים על הבעלים להתגבר ולהתאפק! בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐾\n`;
   msg += `\nאנא וודאו כי פנקס החיסונים בתוקף וציידו את ${booking.dogName} במזון הרגיל ובמידת הצורך בציוד אישי.\n`;
-  msg += `מחכים לכם! צוות הריזורט לכלב 🐾 (${settings.managerPhone})`;
+  msg += `\n📍 *מיקום והגעה בריזורט לכלב (Waze / Google Maps):*\nhttps://maps.app.goo.gl/8bm2Rdt7DtHeUS5J9\n`;
+  msg += `\nמחכים לכם! צוות הריזורט לכלב 🐾 (${settings.managerPhone})`;
 
   return msg;
 }

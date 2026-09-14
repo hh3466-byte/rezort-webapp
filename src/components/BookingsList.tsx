@@ -37,6 +37,7 @@ interface BookingsListProps {
   onOpenPaymentModal: (booking: Booking) => void;
   onOpenNewBooking: () => void;
   onInitiateRelease?: (booking: Booking) => void;
+  onToggleReviewRequest?: (booking: Booking) => void;
 }
 
 export const BookingsList: React.FC<BookingsListProps> = ({
@@ -49,6 +50,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
   onOpenPaymentModal,
   onOpenNewBooking,
   onInitiateRelease,
+  onToggleReviewRequest,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'all' | PaymentStatus>('all');
@@ -72,7 +74,8 @@ export const BookingsList: React.FC<BookingsListProps> = ({
       const matchOwner = b.ownerName.toLowerCase().includes(q);
       const matchPhone = b.ownerPhone.includes(q);
       const matchNotes = (b.notes || '').toLowerCase().includes(q);
-      return matchDog || matchOwner || matchPhone || matchNotes;
+      const matchPlacement = (b.placementNotes || '').toLowerCase().includes(q);
+      return matchDog || matchOwner || matchPhone || matchNotes || matchPlacement;
     }
     return true;
   });
@@ -357,6 +360,13 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                       </span>
                     </div>
 
+                    {b.placementNotes && (
+                      <div className="bg-amber-100/90 border border-amber-300 text-amber-950 font-black text-xs px-2.5 py-1 rounded-xl inline-flex items-center gap-1.5 shadow-2xs">
+                        <span>🚩 דגש שיבוץ:</span>
+                        <span className="text-slate-900 font-bold">{b.placementNotes}</span>
+                      </div>
+                    )}
+
                     {b.notes && (
                       <p className="text-xs text-amber-800/90 italic line-clamp-2">
                         הערות: {b.notes}
@@ -404,6 +414,25 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                         >
                           <Home className="w-4 h-4" />
                           <span>שחרור</span>
+                        </button>
+                      )}
+
+                      {/* Toggle review request for checked out dogs */}
+                      {b.stayStatus === 'checked_out' && onToggleReviewRequest && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleReviewRequest(b);
+                          }}
+                          title={b.skipReviewRequest ? "בקשת חוות דעת מבוטלת ללקוח זה. לחץ להפעלה מחדש" : "בקשת חוות דעת תשלח מחר ב-19:00. לחץ לביטול (אם הלקוח לא הסתדר)"}
+                          className={`text-xs font-bold px-2.5 py-1.5 rounded-xl border flex items-center gap-1 transition-all cursor-pointer ${
+                            b.skipReviewRequest
+                              ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                              : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                          }`}
+                        >
+                          <span>{b.skipReviewRequest ? '🚫 סקר בוטל' : '⭐ סקר מתוזמן'}</span>
                         </button>
                       )}
 

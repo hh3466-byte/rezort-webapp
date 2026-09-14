@@ -472,6 +472,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span className="text-[10px] text-slate-400 mt-1 block">אירוח מלא ולינה לפי מספר ימים</span>
                 </div>
 
+                <div className="bg-red-50/70 p-3.5 rounded-xl border border-red-200">
+                  <label className="text-xs text-red-900 font-bold block mb-1">
+                    🔴 בידוד / תוקפני / זכר לא מסורס (מחיר ליום)
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm font-bold text-red-600">₪</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.defaultDailyRateIsolation || 230}
+                      onChange={(e) => setFormData({ ...formData, defaultDailyRateIsolation: Number(e.target.value) })}
+                      className="w-full bg-white text-slate-900 font-black text-sm p-2 rounded-lg border border-red-300 focus:border-red-500"
+                    />
+                  </div>
+                  <span className="text-[10px] text-red-800 font-semibold mt-1 block">תעריף יומי קבוע לבידוד/זכר לא מסורס (ללא הנחות)</span>
+                </div>
+
                 <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200">
                   <label className="text-xs text-amber-900 font-bold block mb-1">
                     🎓 תהליך אילוף (70 יום)

@@ -150,6 +150,32 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
   const sentCount = dayBookings.filter(b => sentMap[b.id]).length;
   const progressPercent = dayBookings.length > 0 ? Math.round((sentCount / dayBookings.length) * 100) : 0;
 
+  // חסימה מוחלטת ביום כיפור: יום קדוש - לא שולחים שום הודעות ללקוחות!
+  if (holidayInfo.isYomKippur) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in" dir="rtl">
+        <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-md w-full p-6 text-center space-y-4">
+          <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center text-3xl shadow-inner">
+            🕯️
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-xl font-black text-slate-900">יום כיפור – יום קדוש</h3>
+            <p className="text-sm font-medium text-slate-600 leading-relaxed">
+              יום כיפור הוא יום קדוש – לא משנה מה, לא שולחים הודעות אוטומטיות או ד״ש ללקוחות ביום כיפור. המערכת חסומה לחלוטין לשליחה.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 rounded-xl cursor-pointer transition-all shadow-md active:scale-95"
+          >
+            הבנתי, סגור חלון
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in" dir="rtl">
       <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[92vh] overflow-hidden">
