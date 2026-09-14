@@ -8,6 +8,7 @@ export interface WhatsAppChat {
   unreadCount?: number;
   lastMessage?: string;
   timestamp?: number;
+  lastMessageType?: 'incoming' | 'outgoing';
 }
 
 export interface WhatsAppMessage {
@@ -88,7 +89,7 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
 
     const chatMap = new Map<string, WhatsAppChat>();
 
-    const processMessage = (m: any) => {
+    const processMessage = (m: any, direction: 'incoming' | 'outgoing') => {
       if (!m || !m.chatId) return;
       const chatId: string = m.chatId;
 
@@ -118,9 +119,10 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
           id: chatId,
           name: m.senderName || nameMap[chatId] || phone,
           type: 'user',
-          unreadCount: m.type === 'incoming' && !m.isRead ? 1 : 0,
+          unreadCount: direction === 'incoming' && !m.isRead ? 1 : 0,
           lastMessage: msgText,
-          timestamp: msgTime || Date.now()
+          timestamp: msgTime || Date.now(),
+          lastMessageType: direction
         });
       } else {
         const existing = chatMap.get(chatId)!;
@@ -128,18 +130,19 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
           if (m.senderName) existing.name = m.senderName;
           else if (nameMap[chatId]) existing.name = nameMap[chatId];
         }
-        if (m.type === 'incoming' && !m.isRead) {
+        if (direction === 'incoming' && !m.isRead) {
           existing.unreadCount = (existing.unreadCount || 0) + 1;
         }
         if (msgTime > (existing.timestamp || 0)) {
           existing.timestamp = msgTime;
+          existing.lastMessageType = direction;
           if (msgText) existing.lastMessage = msgText;
         }
       }
     };
 
-    incoming.forEach(processMessage);
-    outgoing.forEach(processMessage);
+    incoming.forEach(m => processMessage(m, 'incoming'));
+    outgoing.forEach(m => processMessage(m, 'outgoing'));
 
     // Convert map to array sorted by latest message, excluding non-business emoji contacts
     const result = Array.from(chatMap.values())

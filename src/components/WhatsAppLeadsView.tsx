@@ -65,9 +65,9 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState<'all' | 'new' | 'needs_treatment' | 'handled'>('new');
+  const [filter, setFilter] = useState<'new' | 'needs_treatment'>('new');
   
-  // Status Overrides per phone (סדר חשיבות מובהק: חדשים -> נדרש טיפול -> טופל)
+  // Status Overrides per phone (חדשים למענה -> בטיפול -> טופל)
   const [statusOverrides, setStatusOverrides] = useState<Record<string, 'new' | 'needs_treatment' | 'handled'>>(() => {
     try {
       const raw = localStorage.getItem('crm_status_overrides');
@@ -119,44 +119,51 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
     }
   };
 
-  // Cycle status on card click: חדש -> לטיפול -> טופל -> חדש
+  // Cycle status on card click: חדש -> לטיפול -> טופל (הסרה מהרשימה)
   const cycleChatStatus = (chat: EnrichedWhatsAppChat, e: React.MouseEvent) => {
     e.stopPropagation();
     const current = getChatTreatmentStatus(chat);
-    const nextMap: Record<'new' | 'needs_treatment' | 'handled', 'new' | 'needs_treatment' | 'handled'> = {
-      'new': 'needs_treatment',
-      'needs_treatment': 'handled',
-      'handled': 'new'
-    };
-    updateChatStatus(chat.cleanPhone, nextMap[current]);
+    if (current === 'new') {
+      updateChatStatus(chat.cleanPhone, 'needs_treatment');
+    } else if (current === 'needs_treatment') {
+      updateChatStatus(chat.cleanPhone, 'handled');
+    } else {
+      updateChatStatus(chat.cleanPhone, 'new');
+    }
   };
 
   const getChatTreatmentStatus = (chat: EnrichedWhatsAppChat): 'new' | 'needs_treatment' | 'handled' => {
-    // 1. לקוח שמילא שאלון קליטה -> חד משמעית בסטטוס "לטיפול" (אלא אם אושר ביומן או סומן ידנית כטופל)
+    // 1. קביעה ידנית מפורשת של שמוליק תמיד קודמת
+    if (statusOverrides[chat.cleanPhone]) {
+      return statusOverrides[chat.cleanPhone];
+    }
+
+    // 2. לקוח שיש לו כבר הזמנה קיימת ביומן -> תמיד טופל (handled)
+    if (chat.classification === 'customer_with_booking') {
+      return 'handled';
+    }
+
+    // 3. לקוח שמילא שאלון קליטה:
+    //    אם אושר כבר כהזמנה ביומן -> טופל
+    //    אחרת -> בסטטוס "לטיפול" (ממתין לבדיקת פרטי השאלון וקליטה)
     if (chat.classification === 'intake_submitted') {
-      if (statusOverrides[chat.cleanPhone] === 'handled' || chat.matchedIntake?.status === 'approved') {
+      if (chat.matchedIntake?.status === 'approved') {
         return 'handled';
       }
       return 'needs_treatment';
     }
 
-    // 2. לקוח שיש לו הזמנה קיימת ביומן -> תמיד טופל (handled)
-    if (chat.classification === 'customer_with_booking') {
-      if (statusOverrides[chat.cleanPhone] === 'needs_treatment') return 'needs_treatment';
-      return 'handled';
+    // 4. הודעה שלא נקראה או הודעה נכנסת אחרונה מהלקוח -> חדש (ממתין למענה מצוות הריזורט)
+    if ((chat.unreadCount && chat.unreadCount > 0) || chat.lastMessageType === 'incoming') {
+      return 'new';
     }
 
-    // 3. קביעה ידנית של המשתמש בעלת עדיפות לשאר הפניות
-    if (statusOverrides[chat.cleanPhone]) {
-      return statusOverrides[chat.cleanPhone];
+    // 5. אם ההודעה האחרונה הייתה הודעה יוצאת מאיתנו (נשלח שאלון או ענינו והלקוח טרם השיב) -> לטיפול
+    if (chat.lastMessageType === 'outgoing') {
+      return 'needs_treatment';
     }
 
-    // 4. פנייה חדשה שיש בה הודעה שלא נקראה -> חדש (חשיבות 1)
-    if (chat.unreadCount && chat.unreadCount > 0) return 'new';
-
-    // 5. ברירת מחדל לפנייה חדשה -> חדש
-    if (chat.classification === 'new_lead') return 'new';
-
+    // 6. ברירת מחדל לפנייה -> חדש
     return 'new';
   };
 
@@ -335,15 +342,12 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
     }
   };
 
-  // 5. Filter, Search and Strict Priority Sorting:
-  // סדר חשיבות מובהק: 1. חדשים -> 2. נדרש טיפול -> 3. טופל
+  // 5. Filter, Search and Priority Sorting:
   const filteredChats = chats
     .filter(chat => {
       const status = getChatTreatmentStatus(chat);
-      if (filter === 'new' && status !== 'new') return false;
-      if (filter === 'needs_treatment' && status !== 'needs_treatment') return false;
-      if (filter === 'handled' && status !== 'handled') return false;
 
+      // חיפוש טקסט חופשי מאפשר למצוא כל שיחה
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchName = chat.name.toLowerCase().includes(q);
@@ -351,36 +355,30 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
         const matchDog = (chat.matchedDogName || '').toLowerCase().includes(q);
         return matchName || matchPhone || matchDog;
       }
-      return true;
+
+      // ללא חיפוש טקסט - מציג אך ורק את הטאב הפעיל (חדשים או לטיפול)
+      return status === filter;
     })
     .sort((a, b) => {
       const statusA = getChatTreatmentStatus(a);
       const statusB = getChatTreatmentStatus(b);
 
-      // 1. מיון לפי סדר חשיבות מבוקש (חדשים -> נדרש טיפול -> טופל)
       if (CRM_PRIORITY_ORDER[statusA] !== CRM_PRIORITY_ORDER[statusB]) {
         return CRM_PRIORITY_ORDER[statusA] - CRM_PRIORITY_ORDER[statusB];
       }
 
-      // 2. הודעות שלא נקראו קודמות בתוך אותה קבוצה
       const unreadA = a.unreadCount || 0;
       const unreadB = b.unreadCount || 0;
       if (unreadA !== unreadB) {
         return unreadB - unreadA;
       }
 
-      // 3. לפי עדכניות ההודעה
       return (b.timestamp || 0) - (a.timestamp || 0);
     });
 
-  // Count metrics for Priority Tabs & Groups
+  // מונים לטאבים הפעילים
   const newCount = chats.filter(c => getChatTreatmentStatus(c) === 'new').length;
   const needsTreatmentCount = chats.filter(c => getChatTreatmentStatus(c) === 'needs_treatment').length;
-  const handledCount = chats.filter(c => getChatTreatmentStatus(c) === 'handled').length;
-
-  const newChats = filteredChats.filter(c => getChatTreatmentStatus(c) === 'new');
-  const needsTreatmentChats = filteredChats.filter(c => getChatTreatmentStatus(c) === 'needs_treatment');
-  const handledChats = filteredChats.filter(c => getChatTreatmentStatus(c) === 'handled');
 
   // Render individual chat list item
   const renderChatCard = (chat: EnrichedWhatsAppChat) => {
@@ -562,26 +560,24 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               />
             </div>
 
-            {/* Classification Filter Tabs - 4 equal columns by Priority order */}
-            <div className="grid grid-cols-4 gap-1 pt-0.5">
+            {/* Classification Filter Tabs - 2 focused tabs: חדשים (למענה) & לטיפול */}
+            <div className="grid grid-cols-2 gap-1.5 pt-0.5">
               {[
-                { id: 'all', label: 'הכל', count: chats.length },
-                { id: 'new', label: '🔴 חדשים', count: newCount },
+                { id: 'new', label: '🔴 חדשים (למענה)', count: newCount },
                 { id: 'needs_treatment', label: '🟡 לטיפול', count: needsTreatmentCount },
-                { id: 'handled', label: '🟢 טופל', count: handledCount },
               ].map(tab => (
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setFilter(tab.id as any)}
-                  className={`py-1.5 px-1 rounded-xl text-[11px] font-black transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 shrink-0 ${
+                  onClick={() => setFilter(tab.id as 'new' | 'needs_treatment')}
+                  className={`py-2 px-2 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 ${
                     filter === tab.id
                       ? 'bg-[#065f46] text-white shadow-2xs'
                       : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
                   }`}
                 >
                   <span className="truncate">{tab.label}</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${filter === tab.id ? 'bg-emerald-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${filter === tab.id ? 'bg-emerald-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
                     {tab.count}
                   </span>
                 </button>
@@ -601,59 +597,13 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                 {chatsError}
               </div>
             ) : filteredChats.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-xs font-medium">
-                לא נמצאו שיחות התואמות את הסינון
-              </div>
-            ) : filter === 'all' ? (
-              /* Divided strictly into 3 Priority Sections: חדשים -> נדרש טיפול -> טופל */
-              <div>
-                {/* 1. חדשים (Priority 1) */}
-                {newChats.length > 0 && (
-                  <div>
-                    <div className="sticky top-0 z-10 bg-rose-50/95 backdrop-blur-xs px-3 py-1.5 border-y border-rose-200 flex items-center justify-between shadow-2xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
-                        <span className="text-xs font-black text-rose-950">🔴 פניות חדשות ({newChats.length})</span>
-                      </div>
-                      <span className="text-[10px] text-rose-700 font-bold">חשיבות 1</span>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                      {newChats.map(renderChatCard)}
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. נדרש טיפול (Priority 2) */}
-                {needsTreatmentChats.length > 0 && (
-                  <div>
-                    <div className="sticky top-0 z-10 bg-amber-50/95 backdrop-blur-xs px-3 py-1.5 border-y border-amber-200 flex items-center justify-between shadow-2xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                        <span className="text-xs font-black text-amber-950">🟡 נדרש טיפול ({needsTreatmentChats.length})</span>
-                      </div>
-                      <span className="text-[10px] text-amber-700 font-bold">חשיבות 2</span>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                      {needsTreatmentChats.map(renderChatCard)}
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. טופל (Priority 3) */}
-                {handledChats.length > 0 && (
-                  <div>
-                    <div className="sticky top-0 z-10 bg-emerald-50/95 backdrop-blur-xs px-3 py-1.5 border-y border-emerald-200 flex items-center justify-between shadow-2xs">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                        <span className="text-xs font-black text-emerald-950">🟢 טופל ({handledChats.length})</span>
-                      </div>
-                      <span className="text-[10px] text-emerald-700 font-bold">חשיבות 3</span>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                      {handledChats.map(renderChatCard)}
-                    </div>
-                  </div>
-                )}
+              <div className="p-8 text-center text-slate-400 text-xs font-medium space-y-1">
+                <p className="font-bold text-sm text-slate-600">
+                  {filter === 'new' ? 'אין פניות חדשות שממתינות למענה 🎉' : 'אין פניות בטיפול כרגע'}
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  {searchQuery ? 'לא נמצאו תוצאות התואמות את החיפוש' : filter === 'new' ? 'כל הפניות החדשות נענו או הועברו לטיפול' : 'פניות שנענו או שאלונים שנשלחו יופיעו כאן'}
+                </p>
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
@@ -810,7 +760,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                           ? 'bg-rose-600 text-white shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
-                      title="סמן כפנייה חדשה (בראש הרשימה)"
+                      title="סמן כפנייה חדשה למענה"
                     >
                       🔴 חדש
                     </button>
@@ -822,7 +772,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                           ? 'bg-amber-500 text-white shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
-                      title="סמן כדורש טיפול"
+                      title="סמן כבטיפול"
                     >
                       🟡 לטיפול
                     </button>
@@ -832,11 +782,11 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                       className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
                         getChatTreatmentStatus(selectedChat) === 'handled'
                           ? 'bg-emerald-700 text-white shadow-2xs'
-                          : 'text-slate-600 hover:text-slate-900'
+                          : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50'
                       }`}
-                      title="סמן כטופל (מעביר לתחתית הרשימה)"
+                      title="סמן כטופל (הסר מרשימת הפניות הפעילות)"
                     >
-                      🟢 טופל
+                      ✓ {getChatTreatmentStatus(selectedChat) === 'handled' ? 'טופל (בארכיון)' : 'סמן כטופל'}
                     </button>
                   </div>
 
@@ -861,6 +811,25 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* Handled Notice Banner */}
+              {getChatTreatmentStatus(selectedChat) === 'handled' && (
+                <div className="bg-emerald-50 border-b border-emerald-200/80 px-4 py-2 flex items-center justify-between gap-3 text-xs shrink-0">
+                  <div className="flex items-center gap-2 text-emerald-950 font-bold min-w-0">
+                    <span className="text-emerald-800 font-black shrink-0">✓ פנייה זו סומנה כטופלה</span>
+                    <span className="text-slate-500 text-[11px] truncate hidden sm:inline">
+                      (הפנייה אינה מופיעה ברשימת הפניות הפעילות)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateChatStatus(selectedChat.cleanPhone, 'needs_treatment')}
+                    className="bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-3 py-1 rounded-lg text-xs flex items-center gap-1 shadow-2xs transition-all cursor-pointer shrink-0"
+                  >
+                    <span>החזר לטיפול</span>
+                  </button>
+                </div>
+              )}
 
               {/* Detected Name Banner */}
               {detectedSenderName && (
