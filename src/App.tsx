@@ -101,8 +101,14 @@ export default function App() {
   const [showPublicIntake, setShowPublicIntake] = useState(isIntakeParam);
   const [intakeRequests, setIntakeRequests] = useState<IntakeRequest[]>(() => loadStoredIntakeRequests());
   const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false);
+  const [intakeModalFilter, setIntakeModalFilter] = useState<'new' | 'in_progress' | 'all' | 'payment_requested' | 'approved' | 'rejected'>('new');
   const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
   const [isDailyDogUpdatesOpen, setIsDailyDogUpdatesOpen] = useState(false);
+  
+  const isReqNew = (r: IntakeRequest) => r.status === 'pending' && (!r.internalNotes || !r.internalNotes.trim());
+  const isReqInTreatment = (r: IntakeRequest) => r.status === 'payment_requested' || (r.status === 'pending' && Boolean(r.internalNotes && r.internalNotes.trim()));
+  const newIntakeCount = intakeRequests.filter(isReqNew).length;
+  const inProgressIntakeCount = intakeRequests.filter(isReqInTreatment).length;
   const pendingIntakeCount = intakeRequests.filter(r => r.status === 'pending').length;
 
   // Manager Authentication State (Passcode 3466)
@@ -874,27 +880,58 @@ export default function App() {
           
           {/* Action Buttons (Right in RTL) */}
           <div className="flex items-center gap-2 flex-wrap py-1">
-            {/* 1. First from right: Intake Requests Modal (with prominent live count) */}
+            {/* 1. Button A: New Intake Requests (בקשות חדשות) */}
             <button
               type="button"
-              onClick={() => setIsIntakeModalOpen(true)}
-              id="btn-intake-requests-top"
+              onClick={() => {
+                setIntakeModalFilter('new');
+                setIsIntakeModalOpen(true);
+              }}
+              id="btn-intake-new-top"
               className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-2xs shrink-0 ${
-                pendingIntakeCount > 0
-                  ? 'bg-gradient-to-r from-emerald-50 via-white to-emerald-50 hover:from-emerald-100 hover:to-emerald-50 border-2 border-emerald-600 text-emerald-950 shadow-md shadow-emerald-700/15 ring-2 ring-emerald-500/25 hover:scale-[1.02] active:scale-95'
-                  : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-emerald-300 text-slate-800'
+                newIntakeCount > 0
+                  ? 'bg-gradient-to-r from-rose-50 via-white to-rose-50 hover:from-rose-100 hover:to-rose-50 border-2 border-rose-500 text-rose-950 shadow-md shadow-rose-600/15 ring-2 ring-rose-400/25 hover:scale-[1.02] active:scale-95'
+                  : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700'
               }`}
-              title="צפייה בבקשות קליטה חדשות מלקוחות, חיוג לתיאום, ושליחת קישור לתשלום"
+              title="צפייה בבקשות קליטה חדשות מלקוחות שטרם טופלו"
             >
               <span className="text-base">📥</span>
-              <span className="font-black">בקשות קליטה</span>
-              {pendingIntakeCount > 0 && (
+              <span className="font-black">בקשות חדשות</span>
+              {newIntakeCount > 0 ? (
                 <span className="relative flex items-center justify-center mr-0.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex items-center justify-center min-w-[26px] h-[26px] px-1.5 bg-gradient-to-r from-red-600 to-rose-600 text-white text-sm sm:text-base font-black font-mono rounded-full shadow-md ring-2 ring-white">
-                    {pendingIntakeCount}
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex items-center justify-center min-w-[24px] h-[24px] px-1.5 bg-gradient-to-r from-red-600 to-rose-600 text-white text-xs sm:text-sm font-black font-mono rounded-full shadow-md ring-2 ring-white">
+                    {newIntakeCount}
                   </span>
                 </span>
+              ) : (
+                <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full font-mono font-bold">0</span>
+              )}
+            </button>
+
+            {/* 2. Button B: In-Progress Intake Requests (בתהליך טיפול) */}
+            <button
+              type="button"
+              onClick={() => {
+                setIntakeModalFilter('in_progress');
+                setIsIntakeModalOpen(true);
+              }}
+              id="btn-intake-inprogress-top"
+              className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-2xs shrink-0 ${
+                inProgressIntakeCount > 0
+                  ? 'bg-gradient-to-r from-amber-50 via-white to-amber-50 hover:from-amber-100 hover:to-amber-50 border-2 border-amber-500 text-amber-950 shadow-md shadow-amber-600/15 ring-2 ring-amber-400/25 hover:scale-[1.02] active:scale-95'
+                  : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700'
+              }`}
+              title="צפייה בבקשות שנמצאות כעת בטיפול (שיחות, הודעות או קישור תשלום שנשלח)"
+            >
+              <span className="text-base">⏳</span>
+              <span className="font-black">בתהליך טיפול</span>
+              {inProgressIntakeCount > 0 ? (
+                <span className="relative inline-flex items-center justify-center min-w-[24px] h-[24px] px-1.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white text-xs sm:text-sm font-black font-mono rounded-full shadow-md ring-2 ring-white">
+                  {inProgressIntakeCount}
+                </span>
+              ) : (
+                <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full font-mono font-bold">0</span>
               )}
             </button>
 
@@ -1669,6 +1706,7 @@ export default function App() {
           requests={intakeRequests}
           settings={settings}
           bookings={bookings}
+          initialFilter={intakeModalFilter}
           onClose={() => setIsIntakeModalOpen(false)}
           onUpdateStatus={async (id, status, notes) => {
             await updateIntakeRequestStatusInDb(id, status, notes);
@@ -1692,13 +1730,17 @@ export default function App() {
                 isolationRate: Number(settings?.defaultDailyRateIsolation) || 230
               }
             );
+            const isFree = req.isFreeStay ||
+              (req.notes && (req.notes.includes('חינם') || req.notes.includes('ללא תשלום') || req.notes.includes('כלב נוסף'))) ||
+              (req.internalNotes && (req.internalNotes.includes('חינם') || req.internalNotes.includes('ללא תשלום') || req.internalNotes.includes('כלב נוסף')));
+
             const calculatedDefault = req.serviceType === 'training'
               ? (Number(settings?.defaultDailyRateTraining) || 6500)
               : req.serviceType === 'daycare'
               ? (daysCount * (Number(settings?.defaultDailyRateDaycare) || 90))
               : boardingRateInfo.totalPrice;
-            const finalPrice = req.depositRequested && req.depositRequested > 0 ? req.depositRequested : calculatedDefault;
-            const dailyRateVal = req.serviceType === 'boarding' ? boardingRateInfo.dailyRate : undefined;
+            const finalPrice = isFree ? 0 : (req.depositRequested && req.depositRequested > 0 ? req.depositRequested : calculatedDefault);
+            const dailyRateVal = isFree ? 0 : (req.serviceType === 'boarding' ? boardingRateInfo.dailyRate : undefined);
 
             setBookingWizardOpen({
               isOpen: true,
@@ -1718,8 +1760,9 @@ export default function App() {
                 notes: [req.specialNeeds, req.notes, req.internalNotes ? `הערות שמוליק: ${req.internalNotes}` : ''].filter(Boolean).join(' | '),
                 totalPrice: finalPrice,
                 dailyRate: dailyRateVal,
-                depositAmount: req.depositRequested || 0,
-                paymentStatus: req.depositRequested ? 'deposit_paid' : 'fully_paid',
+                depositAmount: isFree ? 0 : (req.depositRequested || 0),
+                paymentStatus: isFree ? 'fully_paid' : (req.depositRequested ? 'deposit_paid' : 'fully_paid'),
+                isFreeStay: isFree,
                 stayStatus: 'booked'
               }
             });

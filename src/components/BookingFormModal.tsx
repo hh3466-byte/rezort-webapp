@@ -74,6 +74,26 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   const [placementNotes, setPlacementNotes] = useState(initialData?.placementNotes || '');
   const [showDebtCheckoutConfirm, setShowDebtCheckoutConfirm] = useState(false);
 
+  // Free stay / Second dog payment consolidation state
+  const [isFreeStay, setIsFreeStay] = useState<boolean>(() => {
+    if (initialData?.isFreeStay) return true;
+    if (initialData?.id && initialData.totalPrice === 0) return true;
+    if (initialData?.notes && (
+      initialData.notes.includes('חינם') || 
+      initialData.notes.includes('ללא תשלום') || 
+      initialData.notes.includes('כלב נוסף') ||
+      initialData.notes.includes('כלב שני')
+    )) return true;
+    return false;
+  });
+  const [freeStayReason, setFreeStayReason] = useState<'free' | 'second_dog'>(() => {
+    if (initialData?.notes && (initialData.notes.includes('כלב נוסף') || initialData.notes.includes('כלב שני'))) {
+      return 'second_dog';
+    }
+    return 'free';
+  });
+  const [linkedMainDogName, setLinkedMainDogName] = useState<string>(initialData?.linkedDogName || '');
+
   // Voice dictation state inside modal (DEFAULT is voice dictation enabled)
   const [voiceMode, setVoiceMode] = useState<'voice' | 'manual'>('voice');
   const [isRecording, setIsRecording] = useState(false);
@@ -86,6 +106,11 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   // Update default rate & dates when serviceType changes
   const handleServiceTypeChange = (newType: ServiceType) => {
     setServiceType(newType);
+    if (isFreeStay) {
+      setTotalPrice(0);
+      setDailyRate(0);
+      return;
+    }
     if (newType === 'training') {
       setPricingMode('period');
       setTotalPrice(settings.defaultDailyRateTraining || 6500);
@@ -103,6 +128,12 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
 
   // Recompute total price
   useEffect(() => {
+    if (isFreeStay) {
+      setTotalPrice(0);
+      setDailyRate(0);
+      setDepositAmount(0);
+      return;
+    }
     if (serviceType === 'training') {
       if (!totalPrice || totalPrice === 0) {
         setTotalPrice(settings.defaultDailyRateTraining || 6500);
@@ -111,15 +142,22 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       const days = calculateDaysCount(startDate, endDate);
       setTotalPrice(days * dailyRate);
     }
-  }, [startDate, endDate, dailyRate, pricingMode, serviceType, settings.defaultDailyRateTraining]);
+  }, [isFreeStay, startDate, endDate, dailyRate, pricingMode, serviceType, settings.defaultDailyRateTraining]);
 
   // If initialData had custom price not matching days * rate, default to matching or keep
   useEffect(() => {
-    if (initialData?.totalPrice && initialData.totalPrice > 0) {
-      const days = calculateDaysCount(startDate, endDate);
-      const expectedDaily = days * dailyRate;
-      if (initialData.totalPrice !== expectedDaily) {
-        setTotalPrice(initialData.totalPrice);
+    if (initialData?.totalPrice !== undefined) {
+      if (initialData.totalPrice === 0) {
+        setIsFreeStay(true);
+        setTotalPrice(0);
+        setDailyRate(0);
+        setDepositAmount(0);
+      } else {
+        const days = calculateDaysCount(startDate, endDate);
+        const expectedDaily = days * dailyRate;
+        if (initialData.totalPrice !== expectedDaily) {
+          setTotalPrice(initialData.totalPrice);
+        }
       }
     }
   }, []);
@@ -239,13 +277,23 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   };
 
   const doSave = (customDeposit?: number, customPaymentStatus?: PaymentStatus) => {
-    const finalDeposit = customDeposit !== undefined ? Number(customDeposit) : (Number(depositAmount) || 0);
-    let finalPaymentStatus: PaymentStatus = customPaymentStatus || 'unpaid';
-    if (!customPaymentStatus) {
+    const finalDeposit = isFreeStay ? 0 : (customDeposit !== undefined ? Number(customDeposit) : (Number(depositAmount) || 0));
+    let finalPaymentStatus: PaymentStatus = isFreeStay ? 'fully_paid' : (customPaymentStatus || 'unpaid');
+    if (!isFreeStay && !customPaymentStatus) {
       if (finalDeposit >= totalPrice && totalPrice > 0) {
         finalPaymentStatus = 'fully_paid';
       } else if (finalDeposit > 0) {
         finalPaymentStatus = 'deposit_paid';
+      }
+    }
+
+    let formattedNotes = notes.trim();
+    if (isFreeStay) {
+      const freeTag = freeStayReason === 'second_dog'
+        ? (linkedMainDogName.trim() ? `[כלב נוסף - התשלום נרשם על הכלב ${linkedMainDogName.trim()}]` : '[כלב נוסף - התשלום נרשם על הכלב הראשי]')
+        : '[אירוח ללא תשלום (חינם)]';
+      if (!formattedNotes.includes('חינם') && !formattedNotes.includes('כלב נוסף') && !formattedNotes.includes('כלב שני') && !formattedNotes.includes('ללא תשלום')) {
+        formattedNotes = `${freeTag} ${formattedNotes}`.trim();
       }
     }
 
@@ -260,16 +308,19 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       serviceType,
       startDate,
       endDate,
-      totalPrice: Number(totalPrice) || 0,
+      totalPrice: isFreeStay ? 0 : (Number(totalPrice) || 0),
+      dailyRate: isFreeStay ? 0 : (Number(dailyRate) || 0),
       depositAmount: finalDeposit,
       paymentStatus: finalPaymentStatus,
       paymentMethod,
       stayStatus,
       skipReviewRequest,
+      isFreeStay,
+      linkedDogName: isFreeStay && freeStayReason === 'second_dog' ? linkedMainDogName.trim() : undefined,
       placementNotes: placementNotes.trim() || undefined,
       notes: skipReviewRequest
-        ? (notes.includes('[ללא_סקר]') ? notes.trim() : `${notes.trim()} [ללא_סקר]`.trim())
-        : notes.replace(/\[ללא_סקר\]/g, '').trim(),
+        ? (formattedNotes.includes('[ללא_סקר]') ? formattedNotes : `${formattedNotes} [ללא_סקר]`.trim())
+        : formattedNotes.replace(/\[ללא_סקר\]/g, '').trim(),
       specialDiet: specialDiet.trim(),
       vaccinationValid,
       createdAt: initialData?.createdAt || new Date().toISOString(),
@@ -781,6 +832,97 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
           {/* Section 5: Pricing Strategy & Payment */}
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3.5">
             
+            {/* Free Stay / Multi-dog Payment Consolidation Box */}
+            <div className={`p-3.5 rounded-2xl border transition-all ${
+              isFreeStay ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/20' : 'bg-white border-slate-200'
+            }`}>
+              <div className="flex items-start justify-between gap-3">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isFreeStay}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsFreeStay(checked);
+                      if (checked) {
+                        setTotalPrice(0);
+                        setDailyRate(0);
+                        setDepositAmount(0);
+                      } else {
+                        const days = calculateDaysCount(startDate, endDate);
+                        const rate = settings.defaultDailyRateBoarding;
+                        setDailyRate(rate);
+                        setTotalPrice(days * rate);
+                      }
+                    }}
+                    className="mt-0.5 w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                      <span>🎁 סמן כאירוח ללא תשלום (חינם / כלב נוסף)</span>
+                      {isFreeStay && (
+                        <span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
+                          פעיל - ₪0
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                      סמן כאן אם השהות היא בחינם, או שמדובר בכלב שני/נוסף של אותו לקוח שהתשלום נרשם על הכלב הראשי (כדי לשלוח ללקוח לינק תשלום יחיד).
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {isFreeStay && (
+                <div className="mt-3 pt-2.5 border-t border-emerald-200/80 space-y-2.5 animate-in fade-in">
+                  <span className="text-[11px] font-bold text-emerald-950 block">
+                    סיבת הפטור מתשלום:
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFreeStayReason('free')}
+                      className={`p-2 rounded-xl border text-right text-xs transition-all cursor-pointer ${
+                        freeStayReason === 'free'
+                          ? 'bg-emerald-100/90 border-emerald-500 text-emerald-950 font-black shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 font-medium'
+                      }`}
+                    >
+                      🎁 שהות בחינם / הטבה / סגירה מיוחדת
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFreeStayReason('second_dog')}
+                      className={`p-2 rounded-xl border text-right text-xs transition-all cursor-pointer ${
+                        freeStayReason === 'second_dog'
+                          ? 'bg-emerald-100/90 border-emerald-500 text-emerald-950 font-black shadow-2xs'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 font-medium'
+                      }`}
+                    >
+                      🐕 כלב שני/נוסף – התשלום נרשם על הכלב הראשי
+                    </button>
+                  </div>
+
+                  {freeStayReason === 'second_dog' && (
+                    <div className="pt-1">
+                      <input
+                        type="text"
+                        value={linkedMainDogName}
+                        onChange={(e) => setLinkedMainDogName(e.target.value)}
+                        placeholder="שם הכלב הראשי עליו נרשם התשלום המרוכז (למשל: מקס)"
+                        className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-emerald-300 focus:outline-none font-bold"
+                      />
+                    </div>
+                  )}
+
+                  <div className="bg-emerald-100/80 text-emerald-950 text-[11px] font-semibold p-2.5 rounded-xl flex items-center gap-1.5 border border-emerald-200">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>ההזמנה מוגדרת ב-₪0, שולמה במלואה ללא חוב, ולא יישלח קישור תשלום כפול ללקוח.</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Top row: Pricing Mode Tabs */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-200">
               <h4 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">

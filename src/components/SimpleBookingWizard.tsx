@@ -109,11 +109,24 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     hasSecondDog: boolean;
     name: string;
     breed: string;
+    gender: 'male_neutered' | 'female_spayed' | 'male_intact' | 'female_intact';
+    consolidatePayment: boolean;
   }>({
     hasSecondDog: false,
     name: '',
     breed: '',
+    gender: 'male_neutered',
+    consolidatePayment: true,
   });
+
+  // Free Stay & Multi-dog Consolidated Payment states
+  const [isFreeStay, setIsFreeStay] = useState<boolean>(() => {
+    if (initialData?.isFreeStay) return true;
+    if (initialData?.totalPrice === 0 && (initialData?.notes?.includes('חינם') || initialData?.notes?.includes('ללא תשלום') || initialData?.notes?.includes('כלב נוסף'))) return true;
+    return false;
+  });
+  const [freeStayReason, setFreeStayReason] = useState<'free' | 'second_dog'>('free');
+  const [linkedMainDogName, setLinkedMainDogName] = useState<string>(initialData?.linkedDogName || '');
 
   // Step 3 State: Service, Dates, Times & Extras
   const [serviceType, setServiceType] = useState<ServiceType>(initialData?.serviceType || 'boarding');
@@ -363,6 +376,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const extrasTotal = extraServices.filter(s => s.selected).reduce((sum, s) => sum + s.price, 0);
 
   useEffect(() => {
+    if (isFreeStay) {
+      setTotalPrice(0);
+      setDepositAmount(0);
+      return;
+    }
     if (serviceType === 'training') {
       if (!totalPrice || totalPrice === 0) {
         setTotalPrice((settings.defaultDailyRateTraining || 6500) + extrasTotal);
@@ -371,14 +389,19 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       const base = daysCount * dailyRate;
       setTotalPrice(base + extrasTotal);
     }
-  }, [startDate, endDate, dailyRate, pricingMode, extraServices, daysCount, extrasTotal, serviceType, settings.defaultDailyRateTraining]);
+  }, [startDate, endDate, dailyRate, pricingMode, extraServices, daysCount, extrasTotal, serviceType, settings.defaultDailyRateTraining, isFreeStay]);
 
   // If initialData exists and has a total price, initialize accordingly
   useEffect(() => {
+    if (isFreeStay) {
+      setTotalPrice(0);
+      setDepositAmount(0);
+      return;
+    }
     if (initialData?.totalPrice && initialData.totalPrice > 0) {
       setTotalPrice(initialData.totalPrice);
     }
-  }, [initialData]);
+  }, [initialData, isFreeStay]);
 
   // Synchronize wizard state whenever initialData changes (e.g. from Grow payment or intake request)
   useEffect(() => {
@@ -404,6 +427,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     if (initialData.placementNotes !== undefined) setPlacementNotes(initialData.placementNotes);
     if (initialData.vaccinationValid !== undefined) setVaccinationValid(initialData.vaccinationValid);
     if (initialData.paymentMethod) setPaymentMethod(initialData.paymentMethod);
+    if (initialData.isFreeStay !== undefined) setIsFreeStay(initialData.isFreeStay);
+    if (initialData.linkedDogName) {
+      setLinkedMainDogName(initialData.linkedDogName);
+      setFreeStayReason('second_dog');
+    }
   }, [initialData, settings]);
 
   // Signature canvas setup
@@ -479,19 +507,30 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
   // Final submission
   const handleFinalSave = () => {
-    const finalPaymentStatus = depositAmount >= totalPrice 
+    const finalPaymentStatus: PaymentStatus = isFreeStay 
       ? 'fully_paid' 
-      : depositAmount > 0 
-      ? 'deposit_paid' 
-      : 'unpaid';
+      : (depositAmount >= totalPrice && totalPrice > 0 
+          ? 'fully_paid' 
+          : depositAmount > 0 
+          ? 'deposit_paid' 
+          : 'unpaid');
 
     const selectedExtras = extraServices
       .filter(s => s.selected)
       .map(s => ({ id: s.id, name: s.name, price: s.price }));
 
-    let combinedNotes = notes;
-    if (secondDog.hasSecondDog && secondDog.name) {
-      combinedNotes += ` [כלב שני: ${secondDog.name} (${secondDog.breed})]`;
+    let formattedNotes = notes.trim();
+    if (isFreeStay) {
+      const freeTag = freeStayReason === 'second_dog'
+        ? (linkedMainDogName.trim() ? `[כלב נוסף - התשלום נרשם על הכלב ${linkedMainDogName.trim()}]` : '[כלב נוסף - התשלום נרשם על הכלב הראשי]')
+        : '[אירוח ללא תשלום (חינם)]';
+      if (!formattedNotes.includes('חינם') && !formattedNotes.includes('כלב נוסף') && !formattedNotes.includes('כלב שני') && !formattedNotes.includes('ללא תשלום')) {
+        formattedNotes = `${freeTag} ${formattedNotes}`.trim();
+      }
+    }
+
+    if (secondDog.hasSecondDog && secondDog.name.trim()) {
+      formattedNotes = `[אירוח 2 כלבים: ${dogName.trim()} + ${secondDog.name.trim()} - התשלום הכולל נרשם על הזמנה זו] ${formattedNotes}`.trim();
     }
 
     const newBooking: Booking = {
@@ -504,13 +543,13 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       serviceType,
       startDate,
       endDate,
-      totalPrice,
-      depositAmount,
+      totalPrice: isFreeStay ? 0 : totalPrice,
+      depositAmount: isFreeStay ? 0 : depositAmount,
       paymentStatus: finalPaymentStatus,
       paymentMethod,
       stayStatus: initialData?.stayStatus || 'booked',
       placementNotes: placementNotes.trim() || undefined,
-      notes: combinedNotes,
+      notes: formattedNotes,
       vaccinationValid,
       specialDiet,
       medications,
@@ -520,15 +559,58 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       vaccinationDates,
       arrivalTime,
       pickupTime,
+      isFreeStay,
+      linkedDogName: isFreeStay && freeStayReason === 'second_dog' ? linkedMainDogName.trim() : undefined,
       extraServices: selectedExtras,
       signatureDataUrl,
       pricingMode,
-      dailyRate,
+      dailyRate: isFreeStay ? 0 : dailyRate,
       createdAt: initialData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     onSave(newBooking);
+
+    // If second dog was entered, also create a booking for the second dog in the calendar!
+    if (secondDog.hasSecondDog && secondDog.name.trim()) {
+      const secondDogBooking: Booking = {
+        id: `b-${Date.now() + 1}`,
+        dogName: secondDog.name.trim(),
+        dogBreed: secondDog.breed.trim() || 'מעורב',
+        ownerName: ownerName.trim() || 'לקוח',
+        ownerPhone: ownerPhone.trim() || '050-0000000',
+        ownerEmail: ownerEmail.trim(),
+        serviceType,
+        startDate,
+        endDate,
+        totalPrice: secondDog.consolidatePayment ? 0 : (isFreeStay ? 0 : totalPrice),
+        depositAmount: secondDog.consolidatePayment ? 0 : (isFreeStay ? 0 : depositAmount),
+        paymentStatus: 'fully_paid',
+        paymentMethod,
+        stayStatus: initialData?.stayStatus || 'booked',
+        placementNotes: placementNotes.trim() || undefined,
+        notes: `[כלב נוסף - התשלום אוחד ונרשם על ${dogName.trim()} (${ownerName.trim()})] ${notes}`.trim(),
+        vaccinationValid,
+        specialDiet,
+        medications,
+        dogAgeGroup: 'adult',
+        dogGender: secondDog.gender || 'male_neutered',
+        crateTrained,
+        vaccinationDates,
+        arrivalTime,
+        pickupTime,
+        isFreeStay: secondDog.consolidatePayment ? true : isFreeStay,
+        linkedDogName: dogName.trim(),
+        extraServices: [],
+        signatureDataUrl,
+        pricingMode,
+        dailyRate: secondDog.consolidatePayment ? 0 : (isFreeStay ? 0 : dailyRate),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      onSave(secondDogBooking);
+    }
+
     setSavedBookingResult(newBooking);
     setCurrentStep(5); // Show success celebration screen!
     confetti({
@@ -1793,22 +1875,24 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
               {!secondDog.hasSecondDog ? (
                 <button
                   type="button"
-                  onClick={() => setSecondDog({ hasSecondDog: true, name: '', breed: '' })}
+                  onClick={() => setSecondDog({ hasSecondDog: true, name: '', breed: '', gender: 'male_neutered', consolidatePayment: true })}
                   className="flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 py-1.5 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
                   <span>+ הוסף כלב נוסף לאותה הזמנה</span>
                 </button>
               ) : (
-                <div className="bg-indigo-50/60 border border-indigo-200 p-3.5 rounded-xl space-y-2">
+                <div className="bg-indigo-50/70 border-2 border-indigo-200 p-3.5 rounded-2xl space-y-3">
                   <div className="flex items-center justify-between text-xs font-bold text-indigo-900">
-                    <span>🐕 כלב נוסף בהזמנה:</span>
+                    <span className="flex items-center gap-1.5 font-black text-sm">
+                      <span>🐕 פרטי כלב שני/נוסף:</span>
+                    </span>
                     <button
                       type="button"
-                      onClick={() => setSecondDog({ hasSecondDog: false, name: '', breed: '' })}
-                      className="text-red-500 hover:text-red-700 text-xs"
+                      onClick={() => setSecondDog({ hasSecondDog: false, name: '', breed: '', gender: 'male_neutered', consolidatePayment: true })}
+                      className="text-red-500 hover:text-red-700 text-xs font-bold px-2 py-1 rounded-lg hover:bg-red-50 cursor-pointer"
                     >
-                      הסר כלב שני
+                      הסר כלב שני ✕
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -1816,17 +1900,61 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       type="text"
                       value={secondDog.name}
                       onChange={(e) => setSecondDog(prev => ({ ...prev, name: e.target.value }))}
-                      placeholder="שם הכלב השני"
-                      className="bg-white text-xs p-2 rounded-lg border border-indigo-200"
+                      placeholder="שם הכלב השני *"
+                      className="bg-white text-xs p-2.5 rounded-xl border border-indigo-300 font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                     <input
                       type="text"
                       value={secondDog.breed}
                       onChange={(e) => setSecondDog(prev => ({ ...prev, breed: e.target.value }))}
                       placeholder="גזע"
-                      className="bg-white text-xs p-2 rounded-lg border border-indigo-200"
+                      className="bg-white text-xs p-2.5 rounded-xl border border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     />
                   </div>
+
+                  {/* Gender selection for 2nd dog */}
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-bold text-indigo-950 block">מין הכלב השני:</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      {[
+                        { id: 'male_neutered', label: 'זכר מסורס' },
+                        { id: 'female_spayed', label: 'נקבה מעוקרת' },
+                        { id: 'male_intact', label: 'זכר לא מסורס' },
+                        { id: 'female_intact', label: 'נקבה לא מעוקרת' },
+                      ].map(g => (
+                        <button
+                          key={g.id}
+                          type="button"
+                          onClick={() => setSecondDog(prev => ({ ...prev, gender: g.id as any }))}
+                          className={`p-1.5 text-center rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                            secondDog.gender === g.id
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-indigo-50/50'
+                          }`}
+                        >
+                          {g.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Consolidation Checkbox */}
+                  <label className="flex items-start gap-2 pt-2 border-t border-indigo-200/80 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={secondDog.consolidatePayment}
+                      onChange={(e) => setSecondDog(prev => ({ ...prev, consolidatePayment: e.target.checked }))}
+                      className="mt-0.5 w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-black text-indigo-950 block">
+                        רשום את כל התשלום על הכלב הראשון (לינק יחיד ללקוח)
+                      </span>
+                      <span className="text-[11px] text-indigo-700 block mt-0.5">
+                        הכלב השני יירשם ביומן ב-₪0 כמשולם, כך שהלקוח לא יקבל הודעות תשלום כפולות.
+                      </span>
+                    </div>
+                  </label>
                 </div>
               )}
 
@@ -2207,6 +2335,94 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   <span className="text-sm font-extrabold text-slate-900">סה״כ לתשלום:</span>
                   <span className="text-2xl font-black text-indigo-700">₪{totalPrice}</span>
                 </div>
+              </div>
+
+              {/* Free Stay / Multi-dog Payment Consolidation Card */}
+              <div className={`p-4 rounded-2xl border-2 transition-all ${
+                isFreeStay ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/20' : 'bg-slate-50/80 border-slate-200'
+              }`}>
+                <div className="flex items-start justify-between gap-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isFreeStay}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setIsFreeStay(checked);
+                        if (checked) {
+                          setTotalPrice(0);
+                          setDepositAmount(0);
+                        } else {
+                          const base = daysCount * dailyRate;
+                          setTotalPrice(base + extrasTotal);
+                        }
+                      }}
+                      className="mt-0.5 w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                        <span>🎁 סמן כאירוח ללא תשלום (חינם / כלב נוסף)</span>
+                        {isFreeStay && (
+                          <span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
+                            פעיל - ₪0
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                        סמן כאן אם השהות היא בחינם, או שמדובר בכלב שני/נוסף שהתשלום נרשם על הכלב הראשי (כדי לשלוח לינק תשלום יחיד ללקוח).
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                {isFreeStay && (
+                  <div className="mt-3 pt-2.5 border-t border-emerald-200/80 space-y-2.5 animate-in fade-in">
+                    <span className="text-[11px] font-bold text-emerald-950 block">
+                      סיבת הפטור מתשלום:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setFreeStayReason('free')}
+                        className={`p-2 rounded-xl border text-right text-xs transition-all cursor-pointer ${
+                          freeStayReason === 'free'
+                            ? 'bg-emerald-100/90 border-emerald-500 text-emerald-950 font-black shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 font-medium'
+                        }`}
+                      >
+                        🎁 שהות בחינם / הטבה / סגירה מיוחדת
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFreeStayReason('second_dog')}
+                        className={`p-2 rounded-xl border text-right text-xs transition-all cursor-pointer ${
+                          freeStayReason === 'second_dog'
+                            ? 'bg-emerald-100/90 border-emerald-500 text-emerald-950 font-black shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 font-medium'
+                        }`}
+                      >
+                        🐕 כלב שני/נוסף – התשלום נרשם על הכלב הראשי
+                      </button>
+                    </div>
+
+                    {freeStayReason === 'second_dog' && (
+                      <div className="pt-1">
+                        <input
+                          type="text"
+                          value={linkedMainDogName}
+                          onChange={(e) => setLinkedMainDogName(e.target.value)}
+                          placeholder="שם הכלב הראשי עליו נרשם התשלום המרוכז (למשל: מקס)"
+                          className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-emerald-300 focus:outline-none font-bold"
+                        />
+                      </div>
+                    )}
+
+                    <div className="bg-emerald-100/80 text-emerald-950 text-[11px] font-semibold p-2.5 rounded-xl flex items-center gap-1.5 border border-emerald-200">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>ההזמנה מוגדרת ב-₪0, שולמה במלואה, לא תחשב בהכנסות החודש ולא יישלח קישור תשלום כפול.</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Deposit, Quick Buttons & Payment Method */}

@@ -73,20 +73,29 @@ export function formatClientPaymentLinkMessage(
     'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
 
   const agreedAmount = amount !== undefined ? amount : (request.depositRequested || 0);
-
-  const amountSection = agreedAmount > 0
-    ? `\n💰 *הסכום שסוכם הוא:* ₪${agreedAmount}\n`
-    : '';
-
-  const amountInstruction = agreedAmount > 0
-    ? ` (יש להזין ₪${agreedAmount} בעמוד התשלום)`
-    : '';
+  const isFree = request.isFreeStay || agreedAmount === 0;
 
   const stayText = request.serviceType === 'training'
     ? `לתכנית אילוף בריזורט לכלב החל מתאריך ${formatDateIL(request.startDate)}`
     : `בריזורט לכלב בין התאריכים ${formatDateIL(request.startDate)} עד ${formatDateIL(request.endDate)}`;
 
   const firstName = getFirstName(request.ownerName);
+
+  if (isFree) {
+    return `היי ${firstName}, שמחנו לשוחח! 🐾🐶
+שמחים לעדכן שהאירוח של *${request.dogName}* ${stayText} אושר ושוריין בהצלחה בריזורט לכלב! ✨
+האירוח אושר ללא צורך בתשלום נוסף (הסדר מיוחד / תשלום מרוכז).
+
+⏰ *שעות פעילות הריזורט לכלב בימים א-ה הן 09:00 - 19:00*
+• בשישי וערב חג: עד שעה 14:00, ובצאת השבת / החג (למחרת השבת / חג) משעה 09:00
+• מעבר לשעות הפעילות (לפני 09:00 ואחרי 19:00), ובסופי שבוע וחגים על הבעלים להתגבר ולהתאפק! בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐾
+
+נשמח לראותכם בריזורט! 🐕🤍
+צוות הריזורט לכלב`;
+  }
+
+  const amountSection = `\n💰 *הסכום שסוכם הוא:* ₪${agreedAmount}\n`;
+  const amountInstruction = ` (יש להזין ₪${agreedAmount} בעמוד התשלום)`;
 
   return `היי ${firstName}, שמחנו לשוחח! 🐾🐶
 שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר ${stayText}.${amountSection}

@@ -41,6 +41,8 @@ export interface Booking {
   pricingMode?: 'daily' | 'period';
   dailyRate?: number;
   skipReviewRequest?: boolean;
+  isFreeStay?: boolean;
+  linkedDogName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -111,6 +113,8 @@ export interface IntakeRequest {
   selectedBenefitId?: string;
   voucherCode?: string;
   isPhoneVerified?: boolean;
+  isFreeStay?: boolean;
+  linkedDogName?: string;
 }
 
 export interface ResortSettings {

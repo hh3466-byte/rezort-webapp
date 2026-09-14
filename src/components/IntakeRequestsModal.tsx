@@ -39,6 +39,7 @@ interface IntakeRequestsModalProps {
   requests: IntakeRequest[];
   settings: ResortSettings;
   bookings?: Booking[];
+  initialFilter?: 'all' | 'pending' | 'new' | 'in_progress' | 'payment_requested' | 'approved' | 'rejected';
   onClose: () => void;
   onUpdateStatus: (id: string, status: IntakeRequestStatus, internalNotes?: string) => Promise<void>;
   onApproveAndBook: (request: IntakeRequest) => void;
@@ -266,13 +267,20 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   requests,
   settings,
   bookings = [],
+  initialFilter,
   onClose,
   onUpdateStatus,
   onApproveAndBook,
   onDeleteRequest,
   onSaveRequest
 }) => {
-  const [filter, setFilter] = useState<'all' | 'pending' | 'payment_requested' | 'approved' | 'rejected'>('pending');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'new' | 'in_progress' | 'payment_requested' | 'approved' | 'rejected'>(initialFilter || 'new');
+
+  useEffect(() => {
+    if (initialFilter) {
+      setFilter(initialFilter);
+    }
+  }, [initialFilter]);
   const [searchQuery, setSearchQuery] = useState('');
   const [notesInputs, setNotesInputs] = useState<Record<string, string>>({});
   const [savedNoteSuccess, setSavedNoteSuccess] = useState<Record<string, boolean>>({});
@@ -357,12 +365,22 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
+  const isReqNew = (r: IntakeRequest) => r.status === 'pending' && (!r.internalNotes || !r.internalNotes.trim());
+  const isReqInTreatment = (r: IntakeRequest) => r.status === 'payment_requested' || (r.status === 'pending' && Boolean(r.internalNotes && r.internalNotes.trim()));
+
+  const newCount = requests.filter(isReqNew).length;
+  const inTreatmentCount = requests.filter(isReqInTreatment).length;
   const pendingCount = requests.filter(r => r.status === 'pending').length;
   const paymentRequestedCount = requests.filter(r => r.status === 'payment_requested').length;
   const approvedCount = requests.filter(r => r.status === 'approved').length;
 
   const filteredRequests = requests.filter(r => {
-    if (filter !== 'all' && r.status !== filter) return false;
+    if (filter === 'new' && !isReqNew(r)) return false;
+    if (filter === 'in_progress' && !isReqInTreatment(r)) return false;
+    if (filter === 'pending' && r.status !== 'pending') return false;
+    if (filter === 'payment_requested' && r.status !== 'payment_requested') return false;
+    if (filter === 'approved' && r.status !== 'approved') return false;
+    if (filter === 'rejected' && r.status !== 'rejected') return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = r.ownerName.toLowerCase().includes(q);
@@ -722,11 +740,12 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
           {/* Status Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
             {[
-              { id: 'pending', label: 'ממתינות לבדיקה', count: pendingCount, color: 'emerald' },
-              { id: 'payment_requested', label: 'נשלח קישור לתשלום', count: paymentRequestedCount, color: 'blue' },
-              { id: 'approved', label: 'נקלטו ביומן', count: approvedCount, color: 'slate' },
-              { id: 'rejected', label: 'נדחו', count: requests.filter(r => r.status === 'rejected').length, color: 'slate' },
-              { id: 'all', label: 'הכול', count: requests.length, color: 'slate' },
+              { id: 'new', label: '🔴 בקשות חדשות', count: newCount, isHot: newCount > 0 },
+              { id: 'in_progress', label: '🟡 בתהליך טיפול', count: inTreatmentCount, isHot: false },
+              { id: 'payment_requested', label: '💳 נשלח קישור לתשלום', count: paymentRequestedCount, isHot: false },
+              { id: 'approved', label: '🟢 נקלטו ביומן', count: approvedCount, isHot: false },
+              { id: 'rejected', label: 'נדחו', count: requests.filter(r => r.status === 'rejected').length, isHot: false },
+              { id: 'all', label: 'הכול', count: requests.length, isHot: false },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -740,8 +759,10 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               >
                 <span>{tab.label}</span>
                 <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${
-                  tab.id === 'pending' && tab.count > 0
-                    ? 'bg-red-600 text-white shadow-2xs'
+                  tab.id === 'new' && tab.count > 0
+                    ? 'bg-rose-600 text-white shadow-2xs animate-pulse'
+                    : tab.id === 'in_progress' && tab.count > 0
+                    ? 'bg-amber-500 text-amber-950 shadow-2xs font-bold'
                     : filter === tab.id 
                     ? 'bg-emerald-800 text-white' 
                     : 'bg-slate-200 text-slate-700'
@@ -836,15 +857,22 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 ? customPrices[req.id] 
                 : (req.depositRequested && req.depositRequested > 0 ? req.depositRequested : defaultPrice);
 
-              const isUnhandled = req.status === 'pending';
+              const isNew = req.status === 'pending' && (!req.internalNotes || !req.internalNotes.trim());
+              const isInTreatment = req.status === 'payment_requested' || (req.status === 'pending' && Boolean(req.internalNotes && req.internalNotes.trim()));
 
               return (
                 <div
                   key={req.id}
                   className={`rounded-3xl border-2 p-4 sm:p-5 transition-all space-y-4 ${
-                    isUnhandled 
-                      ? 'border-emerald-500 bg-emerald-50/25 ring-2 ring-emerald-500/20 shadow-md' 
-                      : 'border-pink-300 bg-pink-50/20 shadow-xs opacity-95'
+                    isNew 
+                      ? 'border-rose-400 bg-rose-50/20 ring-2 ring-rose-400/20 shadow-md' 
+                      : isInTreatment && req.status !== 'payment_requested'
+                      ? 'border-amber-400 bg-amber-50/25 ring-2 ring-amber-400/20 shadow-sm'
+                      : req.status === 'approved'
+                      ? 'border-emerald-300 bg-emerald-50/20 shadow-xs'
+                      : req.status === 'payment_requested'
+                      ? 'border-blue-300 bg-blue-50/20 shadow-xs'
+                      : 'border-slate-200 bg-white shadow-xs opacity-95'
                   }`}
                 >
                   {/* Card Top: Dog & Owner Header */}
@@ -867,25 +895,32 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                           
                           {/* Status Badge */}
                           <span className={`text-xs px-3 py-1 rounded-full font-black border shadow-2xs flex items-center gap-1.5 ${
-                            isUnhandled
-                              ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/40 animate-pulse'
+                            isNew
+                              ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-400/40 animate-pulse'
+                              : isInTreatment && req.status !== 'payment_requested'
+                              ? 'bg-amber-100 text-amber-950 border-amber-400 ring-1 ring-amber-400/40'
                               : req.status === 'payment_requested'
-                              ? 'bg-pink-100 text-pink-900 border-pink-300'
+                              ? 'bg-blue-100 text-blue-900 border-blue-300'
                               : req.status === 'approved'
-                              ? 'bg-pink-100 text-pink-900 border-pink-300'
+                              ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
                               : 'bg-slate-200 text-slate-700 border-slate-300'
                           }`}>
-                            {isUnhandled ? (
+                            {isNew ? (
                               <>
                                 <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                                <span>🟢 ממתין לטיפול של שמוליק</span>
+                                <span>🔴 פנייה חדשה</span>
+                              </>
+                            ) : isInTreatment && req.status !== 'payment_requested' ? (
+                              <>
+                                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                                <span>🟡 בתהליך טיפול</span>
                               </>
                             ) : req.status === 'payment_requested' ? (
-                              <span>🌸 נשלח קישור לתשלום</span>
+                              <span>💳 נשלח קישור לתשלום</span>
                             ) : req.status === 'approved' ? (
-                              <span>🌸 נקלט ביומן הראשי</span>
+                              <span>🟢 נקלט ביומן הראשי</span>
                             ) : (
-                              <span>🌸 נדחה / בוטל</span>
+                              <span>⚪ נדחה / בוטל</span>
                             )}
                           </span>
                         </div>
@@ -2009,6 +2044,35 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 settings={settings}
               />
 
+              {/* Quick presets & Free stay toggle */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setPaymentAmount('0')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border ${
+                    paymentAmount === '0' || parseFloat(paymentAmount) === 0
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                      : 'bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100'
+                  }`}
+                >
+                  🎁 אירוח ללא תשלום / כלב שני (₪0)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentAmount('200')}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+                >
+                  מקדמה 200 ₪
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentAmount('300')}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+                >
+                  מקדמה 300 ₪
+                </button>
+              </div>
+
               {/* Amount input */}
               <div className="space-y-1.5">
                 <label className="text-xs font-black text-slate-900 block">
@@ -2029,21 +2093,23 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               </div>
 
               {/* Payment Link (Optional override) */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 block">
-                  🔗 קישור לתשלום (Grow):
-                </label>
-                <input
-                  type="text"
-                  value={customPaymentLink}
-                  onChange={(e) => setCustomPaymentLink(e.target.value)}
-                  className="w-full bg-slate-50 text-slate-800 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:outline-none font-mono"
-                  placeholder="https://pay.grow.link/..."
-                />
-                <span className="text-[10px] text-slate-400 block">
-                  (ברירת מחדל: עמוד Grow של הריזורט לתשלום מאובטח ב-Bit, Apple Pay ואשראי. ניתן להדביק קישור ספציפי אם הפקת באפליקציית Grow).
-                </span>
-              </div>
+              {parseFloat(paymentAmount) !== 0 && (
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    🔗 קישור לתשלום (Grow):
+                  </label>
+                  <input
+                    type="text"
+                    value={customPaymentLink}
+                    onChange={(e) => setCustomPaymentLink(e.target.value)}
+                    className="w-full bg-slate-50 text-slate-800 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-blue-500 focus:outline-none font-mono"
+                    placeholder="https://pay.grow.link/..."
+                  />
+                  <span className="text-[10px] text-slate-400 block">
+                    (ברירת מחדל: עמוד Grow של הריזורט לתשלום מאובטח ב-Bit, Apple Pay ואשראי. ניתן להדביק קישור ספציפי אם הפקת באפליקציית Grow).
+                  </span>
+                </div>
+              )}
 
               {/* Message preview snippet */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-[11px] text-slate-700 space-y-1">
@@ -2089,15 +2155,46 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   <span>{copiedPaymentLink ? 'ההודעה הועתקה!' : 'העתק הודעה'}</span>
                 </button>
               </div>
-              <button
-                type="button"
-                disabled={isSendingPayment}
-                onClick={handleConfirmSendPayment}
-                className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-4 sm:px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all text-xs sm:text-sm"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>{isSendingPayment ? 'מעדכן ושולח...' : '📲 שלח עכשיו בוואטסאפ'}</span>
-              </button>
+              
+              {parseFloat(paymentAmount) === 0 ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onApproveAndBook({
+                        ...paymentPromptRequest,
+                        isFreeStay: true,
+                        depositRequested: 0,
+                        notes: `[אירוח ללא תשלום (חינם / כלב נוסף)] ${paymentPromptRequest.notes || ''}`.trim()
+                      });
+                      setPaymentPromptRequest(null);
+                    }}
+                    className="bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white font-black px-3.5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 text-xs"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    <span>קלוט ליומן ב-₪0 🟢</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSendingPayment}
+                    onClick={handleConfirmSendPayment}
+                    className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-3.5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 text-xs"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>אישור בוואטסאפ 📲</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isSendingPayment}
+                  onClick={handleConfirmSendPayment}
+                  className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-4 sm:px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all text-xs sm:text-sm"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>{isSendingPayment ? 'מעדכן ושולח...' : '📲 שלח עכשיו בוואטסאפ'}</span>
+                </button>
+              )}
             </div>
 
           </div>

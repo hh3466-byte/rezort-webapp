@@ -50,32 +50,105 @@ export function extractPhoneFromChatId(chatId: string): string {
 }
 
 /**
- * Fetch active chats list from Green-API
+ * Fetch active chats list from Green-API from the last 7 days only (שיחות מהשבוע האחרון בלבד)
+ * and filter out system/self and Shmulik's private phone.
  */
 export async function fetchGreenApiChats(settings?: ResortSettings): Promise<WhatsAppChat[]> {
   const { id, token } = getCredentials(settings);
   if (!id || !token) return [];
 
-  const url = `https://api.green-api.com/waInstance${id}/getChats/${token}`;
-  const response = await fetch(url, { method: 'GET' });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch chats: ${response.status} ${response.statusText}`);
+  const managerPhoneClean = settings?.managerPhone ? cleanPhoneNumber(settings.managerPhone) : '0506816001';
+  const notificationPhoneClean = settings?.whatsappNotificationPhone ? cleanPhoneNumber(settings.whatsappNotificationPhone) : '0548765888';
+
+  try {
+    // 1. Fetch last incoming & outgoing messages from the last 7 days (10080 minutes)
+    const [incomingRes, outgoingRes] = await Promise.all([
+      fetch(`https://api.green-api.com/waInstance${id}/lastIncomingMessages/${token}?minutes=10080`).then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch(`https://api.green-api.com/waInstance${id}/lastOutgoingMessages/${token}?minutes=10080`).then(r => r.ok ? r.json() : []).catch(() => [])
+    ]);
+
+    const incoming: any[] = Array.isArray(incomingRes) ? incomingRes : [];
+    const outgoing: any[] = Array.isArray(outgoingRes) ? outgoingRes : [];
+
+    // Optional: get basic contact names from getChats if available
+    const nameMap: Record<string, string> = {};
+    try {
+      const getChatsRes = await fetch(`https://api.green-api.com/waInstance${id}/getChats/${token}`);
+      if (getChatsRes.ok) {
+        const rawList: any[] = await getChatsRes.json();
+        if (Array.isArray(rawList)) {
+          for (const c of rawList) {
+            if (c.id && c.name) nameMap[c.id] = c.name;
+          }
+        }
+      }
+    } catch {}
+
+    const chatMap = new Map<string, WhatsAppChat>();
+
+    const processMessage = (m: any) => {
+      if (!m || !m.chatId) return;
+      const chatId: string = m.chatId;
+
+      // Filter out groups, broadcasts, status
+      if (chatId.includes('@g.us') || chatId.includes('@broadcast') || chatId === 'status@broadcast') return;
+
+      const phone = extractPhoneFromChatId(chatId);
+      const cleanP = cleanPhoneNumber(phone);
+
+      // Exclude Shmulik's private phone and resort notification bot self-chat
+      if (
+        cleanP === managerPhoneClean || 
+        cleanP === notificationPhoneClean ||
+        cleanP === '0506816001' || 
+        cleanP === '0548765888' ||
+        chatId.includes('506816001') || 
+        chatId.includes('548765888')
+      ) {
+        return;
+      }
+
+      const msgTime = (m.timestamp || 0) * 1000;
+      const msgText = m.textMessage || (m.extendedTextMessage?.text) || '';
+
+      if (!chatMap.has(chatId)) {
+        chatMap.set(chatId, {
+          id: chatId,
+          name: m.senderName || nameMap[chatId] || phone,
+          type: 'user',
+          unreadCount: m.type === 'incoming' && !m.isRead ? 1 : 0,
+          lastMessage: msgText,
+          timestamp: msgTime || Date.now()
+        });
+      } else {
+        const existing = chatMap.get(chatId)!;
+        if (!existing.name || existing.name === phone) {
+          if (m.senderName) existing.name = m.senderName;
+          else if (nameMap[chatId]) existing.name = nameMap[chatId];
+        }
+        if (m.type === 'incoming' && !m.isRead) {
+          existing.unreadCount = (existing.unreadCount || 0) + 1;
+        }
+        if (msgTime > (existing.timestamp || 0)) {
+          existing.timestamp = msgTime;
+          if (msgText) existing.lastMessage = msgText;
+        }
+      }
+    };
+
+    incoming.forEach(processMessage);
+    outgoing.forEach(processMessage);
+
+    // Convert map to array sorted by latest message, excluding non-business emoji contacts
+    const result = Array.from(chatMap.values())
+      .filter(c => c.name !== '♥️' && c.name !== '❤️')
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    return result;
+  } catch (err) {
+    console.warn('Error fetching 7-day Green-API chats:', err);
+    return [];
   }
-
-  const rawChats: any[] = await response.json();
-  if (!Array.isArray(rawChats)) return [];
-
-  // Filter only direct user chats (not groups or broadcasts unless needed)
-  return rawChats
-    .filter(c => c.type === 'user' && !c.id.includes('@g.us') && !c.id.includes('@broadcast'))
-    .map(c => ({
-      id: c.id,
-      name: c.name || extractPhoneFromChatId(c.id),
-      type: c.type || 'user',
-      unreadCount: c.unreadCount || 0,
-      lastMessage: '',
-      timestamp: Date.now()
-    }));
 }
 
 /**

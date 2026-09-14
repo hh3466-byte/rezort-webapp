@@ -276,7 +276,7 @@ export function getWeekDays(dateStr: string) {
  * Ensures that only payments that were actually cleared/received in that month are counted.
  */
 export function getBookingPaymentsInMonth(b: Booking, targetMonthKey: string): number {
-  if (b.stayStatus === 'cancelled' || b.paymentStatus === 'unpaid') {
+  if (b.stayStatus === 'cancelled' || b.paymentStatus === 'unpaid' || !b.totalPrice || Number(b.totalPrice) <= 0 || (b as any).isFreeStay) {
     return 0;
   }
 
