@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { IntakeRequest, IntakeRequestStatus, ResortSettings, Booking } from '../types';
 import { cleanPhoneNumber, getServiceTypeHebrew, getFirstName } from '../utils/whatsappUtils';
-import { formatClientPaymentLinkMessage, formatClientRejectionMessage } from '../services/notificationService';
+import { formatClientPaymentLinkMessage, formatClientRejectionMessage, sendGreenApiDirectMessage } from '../services/notificationService';
 import { SendIntakeModal } from './SendIntakeModal';
 import { 
   X, 
@@ -28,7 +28,10 @@ import {
   Save,
   Trash2,
   RotateCcw,
-  Dog
+  Dog,
+  Mic,
+  MicOff,
+  Bell
 } from 'lucide-react';
 import { calculateDaysCount, addDays, formatDateIL, getDayNameHebrew, getBookingsForDate } from '../utils/dateUtils';
 
@@ -273,6 +276,11 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [notesInputs, setNotesInputs] = useState<Record<string, string>>({});
   const [savedNoteSuccess, setSavedNoteSuccess] = useState<Record<string, boolean>>({});
+  const [followUpTimes, setFollowUpTimes] = useState<Record<string, string>>({});
+  const [followUpSentAlert, setFollowUpSentAlert] = useState<Record<string, boolean>>({});
+  const [activeVoiceReqId, setActiveVoiceReqId] = useState<string | null>(null);
+  const [isVoiceListening, setIsVoiceListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
   const [copiedPaymentMsg, setCopiedPaymentMsg] = useState(false);
   const [copiedPaymentLink, setCopiedPaymentLink] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -438,6 +446,128 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     } catch (e) {
       console.warn('Error saving free text note:', e);
     }
+  };
+
+  const toggleVoiceRecording = (req: IntakeRequest) => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('זיהוי קולי אינו נתמך בדפדפן זה. מומלץ להשתמש ב-Google Chrome או Microsoft Edge.');
+      return;
+    }
+
+    if (activeVoiceReqId === req.id && isVoiceListening) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+      setIsVoiceListening(false);
+      setActiveVoiceReqId(null);
+      return;
+    }
+
+    try {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.lang = 'he-IL';
+
+      rec.onstart = () => {
+        setIsVoiceListening(true);
+        setActiveVoiceReqId(req.id);
+      };
+
+      rec.onresult = (e: any) => {
+        let speechChunk = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) {
+            speechChunk += e.results[i][0].transcript + ' ';
+          }
+        }
+        if (speechChunk.trim()) {
+          const currentText = notesInputs[req.id] !== undefined ? notesInputs[req.id] : (req.internalNotes || '');
+          const updated = currentText ? `${currentText} ${speechChunk.trim()}` : speechChunk.trim();
+          setNotesInputs(prev => ({ ...prev, [req.id]: updated }));
+          if (onSaveRequest) {
+            onSaveRequest({ ...req, internalNotes: updated });
+          } else {
+            onUpdateStatus(req.id, req.status, updated);
+          }
+          setSavedNoteSuccess(prev => ({ ...prev, [req.id]: true }));
+          setTimeout(() => setSavedNoteSuccess(prev => ({ ...prev, [req.id]: false })), 2500);
+        }
+      };
+
+      rec.onerror = (err: any) => {
+        console.warn('Speech recognition error:', err);
+        setIsVoiceListening(false);
+        setActiveVoiceReqId(null);
+      };
+
+      rec.onend = () => {
+        setIsVoiceListening(false);
+        setActiveVoiceReqId(null);
+      };
+
+      recognitionRef.current = rec;
+      rec.start();
+    } catch (err) {
+      console.warn('Cannot start speech recognition:', err);
+      setIsVoiceListening(false);
+      setActiveVoiceReqId(null);
+    }
+  };
+
+  const handleSendResortFollowUpAlert = async (req: IntakeRequest) => {
+    const followUpTarget = (followUpTimes[req.id] || 'בהקדם').trim();
+    const currentNotes = (notesInputs[req.id] !== undefined ? notesInputs[req.id] : (req.internalNotes || '')).trim();
+    const cleanPhone = cleanPhoneNumber(req.ownerPhone);
+    const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
+
+    const reason = currentNotes || 'בירור פרטים ותיאום הגעה מול הלקוח';
+
+    // Format requested by user: "שים לב, צריך לחזור ל(שם הבעלים) בגלל והסיבה"
+    const alertMsg = `🔔 *התרעת מעקב - הריזורט לכלב* 🐾\n\n` +
+      `⚠️ *שים לב: צריך לחזור ל-${req.ownerName}!* בגלל: ${reason}\n\n` +
+      `🐕 *עבור הכלב:* ${req.dogName} (${req.dogBreed || 'מעורב'})\n` +
+      `📞 *טלפון הלקוח:* ${req.ownerPhone}\n` +
+      `📅 *מועד מתוכנן לחזרה:* ${followUpTarget}\n\n` +
+      `💬 *לפתיחת שיחה מיידית עם הלקוח בוואטסאפ:*\n` +
+      `https://wa.me/${intlPhone}`;
+
+    const stamp = `[תזכורת מעקב לחזרה: ${followUpTarget}]`;
+    const updatedNotes = currentNotes ? `${currentNotes}\n${stamp}` : stamp;
+    setNotesInputs(prev => ({ ...prev, [req.id]: updatedNotes }));
+
+    try {
+      if (onSaveRequest) {
+        await onSaveRequest({ ...req, internalNotes: updatedNotes });
+      } else {
+        await onUpdateStatus(req.id, req.status, updatedNotes);
+      }
+    } catch (e) {}
+
+    // Resort destination phone
+    const resortPhone = cleanPhoneNumber(settings?.managerPhone || '0548765888');
+    const intlResortPhone = resortPhone.startsWith('0') ? '972' + resortPhone.substring(1) : resortPhone;
+
+    // Send via Green-API in background if configured
+    if (settings?.greenApiIdInstance && settings?.greenApiToken) {
+      try {
+        await sendGreenApiDirectMessage(intlResortPhone, alertMsg, settings.greenApiIdInstance, settings.greenApiToken);
+      } catch (err) {
+        console.warn('Green API alert error:', err);
+      }
+    }
+
+    // Open WhatsApp directly
+    const waUrl = `https://wa.me/${intlResortPhone}?text=${encodeURIComponent(alertMsg)}`;
+    window.open(waUrl, '_blank');
+
+    setFollowUpSentAlert(prev => ({ ...prev, [req.id]: true }));
+    setTimeout(() => setFollowUpSentAlert(prev => ({ ...prev, [req.id]: false })), 4000);
   };
 
   const handleConfirmSendPayment = () => {
@@ -950,18 +1080,45 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       )}
 
                       {/* 📞 Call Progress, Phone Summary & Free-Text Tracking (Always accessible) */}
-                      <div className="bg-white/95 border-2 border-emerald-300/80 rounded-2xl p-3.5 space-y-2.5 shadow-xs">
+                      <div className="bg-white/95 border-2 border-emerald-300/80 rounded-2xl p-3.5 space-y-3 shadow-xs">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-slate-900">
                             <Phone className="w-4 h-4 text-emerald-600 shrink-0" />
                             <span>📞 מעקב שיחות וסיכום טיפול בבקשה (שמוליק):</span>
                           </div>
-                          {savedNoteSuccess[req.id] && (
-                            <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-lg animate-in fade-in flex items-center gap-1">
-                              <Check className="w-3 h-3 text-emerald-600" />
-                              ההערה נשמרה בהצלחה! ✨
-                            </span>
-                          )}
+
+                          <div className="flex items-center gap-2">
+                            {/* Speech-to-Text Microphone Dictation Button */}
+                            <button
+                              type="button"
+                              onClick={() => toggleVoiceRecording(req)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                                activeVoiceReqId === req.id && isVoiceListening
+                                  ? 'bg-red-600 text-white animate-pulse ring-2 ring-red-400'
+                                  : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200'
+                              }`}
+                              title="לחץ להכתבה קולית בעברית ישירות לתוך ההערה"
+                            >
+                              {activeVoiceReqId === req.id && isVoiceListening ? (
+                                <>
+                                  <MicOff className="w-3.5 h-3.5 animate-bounce" />
+                                  <span>מקליט... דבר עכשיו 🎙️ (לחץ לסיום)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Mic className="w-3.5 h-3.5 text-indigo-700" />
+                                  <span>🎙️ הכתבה קולית</span>
+                                </>
+                              )}
+                            </button>
+
+                            {savedNoteSuccess[req.id] && (
+                              <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-lg animate-in fade-in flex items-center gap-1">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                ההערה נשמרה! ✨
+                              </span>
+                            )}
+                          </div>
                         </div>
 
                         {/* Quick Action Stamp Buttons */}
@@ -995,11 +1152,11 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                               setNotesInputs(prev => ({ ...prev, [req.id]: val }));
                             }}
                             onBlur={() => handleSaveFreeTextNote(req)}
-                            placeholder="כתוב כאן מה סוכם בשיחה עם הלקוח, דגשים מיוחדים, תאריכים מבוקשים או הערות מעקב... (נשמר אוטומטית בעת יציאה מהשדה)"
+                            placeholder="כתוב כאן מה סוכם בשיחה עם הלקוח, דגשים מיוחדים, תאריכים מבוקשים או הערות מעקב... (נשמר אוטומטית בעת יציאה מהשדה או באמצעות כפתור המיקרופון)"
                             className="w-full bg-slate-50/90 hover:bg-white focus:bg-white text-slate-900 text-xs sm:text-sm p-3 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none resize-y font-medium transition-all"
                           />
                           <div className="flex items-center justify-between text-[11px] text-slate-500">
-                            <span>💡 ניתן להקליד בחופשיות או ללחוץ על הכפתורים המהירים למעלה</span>
+                            <span>💡 ניתן להקליד, להשתמש במיקרופון 🎙️ או ללחוץ על הכפתורים המהירים</span>
                             <button
                               type="button"
                               onClick={() => handleSaveFreeTextNote(req)}
@@ -1007,6 +1164,85 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                             >
                               <Save className="w-3.5 h-3.5" />
                               <span>שמור הערה</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* ⏰ Follow-up scheduler & WhatsApp Alert to Resort */}
+                        <div className="bg-amber-50/70 border border-amber-300/80 rounded-2xl p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                              <Bell className="w-4 h-4 text-amber-700 shrink-0" />
+                              <span>⏰ מתי צריך לחזור ללקוח ולקבל התרעה לוואטסאפ?</span>
+                            </div>
+                            {followUpSentAlert[req.id] && (
+                              <span className="text-xs bg-green-100 text-green-800 font-bold px-2.5 py-0.5 rounded-lg flex items-center gap-1 animate-in fade-in">
+                                <Check className="w-3.5 h-3.5 text-green-700" />
+                                התרעת תזכורת נשלחה לוואטסאפ של הריזורט! 🔔
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Quick scheduling preset slots */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {[
+                              { label: '⏱️ בעוד שעתיים', getVal: () => {
+                                const d = new Date(); d.setHours(d.getHours() + 2);
+                                return `היום בשעה ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                              }},
+                              { label: '🌅 מחר ב-10:00', getVal: () => {
+                                const d = new Date(); d.setDate(d.getDate() + 1);
+                                return `מחר (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) בשעה 10:00`;
+                              }},
+                              { label: '🌇 מחר ב-17:00', getVal: () => {
+                                const d = new Date(); d.setDate(d.getDate() + 1);
+                                return `מחר (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) בשעה 17:00`;
+                              }},
+                              { label: '📅 בעוד יומיים ב-11:00', getVal: () => {
+                                const d = new Date(); d.setDate(d.getDate() + 2);
+                                return `בעוד יומיים (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) בשעה 11:00`;
+                              }},
+                            ].map((slot, sIdx) => {
+                              const val = slot.getVal();
+                              return (
+                                <button
+                                  key={sIdx}
+                                  type="button"
+                                  onClick={() => setFollowUpTimes(prev => ({ ...prev, [req.id]: val }))}
+                                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-all cursor-pointer ${
+                                    followUpTimes[req.id] === val
+                                      ? 'bg-amber-600 text-white border-amber-700 shadow-2xs'
+                                      : 'bg-white hover:bg-amber-100 text-amber-900 border-amber-200'
+                                  }`}
+                                >
+                                  {slot.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Time input + Send WhatsApp Alert Button */}
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1">
+                            <div className="flex-1 flex items-center gap-2 bg-white border border-amber-200 rounded-xl px-3 py-1.5 text-xs">
+                              <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              <input
+                                type="text"
+                                value={followUpTimes[req.id] || ''}
+                                onChange={(e) => setFollowUpTimes(prev => ({ ...prev, [req.id]: e.target.value }))}
+                                placeholder="לדוגמה: מחר ב-10:00 / יום שלישי בצהריים..."
+                                className="w-full text-xs font-bold text-slate-900 bg-transparent focus:outline-none"
+                              />
+                            </div>
+
+                            {/* Send alert to Resort WhatsApp */}
+                            <button
+                              type="button"
+                              onClick={() => handleSendResortFollowUpAlert(req)}
+                              className="bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-all cursor-pointer shrink-0"
+                              title="שלח התרעה לוואטסאפ של הריזורט עם פרטי הלקוח, סיבת הפנייה ומועד החזרה המתוכנן"
+                            >
+                              <Bell className="w-3.5 h-3.5" />
+                              <span>🔔 שלח התרעה לוואטסאפ של הריזורט</span>
                             </button>
                           </div>
                         </div>
