@@ -870,10 +870,10 @@ export default function App() {
         </header>
 
         {/* All Controls in One Single Unified Horizontal Row */}
-        <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 pb-2.5 border-b border-slate-200">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-2.5 border-b border-slate-200">
           
           {/* Action Buttons (Right in RTL) */}
-          <div className="flex items-center gap-2 overflow-x-auto py-1">
+          <div className="flex items-center gap-2 flex-wrap py-1">
             {/* 1. First from right: Intake Requests Modal (with prominent live count) */}
             <button
               type="button"
@@ -898,7 +898,34 @@ export default function App() {
               )}
             </button>
 
-            {/* 2. Attached right next to Intake Requests: Send Intake Questionnaire */}
+            {/* 1.5. RIGHT NEXT TO INTAKE REQUESTS: WhatsApp CRM with Flashing Green Border */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('whatsapp')}
+              id="btn-whatsapp-crm-top"
+              className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-md shrink-0 blink-border-green active:scale-95 ${
+                activeTab === 'whatsapp'
+                  ? 'bg-gradient-to-r from-[#065f46] via-emerald-800 to-[#065f46] text-white ring-2 ring-emerald-400 shadow-emerald-900/30 scale-[1.02]'
+                  : 'bg-white hover:bg-emerald-50 text-emerald-950 hover:scale-[1.02]'
+              }`}
+              title="מרכז וואטסאפ ופניות (CRM) – ניהול שיחות, סיווג לקוחות ומענה מהיר"
+            >
+              <span className="text-base relative flex items-center">
+                💬
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white animate-ping"></span>
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white"></span>
+              </span>
+              <span className="font-black">וואטסאפ ו-CRM</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
+                activeTab === 'whatsapp'
+                  ? 'bg-emerald-900 text-emerald-100'
+                  : 'bg-emerald-100 text-emerald-800'
+              }`}>
+                {activeTab === 'whatsapp' ? 'פתוח' : 'CRM 🟢'}
+              </span>
+            </button>
+
+            {/* 2. Attached next: Send Intake Questionnaire */}
             <button
               type="button"
               onClick={() => setIsSendIntakeModalOpen(true)}
@@ -1012,19 +1039,6 @@ export default function App() {
             >
               <span>⭐</span>
               <span>לקוחות</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('whatsapp')}
-              className={`text-xs sm:text-sm font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'whatsapp'
-                  ? 'bg-[#065f46] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
-              }`}
-            >
-              <span>💬</span>
-              <span>וואטסאפ ופניות</span>
             </button>
           </div>
 

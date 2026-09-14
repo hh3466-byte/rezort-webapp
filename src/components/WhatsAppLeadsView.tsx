@@ -56,7 +56,45 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState<'all' | 'customer_with_booking' | 'intake_submitted' | 'new_lead' | 'unread'>('all');
+  const [filter, setFilter] = useState<'all' | 'new' | 'needs_treatment' | 'handled'>('all');
+  
+  // Status Overrides per phone (חדשים -> נדרש טיפול -> טופל)
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, 'new' | 'needs_treatment' | 'handled'>>(() => {
+    try {
+      const raw = localStorage.getItem('crm_status_overrides');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const updateChatStatus = (phone: string, newStatus: 'new' | 'needs_treatment' | 'handled') => {
+    setStatusOverrides(prev => {
+      const updated = { ...prev, [phone]: newStatus };
+      try {
+        localStorage.setItem('crm_status_overrides', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const getChatTreatmentStatus = (chat: EnrichedWhatsAppChat): 'new' | 'needs_treatment' | 'handled' => {
+    if (statusOverrides[chat.cleanPhone]) {
+      return statusOverrides[chat.cleanPhone];
+    }
+    // If unread messages -> new
+    if (chat.unreadCount && chat.unreadCount > 0) return 'new';
+    // If new lead -> new
+    if (chat.classification === 'new_lead') return 'new';
+    // If intake submitted -> needs treatment (unless approved)
+    if (chat.classification === 'intake_submitted') {
+      if (chat.matchedIntake?.status === 'approved') return 'handled';
+      return 'needs_treatment';
+    }
+    // If customer already has a booking -> handled
+    if (chat.classification === 'customer_with_booking') return 'handled';
+    return 'new';
+  };
 
   const [messageInput, setMessageInput] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -198,51 +236,78 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
     }
   };
 
-  // 5. Filter and Search
-  const filteredChats = chats.filter(chat => {
-    if (filter === 'customer_with_booking' && chat.classification !== 'customer_with_booking') return false;
-    if (filter === 'intake_submitted' && chat.classification !== 'intake_submitted') return false;
-    if (filter === 'new_lead' && chat.classification !== 'new_lead') return false;
-    if (filter === 'unread' && (!chat.unreadCount || chat.unreadCount <= 0)) return false;
+  // 5. Filter, Search and Strict Priority Sorting:
+  // סדר חשיבות מובהק: 1. חדשים -> 2. נדרש טיפול -> 3. טופל
+  const PRIORITY_ORDER: Record<'new' | 'needs_treatment' | 'handled', number> = {
+    'new': 1,
+    'needs_treatment': 2,
+    'handled': 3
+  };
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = chat.name.toLowerCase().includes(q);
-      const matchPhone = chat.cleanPhone.includes(q);
-      const matchDog = (chat.matchedDogName || '').toLowerCase().includes(q);
-      return matchName || matchPhone || matchDog;
-    }
-    return true;
-  });
+  const filteredChats = chats
+    .filter(chat => {
+      const status = getChatTreatmentStatus(chat);
+      if (filter === 'new' && status !== 'new') return false;
+      if (filter === 'needs_treatment' && status !== 'needs_treatment') return false;
+      if (filter === 'handled' && status !== 'handled') return false;
 
-  // Count metrics
-  const customerCount = chats.filter(c => c.classification === 'customer_with_booking').length;
-  const intakeCount = chats.filter(c => c.classification === 'intake_submitted').length;
-  const newLeadCount = chats.filter(c => c.classification === 'new_lead').length;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchName = chat.name.toLowerCase().includes(q);
+        const matchPhone = chat.cleanPhone.includes(q);
+        const matchDog = (chat.matchedDogName || '').toLowerCase().includes(q);
+        return matchName || matchPhone || matchDog;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const statusA = getChatTreatmentStatus(a);
+      const statusB = getChatTreatmentStatus(b);
+
+      // 1. מיון לפי סדר חשיבות מבוקש (חדשים -> נדרש טיפול -> טופל)
+      if (PRIORITY_ORDER[statusA] !== PRIORITY_ORDER[statusB]) {
+        return PRIORITY_ORDER[statusA] - PRIORITY_ORDER[statusB];
+      }
+
+      // 2. הודעות שלא נקראו קודמות בתוך אותה קבוצה
+      const unreadA = a.unreadCount || 0;
+      const unreadB = b.unreadCount || 0;
+      if (unreadA !== unreadB) {
+        return unreadB - unreadA;
+      }
+
+      // 3. לפי עדכניות ההודעה
+      return (b.timestamp || 0) - (a.timestamp || 0);
+    });
+
+  // Count metrics for Priority Tabs
+  const newCount = chats.filter(c => getChatTreatmentStatus(c) === 'new').length;
+  const needsTreatmentCount = chats.filter(c => getChatTreatmentStatus(c) === 'needs_treatment').length;
+  const handledCount = chats.filter(c => getChatTreatmentStatus(c) === 'handled').length;
 
   return (
     <div className="bg-slate-100 rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[calc(100vh-140px)] min-h-[580px]" dir="rtl">
       
       {/* Top Bar / Status */}
-      <div className="bg-white px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shadow-2xs shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-xl shadow-2xs">
+      <div className="bg-white px-4 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5 shadow-2xs shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-lg shadow-2xs shrink-0">
             💬
           </div>
-          <div>
-            <h2 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
-              <span>מרכז וואטסאפ ופניות לקוחות</span>
-              <span className="text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+          <div className="min-w-0">
+            <h2 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-2 flex-wrap">
+              <span>מרכז וואטסאפ ופניות (CRM)</span>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full border border-emerald-300 shrink-0">
                 Green-API מחובר 🟢
               </span>
             </h2>
-            <p className="text-xs text-slate-500 font-medium">
-              נהל את כל שיחות הוואטסאפ, זהה לקוחות קיימים ופניות חדשות, וענה ישירות עם תבניות מהירות
+            <p className="text-[11px] text-slate-500 font-medium truncate hidden sm:block">
+              ניהול שיחות וואטסאפ, זיהוי לקוחות ומענה ישיר בתבניות מהירות
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={loadChats}
@@ -251,7 +316,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
             title="רענן רשימת שיחות"
           >
             <RotateCcw className={`w-3.5 h-3.5 ${isLoadingChats ? 'animate-spin text-emerald-600' : ''}`} />
-            <span>{isLoadingChats ? 'מרענן...' : 'רענן שיחות'}</span>
+            <span>{isLoadingChats ? 'מרענן...' : 'רענן'}</span>
           </button>
         </div>
       </div>
@@ -260,7 +325,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
       <div className="flex-1 flex overflow-hidden">
         
         {/* LEFT COLUMN: Chats & Leads List (Sidebar) */}
-        <div className="w-full sm:w-80 md:w-96 bg-white border-l border-slate-200 flex flex-col shrink-0">
+        <div className="w-full sm:w-88 md:w-[380px] lg:w-[410px] bg-white border-l border-slate-200 flex flex-col shrink-0">
           
           {/* Search Bar */}
           <div className="p-3 border-b border-slate-100 bg-slate-50/70 space-y-2">
@@ -275,26 +340,26 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               />
             </div>
 
-            {/* Classification Filter Tabs */}
-            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
+            {/* Classification Filter Tabs - 4 equal columns by Priority order */}
+            <div className="grid grid-cols-4 gap-1 pt-0.5">
               {[
                 { id: 'all', label: 'הכל', count: chats.length },
-                { id: 'customer_with_booking', label: '🟢 לקוחות ביומן', count: customerCount },
-                { id: 'intake_submitted', label: '🟡 שאלון קליטה', count: intakeCount },
-                { id: 'new_lead', label: '⚪ פניות חדשות', count: newLeadCount },
+                { id: 'new', label: '🔴 חדשים', count: newCount },
+                { id: 'needs_treatment', label: '🟡 לטיפול', count: needsTreatmentCount },
+                { id: 'handled', label: '🟢 טופל', count: handledCount },
               ].map(tab => (
                 <button
                   key={tab.id}
                   type="button"
                   onClick={() => setFilter(tab.id as any)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 shrink-0 ${
+                  className={`py-1.5 px-1 rounded-xl text-[11px] font-black transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-center gap-1 shrink-0 ${
                     filter === tab.id
                       ? 'bg-[#065f46] text-white shadow-2xs'
-                      : 'bg-white hover:bg-slate-200 text-slate-600 border border-slate-200'
+                      : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
                   }`}
                 >
-                  <span>{tab.label}</span>
-                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${filter === tab.id ? 'bg-emerald-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
+                  <span className="truncate">{tab.label}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${filter === tab.id ? 'bg-emerald-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
                     {tab.count}
                   </span>
                 </button>
@@ -320,6 +385,8 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
             ) : (
               filteredChats.map(chat => {
                 const isSelected = selectedChat?.id === chat.id;
+                const status = getChatTreatmentStatus(chat);
+
                 return (
                   <div
                     key={chat.id}
@@ -330,20 +397,20 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                         : 'hover:bg-slate-50'
                     }`}
                   >
-                    {/* Status Circle Avatar */}
+                    {/* Status Circle Avatar with Priority Ring */}
                     <div className="relative shrink-0 mt-0.5">
                       <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-2xs ${
-                        chat.classification === 'customer_with_booking'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          : chat.classification === 'intake_submitted'
-                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                          : 'bg-slate-100 text-slate-700 border border-slate-200'
+                        status === 'new'
+                          ? 'bg-rose-100 text-rose-800 border-2 border-rose-300'
+                          : status === 'needs_treatment'
+                          ? 'bg-amber-100 text-amber-900 border-2 border-amber-300'
+                          : 'bg-emerald-100 text-emerald-800 border-2 border-emerald-300'
                       }`}>
                         {chat.matchedDogName ? '🐕' : '👤'}
                       </div>
                       <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white shadow-2xs ${
-                        chat.classification === 'customer_with_booking' ? 'bg-emerald-500' :
-                        chat.classification === 'intake_submitted' ? 'bg-amber-500' : 'bg-slate-400'
+                        status === 'new' ? 'bg-rose-500' :
+                        status === 'needs_treatment' ? 'bg-amber-500' : 'bg-emerald-500'
                       }`} />
                     </div>
 
@@ -354,7 +421,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                           {chat.name}
                         </h4>
                         {chat.unreadCount && chat.unreadCount > 0 ? (
-                          <span className="bg-emerald-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0">
+                          <span className="bg-rose-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-2xs shrink-0 animate-pulse">
                             {chat.unreadCount}
                           </span>
                         ) : null}
@@ -372,18 +439,28 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                         )}
                       </div>
 
-                      {/* Classification Badge */}
-                      <div className="mt-1">
-                        <span className={`text-[10px] font-bold px-2 py-0.2 rounded-md inline-block ${
-                          chat.classification === 'customer_with_booking'
-                            ? 'bg-emerald-100/90 text-emerald-800'
-                            : chat.classification === 'intake_submitted'
-                            ? 'bg-amber-100/90 text-amber-800'
-                            : 'bg-slate-100 text-slate-500'
-                        }`}>
-                          {chat.classification === 'customer_with_booking' ? '🟢 לקוח עם הזמנה' :
-                           chat.classification === 'intake_submitted' ? '🟡 מילא שאלון קליטה' : '⚪ פנייה חדשה'}
-                        </span>
+                      {/* Priority Treatment Badge */}
+                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                        {status === 'new' ? (
+                          <span className="text-[10px] font-black bg-rose-100 text-rose-800 px-2 py-0.5 rounded-md inline-flex items-center gap-1 border border-rose-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
+                            <span>🔴 חדש לטיפול</span>
+                          </span>
+                        ) : status === 'needs_treatment' ? (
+                          <span className="text-[10px] font-black bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md inline-flex items-center gap-1 border border-amber-300">
+                            <span>🟡 נדרש טיפול</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md inline-flex items-center gap-1 border border-emerald-200">
+                            <span>🟢 טופל</span>
+                          </span>
+                        )}
+
+                        {chat.classification === 'intake_submitted' && (
+                          <span className="text-[10px] font-bold text-amber-800">
+                            📋 שאלון
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -462,15 +539,58 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     <span>וואטסאפ</span>
                   </a>
 
+                  {/* Priority Status Changer for Shmulik */}
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => updateChatStatus(selectedChat.cleanPhone, 'new')}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
+                        getChatTreatmentStatus(selectedChat) === 'new'
+                          ? 'bg-rose-600 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="סמן כפנייה חדשה (בראש הרשימה)"
+                    >
+                      🔴 חדש
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateChatStatus(selectedChat.cleanPhone, 'needs_treatment')}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
+                        getChatTreatmentStatus(selectedChat) === 'needs_treatment'
+                          ? 'bg-amber-500 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="סמן כדורש טיפול"
+                    >
+                      🟡 לטיפול
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateChatStatus(selectedChat.cleanPhone, 'handled')}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
+                        getChatTreatmentStatus(selectedChat) === 'handled'
+                          ? 'bg-emerald-700 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                      title="סמן כטופל (מעביר לתחתית הרשימה)"
+                    >
+                      🟢 טופל
+                    </button>
+                  </div>
+
                   {/* "קלוט להזמנה ביומן" */}
                   {onOpenNewBookingWithData && (
                     <button
                       type="button"
-                      onClick={() => onOpenNewBookingWithData({
-                        ownerName: selectedChat.name,
-                        ownerPhone: selectedChat.cleanPhone,
-                        dogName: selectedChat.matchedDogName || ''
-                      })}
+                      onClick={() => {
+                        updateChatStatus(selectedChat.cleanPhone, 'handled');
+                        onOpenNewBookingWithData({
+                          ownerName: selectedChat.name,
+                          ownerPhone: selectedChat.cleanPhone,
+                          dogName: selectedChat.matchedDogName || ''
+                        });
+                      }}
                       className="bg-[#065f46] hover:bg-[#044e45] text-white font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
                       title="פתח את אשף ההזמנה עם פרטי הלקוח ממולאים מראש"
                     >
@@ -585,7 +705,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               </div>
 
               {/* Quick Action Template Bar */}
-              <div className="bg-white border-t border-slate-200 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 shadow-2xs">
+              <div className="bg-white border-t border-slate-200 px-3 py-2 flex flex-wrap items-center gap-1.5 shrink-0 shadow-2xs">
                 <span className="text-[11px] font-black text-slate-400 shrink-0 ml-1">
                   תגובה מהירה:
                 </span>
