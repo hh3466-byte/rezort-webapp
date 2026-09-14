@@ -11,13 +11,16 @@ import {
   Sparkles,
   Send
 } from 'lucide-react';
-import { ResortSettings } from '../types';
+import { Booking, IntakeRequest, ResortSettings } from '../types';
 import { cleanPhoneNumber } from '../utils/whatsappUtils';
+import { formatDateIL } from '../utils/dateUtils';
 
 interface SendIntakeModalProps {
   isOpen: boolean;
   onClose: () => void;
   settings: ResortSettings;
+  bookings?: Booking[];
+  intakeRequests?: IntakeRequest[];
   onOpenFormPreview?: () => void;
 }
 
@@ -25,6 +28,8 @@ export const SendIntakeModal: React.FC<SendIntakeModalProps> = ({
   isOpen,
   onClose,
   settings,
+  bookings = [],
+  intakeRequests = [],
   onOpenFormPreview,
 }) => {
   const [clientPhone, setClientPhone] = useState('');
@@ -34,6 +39,17 @@ export const SendIntakeModal: React.FC<SendIntakeModalProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
 
   if (!isOpen) return null;
+
+  const cleanPhone = cleanPhoneNumber(clientPhone);
+  const phoneSuffix = cleanPhone.length >= 7 ? cleanPhone.slice(-7) : '';
+
+  const matchedBooking = (phoneSuffix && bookings)
+    ? bookings.find(b => cleanPhoneNumber(b.ownerPhone).slice(-7) === phoneSuffix)
+    : null;
+
+  const matchedIntake = (phoneSuffix && intakeRequests)
+    ? intakeRequests.find(r => cleanPhoneNumber(r.ownerPhone).slice(-7) === phoneSuffix)
+    : null;
 
   const intakeUrl = typeof window !== 'undefined' 
     ? `${window.location.origin}/?intake=true`
@@ -118,6 +134,15 @@ export const SendIntakeModal: React.FC<SendIntakeModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
+          {/* Deduplication Guidance Note */}
+          <div className="bg-emerald-50/90 border border-emerald-200/80 rounded-2xl p-3 flex items-start gap-2.5 text-xs text-emerald-950 shadow-2xs">
+            <span className="text-base shrink-0">💡</span>
+            <div className="leading-relaxed">
+              <strong>שים לב – מניעת כפילות:</strong> כל לקוח שפונה בוואטסאפ מקבל קישור לשאלון קליטה במענה האוטומטי באופן מיידי.
+              מסך זה מיועד <strong>רק ללקוחות ששוחחת איתם בטלפון</strong>, או שלקוח שכבר שוחח איתך <strong>ביקש את השאלון שוב</strong> על מנת למלא אותו.
+            </div>
+          </div>
+
           {/* Caller Quick Info Inputs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Phone */}
@@ -134,6 +159,32 @@ export const SendIntakeModal: React.FC<SendIntakeModalProps> = ({
                 className="w-full bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-300 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 autoFocus
               />
+
+              {/* Duplicate Safeguard Alerts */}
+              {matchedBooking && (
+                <div className="mt-2 bg-red-50 border border-red-200 text-red-900 rounded-xl p-2.5 text-xs flex items-center gap-2">
+                  <span className="text-base shrink-0">🛑</span>
+                  <div>
+                    <strong>עצור – לקוח קיים ביומן!</strong>
+                    <div>
+                      ללקוח זה יש כבר הזמנה רשומה ביומן עבור <strong>{matchedBooking.dogName}</strong> ({matchedBooking.ownerName}). אין צורך בשאלון קליטה!
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {!matchedBooking && matchedIntake && (
+                <div className="mt-2 bg-amber-50 border border-amber-200 text-amber-950 rounded-xl p-2.5 text-xs flex items-center gap-2">
+                  <span className="text-base shrink-0">⚠️</span>
+                  <div>
+                    <strong>שאלון קליטה כבר מולא ונקלט במערכת!</strong>
+                    <div>
+                      לקוח זה כבר הגיש שאלון עבור <strong>{matchedIntake.dogName}</strong> ({formatDateIL(matchedIntake.createdAt)}).
+                      יש לשלוח שוב אך ורק אם הלקוח ביקש קישור נוסף בהתנהלות מולו.
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Client Name */}

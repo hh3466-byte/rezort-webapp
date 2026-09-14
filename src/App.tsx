@@ -1749,6 +1749,8 @@ export default function App() {
         isOpen={isSendIntakeModalOpen}
         onClose={() => setIsSendIntakeModalOpen(false)}
         settings={settings}
+        bookings={bookings}
+        intakeRequests={intakeRequests}
         onOpenFormPreview={() => setShowPublicIntake(true)}
       />
 

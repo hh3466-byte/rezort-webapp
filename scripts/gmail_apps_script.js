@@ -708,12 +708,14 @@ function doPost(e) {
       closedReason = "ערב " + (holidayTitle || "חג");
     }
 
-    // בדיקת קיום לקוח במאגר (לקוח חדש מקבל קישור שאלון קליטה)
+    // בדיקת קיום לקוח במאגר (לקוח חוזר ביומן או לקוח שכבר מילא שאלון קליטה)
     var isReturningCustomer = false;
+    var hasSubmittedIntake = false;
     var customerName = "";
     var dogName = "";
 
     try {
+      // 1. בדיקה מול טבלת ההזמנות ביומן (לקוח עם הזמנה פעילה/קודמת)
       var queryUrl = SUPABASE_URL + "/rest/v1/bookings?select=owner_name,dog_name,owner_phone&order=created_at.desc&limit=200";
       var response = UrlFetchApp.fetch(queryUrl, {
         method: "get",
@@ -735,9 +737,37 @@ function doPost(e) {
           }
         }
       }
+
+      // 2. בדיקה מול טבלת בקשות הקליטה (לקוח שכבר מילא שאלון קליטה)
+      var intakeQueryUrl = SUPABASE_URL + "/rest/v1/intake_requests?select=owner_name,dog_name,owner_phone&order=created_at.desc&limit=200";
+      var intakeRes = UrlFetchApp.fetch(intakeQueryUrl, {
+        method: "get",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+        muteHttpExceptions: true
+      });
+
+      if (intakeRes.getResponseCode() === 200) {
+        var intakes = JSON.parse(intakeRes.getContentText());
+        if (intakes && intakes.length > 0) {
+          for (var k = 0; k < intakes.length; k++) {
+            var iPhone = (intakes[k].owner_phone || "").replace(/[^0-9]/g, "");
+            if (iPhone && iPhone.slice(-7) === phoneSuffix) {
+              hasSubmittedIntake = true;
+              if (!customerName) customerName = (intakes[k].owner_name || "").trim();
+              if (!dogName) dogName = (intakes[k].dog_name || "").trim();
+              break;
+            }
+          }
+        }
+      }
     } catch (dbErr) {
       Logger.log("DB Error: " + dbErr.toString());
     }
+
+    // בדיקה האם הבוט כבר שלח בעבר קישור שאלון למספר זה (מניעת כל כפילות בשליחה אוטומטית)
+    var props = PropertiesService.getScriptProperties();
+    var intakeSentKey = "intake_sent_" + phoneSuffix;
+    var wasIntakeEverSent = props.getProperty(intakeSentKey) ? true : false;
 
     var cleanName = customerName ? customerName.split(" ")[0] : (senderName ? senderName.split(" ")[0] : "");
     var greetingName = cleanName ? (" " + cleanName) : "";
@@ -755,22 +785,43 @@ function doPost(e) {
         message += "שמחנו לראות את הודעתך! " + (dogName ? "ד\"ש חם ל-" + dogName + "! 🐶\n" : "\n")
           + "נחזור אליך בשמחה ביום ראשון החל מהשעה 09:30.\n\n"
           + "בברכה,\nשמוליק - הריזורט לכלב 🐾";
+      } else if (hasSubmittedIntake) {
+        // לקוח שכבר הגיש שאלון קליטה - לא שולחים שוב שאלון!
+        message += "ראינו ששאלון בקשת הקליטה" + (dogName ? " עבור *" + dogName + "*" : "") + " כבר נקלט במערכת שלנו בהצלחה! 📋✨\n"
+          + "שמוליק והצוות בוחנים את הבקשה ונחזור אליך בשמחה ביום ראשון החל מהשעה 09:30 לתיאום סופי.\n\n"
+          + "בברכה,\nשמוליק וצוות הריזורט לכלב 🐾";
+      } else if (wasIntakeEverSent) {
+        // לקוח שכבר קיבל את הקישור לשאלון בפנייה קודמת - לא שולחים שוב שאלון!
+        message += "הודעתך נרשמה במערכת ונחזור אליך בשמחה ביום ראשון החל מהשעה 09:30.\n\n"
+          + "בברכה,\nשמוליק וצוות הריזורט לכלב 🐾";
       } else {
+        // פנייה חדשה ראשונית בלבד - מקבל קישור לשאלון
         message += "אם פניתם לגבי קליטה או שריון מקום לכלבכם, נשמח מאוד שתמלאו שאלון קצר (דקה אחת בלבד) כדי שנוכל לחזור אליכם ראשונים עם כל הפרטים והזמינות ביום ראשון בבוקר:\n"
           + "👉 https://rezort-webapp.vercel.app/?request=true\n\n"
           + "שיהיה סוף שבוע נעים ושקט,\nשמוליק וצוות הריזורט לכלב 🐾✨";
+        props.setProperty(intakeSentKey, new Date().toISOString());
       }
     } else {
-      if (!isReturningCustomer) {
-        message = "היי" + greetingName + "! 🐾🐶\n"
-          + "תודה שפנית ל*ריזורט לכלב* – פנסיון בוטיק, אילוף וחוויות לכלבים!\n\n"
-          + "כדי שנוכל לתת לכם את המענה הטוב והמדויק ביותר, אנא מלאו שאלון קצר (דקה אחת בלבד) עם פרטי הכלב והתאריכים המבוקשים:\n"
-          + "👉 https://rezort-webapp.vercel.app/?request=true\n\n"
-          + "מיד לאחר מילוי השאלון ניצור איתכם קשר טלפוני לתיאום סופי.\n\n"
-          + "בברכה חמה,\nשמוליק וצוות הריזורט לכלב 🐕🤍";
-      } else {
-        return ContentService.createTextOutput(JSON.stringify({ ok: true, reason: "open hours returning customer" })).setMimeType(ContentService.MimeType.JSON);
+      // שעות פעילות פתוחות:
+      // אם זה לקוח קיים, לקוח שכבר הגיש שאלון, או שכבר קיבל קישור בעבר - אין לשלוח הודעה אוטומטית (שמוליק מתכתב איתו ידנית במערכת)
+      if (isReturningCustomer || hasSubmittedIntake || wasIntakeEverSent) {
+        return ContentService.createTextOutput(JSON.stringify({ 
+          ok: true, 
+          reason: "open hours - customer in CRM, no auto intake spam",
+          isReturningCustomer: isReturningCustomer,
+          hasSubmittedIntake: hasSubmittedIntake,
+          wasIntakeEverSent: wasIntakeEverSent
+        })).setMimeType(ContentService.MimeType.JSON);
       }
+
+      // פנייה חדשה לגמרי בפעם הראשונה בלבד:
+      message = "היי" + greetingName + "! 🐾🐶\n"
+        + "תודה שפנית ל*ריזורט לכלב* – פנסיון בוטיק, אילוף וחוויות לכלבים!\n\n"
+        + "כדי שנוכל לתת לכם את המענה הטוב והמדויק ביותר, אנא מלאו שאלון קצר (דקה אחת בלבד) עם פרטי הכלב והתאריכים המבוקשים:\n"
+        + "👉 https://rezort-webapp.vercel.app/?request=true\n\n"
+        + "מיד לאחר מילוי השאלון ניצור איתכם קשר טלפוני לתיאום סופי.\n\n"
+        + "בברכה חמה,\nשמוליק וצוות הריזורט לכלב 🐕🤍";
+      props.setProperty(intakeSentKey, new Date().toISOString());
     }
 
     // שליחת ההודעה דרך Green-API

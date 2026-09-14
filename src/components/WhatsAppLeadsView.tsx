@@ -19,7 +19,8 @@ import {
   Sparkles,
   AlertCircle,
   PlusCircle,
-  Filter
+  Filter,
+  X
 } from 'lucide-react';
 import { Booking, IntakeRequest, ResortSettings } from '../types';
 import { cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
@@ -60,6 +61,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   const [messageInput, setMessageInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sendSuccessToast, setSendSuccessToast] = useState(false);
+  const [confirmResendModal, setConfirmResendModal] = useState(false);
 
   // Voice dictation
   const [isListening, setIsListening] = useState(false);
@@ -479,6 +481,65 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                 </div>
               </div>
 
+              {/* Status Safeguard Banner: Intake Questionnaire Deduplication */}
+              {selectedChat.classification === 'new_lead' && (
+                <div className="bg-emerald-50/90 border-b border-emerald-200/80 px-4 py-2 flex items-center justify-between gap-3 text-xs shrink-0">
+                  <div className="flex items-center gap-2 text-emerald-950 font-bold min-w-0">
+                    <span className="text-emerald-800 font-black shrink-0">🤖 שאלון קליטה נשלח אוטומטית בפנייה הראשונה</span>
+                    <span className="text-emerald-400 hidden sm:inline">|</span>
+                    <span className="text-emerald-800 font-medium text-[11px] truncate hidden sm:inline">
+                      שמוליק שולח שוב קישור אך ורק אם הלקוח מבקש זאת במפורש במהלך ההתכתבות
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmResendModal(true)}
+                    className="bg-white hover:bg-emerald-100 active:scale-95 text-emerald-900 border border-emerald-300 px-2.5 py-1 rounded-lg text-[11px] font-black shrink-0 shadow-2xs transition-all cursor-pointer flex items-center gap-1"
+                    title="שלח שוב שאלון לבקשת הלקוח"
+                  >
+                    <RotateCcw className="w-3 h-3 text-emerald-700" />
+                    <span>שלח שוב לבקשתו</span>
+                  </button>
+                </div>
+              )}
+
+              {selectedChat.classification === 'intake_submitted' && (
+                <div className="bg-amber-50/90 border-b border-amber-200/80 px-4 py-2 flex items-center justify-between gap-3 text-xs shrink-0">
+                  <div className="flex items-center gap-2 text-amber-950 font-bold min-w-0">
+                    <span className="font-black shrink-0">📋 שאלון קליטה כבר מולא ונקלט במערכת</span>
+                    {selectedChat.matchedDogName && (
+                      <span className="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded-md text-[11px]">
+                        עבור {selectedChat.matchedDogName}
+                      </span>
+                    )}
+                    <span className="text-amber-400 hidden sm:inline">|</span>
+                    <span className="text-amber-800 font-medium text-[11px] truncate hidden sm:inline">
+                      אין צורך בשליחה נוספת אלא אם הלקוח ביקש קישור מחדש
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmResendModal(true)}
+                    className="bg-white hover:bg-amber-100 active:scale-95 text-amber-950 border border-amber-300 px-2.5 py-1 rounded-lg text-[11px] font-black shrink-0 shadow-2xs transition-all cursor-pointer flex items-center gap-1"
+                    title="שלח שוב שאלון לבקשת הלקוח"
+                  >
+                    <RotateCcw className="w-3 h-3 text-amber-700" />
+                    <span>שלח שוב לבקשתו</span>
+                  </button>
+                </div>
+              )}
+
+              {selectedChat.classification === 'customer_with_booking' && (
+                <div className="bg-slate-100/90 border-b border-slate-200 px-4 py-1.5 flex items-center gap-2 text-xs text-slate-700 shrink-0">
+                  <span className="font-black text-emerald-800">🟢 לקוח רשום ביומן</span>
+                  {selectedChat.matchedDogName && (
+                    <span className="font-bold text-slate-900">🐾 {selectedChat.matchedDogName}</span>
+                  )}
+                  <span className="text-slate-300">|</span>
+                  <span className="text-slate-500 text-[11px]">ללקוח זה כבר יש הזמנה רשמית – אין צורך בשאלון קליטה</span>
+                </div>
+              )}
+
               {/* Chat Messages Thread */}
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {isLoadingMessages ? (
@@ -529,19 +590,42 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   תגובה מהירה:
                 </span>
 
-                {/* 1. Send Intake Link */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const intakeUrl = `${window.location.origin}/?intake=true`;
-                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\nכדי שנוכל לבדוק זמינות ולשריין מקום עבור הכלב שלכם ב${settings.resortName}, אנא מלאו את שאלון בקשת הקליטה הקצר:\n${intakeUrl}\n\nנשמח לארח אתכם! צוות הריזורט לכלב 🐾`;
-                    handleSendMessage(text);
-                  }}
-                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
-                >
-                  <FileText className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>📝 שלח שאלון קליטה</span>
-                </button>
+                {/* 1. Intake Questionnaire Deduplication Button */}
+                {selectedChat.classification === 'customer_with_booking' ? (
+                  <div
+                    className="bg-slate-100 text-slate-500 border border-slate-200 font-bold px-3 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 select-none cursor-default"
+                    title="ללקוח יש הזמנה פעילה ביומן - אין צורך בשאלון קליטה"
+                  >
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>לקוח ביומן ({selectedChat.matchedDogName || 'פעיל'})</span>
+                  </div>
+                ) : selectedChat.classification === 'intake_submitted' ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmResendModal(true)}
+                    className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                    title="השאלון כבר נקלט במערכת. לחץ לשליחה חוזרת רק אם הלקוח ביקש זאת במפורש"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
+                    <span>🔁 שלח שוב שאלון (לבקשת הלקוח)</span>
+                    <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded-md font-black">
+                      הוגש ✅
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmResendModal(true)}
+                    className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                    title="הלקוח כבר קיבל שאלון במענה האוטומטי. שלח שוב רק אם ביקש זאת מפורשות לאחר שיחה"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>🔁 שלח שוב שאלון (לבקשת הלקוח)</span>
+                    <span className="text-[10px] bg-emerald-200/80 text-emerald-900 px-1.5 py-0.2 rounded-md font-bold">
+                      נשלח אוטומטית 🤖
+                    </span>
+                  </button>
+                )}
 
                 {/* 2. Send Location */}
                 <button
@@ -653,6 +737,83 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
         </div>
 
       </div>
+
+      {/* Confirmation Modal: Resend Intake Link Only Upon Customer Request */}
+      {confirmResendModal && selectedChat && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 max-w-md w-full p-5 space-y-4 animate-in zoom-in-95 duration-200" dir="rtl">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center text-xl shrink-0">
+                  ⚠️
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-slate-900">
+                    שליחה חוזרת של שאלון קליטה
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    מניעת כפילויות – שליחה אך ורק לבקשת הלקוח
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConfirmResendModal(false)}
+                className="w-7 h-7 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl text-xs space-y-2 leading-relaxed text-amber-950">
+              {selectedChat.classification === 'intake_submitted' ? (
+                <p>
+                  הלקוח <strong>{selectedChat.name}</strong> כבר מילא שאלון קליטה במערכת{selectedChat.matchedDogName ? ` עבור ${selectedChat.matchedDogName}` : ''}.
+                  <br />
+                  האם הלקוח ביקש קישור נוסף על מנת למלא מחדש?
+                </p>
+              ) : selectedChat.classification === 'customer_with_booking' ? (
+                <p>
+                  הלקוח <strong>{selectedChat.name}</strong> כבר משוריין ביומן הנופש עם הזמנה פעילה.
+                </p>
+              ) : (
+                <p>
+                  לקוח זה (<strong>{selectedChat.name}</strong>) כבר קיבל את שאלון הקליטה <strong>באופן אוטומטי במענה הראשוני</strong>.
+                  <br />
+                  שמוליק שולח את הקישור שוב <strong>רק אם אחרי ההתנהלות מולו הלקוח ביקש את השאלון שוב על מנת למלא אותו</strong>.
+                </p>
+              )}
+              <p className="font-black text-slate-900 pt-1">
+                האם לשלוח את קישור השאלון שוב בוואטסאפ?
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmResendModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition-all cursor-pointer"
+              >
+                ביטול (לא לשלוח)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const intakeUrl = `${window.location.origin}/?intake=true`;
+                  const firstName = getFirstName(selectedChat.name);
+                  const text = `שלום ${firstName}! 🐾\nלבקשתך ובהמשך להתכתבות שלנו, מצורף שוב הקישור לשאלון בקשת הקליטה בריזורט לכלב:\n${intakeUrl}\n\nנשמח לעמוד לרשותך לכל שאלה! צוות ${settings.resortName} 🐾`;
+                  setConfirmResendModal(false);
+                  handleSendMessage(text);
+                }}
+                className="bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>כן, הלקוח ביקש – שלח שוב</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

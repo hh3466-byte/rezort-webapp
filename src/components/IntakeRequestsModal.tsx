@@ -690,10 +690,10 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               type="button"
               onClick={() => setIsSendIntakeModalOpen(true)}
               className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-              title="שליחת שאלון בקשה לקליטה ישירות לוואטסאפ של לקוח שהתקשר"
+              title="שליחת שאלון בקשה לקליטה ללקוח שהתקשר בטלפון או ביקש שוב (פניות וואטסאפ מקבלות שאלון אוטומטית)"
             >
               <MessageCircle className="w-3.5 h-3.5" />
-              <span>שלח שאלון ללקוח</span>
+              <span>שלח שאלון ללקוח שהתקשר</span>
             </button>
 
             <button
@@ -2171,6 +2171,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
         isOpen={isSendIntakeModalOpen}
         onClose={() => setIsSendIntakeModalOpen(false)}
         settings={settings}
+        bookings={bookings}
+        intakeRequests={requests}
       />
 
     </div>
