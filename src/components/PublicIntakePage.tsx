@@ -1820,18 +1820,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
           settings={settings}
         />
 
-        {/* Discreet Staff Portal Link */}
-        {onStaffLoginClick && (
-          <div className="pt-6 pb-2 text-center">
-            <button
-              type="button"
-              onClick={onStaffLoginClick}
-              className="text-[11px] text-slate-400 hover:text-slate-600 font-medium inline-flex items-center gap-1 cursor-pointer transition-colors"
-            >
-              <span>🔒 כניסת צוות ומנהלים</span>
-            </button>
-          </div>
-        )}
+
 
       </div>
     </div>

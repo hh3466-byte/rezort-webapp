@@ -2,6 +2,7 @@ import { Booking, ResortSettings, IntakeRequest } from '../types';
 import { getTodayStr } from '../utils/dateUtils';
 import { cleanPhoneNumber } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from './notificationService';
+import { saveBookingToDb } from './dbService';
 import { 
   pickDailyDogTemplate, 
   isDogIsolationRequired, 
@@ -93,10 +94,12 @@ export async function runAutoDailyDogUpdates(
     return { sentCount: 0, errors: [] };
   }
 
-  // Filter unsent dogs
+  // Filter unsent dogs (Check BOTH local device storage AND shared Supabase database)
   const unsentDogs = activeTonight.filter(b => {
     const key = `daily_dog_sent_${b.id}_${todayStr}`;
-    return localStorage.getItem(key) !== 'true';
+    const sentLocally = localStorage.getItem(key) === 'true';
+    const sentInDb = (b.data as any)?.lastDailyDogUpdateSent === todayStr;
+    return !sentLocally && !sentInDb;
   });
 
   if (unsentDogs.length === 0) {
@@ -145,6 +148,19 @@ export async function runAutoDailyDogUpdates(
       const res = await sendGreenApiDirectMessage(cleanPhone, formattedText, greenApiId, greenApiToken);
       if (res.success) {
         localStorage.setItem(`daily_dog_sent_${b.id}_${todayStr}`, 'true');
+        // Persist to Supabase so NO other device or browser ever re-sends today!
+        try {
+          const updatedBooking: Booking = {
+            ...b,
+            data: {
+              ...(b.data || {}),
+              lastDailyDogUpdateSent: todayStr
+            }
+          };
+          await saveBookingToDb(updatedBooking);
+        } catch (errDb) {
+          console.warn('[AutoSender] Failed to sync update state to DB:', errDb);
+        }
         sentCount++;
         console.log(`[AutoSender 20:00] נשלח בהצלחה ל-${b.dogName} (${b.ownerName}) [אילוף=${isTraining}, בידוד=${isIsolation}]`);
       } else {

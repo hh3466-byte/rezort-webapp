@@ -114,23 +114,25 @@ export default function App() {
   const pendingIntakeCount = intakeRequests.filter(r => r.status === 'pending').length;
 
   // Manager Authentication State (Passcode 3466)
+  // Seamless, smooth default access for the resort team (owner, Shmulik, and Talinka)
   const [isManagerAuthenticated, setIsManagerAuthenticated] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('resort_manager_authenticated') === 'true' ||
-             sessionStorage.getItem('resort_manager_authenticated') === 'true';
+      if (sessionStorage.getItem('resort_manager_locked') === 'true') {
+        return false;
+      }
+      return true;
     }
-    return false;
+    return true;
   });
   const [isStaffPreviewMode, setIsStaffPreviewMode] = useState(false);
 
   const handleManagerLogout = () => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('resort_manager_authenticated');
-      sessionStorage.removeItem('resort_manager_authenticated');
+      sessionStorage.setItem('resort_manager_locked', 'true');
     }
     setIsManagerAuthenticated(false);
     setIsStaffPreviewMode(false);
-    showToast('🔒 התנתקת בהצלחה. מערכת היומן נעולה.');
+    showToast('🔒 מערכת היומן ננעלה.');
   };
 
   const [isManagerAuthOpen, setIsManagerAuthOpen] = useState(false);
@@ -881,28 +883,20 @@ export default function App() {
           setShowPublicIntake(false);
           setIsStaffPreviewMode(false);
         }}
-        onStaffLoginClick={() => {
-          setShowPublicIntake(false);
-          setIsStaffPreviewMode(false);
-        }}
       />
     );
   }
 
-  // 2. If user is NOT authenticated as a manager, show secure login gate
+  // 2. If system is manually locked by manager
   if (!isManagerAuthenticated) {
     return (
       <ManagerLoginGate
-        onSuccess={(rememberDevice) => {
+        onSuccess={() => {
           if (typeof window !== 'undefined') {
-            if (rememberDevice) {
-              localStorage.setItem('resort_manager_authenticated', 'true');
-            } else {
-              sessionStorage.setItem('resort_manager_authenticated', 'true');
-            }
+            sessionStorage.removeItem('resort_manager_locked');
           }
           setIsManagerAuthenticated(true);
-          showToast('ברוך הבא! כניסת מנהל אומתה בהצלחה 🐾');
+          showToast('ברוך הבא! נעילת יומן שוחררה בהצלחה 🐾');
         }}
         onGoToPublicIntake={() => {
           setIsStaffPreviewMode(false);
