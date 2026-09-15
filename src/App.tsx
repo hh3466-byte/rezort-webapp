@@ -53,12 +53,14 @@ import { DailyDogUpdatesModal } from './components/DailyDogUpdatesModal';
 import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
 import { initDailyDogAutoSender } from './services/dailyDogAutoSender';
+import { fetchNewCrmChatsCount } from './services/whatsappCrmService';
 
 export default function App() {
   // Core application state with live Cloud synchronization
   const [bookings, setBookings] = useState<Booking[]>(() => loadStoredBookings());
   const [settings, setSettings] = useState<ResortSettings>(() => loadStoredSettings());
   const [activeTab, setActiveTab] = useState<'calendar' | 'forecast' | 'bookings' | 'customers' | 'whatsapp'>('calendar');
+  const [newCrmChatsCount, setNewCrmChatsCount] = useState<number>(0);
 
   // Calendar year/month state
   const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
@@ -367,6 +369,29 @@ export default function App() {
     );
     return cleanup;
   }, [bookings, settings, intakeRequests]);
+
+  // Periodic check for new CRM chats & unread inquiries for the top button badge
+  useEffect(() => {
+    let isMounted = true;
+    const checkCrmNew = async () => {
+      try {
+        if (!settings) return;
+        const count = await fetchNewCrmChatsCount(settings, bookings, intakeRequests);
+        if (isMounted) {
+          setNewCrmChatsCount(count);
+        }
+      } catch (err) {
+        console.warn('Error checking new CRM count:', err);
+      }
+    };
+
+    checkCrmNew();
+    const interval = setInterval(checkCrmNew, 45000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [settings?.greenApiIdInstance, settings?.greenApiToken, bookings, intakeRequests]);
 
   // Accurate real-time money calculation across all bookings
   const totalCollected = activeBookings.reduce((acc, b) => {
@@ -992,31 +1017,49 @@ export default function App() {
               )}
             </button>
 
-            {/* 1.5. RIGHT NEXT TO INTAKE REQUESTS: WhatsApp CRM with Flashing Green Border */}
+            {/* 1.5. RIGHT NEXT TO INTAKE REQUESTS: WhatsApp CRM with Live Count Badge */}
             <button
               type="button"
               onClick={() => setActiveTab('whatsapp')}
               id="btn-whatsapp-crm-top"
-              className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-md shrink-0 blink-border-green active:scale-95 ${
+              className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-md shrink-0 active:scale-95 ${
                 activeTab === 'whatsapp'
                   ? 'bg-gradient-to-r from-[#065f46] via-emerald-800 to-[#065f46] text-white ring-2 ring-emerald-400 shadow-emerald-900/30 scale-[1.02]'
-                  : 'bg-white hover:bg-emerald-50 text-emerald-950 hover:scale-[1.02]'
+                  : newCrmChatsCount > 0
+                  ? 'bg-white hover:bg-rose-50 text-slate-900 border-2 border-rose-400 shadow-rose-200 hover:scale-[1.02] ring-2 ring-rose-300/60'
+                  : 'bg-white hover:bg-emerald-50 text-emerald-950 hover:scale-[1.02] blink-border-green'
               }`}
               title="מרכז וואטסאפ ופניות (CRM) – ניהול שיחות, סיווג לקוחות ומענה מהיר"
             >
               <span className="text-base relative flex items-center">
                 💬
-                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white animate-ping"></span>
-                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white"></span>
+                {newCrmChatsCount > 0 ? (
+                  <>
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border border-white animate-ping"></span>
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-600 rounded-full border border-white"></span>
+                  </>
+                ) : (
+                  <>
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white animate-ping"></span>
+                    <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white"></span>
+                  </>
+                )}
               </span>
               <span className="font-black">וואטסאפ ו-CRM</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
-                activeTab === 'whatsapp'
-                  ? 'bg-emerald-900 text-emerald-100'
-                  : 'bg-emerald-100 text-emerald-800'
-              }`}>
-                {activeTab === 'whatsapp' ? 'פתוח' : 'CRM 🟢'}
-              </span>
+              {newCrmChatsCount > 0 ? (
+                <span className="bg-rose-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse flex items-center gap-1 font-mono">
+                  <span>{newCrmChatsCount}</span>
+                  <span className="font-sans text-[10px]">חדשות 🔥</span>
+                </span>
+              ) : (
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
+                  activeTab === 'whatsapp'
+                    ? 'bg-emerald-900 text-emerald-100'
+                    : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  {activeTab === 'whatsapp' ? 'פתוח' : 'CRM 🟢'}
+                </span>
+              )}
             </button>
 
             {/* 2. Daily Evening Dog Update (20:00) */}
@@ -1569,6 +1612,7 @@ export default function App() {
               bookings={bookings}
               intakeRequests={intakeRequests}
               settings={settings}
+              onNewCountChange={setNewCrmChatsCount}
               onOpenNewBookingWithData={(data) => {
                 setBookingWizardOpen({
                   isOpen: true,

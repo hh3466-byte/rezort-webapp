@@ -505,3 +505,77 @@ export function enrichChatWithSystemData(
     classification: 'new_lead'
   };
 }
+
+/**
+ * Fetches the count of new unhandled leads/chats for badge notifications
+ */
+export async function fetchNewCrmChatsCount(
+  settings: ResortSettings,
+  bookings: Booking[],
+  intakeRequests: IntakeRequest[]
+): Promise<number> {
+  try {
+    const raw = await fetchGreenApiChats(settings);
+    let overrides: Record<string, string> = {};
+    try {
+      const rawOverrides = localStorage.getItem('crm_status_overrides');
+      if (rawOverrides) overrides = JSON.parse(rawOverrides);
+    } catch {}
+
+    let newCount = 0;
+    for (const chat of raw) {
+      const cleanPhone = extractPhoneFromChatId(chat.id);
+      if (overrides[cleanPhone]) {
+        if (overrides[cleanPhone] === 'new') newCount++;
+        continue;
+      }
+      if (overrides[cleanPhone] === 'handled' || overrides[cleanPhone] === 'waiting_reply' || overrides[cleanPhone] === 'in_chat') {
+        continue;
+      }
+
+      // If unread messages exist, it requires immediate attention
+      if (chat.unreadCount && chat.unreadCount > 0) {
+        newCount++;
+        continue;
+      }
+
+      const incCount = chat.incomingCount || 0;
+      const outCount = chat.outgoingCount || 0;
+
+      // customer with booking
+      const hasBooking = bookings.some(b => {
+        const bp = cleanPhoneNumber(b.ownerPhone);
+        return bp && cleanPhone && (bp.slice(-7) === cleanPhone.slice(-7)) && b.stayStatus !== 'cancelled';
+      });
+      if (hasBooking) {
+        if (chat.lastMessageType === 'incoming' && incCount > outCount) {
+          newCount++;
+        }
+        continue;
+      }
+
+      // intake request
+      const intake = intakeRequests.find(r => {
+        const rp = cleanPhoneNumber(r.ownerPhone);
+        return rp && cleanPhone && (rp.slice(-7) === cleanPhone.slice(-7));
+      });
+      if (intake) {
+        if (chat.lastMessageType === 'incoming' && incCount > outCount) {
+          newCount++;
+        }
+        continue;
+      }
+
+      if (chat.isOngoingDialogue) continue;
+      if (chat.lastMessageType === 'outgoing' && incCount <= 1) continue;
+
+      // Brand new lead
+      newCount++;
+    }
+
+    return newCount;
+  } catch (err) {
+    console.warn('Error fetching new CRM chats count:', err);
+    return 0;
+  }
+}

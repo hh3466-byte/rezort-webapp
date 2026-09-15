@@ -55,13 +55,15 @@ interface WhatsAppLeadsViewProps {
   intakeRequests: IntakeRequest[];
   settings: ResortSettings;
   onOpenNewBookingWithData?: (data: { ownerName: string; ownerPhone: string; dogName?: string }) => void;
+  onNewCountChange?: (count: number) => void;
 }
 
 export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   bookings,
   intakeRequests,
   settings,
-  onOpenNewBookingWithData
+  onOpenNewBookingWithData,
+  onNewCountChange
 }) => {
   const [chats, setChats] = useState<EnrichedWhatsAppChat[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
@@ -408,6 +410,10 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   const newCount = chats.filter(c => getChatTreatmentStatus(c) === 'new').length;
   const inChatCount = chats.filter(c => getChatTreatmentStatus(c) === 'in_chat').length;
   const waitingReplyCount = chats.filter(c => getChatTreatmentStatus(c) === 'waiting_reply').length;
+
+  useEffect(() => {
+    onNewCountChange?.(newCount);
+  }, [newCount, onNewCountChange]);
 
   // Render individual chat list item
   const renderChatCard = (chat: EnrichedWhatsAppChat) => {

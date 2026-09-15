@@ -15,7 +15,9 @@ import {
   ArrowLeft,
   Filter,
   CalendarDays,
-  CalendarRange
+  CalendarRange,
+  Search,
+  X
 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
 import { 
@@ -70,7 +72,63 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [focusedDate, setFocusedDate] = useState<string>(todayStr);
   const [greetingModalDate, setGreetingModalDate] = useState<string | null>(null);
 
+  // Search state for Shmulik (חיפוש ביומן לפי שם כלב או בעלים)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
+  const searchContainerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsSearchDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
+
+  // Filter bookings for live search
+  const matchingBookings = React.useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    const qNorm = q.replace(/[״"׳']/g, '').replace(/[יו]/g, '');
+    const qDigits = q.replace(/\D/g, '');
+
+    return activeBookings.filter(b => {
+      const dog = (b.dogName || '').toLowerCase();
+      const dogNorm = dog.replace(/[״"׳']/g, '').replace(/[יו]/g, '');
+      const breed = (b.dogBreed || '').toLowerCase();
+      const owner = (b.ownerName || '').toLowerCase();
+      const ownerNorm = owner.replace(/[״"׳']/g, '').replace(/[יו]/g, '');
+      const phoneDigits = (b.ownerPhone || '').replace(/\D/g, '');
+
+      return (
+        dog.includes(q) ||
+        (qNorm.length >= 2 && dogNorm.includes(qNorm)) ||
+        breed.includes(q) ||
+        owner.includes(q) ||
+        (qNorm.length >= 2 && ownerNorm.includes(qNorm)) ||
+        (qDigits.length >= 3 && phoneDigits.includes(qDigits))
+      );
+    }).sort((a, b) => b.startDate.localeCompare(a.startDate));
+  }, [activeBookings, searchQuery]);
+
+  // Jump calendar view directly to the selected booking date
+  const handleSelectSearchResult = (booking: Booking) => {
+    setFocusedDate(booking.startDate);
+    const bDate = new Date(booking.startDate + 'T12:00:00');
+    if (onSetMonth && bDate.getMonth() !== currentMonth) {
+      onSetMonth(bDate.getMonth());
+    }
+    if (onSetYear && bDate.getFullYear() !== currentYear) {
+      onSetYear(bDate.getFullYear());
+    }
+    setIsSearchDropdownOpen(false);
+    onSelectBooking(booking);
+  };
+
   const daysGrid = getMonthGrid(currentYear, currentMonth);
   const weekDays = getWeekDays(focusedDate);
   const dayBreakdown = getDailyBreakdown(activeBookings, focusedDate);
@@ -168,8 +226,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   return (
     <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-6 shadow-xs select-none" dir="rtl">
       
-      {/* Top Controls: Centered Navigation Toolbar + Attached View Mode Switcher */}
-      <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 mb-6 pb-4 border-b border-slate-100">
+      {/* Top Controls: Navigation Toolbar + Dog/Owner Search + View Mode Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 mb-4 pb-4 border-b border-slate-100">
         
         {/* Navigation Controls */}
         <div className="flex flex-wrap items-center gap-2 bg-slate-50/80 p-1.5 rounded-2xl border border-slate-200 shadow-2xs">
@@ -316,6 +374,108 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </button>
         </div>
 
+        {/* Center: Search Bar for Shmulik (חיפוש ביומן לפי שם כלב או בעלים) */}
+        <div ref={searchContainerRef} className="relative flex-1 min-w-[240px] max-w-sm sm:max-w-md">
+          <div className="relative">
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-emerald-600">
+              <Search className="w-4 h-4" />
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setIsSearchDropdownOpen(true);
+              }}
+              onFocus={() => {
+                if (searchQuery.trim()) setIsSearchDropdownOpen(true);
+              }}
+              placeholder="חיפוש ביומן לפי שם כלב או בעלים..."
+              className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-emerald-600 rounded-xl pr-9 pl-9 py-2 text-xs sm:text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden transition-all shadow-2xs focus:ring-2 focus:ring-emerald-500/20"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setIsSearchDropdownOpen(false);
+                }}
+                className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                title="נקה חיפוש"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Quick Interactive Search Dropdown */}
+          {isSearchDropdownOpen && searchQuery.trim().length > 0 && (
+            <div className="absolute z-50 mt-1.5 w-full bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-80 overflow-y-auto animate-in fade-in duration-150">
+              <div className="p-2.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-xs font-bold text-slate-700">
+                <span>נמצאו {matchingBookings.length} הזמנות ביומן</span>
+                <span className="text-[11px] text-emerald-700 font-semibold">לחץ למעבר ישיר לתאריך</span>
+              </div>
+              {matchingBookings.length === 0 ? (
+                <div className="p-5 text-center text-slate-500 text-xs font-medium">
+                  לא נמצאו הזמנות עבור "{searchQuery}"
+                </div>
+              ) : (
+                matchingBookings.map((b) => {
+                  const isPast = b.endDate < todayStr;
+                  const isCurrent = b.startDate <= todayStr && b.endDate >= todayStr;
+                  return (
+                    <div
+                      key={b.id}
+                      onClick={() => handleSelectSearchResult(b)}
+                      className="p-3 border-b border-slate-100 last:border-0 hover:bg-emerald-50/80 transition-all cursor-pointer flex items-center justify-between gap-3 text-right"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm shrink-0">
+                          🐾
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-black text-sm text-slate-900">{b.dogName}</span>
+                            {b.dogBreed && <span className="text-xs text-slate-500">({b.dogBreed})</span>}
+                            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-700">
+                              {getServiceTypeHebrew(b.serviceType)}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                            <span>בעלים: <strong className="text-slate-800">{b.ownerName}</strong></span>
+                            {b.ownerPhone && <span className="font-mono text-[11px]" dir="ltr">📞 {b.ownerPhone}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-left shrink-0">
+                        <div className="text-xs font-bold text-slate-800">
+                          {formatDateIL(b.startDate)} - {formatDateIL(b.endDate)}
+                        </div>
+                        <div className="mt-0.5">
+                          {isCurrent ? (
+                            <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">
+                              שוהה כעת בריזורט
+                            </span>
+                          ) : isPast ? (
+                            <span className="text-[10px] font-medium bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                              שהות עבר
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-black bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                              שהות עתידית
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
+
         {/* View Mode Toggle: חודש / שבועיים קרובים / שבוע / יום בודד - הצמדה ישירה לתפריט */}
         <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200 shrink-0 shadow-2xs">
           <button
@@ -374,6 +534,32 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Active Search Filter Banner */}
+      {searchQuery.trim() && (
+        <div className="mb-4 -mt-2 flex items-center justify-between bg-amber-50/90 border border-amber-300 rounded-2xl px-4 py-2.5 text-xs font-bold text-amber-950 animate-in fade-in shadow-2xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-base">🔍</span>
+            <span>סינון פעיל ביומן:</span>
+            <span className="bg-amber-200/90 px-2 py-0.5 rounded-md font-black text-amber-950">
+              "{searchQuery}"
+            </span>
+            <span className="text-amber-800">
+              (נמצאו {matchingBookings.length} הזמנות תואמות — מודגשות בצהוב זוהר בלוח)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery('');
+              setIsSearchDropdownOpen(false);
+            }}
+            className="bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 px-3 py-1 rounded-xl text-xs font-black transition-all cursor-pointer shadow-2xs shrink-0"
+          >
+            איפוס חיפוש ✕
+          </button>
+        </div>
+      )}
 
       {/* =========================================================================
           MODE: TWO WEEKS VIEW (תצוגת שבועיים קרובים - 14 ימים עם כל הכלבים ומקומות פנויים ללא הסתרה)
@@ -520,13 +706,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                         const isPaid = b.paymentStatus === 'fully_paid';
                         const isDeposit = b.paymentStatus === 'deposit_paid';
+                        const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
+                        const isDimmed = Boolean(searchQuery.trim() && !isMatch);
 
                         return (
                           <div
                             key={b.id}
                             onClick={() => onSelectBooking(b)}
                             className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer text-xs font-black flex items-center justify-between shadow-2xs hover:shadow-xs ${
-                              isEnded
+                              isMatch
+                                ? 'bg-amber-100 border-amber-400 text-amber-950 ring-2 ring-amber-400 shadow-md scale-[1.03]'
+                                : isDimmed
+                                ? 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90'
+                                : isEnded
                                 ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-70'
                                 : 'bg-white hover:bg-emerald-50 border-slate-200 hover:border-emerald-300 text-slate-900'
                             }`}
@@ -642,9 +834,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                       const isPaid = b.paymentStatus === 'fully_paid';
                       const isDeposit = b.paymentStatus === 'deposit_paid';
+                      const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
+                      const isDimmed = Boolean(searchQuery.trim() && !isMatch);
 
                       let chipStyle = 'bg-red-500 text-white';
-                      if (isEnded) {
+                      if (isMatch) {
+                        chipStyle = 'bg-amber-500 text-white ring-2 ring-amber-300 font-black shadow-md';
+                      } else if (isDimmed) {
+                        chipStyle = 'bg-slate-200/60 text-slate-400 opacity-30';
+                      } else if (isEnded) {
                         chipStyle = 'bg-slate-200 text-slate-700 border border-slate-300 font-medium';
                       } else if (isPaid) {
                         chipStyle = 'bg-emerald-600 text-white';
@@ -659,7 +857,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           title={`${b.dogName} (${getServiceTypeHebrew(b.serviceType)})${isEnded ? ' - הסתיים' : ''}`}
                         >
                           <span className="truncate">🐾 {b.dogName}</span>
-                          {isEnded && <span className="text-[9px] opacity-70 shrink-0">🏁</span>}
+                          {isMatch && <span className="text-[9px] shrink-0">⭐</span>}
+                          {!isMatch && isEnded && <span className="text-[9px] opacity-70 shrink-0">🏁</span>}
                         </div>
                       );
                     })}
@@ -781,12 +980,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         const isArrival = b.startDate === day.dateStr;
                         const isDeparture = b.endDate === day.dateStr;
 
+                        const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
+                        const isDimmed = Boolean(searchQuery.trim() && !isMatch);
+
                         return (
                           <div
                             key={b.id}
                             onClick={() => onSelectBooking(b)}
-                            className={`border rounded-xl p-2 text-xs transition-colors cursor-pointer shadow-2xs ${
-                              isEnded
+                            className={`border rounded-xl p-2 text-xs transition-all cursor-pointer shadow-2xs ${
+                              isMatch
+                                ? 'bg-amber-50/90 border-2 border-amber-400 text-amber-950 ring-2 ring-amber-400/80 shadow-md scale-[1.02]'
+                                : isDimmed
+                                ? 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90'
+                                : isEnded
                                 ? 'bg-slate-100/80 border-slate-200 text-slate-500 opacity-80'
                                 : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-900'
                             }`}
@@ -934,11 +1140,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   const isPaid = booking.paymentStatus === 'fully_paid' || remainingDebt === 0;
                   const isDeposit = booking.paymentStatus === 'deposit_paid' || (!isPaid && booking.depositAmount > 0);
 
+                  const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === booking.id));
+                  const isDimmed = Boolean(searchQuery.trim() && !isMatch);
+
                   return (
                     <div
                       key={booking.id}
                       onClick={() => onSelectBooking(booking)}
-                      className="bg-white hover:bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs flex flex-col justify-between"
+                      className={`rounded-xl p-3.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs flex flex-col justify-between ${
+                        isMatch
+                          ? 'bg-amber-50/90 border-2 border-amber-400 ring-2 ring-amber-300 shadow-md scale-[1.01]'
+                          : isDimmed
+                          ? 'bg-white/60 border border-slate-200 opacity-30 hover:opacity-90'
+                          : 'bg-white hover:bg-slate-50/80 border border-slate-200'
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
