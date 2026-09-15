@@ -243,17 +243,20 @@ export async function sendResortEmailNotification(
   }
 }
 
+export const DEFAULT_GREEN_API_ID = '710722735421';
+export const DEFAULT_GREEN_API_TOKEN = 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b';
+
 /**
  * Send direct message via Green-API and return result
  */
 export async function sendGreenApiDirectMessage(
   phone: string,
   message: string,
-  idInstance: string,
-  apiToken: string
+  idInstance?: string,
+  apiToken?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const cleanId = (idInstance || '').trim();
-  const cleanTok = (apiToken || '').trim();
+  const cleanId = (idInstance || '').trim() || DEFAULT_GREEN_API_ID;
+  const cleanTok = (apiToken || '').trim() || DEFAULT_GREEN_API_TOKEN;
   if (!cleanId || !cleanTok) {
     return { success: false, error: 'חסרים פרטי חיבור Green-API' };
   }

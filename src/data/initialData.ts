@@ -17,6 +17,8 @@ export const defaultSettings: ResortSettings = {
   whatsappNotificationPhone: '054-8765888',
   bankDetails: 'בנק הפועלים (12), סניף 600, ח-ן 123456 על שם הריזורט לכלב',
   autoCheckVaccination: true,
+  greenApiIdInstance: '710722735421',
+  greenApiToken: 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b',
 };
 
 // Production clean start: no demo dogs
