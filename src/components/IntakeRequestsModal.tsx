@@ -374,21 +374,47 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const paymentRequestedCount = requests.filter(r => r.status === 'payment_requested').length;
   const approvedCount = requests.filter(r => r.status === 'approved').length;
 
+  const normalizeHebrew = (str: string = '') => {
+    return str
+      .toLowerCase()
+      .trim()
+      .replace(/[״"׳']/g, '')
+      .replace(/ו{2,}/g, 'ו')
+      .replace(/י{2,}/g, 'י');
+  };
+
   const filteredRequests = requests.filter(r => {
+    if (searchQuery.trim()) {
+      const q = normalizeHebrew(searchQuery);
+      const qRaw = searchQuery.toLowerCase().trim();
+      const name = normalizeHebrew(r.ownerName);
+      const dog = normalizeHebrew(r.dogName);
+      const phone = (r.ownerPhone || '').replace(/\D/g, '');
+      const breed = normalizeHebrew(r.dogBreed || '');
+      const notes = normalizeHebrew(r.notes || '');
+      const intNotes = normalizeHebrew(r.internalNotes || '');
+
+      const matchName = name.includes(q) || (r.ownerName || '').toLowerCase().includes(qRaw);
+      const matchDog = dog.includes(q) || (r.dogName || '').toLowerCase().includes(qRaw);
+      const matchPhone = phone.includes(q.replace(/\D/g, '')) || (r.ownerPhone || '').includes(qRaw);
+      const matchBreed = breed.includes(q) || (r.dogBreed || '').toLowerCase().includes(qRaw);
+      const matchNotes = notes.includes(q) || intNotes.includes(q);
+
+      // Flexible matching for common Hebrew vowel spelling differences (תם <-> תום, מימי <-> מיני)
+      const qCore = q.replace(/[יו]/g, '');
+      const dogCore = dog.replace(/[יו]/g, '');
+      const nameCore = name.replace(/[יו]/g, '');
+      const matchCore = (qCore.length >= 2) && (dogCore.includes(qCore) || nameCore.includes(qCore));
+
+      return matchName || matchDog || matchPhone || matchBreed || matchNotes || matchCore;
+    }
+
     if (filter === 'new' && !isReqNew(r)) return false;
     if (filter === 'in_progress' && !isReqInTreatment(r)) return false;
     if (filter === 'pending' && r.status !== 'pending') return false;
     if (filter === 'payment_requested' && r.status !== 'payment_requested') return false;
     if (filter === 'approved' && r.status !== 'approved') return false;
     if (filter === 'rejected' && r.status !== 'rejected') return false;
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = r.ownerName.toLowerCase().includes(q);
-      const matchDog = r.dogName.toLowerCase().includes(q);
-      const matchPhone = r.ownerPhone.includes(q);
-      const matchBreed = r.dogBreed.toLowerCase().includes(q);
-      return matchName || matchDog || matchPhone || matchBreed;
-    }
     return true;
   });
 
@@ -588,7 +614,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     setTimeout(() => setFollowUpSentAlert(prev => ({ ...prev, [req.id]: false })), 4000);
   };
 
-  const handleConfirmSendPayment = () => {
+  const handleConfirmSendPayment = async (mode: 'green_api' | 'manual_whatsapp' = 'green_api') => {
     if (!paymentPromptRequest) return;
     setIsSendingPayment(true);
     
@@ -614,31 +640,47 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     const msg = formatClientPaymentLinkMessage(updated, settings, numAmount, linkToUse);
     const whatsappUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
 
-    // Open WhatsApp IMMEDIATELY inside user gesture so browser popup blocker never blocks it!
-    try {
-      const win = window.open(whatsappUrl, '_blank');
-      if (!win) {
-        window.location.href = whatsappUrl;
+    let sentViaGreenApi = false;
+
+    // 1. Direct automated send via Green-API (ideal for mobile phones!)
+    if (mode === 'green_api') {
+      try {
+        const greenRes = await sendGreenApiDirectMessage(cleanPhone, msg, settings.greenApiIdInstance, settings.greenApiToken);
+        if (greenRes && greenRes.success) {
+          sentViaGreenApi = true;
+        }
+      } catch (gErr) {
+        console.warn('Green-API payment send notice:', gErr);
       }
-    } catch (e) {
-      window.location.href = whatsappUrl;
     }
 
-    // Background asynchronous persistence
-    (async () => {
+    // 2. If user chose manual or Green-API failed, open WhatsApp app / web
+    if (mode === 'manual_whatsapp' || !sentViaGreenApi) {
       try {
-        if (onSaveRequest) {
-          await onSaveRequest(updated);
-        } else {
-          await onUpdateStatus(paymentPromptRequest.id, 'payment_requested');
+        const win = window.open(whatsappUrl, '_blank');
+        if (!win) {
+          window.location.href = whatsappUrl;
         }
-      } catch (err) {
-        console.warn('Error saving payment status:', err);
-      } finally {
-        setIsSendingPayment(false);
-        setPaymentPromptRequest(null);
+      } catch (e) {
+        window.location.href = whatsappUrl;
       }
-    })();
+    }
+
+    // 3. Save updated status
+    try {
+      if (onSaveRequest) {
+        await onSaveRequest(updated);
+      } else {
+        await onUpdateStatus(paymentPromptRequest.id, 'payment_requested');
+      }
+      setFollowUpSentAlert(prev => ({ ...prev, [paymentPromptRequest.id]: true }));
+      setTimeout(() => setFollowUpSentAlert(prev => ({ ...prev, [paymentPromptRequest.id]: false })), 4000);
+    } catch (err) {
+      console.warn('Error saving payment status:', err);
+    } finally {
+      setIsSendingPayment(false);
+      setPaymentPromptRequest(null);
+    }
   };
 
   const handleOpenRejectPrompt = (request: IntakeRequest) => {
@@ -2177,7 +2219,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   <button
                     type="button"
                     disabled={isSendingPayment}
-                    onClick={handleConfirmSendPayment}
+                    onClick={() => handleConfirmSendPayment('green_api')}
                     className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-3.5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 text-xs"
                   >
                     <MessageCircle className="w-4 h-4" />
@@ -2185,15 +2227,27 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  disabled={isSendingPayment}
-                  onClick={handleConfirmSendPayment}
-                  className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-4 sm:px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all text-xs sm:text-sm"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  <span>{isSendingPayment ? 'מעדכן ושולח...' : '📲 שלח עכשיו בוואטסאפ'}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isSendingPayment}
+                    onClick={() => handleConfirmSendPayment('manual_whatsapp')}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-2 rounded-xl border border-slate-300 cursor-pointer shadow-2xs text-xs flex items-center gap-1.5"
+                    title="פתח את אפליקציית וואטסאפ במכשיר הנוכחי"
+                  >
+                    <span>📱 פתח בוואטסאפ ידנית</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSendingPayment}
+                    onClick={() => handleConfirmSendPayment('green_api')}
+                    className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-4 sm:px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all text-xs sm:text-sm"
+                    title="שליחה ישירה מוואטסאפ הריזורט ללקוח ברקע (עובד אוטומטית גם מהנייד)"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>{isSendingPayment ? 'שולח קישור...' : '⚡ שלח ישירות בוואטסאפ (אוטומטי)'}</span>
+                  </button>
+                </div>
               )}
             </div>
 

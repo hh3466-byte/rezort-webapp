@@ -21,7 +21,8 @@ import {
   PlusCircle,
   Filter,
   X,
-  PenTool
+  PenTool,
+  PhoneCall
 } from 'lucide-react';
 import { Booking, IntakeRequest, ResortSettings } from '../types';
 import { cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
@@ -38,7 +39,8 @@ import {
   generateFollowUpReminderText,
   generateResortMarketingValueText,
   generateTrainingOnlyMarketingText,
-  generateBoardingOnlyMarketingText
+  generateBoardingOnlyMarketingText,
+  generateAvailableToTalkText
 } from '../services/whatsappCrmService';
 
 export const CRM_PRIORITY_ORDER: Record<'new' | 'in_chat' | 'waiting_reply' | 'handled', number> = {
@@ -372,11 +374,14 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
 
       // חיפוש טקסט חופשי מאפשר למצוא כל שיחה
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchName = chat.name.toLowerCase().includes(q);
-        const matchPhone = chat.cleanPhone.includes(q);
+        const q = searchQuery.toLowerCase().trim();
+        const qNorm = q.replace(/[״"׳']/g, '').replace(/[יו]/g, '');
+        const matchName = chat.name.toLowerCase().includes(q) || (chat.whatsappPushName || '').toLowerCase().includes(q);
+        const matchPhone = chat.cleanPhone.includes(q.replace(/\D/g, ''));
         const matchDog = (chat.matchedDogName || '').toLowerCase().includes(q);
-        return matchName || matchPhone || matchDog;
+        const matchDogNorm = (chat.matchedDogName || '').replace(/[״"׳']/g, '').replace(/[יו]/g, '').includes(qNorm) && qNorm.length >= 2;
+        const matchMsg = (chat.lastMessage || '').toLowerCase().includes(q);
+        return matchName || matchPhone || matchDog || matchDogNorm || matchMsg;
       }
 
       // ללא חיפוש טקסט - מציג אך ורק את הטאב הפעיל (חדשים או לטיפול)
@@ -518,6 +523,22 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               )}
               <span className="text-[8px] text-slate-400 mr-0.5 font-sans">↺</span>
             </button>
+
+            {status === 'new' && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedChat(chat);
+                  const text = generateAvailableToTalkText(chat.name, chat.matchedDogName);
+                  setMessageInput(text);
+                }}
+                className="text-[10px] font-black bg-sky-50 hover:bg-sky-100 text-sky-950 border border-sky-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs"
+                title="טען הודעת פנייה מכבדת ללקוח: האם אפשר לדבר עכשיו? פנוי לשיחה?"
+              >
+                <span>📞 פנוי לשיחה?</span>
+              </button>
+            )}
 
             {status === 'waiting_reply' && (
               <button
@@ -1069,6 +1090,20 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     </span>
                   </button>
                 )}
+
+                {/* 1.1 Available to Talk (Apology for delay + check availability) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = generateAvailableToTalkText(selectedChat.name, selectedChat.matchedDogName);
+                    setMessageInput(text);
+                  }}
+                  className="bg-sky-50 hover:bg-sky-100 text-sky-950 border border-sky-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="שליחת הודעה מכבדת ללקוח שהתעכבנו איתו: האם אפשר לדבר עכשיו? פנוי לשיחה?"
+                >
+                  <PhoneCall className="w-3.5 h-3.5 text-sky-700" />
+                  <span>📞 אפשר לדבר עכשיו? פנוי?</span>
+                </button>
 
                 {/* 2. Send Location */}
                 <button

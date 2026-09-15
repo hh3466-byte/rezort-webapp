@@ -409,6 +409,29 @@ export function generateBoardingOnlyMarketingText(
   return text;
 }
 
+/**
+ * Generates a warm, respectful and welcoming message for a lead where response was delayed,
+ * asking if they are available to talk on the phone now.
+ */
+export function generateAvailableToTalkText(
+  ownerName?: string,
+  dogName?: string
+): string {
+  const firstName = ownerName && ownerName !== 'לקוח' && !ownerName.startsWith('05')
+    ? ownerName.trim().split(' ')[0]
+    : '';
+  const greeting = firstName ? `שלום ${firstName}!` : 'שלום!';
+  const dogMention = dogName ? ` עבור ${dogName}` : '';
+
+  return `${greeting} 🐾
+סליחה מעומק הלב על ההמתנה, היינו בפעילות שוטפת עם הכלבים בריזורט.
+
+רצינו לשאול – האם אפשר לדבר עכשיו? פנוי/ה לשיחה טלפונית קצרה${dogMention}?
+נשמח לתת לכם את כל הפרטים ולענות על כל שאלה באהבה! 🐶❤️
+
+(אם פחות נוח כרגע, אפשר פשוט לכתוב מתי מתאים ונתקשר)`;
+}
+
 
 /**
  * Cross-references a WhatsApp chat with existing bookings and intake requests

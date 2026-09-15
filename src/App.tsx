@@ -36,7 +36,8 @@ import { GrowPaymentsModal } from './components/GrowPaymentsModal';
 import { PaymentModal } from './components/PaymentModal';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
-import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2 } from 'lucide-react';
+import { ManagerLoginGate } from './components/ManagerLoginGate';
+import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2, LogOut, Lock } from 'lucide-react';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
 import { Guide } from './components/Guide';
@@ -113,6 +114,25 @@ export default function App() {
   const pendingIntakeCount = intakeRequests.filter(r => r.status === 'pending').length;
 
   // Manager Authentication State (Passcode 3466)
+  const [isManagerAuthenticated, setIsManagerAuthenticated] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('resort_manager_authenticated') === 'true' ||
+             sessionStorage.getItem('resort_manager_authenticated') === 'true';
+    }
+    return false;
+  });
+  const [isStaffPreviewMode, setIsStaffPreviewMode] = useState(false);
+
+  const handleManagerLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('resort_manager_authenticated');
+      sessionStorage.removeItem('resort_manager_authenticated');
+    }
+    setIsManagerAuthenticated(false);
+    setIsStaffPreviewMode(false);
+    showToast('🔒 התנתקת בהצלחה. מערכת היומן נעולה.');
+  };
+
   const [isManagerAuthOpen, setIsManagerAuthOpen] = useState(false);
   const [managerAuthContext, setManagerAuthContext] = useState<{
     actionType: 'open_settings' | 'clear_all';
@@ -851,12 +871,43 @@ export default function App() {
     showToast('🧹 כל הנתונים נמחקו - היומן נקי לחלוטין!');
   };
 
-  // If the client opened the public intake form link (?request=true) or manager opened preview
+  // 1. If public intake link opened (?request=true or ?intake=true) or manager opened preview
   if (showPublicIntake) {
     return (
       <PublicIntakePage
         settings={settings}
-        onBackToApp={() => setShowPublicIntake(false)}
+        isStaffPreview={isStaffPreviewMode && isManagerAuthenticated}
+        onBackToApp={() => {
+          setShowPublicIntake(false);
+          setIsStaffPreviewMode(false);
+        }}
+        onStaffLoginClick={() => {
+          setShowPublicIntake(false);
+          setIsStaffPreviewMode(false);
+        }}
+      />
+    );
+  }
+
+  // 2. If user is NOT authenticated as a manager, show secure login gate
+  if (!isManagerAuthenticated) {
+    return (
+      <ManagerLoginGate
+        onSuccess={(rememberDevice) => {
+          if (typeof window !== 'undefined') {
+            if (rememberDevice) {
+              localStorage.setItem('resort_manager_authenticated', 'true');
+            } else {
+              sessionStorage.setItem('resort_manager_authenticated', 'true');
+            }
+          }
+          setIsManagerAuthenticated(true);
+          showToast('ברוך הבא! כניסת מנהל אומתה בהצלחה 🐾');
+        }}
+        onGoToPublicIntake={() => {
+          setIsStaffPreviewMode(false);
+          setShowPublicIntake(true);
+        }}
       />
     );
   }
@@ -1021,6 +1072,18 @@ export default function App() {
             >
               <span className="text-base">⚙️</span>
               <span>הגדרות</span>
+            </button>
+
+            {/* 6. Lock System / Logout Button */}
+            <button
+              type="button"
+              onClick={handleManagerLogout}
+              id="btn-lock-system-top"
+              className="bg-white hover:bg-rose-50 active:scale-95 border border-slate-200 hover:border-rose-300 text-slate-500 hover:text-rose-700 font-bold px-2.5 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1 transition-all cursor-pointer shrink-0"
+              title="נעילת יומן ויציאה מאובטחת"
+            >
+              <Lock className="w-3.5 h-3.5 text-slate-400 group-hover:text-rose-600" />
+              <span className="hidden sm:inline">נעילה</span>
             </button>
 
           </div>
@@ -1809,7 +1872,10 @@ export default function App() {
         settings={settings}
         bookings={bookings}
         intakeRequests={intakeRequests}
-        onOpenFormPreview={() => setShowPublicIntake(true)}
+        onOpenFormPreview={() => {
+          setIsStaffPreviewMode(true);
+          setShowPublicIntake(true);
+        }}
       />
 
       {/* Shabbat & Jewish Holiday Greetings Modal */}

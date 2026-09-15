@@ -81,9 +81,16 @@ const RESORT_BYLAWS_SECTIONS = [
 interface PublicIntakePageProps {
   settings: ResortSettings;
   onBackToApp?: () => void;
+  isStaffPreview?: boolean;
+  onStaffLoginClick?: () => void;
 }
 
-export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, onBackToApp }) => {
+export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ 
+  settings, 
+  onBackToApp, 
+  isStaffPreview = false,
+  onStaffLoginClick
+}) => {
   const today = getTodayStr();
 
   // Form State
@@ -460,24 +467,25 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
             </p>
           </div>
 
-          <div className="pt-2">
-            {onBackToApp ? (
+          <div className="pt-2 space-y-2">
+            <a
+              href={`https://wa.me/${settings.managerPhone?.replace(/\D/g, '') || '0548765888'}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center justify-center gap-2 w-full bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold py-3 rounded-2xl text-sm transition-all cursor-pointer shadow-md"
+            >
+              <span>💬 פתח שיחה ישירה עם צוות הריזורט</span>
+            </a>
+
+            {/* Back to Management App is ONLY allowed for authorized staff during preview */}
+            {isStaffPreview && onBackToApp && (
               <button
                 type="button"
                 onClick={onBackToApp}
-                className="w-full bg-[#065f46] hover:bg-[#044e45] text-white font-bold py-3 rounded-2xl text-sm transition-all cursor-pointer shadow-md"
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-2xl text-xs transition-all cursor-pointer border border-slate-200"
               >
-                חזרה ליומן הראשי
+                חזרה ליומן הניהול (תצוגת מנהל)
               </button>
-            ) : (
-              <a
-                href={`https://wa.me/${settings.managerPhone?.replace(/\D/g, '') || '0548765888'}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center justify-center gap-2 w-full bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold py-3 rounded-2xl text-sm transition-all cursor-pointer shadow-md"
-              >
-                <span>💬 פתח שיחה ישירה עם צוות הריזורט</span>
-              </a>
             )}
           </div>
         </div>
@@ -491,12 +499,13 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
         
         {/* Header with Resort Logo */}
         <header className="text-center space-y-2 pt-2">
-          {onBackToApp && (
-            <div className="flex justify-start mb-2">
+          {isStaffPreview && onBackToApp && (
+            <div className="flex justify-between items-center mb-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-1.5 text-xs text-amber-900 font-bold">
+              <span>👁️ תצוגה מקדימה למנהל</span>
               <button
                 type="button"
                 onClick={onBackToApp}
-                className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs"
+                className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs"
               >
                 <ArrowRight className="w-3.5 h-3.5" />
                 <span>חזרה ליומן</span>
@@ -520,7 +529,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
           </p>
 
           {/* Proactive Send Form to Callers Banner (For staff preview only) */}
-          {onBackToApp && (
+          {isStaffPreview && (
             <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl p-3.5 sm:p-4 text-emerald-950 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-right mt-3">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-2xs shrink-0">
@@ -1810,6 +1819,19 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({ settings, on
           onClose={() => setIsSendIntakeModalOpen(false)}
           settings={settings}
         />
+
+        {/* Discreet Staff Portal Link */}
+        {onStaffLoginClick && (
+          <div className="pt-6 pb-2 text-center">
+            <button
+              type="button"
+              onClick={onStaffLoginClick}
+              className="text-[11px] text-slate-400 hover:text-slate-600 font-medium inline-flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>🔒 כניסת צוות ומנהלים</span>
+            </button>
+          </div>
+        )}
 
       </div>
     </div>

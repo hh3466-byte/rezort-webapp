@@ -1464,7 +1464,8 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
   try {
     const { data: custData, error: custErr } = await supabase
       .from(CUSTOMERS_TABLE)
-      .select('name, phone, dogs, total_visits, is_vip');
+      .select('name, phone, dogs, total_visits, is_vip')
+      .ilike('phone', `%${matchSuffix}%`);
 
     if (!custErr && custData && Array.isArray(custData)) {
       const match = custData.find((c: any) => {
@@ -1492,7 +1493,8 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
   try {
     const { data: bkData, error: bkErr } = await supabase
       .from(BOOKINGS_TABLE)
-      .select('owner_name, owner_phone, dog_name, dog_breed');
+      .select('owner_name, owner_phone, dog_name, dog_breed')
+      .ilike('owner_phone', `%${matchSuffix}%`);
 
     if (!bkErr && bkData && Array.isArray(bkData)) {
       const matches = bkData.filter((b: any) => {
