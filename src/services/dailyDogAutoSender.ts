@@ -98,7 +98,7 @@ export async function runAutoDailyDogUpdates(
   const unsentDogs = activeTonight.filter(b => {
     const key = `daily_dog_sent_${b.id}_${todayStr}`;
     const sentLocally = localStorage.getItem(key) === 'true';
-    const sentInDb = b.lastDailyDogUpdateSent === todayStr;
+    const sentInDb = b.lastDailyDogUpdateSent === todayStr || (b as any)?.data?.lastDailyDogUpdateSent === todayStr;
     return !sentLocally && !sentInDb;
   });
 

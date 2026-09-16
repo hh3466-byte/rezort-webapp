@@ -303,6 +303,7 @@ export const subscribeToBookings = (
             vaccinationValid: Boolean(row.vaccination_valid ?? rowData.vaccinationValid ?? true),
             createdAt: row.created_at || rowData.createdAt || new Date().toISOString(),
             updatedAt: row.updated_at || rowData.updatedAt || new Date().toISOString(),
+            lastDailyDogUpdateSent: rowData.lastDailyDogUpdateSent || undefined,
           };
 
           if (b.id === 'b-103' || b.dogName === 'ברונו') {

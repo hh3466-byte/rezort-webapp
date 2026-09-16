@@ -1514,8 +1514,9 @@ function sendDailyDogEveningUpdates() {
       var b = activeBookings[i];
       var todaySentKey = "daily_dog_sent_" + b.id + "_" + todayStr;
 
-      // מניעת כפילות: אם כבר נשלחה הודעה לכלב זה היום, דלג
-      if (props.getProperty(todaySentKey)) {
+      // מניעת כפילות: אם כבר נשלחה הודעה לכלב זה היום (בענן או מכל דפדפן), דלג
+      var bookingData = (b.data && typeof b.data === "object") ? b.data : {};
+      if (props.getProperty(todaySentKey) || bookingData.lastDailyDogUpdateSent === todayStr) {
         continue;
       }
 
@@ -1543,6 +1544,24 @@ function sendDailyDogEveningUpdates() {
         props.setProperty(todaySentKey, "true");
         sentCount++;
         Logger.log("נשלח בהצלחה עדכון יומי (נוסח #" + templateData.id + ", בידוד=" + isIsolation + ") ל-" + b.dog_name + " (" + b.owner_name + ")");
+
+        // סנכרון מיידי ל-Supabase למניעת כפילות מכל דפדפן או מכשיר
+        try {
+          bookingData.lastDailyDogUpdateSent = todayStr;
+          UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings?id=eq." + encodeURIComponent(b.id), {
+            method: "patch",
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Authorization": "Bearer " + SUPABASE_KEY,
+              "Content-Type": "application/json",
+              "Prefer": "return=minimal"
+            },
+            payload: JSON.stringify({ data: bookingData, updated_at: new Date().toISOString() }),
+            muteHttpExceptions: true
+          });
+        } catch(eDbSync) {
+          Logger.log("סנכרון סטטוס שליחה ל-Supabase נכשל: " + eDbSync.toString());
+        }
       } else {
         Logger.log("שגיאה במשלוח ל-" + b.dog_name + ": " + sendRes.getContentText());
       }
