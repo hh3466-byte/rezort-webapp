@@ -262,22 +262,41 @@ export async function sendGreenApiDirectMessage(
   }
 
   const cleanP = cleanPhoneNumber(phone);
-  const intlPhone = cleanP.startsWith('0') ? '972' + cleanP.substring(1) : cleanP;
+  if (!cleanP || cleanP.length < 9) {
+    return { success: false, error: `מספר הטלפון שנמסר (${phone}) אינו תקין` };
+  }
+
+  let intlPhone = cleanP;
+  if (intlPhone.startsWith('0')) {
+    intlPhone = '972' + intlPhone.substring(1);
+  } else if (intlPhone.startsWith('5') && intlPhone.length === 9) {
+    intlPhone = '972' + intlPhone;
+  }
+
   const greenApiUrl = `https://api.green-api.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
   const chatId = `${intlPhone}@c.us`;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
     const res = await fetch(greenApiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, message })
+      body: JSON.stringify({ chatId, message }),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
+
     if (res.ok) {
       return { success: true };
     }
     const errText = await res.text();
-    return { success: false, error: `שגיאה (${res.status}): ${errText}` };
+    return { success: false, error: `שגיאה מ-Green-API (${res.status}): ${errText}` };
   } catch (err: any) {
+    if (err.name === 'AbortError') {
+      return { success: false, error: 'זמן ההמתנה לשרת אזל (Timeout)' };
+    }
     return { success: false, error: err.message || String(err) };
   }
 }

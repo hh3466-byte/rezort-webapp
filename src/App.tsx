@@ -1797,6 +1797,7 @@ export default function App() {
             setBookingWizardOpen({ isOpen: false, initialData: null });
             setActiveGrowPayment(null);
           }}
+          onOpenSendPaymentLink={(b) => setPaymentLinkBooking(b)}
           onSave={async (newBooking) => {
             setBookings(prev => {
               const exists = prev.some(b => b.id === newBooking.id);

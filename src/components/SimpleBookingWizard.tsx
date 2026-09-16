@@ -31,7 +31,8 @@ import {
   Mic,
   Square,
   Loader2,
-  Volume2
+  Volume2,
+  CreditCard
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Booking, ResortSettings, ServiceType, PaymentMethod, PaymentStatus, StayStatus, AgentActionProposal, IntakeRequest } from '../types';
@@ -56,6 +57,7 @@ interface SimpleBookingWizardProps {
   settings: ResortSettings;
   onClose: () => void;
   onSave: (booking: Booking) => void;
+  onOpenSendPaymentLink?: (booking: Booking) => void;
 }
 
 export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
@@ -66,6 +68,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   settings,
   onClose,
   onSave,
+  onOpenSendPaymentLink,
 }) => {
   const todayStr = getTodayStr();
 
@@ -2571,6 +2574,21 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
               {/* Actions */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                {onOpenSendPaymentLink && savedBookingResult.paymentStatus !== 'fully_paid' && savedBookingResult.totalPrice > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenSendPaymentLink(savedBookingResult);
+                    }}
+                    className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    title="פתח חלון שליחת קישור תשלום אוטונומי בוואטסאפ ללקוח"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>⚡ שלח קישור לתשלום (Grow/ביט)</span>
+                  </button>
+                )}
+
                 <a
                   href={generateWhatsAppLink(
                     savedBookingResult.ownerPhone,

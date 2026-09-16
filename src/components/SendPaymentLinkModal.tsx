@@ -46,10 +46,12 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
   });
   const [isSending, setIsSending] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
-  const [sendStatus, setSendStatus] = useState<string | null>(null);
+  const [sendStatus, setSendStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const cleanPhone = cleanPhoneNumber(booking.ownerPhone);
-  const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
+  const intlPhone = cleanPhone.startsWith('0') 
+    ? '972' + cleanPhone.substring(1) 
+    : (cleanPhone.startsWith('5') && cleanPhone.length === 9 ? '972' + cleanPhone : cleanPhone);
   const firstName = getFirstName(booking.ownerName);
   const serviceHebrew = getServiceTypeHebrew(booking.serviceType);
   const stayDates = `${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}`;
@@ -83,6 +85,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
   };
 
   const messageText = generateMessage();
+  const whatsappUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(messageText)}`;
 
   // Send via automated Green-API direct to WhatsApp
   const handleSendGreenApi = async () => {
@@ -98,36 +101,30 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
       );
 
       if (res && res.success) {
-        setSendStatus('הודעה עם הקישור נשלחה בהצלחה ישירות לוואטסאפ של הלקוח! 🟢');
+        setSendStatus({
+          type: 'success',
+          text: `ההודעה עם הקישור נשלחה בהצלחה ישירות לוואטסאפ של ${booking.ownerName}! 🟢`
+        });
         if (onSentSuccess) {
           onSentSuccess(`קישור לתשלום נשלח בהצלחה ל-${booking.ownerName} בוואטסאפ`);
         }
         setTimeout(() => {
           onClose();
-        }, 1600);
+        }, 2000);
       } else {
-        // Fallback to direct WhatsApp web/app
-        handleOpenWhatsApp();
+        setSendStatus({
+          type: 'error',
+          text: res?.error || 'השליחה האוטומטית נכשלה. באפשרותך ללחוץ על "פתח בוואטסאפ" או להעתיק את ההודעה.'
+        });
       }
-    } catch (err) {
-      console.warn('Green-API send error, falling back to manual whatsapp:', err);
-      handleOpenWhatsApp();
+    } catch (err: any) {
+      setSendStatus({
+        type: 'error',
+        text: `שגיאת תקשורת: ${err?.message || String(err)}`
+      });
     } finally {
       setIsSending(false);
     }
-  };
-
-  // Open direct WhatsApp chat with prefilled message
-  const handleOpenWhatsApp = () => {
-    const waUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(messageText)}`;
-    const win = window.open(waUrl, '_blank');
-    if (!win) {
-      window.location.href = waUrl;
-    }
-    if (onSentSuccess) {
-      onSentSuccess(`חלון הוואטסאפ נפתח עם קישור התשלום עבור ${booking.ownerName}`);
-    }
-    onClose();
   };
 
   // Copy message to clipboard
@@ -254,9 +251,14 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
             </div>
           </div>
 
+          {/* Status Feedback Banner */}
           {sendStatus && (
-            <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 rounded-xl p-2.5 text-xs font-bold flex items-center gap-2">
-              <span>{sendStatus}</span>
+            <div className={`p-3 rounded-2xl text-xs font-bold flex items-center gap-2 animate-in fade-in ${
+              sendStatus.type === 'success' 
+                ? 'bg-emerald-50 border border-emerald-300 text-emerald-900' 
+                : 'bg-rose-50 border border-rose-300 text-rose-900'
+            }`}>
+              <span>{sendStatus.text}</span>
             </div>
           )}
 
@@ -267,33 +269,50 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer order-2 sm:order-1 text-center"
+            className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer order-3 sm:order-1 text-center"
           >
             סגור
           </button>
 
           <div className="flex items-center gap-2 order-1 sm:order-2">
-            {/* WhatsApp App / Web button */}
+            {/* Copy Button */}
             <button
               type="button"
-              onClick={handleOpenWhatsApp}
-              className="flex-1 sm:flex-initial bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold px-3 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
-              title="פתח שיחת וואטסאפ עם ההודעה מוכנה לשליחה"
+              onClick={handleCopyMessage}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
+              title="העתק את ההודעה המלאה יחד עם הקישור ללוח"
             >
-              <MessageSquare className="w-4 h-4 text-emerald-700" />
-              <span>פתח בוואטסאפ</span>
+              {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{isCopied ? 'הועתק!' : 'העתק'}</span>
             </button>
 
-            {/* Direct Green-API button */}
+            {/* Direct WhatsApp Native Link (Unblockable by popup blockers!) */}
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => {
+                if (onSentSuccess) {
+                  onSentSuccess(`חלון הוואטסאפ נפתח עם קישור התשלום עבור ${booking.ownerName}`);
+                }
+              }}
+              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold px-3 py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-2xs active:scale-95 text-center cursor-pointer"
+              title="פתח שיחת וואטסאפ ישירה (עובד מכל טלפון ומחשב ללא חסימות)"
+            >
+              <MessageSquare className="w-4 h-4 text-emerald-700" />
+              <span>פתח בוואטסאפ 📱</span>
+            </a>
+
+            {/* Direct Autonomous Green-API button */}
             <button
               type="button"
               onClick={handleSendGreenApi}
               disabled={isSending}
-              className="flex-1 sm:flex-initial bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white text-xs font-black px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
-              title="שלח ישירות דרך Green-API ללא פתיחת וואטסאפ"
+              className="bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white text-xs font-black px-4 py-2.5 rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+              title="שליחה ישירה מוואטסאפ הריזורט ללקוח ברקע (עובד אוטומטית גם מהנייד וגם מהמחשב)"
             >
               <Send className={`w-3.5 h-3.5 ${isSending ? 'animate-spin' : ''}`} />
-              <span>{isSending ? 'שולח...' : 'שלח עכשיו 🟢'}</span>
+              <span>{isSending ? 'שולח עכשיו...' : '⚡ שלח ישירות בוואטסאפ'}</span>
             </button>
           </div>
         </div>

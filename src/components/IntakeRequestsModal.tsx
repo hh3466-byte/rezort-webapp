@@ -300,6 +300,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [customPaymentLink, setCustomPaymentLink] = useState<string>('');
   const [isSendingPayment, setIsSendingPayment] = useState<boolean>(false);
+  const [paymentSendError, setPaymentSendError] = useState<string | null>(null);
   const [rejectPromptRequest, setRejectPromptRequest] = useState<IntakeRequest | null>(null);
   const [rejectMessageText, setRejectMessageText] = useState<string>('');
   const [isProcessingReject, setIsProcessingReject] = useState<boolean>(false);
@@ -441,6 +442,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     const effectiveAmount = customPrices[request.id] ?? (request.depositRequested && request.depositRequested > 0 ? request.depositRequested : calculatedDefault);
     setPaymentAmount(String(effectiveAmount));
     setCustomPaymentLink(settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg');
+    setPaymentSendError(null);
   };
 
   const sortedRequests = [...filteredRequests].sort((a, b) => {
@@ -617,6 +619,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const handleConfirmSendPayment = async (mode: 'green_api' | 'manual_whatsapp' = 'green_api') => {
     if (!paymentPromptRequest) return;
     setIsSendingPayment(true);
+    setPaymentSendError(null);
     
     const numAmount = Number(paymentAmount) || 0;
     let linkToUse = (customPaymentLink || '').trim();
@@ -636,37 +639,29 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     };
 
     const cleanPhone = cleanPhoneNumber(paymentPromptRequest.ownerPhone);
-    const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
+    const intlPhone = cleanPhone.startsWith('0') 
+      ? '972' + cleanPhone.substring(1) 
+      : (cleanPhone.startsWith('5') && cleanPhone.length === 9 ? '972' + cleanPhone : cleanPhone);
     const msg = formatClientPaymentLinkMessage(updated, settings, numAmount, linkToUse);
-    const whatsappUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
-
-    let sentViaGreenApi = false;
 
     // 1. Direct automated send via Green-API (ideal for mobile phones!)
     if (mode === 'green_api') {
       try {
         const greenRes = await sendGreenApiDirectMessage(cleanPhone, msg, settings.greenApiIdInstance, settings.greenApiToken);
-        if (greenRes && greenRes.success) {
-          sentViaGreenApi = true;
+        if (!greenRes || !greenRes.success) {
+          setPaymentSendError(greenRes?.error || 'השליחה האוטומטית נכשלה. באפשרותך ללחוץ על "פתח בוואטסאפ ידנית" או להעתיק את ההודעה.');
+          setIsSendingPayment(false);
+          return;
         }
-      } catch (gErr) {
+      } catch (gErr: any) {
         console.warn('Green-API payment send notice:', gErr);
+        setPaymentSendError(`שגיאת תקשורת: ${gErr?.message || String(gErr)}`);
+        setIsSendingPayment(false);
+        return;
       }
     }
 
-    // 2. If user chose manual or Green-API failed, open WhatsApp app / web
-    if (mode === 'manual_whatsapp' || !sentViaGreenApi) {
-      try {
-        const win = window.open(whatsappUrl, '_blank');
-        if (!win) {
-          window.location.href = whatsappUrl;
-        }
-      } catch (e) {
-        window.location.href = whatsappUrl;
-      }
-    }
-
-    // 3. Save updated status
+    // 2. Save updated status
     try {
       if (onSaveRequest) {
         await onSaveRequest(updated);
@@ -2193,6 +2188,13 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 </div>
               </div>
 
+              {/* Error / Alert banner */}
+              {paymentSendError && (
+                <div className="bg-rose-50 border border-rose-300 text-rose-900 rounded-xl p-3 text-xs font-bold flex items-center gap-2">
+                  <span>⚠️ {paymentSendError}</span>
+                </div>
+              )}
+
             </div>
 
             {/* Footer */}
@@ -2200,7 +2202,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setPaymentPromptRequest(null)}
+                  onClick={() => { setPaymentPromptRequest(null); setPaymentSendError(null); }}
                   className="bg-white hover:bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-xl border border-slate-300 cursor-pointer shadow-2xs text-xs"
                 >
                   ביטול
@@ -2247,7 +2249,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     type="button"
                     disabled={isSendingPayment}
                     onClick={() => handleConfirmSendPayment('green_api')}
-                    className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-3.5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 text-xs"
+                    className="bg-[#065f46] hover:bg-[#044e45] active:scale-98 text-white font-black px-3.5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 text-xs"
                   >
                     <MessageCircle className="w-4 h-4" />
                     <span>אישור בוואטסאפ 📲</span>
@@ -2255,24 +2257,46 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={isSendingPayment}
-                    onClick={() => handleConfirmSendPayment('manual_whatsapp')}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-2 rounded-xl border border-slate-300 cursor-pointer shadow-2xs text-xs flex items-center gap-1.5"
-                    title="פתח את אפליקציית וואטסאפ במכשיר הנוכחי"
-                  >
-                    <span>📱 פתח בוואטסאפ ידנית</span>
-                  </button>
+                  {/* Direct Native WhatsApp Link (Unblockable!) */}
+                  {(() => {
+                    const cleanP = cleanPhoneNumber(paymentPromptRequest.ownerPhone);
+                    const intlP = cleanP.startsWith('0') 
+                      ? '972' + cleanP.substring(1) 
+                      : (cleanP.startsWith('5') && cleanP.length === 9 ? '972' + cleanP : cleanP);
+                    const fullMsg = formatClientPaymentLinkMessage(
+                      { ...paymentPromptRequest, depositRequested: Number(paymentAmount) || 0, status: 'payment_requested' },
+                      settings,
+                      Number(paymentAmount) || 0,
+                      customPaymentLink
+                    );
+                    const waLink = `https://wa.me/${intlP}?text=${encodeURIComponent(fullMsg)}`;
+                    return (
+                      <a
+                        href={waLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => {
+                          onUpdateStatus(paymentPromptRequest.id, 'payment_requested');
+                          setPaymentPromptRequest(null);
+                        }}
+                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        title="פתח שיחת וואטסאפ במכשיר הנוכחי (ללא חסימות)"
+                      >
+                        <span>📱 פתח בוואטסאפ</span>
+                      </a>
+                    );
+                  })()}
+
+                  {/* Direct Autonomous Green-API button */}
                   <button
                     type="button"
                     disabled={isSendingPayment}
                     onClick={() => handleConfirmSendPayment('green_api')}
-                    className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-98 text-white font-black px-4 sm:px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all text-xs sm:text-sm"
-                    title="שליחה ישירה מוואטסאפ הריזורט ללקוח ברקע (עובד אוטומטית גם מהנייד)"
+                    className="bg-[#065f46] hover:bg-[#044e45] active:scale-98 text-white font-black px-4 sm:px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all text-xs sm:text-sm disabled:opacity-50"
+                    title="שליחה ישירה מוואטסאפ הריזורט ללקוח ברקע (עובד אוטומטית גם מהנייד וגם מהמחשב)"
                   >
                     <MessageCircle className="w-4 h-4" />
-                    <span>{isSendingPayment ? 'שולח קישור...' : '⚡ שלח ישירות בוואטסאפ (אוטומטי)'}</span>
+                    <span>{isSendingPayment ? 'שולח קישור...' : '⚡ שלח ישירות בוואטסאפ'}</span>
                   </button>
                 </div>
               )}
