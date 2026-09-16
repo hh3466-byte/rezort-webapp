@@ -35,6 +35,7 @@ interface BookingsListProps {
   onDeleteBooking: (bookingId: string) => void;
   onMarkAsPaid: (bookingId: string) => void;
   onOpenPaymentModal: (booking: Booking) => void;
+  onOpenSendPaymentLink?: (booking: Booking) => void;
   onOpenNewBooking: () => void;
   onInitiateRelease?: (booking: Booking) => void;
   onToggleReviewRequest?: (booking: Booking) => void;
@@ -48,6 +49,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
   onDeleteBooking,
   onMarkAsPaid,
   onOpenPaymentModal,
+  onOpenSendPaymentLink,
   onOpenNewBooking,
   onInitiateRelease,
   onToggleReviewRequest,
@@ -130,18 +132,26 @@ export const BookingsList: React.FC<BookingsListProps> = ({
           
           {/* Search */}
           <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="חיפוש לפי שם כלב, בעלים, טלפון, הערות..."
-              className="w-full bg-slate-50 text-slate-900 text-xs sm:text-sm pl-3 pr-9 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none"
+              placeholder="חיפוש לפי שם כלב, בעלים, טלפון, הערות... (הקש Enter לחיפוש)"
+              className="w-full bg-slate-50 focus:bg-white text-slate-900 text-xs sm:text-sm pl-8 pr-10 py-2.5 rounded-xl border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all"
             />
+            <button
+              type="button"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600 cursor-pointer p-0.5"
+              title="חפש"
+            >
+              <Search className="w-4 h-4" />
+            </button>
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs cursor-pointer p-1"
+                title="נקה חיפוש"
               >
                 ✕
               </button>
@@ -449,6 +459,26 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                         >
                           <CreditCard className="w-4 h-4 text-green-600" />
                           <span>תשלום</span>
+                        </button>
+                      )}
+
+                      {/* Send / Resend Payment Link Button */}
+                      {b.stayStatus !== 'cancelled' && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onOpenSendPaymentLink) {
+                              onOpenSendPaymentLink(b);
+                            } else {
+                              handleSendWhatsAppReminder(b, e);
+                            }
+                          }}
+                          title="שלח או שלח שוב קישור לתשלום ב-Grow / Bit ישירות לוואטסאפ של הלקוח"
+                          className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-800 border border-emerald-300 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                        >
+                          <CreditCard className="w-4 h-4 text-emerald-600" />
+                          <span>קישור לתשלום 💳</span>
                         </button>
                       )}
 

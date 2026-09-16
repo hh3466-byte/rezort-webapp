@@ -37,11 +37,12 @@ import { PaymentModal } from './components/PaymentModal';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
 import { ManagerLoginGate } from './components/ManagerLoginGate';
-import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2, LogOut, Lock, ArrowLeft } from 'lucide-react';
+import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2, LogOut, Lock, ArrowLeft, Search } from 'lucide-react';
 import { formatPhoneForWhatsApp } from './utils/whatsappUtils';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
 import { Guide } from './components/Guide';
+import { SendPaymentLinkModal } from './components/SendPaymentLinkModal';
 import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricModal';
 import { IntakeRequestsModal, calculateBoardingRate } from './components/IntakeRequestsModal';
 import { CheckoutDebtAlertModal } from './components/CheckoutDebtAlertModal';
@@ -88,6 +89,7 @@ export default function App() {
     initialData?: Partial<Booking> | null;
   }>({ isOpen: false, initialData: null });
   const [paymentModalBooking, setPaymentModalBooking] = useState<Booking | null>(null);
+  const [paymentLinkBooking, setPaymentLinkBooking] = useState<Booking | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isReportsOpen, setIsReportsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
@@ -1182,12 +1184,12 @@ export default function App() {
 
           </div>
 
-          {/* Main View Navigation Tabs (Left in RTL) */}
-          <div className="flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200 shadow-2xs shrink-0">
+          {/* Main View Navigation Tabs (Left in RTL) - Includes WhatsApp CRM as 1st Class Tab */}
+          <div className="flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200 shadow-2xs shrink-0 overflow-x-auto no-scrollbar">
             <button
               type="button"
               onClick={() => setActiveTab('calendar')}
-              className={`text-xs sm:text-sm font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`text-xs sm:text-sm font-black px-3 sm:px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'calendar'
                   ? 'bg-[#065f46] text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
@@ -1200,7 +1202,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setActiveTab('forecast')}
-              className={`text-xs sm:text-sm font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`text-xs sm:text-sm font-black px-3 sm:px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'forecast'
                   ? 'bg-[#065f46] text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
@@ -1213,7 +1215,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setActiveTab('bookings')}
-              className={`text-xs sm:text-sm font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`text-xs sm:text-sm font-black px-3 sm:px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'bookings'
                   ? 'bg-[#065f46] text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
@@ -1223,10 +1225,37 @@ export default function App() {
               <span>הזמנות ({activeBookings.length})</span>
             </button>
 
+            {/* WhatsApp CRM Tab */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('whatsapp')}
+              id="tab-whatsapp-crm-main"
+              className={`text-xs sm:text-sm font-black px-3 sm:px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'whatsapp'
+                  ? 'bg-gradient-to-r from-[#065f46] via-emerald-800 to-[#065f46] text-white shadow-xs ring-1 ring-emerald-400'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+              title="מרכז וואטסאפ ופניות (CRM)"
+            >
+              <span>💬</span>
+              <span>CRM ושיחות</span>
+              {newCrmChatsCount > 0 ? (
+                <span className="bg-rose-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full font-mono animate-pulse">
+                  {newCrmChatsCount}
+                </span>
+              ) : (
+                <span className={`text-[9px] px-1 py-0.2 rounded-md font-bold ${
+                  activeTab === 'whatsapp' ? 'bg-emerald-900 text-emerald-100' : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  CRM
+                </span>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveTab('customers')}
-              className={`text-xs sm:text-sm font-black px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`text-xs sm:text-sm font-black px-3 sm:px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'customers'
                   ? 'bg-[#065f46] text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
@@ -1319,7 +1348,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Header Metrics Section: Ultra-Compact & Space-Efficient with Collapse Option */}
+        {/* Header Metrics Section: Ultra-Compact & Space-Efficient (Hidden on mobile when in WhatsApp CRM to maximize full-screen view) */}
+        <div className={activeTab === 'whatsapp' ? 'hidden sm:block' : ''}>
         {isMetricsRowCollapsed ? (
           /* Collapsed Single-Line Summary Bar (~36px height) */
           <div className="bg-white border border-slate-200 rounded-xl px-3.5 py-2 shadow-2xs flex items-center justify-between text-xs transition-all">
@@ -1584,6 +1614,7 @@ export default function App() {
             </div>
           </div>
         )}
+        </div>
 
 
 
@@ -1633,6 +1664,7 @@ export default function App() {
               settings={settings}
               onSelectBooking={(b) => setSelectedDateForDetails(b.startDate)}
               onOpenPaymentModal={(b) => setPaymentModalBooking(b)}
+              onOpenSendPaymentLink={(b) => setPaymentLinkBooking(b)}
               onMarkAsPaid={handleMarkAsPaid}
               onEditBooking={(b) => setBookingFormModal({ isOpen: true, initialData: b })}
               onDeleteBooking={handleDeleteBooking}
@@ -1800,10 +1832,22 @@ export default function App() {
           booking={paymentModalBooking}
           settings={settings}
           onClose={() => setPaymentModalBooking(null)}
+          onOpenSendPaymentLink={(b) => setPaymentLinkBooking(b)}
           onSavePayment={(bookingId, amount, method, notes) => {
             handleSavePayment(bookingId, amount, method, notes);
             setPaymentModalBooking(null);
           }}
+        />
+      )}
+
+      {/* Direct Send / Resend Payment Link Modal */}
+      {paymentLinkBooking && (
+        <SendPaymentLinkModal
+          isOpen={!!paymentLinkBooking}
+          booking={paymentLinkBooking}
+          settings={settings}
+          onClose={() => setPaymentLinkBooking(null)}
+          onSentSuccess={(msg) => showToast(msg)}
         />
       )}
 
@@ -1941,8 +1985,8 @@ export default function App() {
                 notes: [req.specialNeeds, req.notes, req.internalNotes ? `הערות שמוליק: ${req.internalNotes}` : ''].filter(Boolean).join(' | '),
                 totalPrice: finalPrice,
                 dailyRate: dailyRateVal,
-                depositAmount: isFree ? 0 : (req.depositRequested || 0),
-                paymentStatus: isFree ? 'fully_paid' : (req.depositRequested ? 'deposit_paid' : 'fully_paid'),
+                depositAmount: 0,
+                paymentStatus: isFree ? 'fully_paid' : 'unpaid',
                 isFreeStay: isFree,
                 stayStatus: 'booked'
               }

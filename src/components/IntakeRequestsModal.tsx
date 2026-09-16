@@ -816,7 +816,34 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
           </div>
 
           {/* Search Bar & Bulk Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-1 sm:max-w-xs w-full">
+            <div className="relative flex-1 flex items-center">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="חפש בקשה (שם, כלב, טלפון)..."
+                className="w-full bg-slate-50 focus:bg-white text-slate-900 text-xs sm:text-sm pl-8 pr-9 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all shadow-2xs"
+              />
+              <button
+                type="button"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600 cursor-pointer p-0.5"
+                title="חפש"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer p-1"
+                  title="נקה חיפוש"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
             {filter === 'rejected' && filteredRequests.length > 0 && (
               <button
                 type="button"
@@ -1408,10 +1435,10 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         type="button"
                         onClick={() => handleOpenPaymentPrompt(req)}
                         className="bg-blue-50 hover:bg-blue-100 active:scale-98 text-blue-900 border border-blue-300 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                        title="הגדר סכום שסוכם ושלח קישור לתשלום ישירות לוואטסאפ של הלקוח"
+                        title="הגדר סכום שסוכם ושלח או שלח שוב קישור לתשלום ישירות לוואטסאפ של הלקוח"
                       >
                         <CreditCard className="w-3.5 h-3.5 text-blue-600" />
-                        <span>שלח קישור לתשלום 💬</span>
+                        <span>{req.status === 'payment_requested' ? 'שלח שוב קישור 💬' : 'שלח קישור לתשלום 💬'}</span>
                       </button>
 
                       {/* Approve and Book on calendar */}

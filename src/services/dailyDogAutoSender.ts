@@ -98,7 +98,7 @@ export async function runAutoDailyDogUpdates(
   const unsentDogs = activeTonight.filter(b => {
     const key = `daily_dog_sent_${b.id}_${todayStr}`;
     const sentLocally = localStorage.getItem(key) === 'true';
-    const sentInDb = (b.data as any)?.lastDailyDogUpdateSent === todayStr;
+    const sentInDb = b.lastDailyDogUpdateSent === todayStr;
     return !sentLocally && !sentInDb;
   });
 
@@ -152,10 +152,7 @@ export async function runAutoDailyDogUpdates(
         try {
           const updatedBooking: Booking = {
             ...b,
-            data: {
-              ...(b.data || {}),
-              lastDailyDogUpdateSent: todayStr
-            }
+            lastDailyDogUpdateSent: todayStr
           };
           await saveBookingToDb(updatedBooking);
         } catch (errDb) {

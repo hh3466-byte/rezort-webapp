@@ -18,6 +18,7 @@ interface PaymentModalProps {
   settings: ResortSettings;
   onClose: () => void;
   onSavePayment: (bookingId: string, addedAmount: number, method: PaymentMethod, notes?: string) => void;
+  onOpenSendPaymentLink?: (booking: Booking) => void;
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
@@ -25,6 +26,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   settings,
   onClose,
   onSavePayment,
+  onOpenSendPaymentLink,
 }) => {
   if (!booking) return null;
 
@@ -157,17 +159,39 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             />
           </div>
 
-          <div className="pt-2 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={handleWhatsApp}
-              className="text-xs text-green-700 hover:text-green-900 flex items-center gap-1 py-2 px-2.5 rounded-xl bg-green-50 hover:bg-green-100 transition-colors border border-green-200 cursor-pointer font-bold"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span>שלח בוואטסאפ</span>
-            </button>
+          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 border-t border-slate-100">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Send Grow Payment Link button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (onOpenSendPaymentLink) {
+                    onClose();
+                    onOpenSendPaymentLink(booking);
+                  } else {
+                    handleWhatsApp();
+                  }
+                }}
+                className="text-xs text-emerald-800 hover:text-emerald-950 flex items-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-all border border-emerald-300 cursor-pointer font-black active:scale-95 shadow-2xs"
+                title="שלח קישור לתשלום ב-Grow / Bit ישירות ללקוח בוואטסאפ"
+              >
+                <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
+                <span>שלח קישור Grow 💳</span>
+              </button>
 
-            <div className="flex items-center gap-2">
+              {/* General WhatsApp reminder */}
+              <button
+                type="button"
+                onClick={handleWhatsApp}
+                className="text-xs text-slate-700 hover:text-slate-900 flex items-center gap-1 py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors border border-slate-200 cursor-pointer font-bold"
+                title="שלח הודעת תזכורת טקסטואלית בוואטסאפ"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-slate-600" />
+                <span>תזכורת</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 justify-end">
               <button
                 type="button"
                 onClick={onClose}

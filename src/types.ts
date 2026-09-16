@@ -43,6 +43,7 @@ export interface Booking {
   skipReviewRequest?: boolean;
   isFreeStay?: boolean;
   linkedDogName?: string;
+  lastDailyDogUpdateSent?: string;
   createdAt: string;
   updatedAt: string;
 }

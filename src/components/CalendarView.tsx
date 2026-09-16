@@ -375,11 +375,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
 
         {/* Center: Search Bar for Shmulik (חיפוש ביומן לפי שם כלב או בעלים) */}
-        <div ref={searchContainerRef} className="relative flex-1 min-w-[240px] max-w-sm sm:max-w-md">
-          <div className="relative">
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-emerald-600">
-              <Search className="w-4 h-4" />
-            </div>
+        <div ref={searchContainerRef} className="relative flex-1 min-w-[220px] max-w-sm sm:max-w-md">
+          <div className="relative flex items-center">
             <input
               type="text"
               value={searchQuery}
@@ -387,12 +384,37 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 setSearchQuery(e.target.value);
                 setIsSearchDropdownOpen(true);
               }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (matchingBookings.length > 0) {
+                    handleSelectSearchResult(matchingBookings[0]);
+                  }
+                }
+                if (e.key === 'Escape') {
+                  setIsSearchDropdownOpen(false);
+                }
+              }}
               onFocus={() => {
                 if (searchQuery.trim()) setIsSearchDropdownOpen(true);
               }}
-              placeholder="חיפוש ביומן לפי שם כלב או בעלים..."
-              className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-emerald-600 rounded-xl pr-9 pl-9 py-2 text-xs sm:text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden transition-all shadow-2xs focus:ring-2 focus:ring-emerald-500/20"
+              placeholder="חיפוש ביומן לפי שם כלב או בעלים (Enter למעבר)..."
+              className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-emerald-600 rounded-xl pr-10 pl-9 py-2 text-xs sm:text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden transition-all shadow-2xs focus:ring-2 focus:ring-emerald-500/20"
             />
+            <button
+              type="button"
+              onClick={() => {
+                if (matchingBookings.length > 0) {
+                  handleSelectSearchResult(matchingBookings[0]);
+                } else if (searchQuery.trim()) {
+                  setIsSearchDropdownOpen(true);
+                }
+              }}
+              className="absolute inset-y-0 right-0 pr-3 pl-2 flex items-center text-emerald-600 hover:text-emerald-800 cursor-pointer active:scale-95 transition-transform"
+              title="חפש ועבור לתוצאה הראשונה"
+            >
+              <Search className="w-4 h-4" />
+            </button>
             {searchQuery && (
               <button
                 type="button"

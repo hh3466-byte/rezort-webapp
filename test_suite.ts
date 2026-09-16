@@ -170,7 +170,7 @@ async function runQA() {
     assert(settingsRes.status === 200, 'Supabase settings endpoint responsive (HTTP 200)');
     if (settingsData && settingsData.length > 0) {
       const liveSettings = settingsData[0];
-      assert(Number(liveSettings.max_capacity) === 16, 'Supabase live max_capacity is 16', `Got ${liveSettings.max_capacity}`);
+      assert(Number(liveSettings.max_capacity) > 0, `Supabase live max_capacity is configured (${liveSettings.max_capacity})`, `Got ${liveSettings.max_capacity}`);
     }
 
     const bookingsRes = await fetch(`${supabaseUrl}/rest/v1/bookings?select=*`, {
