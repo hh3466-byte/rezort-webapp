@@ -32,12 +32,13 @@ import { DayDetailsModal } from './components/DayDetailsModal';
 import { AgentActionModal } from './components/AgentActionModal';
 import { BookingFormModal } from './components/BookingFormModal';
 import { SimpleBookingWizard } from './components/SimpleBookingWizard';
-import { GrowPaymentsModal } from './components/GrowPaymentsModal';
+import { GrowPaymentsModal, LinkedPaymentDetails } from './components/GrowPaymentsModal';
 import { PaymentModal } from './components/PaymentModal';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
 import { ManagerLoginGate } from './components/ManagerLoginGate';
-import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2, LogOut, Lock } from 'lucide-react';
+import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2, LogOut, Lock, ArrowLeft } from 'lucide-react';
+import { formatPhoneForWhatsApp } from './utils/whatsappUtils';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
 import { Guide } from './components/Guide';
@@ -94,6 +95,8 @@ export default function App() {
   // Incoming Grow Payments from Gmail sync
   const [pendingGrowPayments, setPendingGrowPayments] = useState<GrowIncomingPayment[]>([]);
   const [activeGrowPayment, setActiveGrowPayment] = useState<GrowIncomingPayment | null>(null);
+  const [isGrowPaymentsMinimized, setIsGrowPaymentsMinimized] = useState(false);
+  const [isGrowFloatingSnoozed, setIsGrowFloatingSnoozed] = useState(false);
 
   // Client Intake Requests State
   const isIntakeParam = typeof window !== 'undefined' && (
@@ -647,7 +650,7 @@ export default function App() {
   };
 
   // Grow Payments Acceptance Handler
-  const handleAcceptGrowPayment = (payment: GrowIncomingPayment) => {
+  const handleAcceptGrowPayment = (payment: GrowIncomingPayment, linkedDetails?: LinkedPaymentDetails) => {
     setActiveGrowPayment(payment);
     const methodStr = (payment.payment_method || '').toLowerCase();
     const payMethod: PaymentMethod = methodStr.includes('bit') 
@@ -666,34 +669,60 @@ export default function App() {
       return req.ownerName.trim().toLowerCase() === payment.customer_name.trim().toLowerCase();
     });
 
+    // Check existing booking if dog name not in intake
+    const matchedBooking = bookings.find(b => {
+      const cleanBPhone = (b.ownerPhone || '').replace(/\D/g, '');
+      if (cleanPayPhone.length >= 7 && cleanBPhone.length >= 7) {
+        return cleanBPhone.includes(cleanPayPhone) || cleanPayPhone.includes(cleanBPhone);
+      }
+      return b.ownerName.trim().toLowerCase() === payment.customer_name.trim().toLowerCase();
+    });
+
+    const ownerName = linkedDetails?.ownerName || matchedIntake?.ownerName || payment.customer_name;
+    const ownerPhone = linkedDetails?.ownerPhone || payment.customer_phone || matchedIntake?.ownerPhone || '';
+    const ownerEmail = linkedDetails?.ownerEmail || payment.customer_email || matchedIntake?.ownerEmail || '';
+    const dogName = linkedDetails?.dogName || matchedIntake?.dogName || matchedBooking?.dogName || '';
+    const dogBreed = linkedDetails?.dogBreed || matchedIntake?.dogBreed || matchedBooking?.dogBreed || '';
+    const serviceType = linkedDetails?.serviceType || matchedIntake?.serviceType || matchedBooking?.serviceType || 'boarding';
+    const startDate = linkedDetails?.startDate || matchedIntake?.startDate || getTodayStr();
+    const endDate = linkedDetails?.endDate || matchedIntake?.endDate || addDays(getTodayStr(), 3);
+
+    const notesParts = [
+      linkedDetails?.specialNeeds ? `צרכים מיוחדים: ${linkedDetails.specialNeeds}` : (matchedIntake?.specialNeeds ? `צרכים מיוחדים: ${matchedIntake.specialNeeds}` : ''),
+      linkedDetails?.notes ? linkedDetails.notes : (matchedIntake?.notes ? `הערות מטופס בקשת הקליטה: ${matchedIntake.notes}` : ''),
+      linkedDetails?.chatSnippet ? `ציטוט מוואטסאפ: "${linkedDetails.chatSnippet}"` : '',
+      `עסקת Grow (אסמכתא: ${payment.reference_id})`
+    ].filter(Boolean).join(' | ');
+
     setBookingWizardOpen({
       isOpen: true,
       initialData: {
-        ownerName: matchedIntake?.ownerName || payment.customer_name,
-        ownerPhone: payment.customer_phone || matchedIntake?.ownerPhone || '',
-        ownerEmail: payment.customer_email || matchedIntake?.ownerEmail || '',
-        dogName: matchedIntake?.dogName || '',
-        dogBreed: matchedIntake?.dogBreed || '',
-        serviceType: matchedIntake?.serviceType || 'boarding',
-        startDate: matchedIntake?.startDate || getTodayStr(),
-        endDate: matchedIntake?.endDate || addDays(getTodayStr(), 3),
+        ownerName,
+        ownerPhone,
+        ownerEmail,
+        dogName,
+        dogBreed,
+        serviceType,
+        startDate,
+        endDate,
         vaccinationValid: matchedIntake?.isVaccinated ?? true,
         depositAmount: payment.amount,
         totalPrice: payment.amount,
         paymentStatus: 'deposit_paid',
         paymentMethod: payMethod,
         stayStatus: 'booked',
-        notes: [
-          matchedIntake?.specialNeeds ? `צרכים מיוחדים: ${matchedIntake.specialNeeds}` : '',
-          matchedIntake?.notes ? `הערות מטופס בקשת הקליטה: ${matchedIntake.notes}` : '',
-          `עסקת Grow (אסמכתא: ${payment.reference_id})`
-        ].filter(Boolean).join(' | '),
+        notes: notesParts,
       }
     });
 
-    if (matchedIntake) {
-      updateIntakeRequestStatusInDb(matchedIntake.id, 'approved');
-      showToast(`✨ תאריכים ופרטי ${matchedIntake.dogName} נטענו אוטומטית מטופס בקשת הקליטה!`);
+    if (matchedIntake || linkedDetails?.source === 'intake_request') {
+      const intakeId = matchedIntake?.id;
+      if (intakeId) {
+        updateIntakeRequestStatusInDb(intakeId, 'approved');
+      }
+      showToast(`✨ תאריכים ופרטי ${dogName || 'הכלב'} נטענו אוטומטית!`);
+    } else if (linkedDetails?.dogName) {
+      showToast(`✨ פרטי ${linkedDetails.dogName} והלקוח קושרו אוטומטית להזמנה`);
     }
   };
 
@@ -1061,6 +1090,34 @@ export default function App() {
                 </span>
               )}
             </button>
+
+            {/* Pending Grow Payments Quick Access Button in Header */}
+            {pendingGrowPayments.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsGrowPaymentsMinimized(false);
+                  setIsGrowFloatingSnoozed(false);
+                }}
+                id="btn-pending-grow-payments-top"
+                className="relative bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black px-3 py-2 rounded-xl text-xs sm:text-sm shadow-md hover:shadow-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0 border border-emerald-400/60 active:scale-95 animate-pulse"
+                title="התקבל תשלום חדש ממתין להקמת הזמנה - לחץ לפתיחת החלון"
+              >
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-300 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
+                </span>
+                <span>💳 תשלום ממתין</span>
+                <span className="bg-amber-400 text-slate-950 text-[11px] font-black px-1.5 py-0.2 rounded-full font-mono shadow-2xs">
+                  ₪{pendingGrowPayments[0]?.amount.toLocaleString()}
+                </span>
+                {pendingGrowPayments.length > 1 && (
+                  <span className="bg-emerald-900/80 text-emerald-100 text-[10px] font-extrabold px-1 rounded-full">
+                    +{pendingGrowPayments.length - 1}
+                  </span>
+                )}
+              </button>
+            )}
 
             {/* 2. Daily Evening Dog Update (20:00) */}
             <button
@@ -1673,11 +1730,22 @@ export default function App() {
       )}
 
       {/* Grow Incoming Payments Popup / Notification for Shmulik */}
-      {!bookingWizardOpen.isOpen && pendingGrowPayments.length > 0 && (
+      {!bookingWizardOpen.isOpen && pendingGrowPayments.length > 0 && !isGrowPaymentsMinimized && (
         <GrowPaymentsModal
           pendingPayments={pendingGrowPayments}
+          bookings={bookings}
+          intakeRequests={intakeRequests}
+          settings={settings}
           onAccept={handleAcceptGrowPayment}
           onDismiss={handleDismissGrowPayment}
+          onCloseLater={() => {
+            setIsGrowPaymentsMinimized(true);
+            showToast('החלון הושהה לטיפול מאוחר יותר. נותרה תזכורת פעילה ⏳');
+          }}
+          onOpenWhatsApp={(phone) => {
+            const waUrl = `https://wa.me/${formatPhoneForWhatsApp(phone)}`;
+            window.open(waUrl, '_blank');
+          }}
         />
       )}
 
@@ -2029,6 +2097,61 @@ export default function App() {
               }}
               className="text-white/70 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition-colors cursor-pointer text-xs"
               title="השתק ל-15 דקות"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Persistent Floating Alert for Pending Grow Payments (when modal is snoozed/minimized) */}
+      {pendingGrowPayments.length > 0 && isGrowPaymentsMinimized && !bookingWizardOpen.isOpen && !isGrowFloatingSnoozed && (
+        <div 
+          className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-6 sm:w-[430px] z-40 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 text-white p-3.5 rounded-2xl shadow-2xl border-2 border-emerald-500 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-5 duration-300 ring-4 ring-emerald-500/25"
+          dir="rtl"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative w-10 h-10 rounded-xl bg-emerald-600/30 border border-emerald-400/40 flex items-center justify-center text-xl shrink-0 backdrop-blur-xs">
+              💳
+              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+              </span>
+            </div>
+            <div className="min-w-0">
+              <div className="font-black text-xs sm:text-sm tracking-tight flex items-center gap-1.5 text-emerald-300">
+                <span>תשלום ממתין לטיפול!</span>
+                <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded-full font-mono">
+                  ₪{pendingGrowPayments[0]?.amount.toLocaleString()}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-200 font-medium truncate mt-0.5">
+                {pendingGrowPayments[0]?.customer_name} ({pendingGrowPayments[0]?.payment_method || 'Bit'})
+                {pendingGrowPayments.length > 1 && ` • ועוד ${pendingGrowPayments.length - 1} ממתינים`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setIsGrowPaymentsMinimized(false);
+              }}
+              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-3 py-2 rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1"
+            >
+              <span>טפל עכשיו</span>
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsGrowFloatingSnoozed(true);
+                setTimeout(() => setIsGrowFloatingSnoozed(false), 15 * 60 * 1000);
+                showToast('התזכורת תושתק ל-15 דקות ⏳ (נגישה תמיד מהסרגל העליון)');
+              }}
+              className="text-slate-400 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition-colors cursor-pointer text-xs"
+              title="השתק תזכורת צפה ל-15 דקות"
             >
               ✕
             </button>
