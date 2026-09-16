@@ -17,7 +17,8 @@ import {
   ShieldAlert,
   Edit2,
   Trash2,
-  Gift
+  Gift,
+  CreditCard
 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
 import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr } from '../utils/dateUtils';
@@ -35,6 +36,7 @@ interface DayDetailsModalProps {
   onDeleteBooking?: (bookingId: string) => void;
   onMarkAsPaid: (bookingId: string) => void;
   onOpenPaymentModal: (booking: Booking) => void;
+  onOpenSendPaymentLink?: (booking: Booking) => void;
   onToggleStayStatus: (bookingId: string, newStatus: Booking['stayStatus']) => void;
   onInitiateRelease?: (booking: Booking) => void;
   onToggleReviewRequest?: (booking: Booking) => void;
@@ -51,6 +53,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   onDeleteBooking,
   onMarkAsPaid,
   onOpenPaymentModal,
+  onOpenSendPaymentLink,
   onToggleStayStatus,
   onInitiateRelease,
   onToggleReviewRequest,
@@ -186,6 +189,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
+                    onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
                     onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
                     onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
@@ -220,6 +224,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
+                    onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
                     onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
                     onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
@@ -254,6 +259,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                     onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
                     onMarkPaid={() => onMarkAsPaid(b.id)}
                     onOpenPayment={() => onOpenPaymentModal(b)}
+                    onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
                     onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
                     onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
                     onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
@@ -288,6 +294,7 @@ interface DogBookingCardProps {
   onDelete?: () => void;
   onMarkPaid: () => void;
   onOpenPayment: () => void;
+  onOpenSendPaymentLink?: () => void;
   onInitiateRelease?: () => void;
   onToggleReviewRequest?: () => void;
   onOpenVoucher?: () => void;
@@ -301,6 +308,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   onDelete,
   onMarkPaid,
   onOpenPayment,
+  onOpenSendPaymentLink,
   onInitiateRelease,
   onToggleReviewRequest,
   onOpenVoucher,
@@ -497,6 +505,21 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 <MessageSquare className="w-3.5 h-3.5" />
                 <span>וואטסאפ</span>
               </button>
+
+              {onOpenSendPaymentLink && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenSendPaymentLink();
+                  }}
+                  title="שלח קישור Grow / Bit לתשלום בוואטסאפ ללא ביטול הזמנה"
+                  className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-950 border border-emerald-300 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                >
+                  <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>קישור לתשלום 💳</span>
+                </button>
+              )}
             </>
           )}
 

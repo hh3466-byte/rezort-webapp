@@ -1742,6 +1742,10 @@ export default function App() {
             setSelectedDateForDetails(null);
             setPaymentModalBooking(b);
           }}
+          onOpenSendPaymentLink={(b) => {
+            setSelectedDateForDetails(null);
+            setPaymentLinkBooking(b);
+          }}
           onToggleStayStatus={handleToggleStayStatus}
           onInitiateRelease={handleInitiateRelease}
           onToggleReviewRequest={handleToggleReviewRequest}
