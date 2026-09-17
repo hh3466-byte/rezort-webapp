@@ -97,12 +97,24 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
         intakeMatch?.isFriendlyWithDogs
       );
 
+      const isFemale = Boolean(
+        b.dogGender === 'female_spayed' || 
+        b.dogGender === 'female_intact' ||
+        intakeMatch?.dogGender === 'female' ||
+        intakeMatch?.dogGender === 'female_spayed' ||
+        intakeMatch?.dogGender === 'female_intact' ||
+        (b.notes && (b.notes.includes('נקבה') || b.notes.includes('מעוקרת'))) ||
+        (b.behaviorNotes && (b.behaviorNotes.includes('נקבה') || b.behaviorNotes.includes('מעוקרת'))) ||
+        ['לונה', 'קירה', 'מימי', 'ניצה', 'גולי', 'ג\'ולי', 'נולי', 'שירלי', 'מיה', 'בלה', 'בל', 'רובי'].some(fn => b.dogName.includes(fn))
+      );
+
       const { template, formattedText } = pickDailyDogTemplate(
         b.ownerName,
         b.dogName,
         isIsolation,
         [],
-        isTraining
+        isTraining,
+        isFemale
       );
 
       // Check if already sent today in localStorage
@@ -131,12 +143,24 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
     setDogStates(prev => prev.map(item => {
       if (item.booking.id !== bookingId) return item;
 
+      const isFemale = Boolean(
+        item.booking.dogGender === 'female_spayed' || 
+        item.booking.dogGender === 'female_intact' ||
+        item.intakeMatch?.dogGender === 'female' ||
+        item.intakeMatch?.dogGender === 'female_spayed' ||
+        item.intakeMatch?.dogGender === 'female_intact' ||
+        (item.booking.notes && (item.booking.notes.includes('נקבה') || item.booking.notes.includes('מעוקרת'))) ||
+        (item.booking.behaviorNotes && (item.booking.behaviorNotes.includes('נקבה') || item.booking.behaviorNotes.includes('מעוקרת'))) ||
+        ['לונה', 'קירה', 'מימי', 'ניצה', 'גולי', 'ג\'ולי', 'נולי', 'שירלי', 'מיה', 'בלה', 'בל', 'רובי'].some(fn => item.booking.dogName.includes(fn))
+      );
+
       const { template, formattedText } = pickDailyDogTemplate(
         item.booking.ownerName,
         item.booking.dogName,
         item.isIsolation,
         item.usedTemplateIds,
-        item.isTraining
+        item.isTraining,
+        isFemale
       );
 
       return {

@@ -744,11 +744,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-70'
                                 : 'bg-white hover:bg-emerald-50 border-slate-200 hover:border-emerald-300 text-slate-900'
                             }`}
-                            title={`${b.dogName} (${getServiceTypeHebrew(b.serviceType)}) - לחץ לפרטים מלאים`}
+                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)} - לחץ לפרטים מלאים`}
                           >
                             <span className="flex items-center gap-1.5 truncate">
                               <span className="text-emerald-600 text-xs">🐾</span>
-                              <span className="truncate">{b.dogName}</span>
+                              <span className="truncate">{b.dogName} <span className="text-slate-500 font-medium text-[11px]">({b.ownerName})</span></span>
                             </span>
                             <span
                               className={`w-2 h-2 rounded-full shrink-0 ${
@@ -876,9 +876,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         <div
                           key={b.id}
                           className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between ${chipStyle}`}
-                          title={`${b.dogName} (${getServiceTypeHebrew(b.serviceType)})${isEnded ? ' - הסתיים' : ''}`}
+                          title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${isEnded ? ' - הסתיים' : ''}`}
                         >
-                          <span className="truncate">🐾 {b.dogName}</span>
+                          <span className="truncate">🐾 {b.dogName} ({b.ownerName})</span>
                           {isMatch && <span className="text-[9px] shrink-0">⭐</span>}
                           {!isMatch && isEnded && <span className="text-[9px] opacity-70 shrink-0">🏁</span>}
                         </div>
@@ -1018,11 +1018,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 ? 'bg-slate-100/80 border-slate-200 text-slate-500 opacity-80'
                                 : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-900'
                             }`}
+                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}`}
                           >
                             <div className="flex items-center justify-between font-bold">
-                              <span className="flex items-center gap-1">
+                              <span className="flex items-center gap-1 min-w-0">
                                 <Dog className={`w-3 h-3 shrink-0 ${isEnded ? 'text-slate-400' : 'text-emerald-600'}`} />
-                                <span className="truncate">{b.dogName}</span>
+                                <span className="truncate">{b.dogName} <span className="text-slate-500 font-medium text-[11px]">({b.ownerName})</span></span>
                               </span>
                               <span className="text-[10px] text-slate-400 font-normal">
                                 {isEnded ? '🏁 הסתיים' : getServiceTypeHebrew(b.serviceType)}
@@ -1182,6 +1183,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           <div className="flex items-center gap-2">
                             <span className="text-base shrink-0">🐾</span>
                             <span className="font-black text-base text-slate-900">{booking.dogName}</span>
+                            <span className="text-xs font-bold text-slate-500">({booking.ownerName})</span>
                             {booking.dogBreed && (
                               <span className="text-xs text-slate-500 font-normal">({booking.dogBreed})</span>
                             )}

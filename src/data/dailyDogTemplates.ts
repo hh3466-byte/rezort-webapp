@@ -817,7 +817,8 @@ export function pickDailyDogTemplate(
   dogName: string,
   isIsolation: boolean,
   alreadyUsedTemplateIds: number[] = [],
-  isTraining: boolean = false
+  isTraining: boolean = false,
+  isFemale: boolean = false
 ): { template: DailyDogTemplate; formattedText: string } {
   let eligibleTemplates: DailyDogTemplate[] = [];
 
@@ -849,9 +850,37 @@ export function pickDailyDogTemplate(
   const cleanOwner = (ownerName || '').trim().split(' ')[0] || 'לקוח יקר';
   const cleanDog = (dogName || '').trim() || 'החבר על 4';
 
-  const formattedText = template.text
+  let formattedText = template.text
     .replace(/{ownerName}/g, cleanOwner)
     .replace(/{dogName}/g, cleanDog);
+
+  if (isFemale) {
+    formattedText = formattedText
+      .replace(/אוהב\s+{dogName}/g, `אוהבת ${cleanDog}`)
+      .replace(/אוהב\s+המון,\s+{dogName}/g, `אוהבת המון, ${cleanDog}`)
+      .replace(/אוהב,\s+{dogName}/g, `אוהבת, ${cleanDog}`)
+      .replace(/אוהב\s+אותכם/g, 'אוהבת אתכם')
+      .replace(/אוהב\s+אתכם/g, 'אוהבת אתכם')
+      .replace(/שוכב\s+רגוע\s+ומרוצה/g, 'שוכבת רגועה ומרוצה')
+      .replace(/שוכב\s+מרוצה/g, 'שוכבת מרוצה')
+      .replace(/שוכב\s+בכיף/g, 'שוכבת בכיף')
+      .replace(/שוכב/g, 'שוכבת')
+      .replace(/נח\s+כמו\s+מלך/g, 'נחה כמו מלכה')
+      .replace(/כמו\s+מלך\s+אמיתי/g, 'כמו מלכה אמיתית')
+      .replace(/כמו\s+מלך/g, 'כמו מלכה')
+      .replace(/מלך\s+אמיתי/g, 'מלכה אמיתית')
+      .replace(/שייח'\s+אמיתי/g, 'נסיכה אמיתית')
+      .replace(/שבע\s+ומבסוט/g, 'שבעה ומבסוטה')
+      .replace(/מסודר\s+ושבע/g, 'מסודרת ושבעה')
+      .replace(/שבע\s+ומרוצה/g, 'שבעה ומרוצה')
+      .replace(/שבע/g, 'שבעה')
+      .replace(/שקוע\s+עמוק/g, 'שקועה עמוק')
+      .replace(/שקוע\s+בפינוקים/g, 'שקועה בפינוקים')
+      .replace(/טייס\s+קרב/g, 'טייסת קרב')
+      .replace(/הוד\s+מעלתו/g, 'הוד מעלתה')
+      .replace(/אלופים\s+אמיתיים/g, 'אלופות אמיתיות')
+      .replace(/אלופים/g, 'אלופות');
+  }
 
   return { template, formattedText };
 }

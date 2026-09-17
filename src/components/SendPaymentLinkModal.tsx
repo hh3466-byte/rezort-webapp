@@ -56,23 +56,28 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
   const serviceHebrew = getServiceTypeHebrew(booking.serviceType);
   const stayDates = `${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}`;
 
-  let linkToUse = (customLink || '').trim();
-  if (linkToUse.startsWith('//')) {
-    linkToUse = 'https:' + linkToUse;
-  } else if (!linkToUse.startsWith('http://') && !linkToUse.startsWith('https://')) {
-    linkToUse = 'https://' + linkToUse;
-  }
+  // Helper to format link
+  const formatLink = (rawLink: string) => {
+    let clean = (rawLink || '').trim();
+    if (clean.startsWith('//')) {
+      clean = 'https:' + clean;
+    } else if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      clean = 'https://' + clean;
+    }
+    return clean;
+  };
 
   // Construct official payment message
-  const generateMessage = () => {
-    const amountSection = amount > 0 ? `\n💰 *הסכום לתשלום:* ₪${amount}\n` : '';
-    const amountHint = amount > 0 ? ` (יש להזין ₪${amount} בעמוד התשלום)` : '';
+  const buildDefaultMessage = (amt: number, rawLink: string) => {
+    const formattedLink = formatLink(rawLink);
+    const amountSection = amt > 0 ? `\n💰 *הסכום לתשלום:* ₪${amt}\n` : '';
+    const amountHint = amt > 0 ? ` (יש להזין ₪${amt} בעמוד התשלום)` : '';
 
     return `היי ${firstName}! 🐾
 שמחים לעדכן שהמקום עבור *${booking.dogName}* (${serviceHebrew}) שוריין בריזורט לכלב לתאריכים:
 📅 ${stayDates}.${amountSection}
 להשלמת השריון / הסדרת התשלום, מצורף הקישור המאובטח לתשלום${amountHint}:
-👉 ${linkToUse}
+👉 ${formattedLink}
 
 (בתוך הקישור ניתן לשלם בנוחות ב-Bit, Apple Pay, Google Pay או כרטיס אשראי)
 
@@ -84,7 +89,28 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 צוות הריזורט לכלב`;
   };
 
-  const messageText = generateMessage();
+  const [messageText, setMessageText] = useState<string>(() => buildDefaultMessage(initialAmount, customLink));
+  const [isManuallyEdited, setIsManuallyEdited] = useState<boolean>(false);
+
+  const handleAmountChange = (newAmt: number) => {
+    setAmount(newAmt);
+    if (!isManuallyEdited) {
+      setMessageText(buildDefaultMessage(newAmt, customLink));
+    }
+  };
+
+  const handleLinkChange = (newLink: string) => {
+    setCustomLink(newLink);
+    if (!isManuallyEdited) {
+      setMessageText(buildDefaultMessage(amount, newLink));
+    }
+  };
+
+  const handleResetToDefault = () => {
+    setMessageText(buildDefaultMessage(amount, customLink));
+    setIsManuallyEdited(false);
+  };
+
   const whatsappUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(messageText)}`;
 
   // Send via automated Green-API direct to WhatsApp
@@ -197,7 +223,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
               {currentDebt > 0 && currentDebt !== amount && (
                 <button
                   type="button"
-                  onClick={() => setAmount(currentDebt)}
+                  onClick={() => handleAmountChange(currentDebt)}
                   className="text-[11px] text-emerald-700 hover:underline font-bold cursor-pointer"
                 >
                   הגדר למלוא יתרת החוב (₪{currentDebt})
@@ -210,7 +236,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
                 type="number"
                 min="1"
                 value={amount === 0 ? '' : amount}
-                onChange={(e) => setAmount(Number(e.target.value) || 0)}
+                onChange={(e) => handleAmountChange(Number(e.target.value) || 0)}
                 placeholder="0"
                 className="w-full bg-white text-slate-900 font-black text-base pr-8 pl-3 py-2 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
               />
@@ -225,29 +251,54 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
             <input
               type="text"
               value={customLink}
-              onChange={(e) => setCustomLink(e.target.value)}
+              onChange={(e) => handleLinkChange(e.target.value)}
               placeholder="https://pay.grow.link/..."
               className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-300 focus:border-emerald-600 focus:bg-white focus:outline-none"
             />
           </div>
 
-          {/* Preview of Message */}
+          {/* Editable Message Box */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-extrabold text-slate-700">
-                תצוגה מקדימה של ההודעה שתישלח ללקוח:
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                <span>הודעה לבקשת תשלום (ניתנת לעריכה חופשית):</span>
               </label>
-              <button
-                type="button"
-                onClick={handleCopyMessage}
-                className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
-              >
-                {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{isCopied ? 'הועתק!' : 'העתק'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {isManuallyEdited && (
+                  <button
+                    type="button"
+                    onClick={handleResetToDefault}
+                    className="text-[11px] text-amber-700 hover:text-amber-900 underline font-bold cursor-pointer transition-colors"
+                    title="שחזר לנוסח ברירת המחדל המקורי"
+                  >
+                    שחזר נוסח מקורי
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCopyMessage}
+                  className="text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-1 cursor-pointer bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-md transition-colors"
+                >
+                  {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{isCopied ? 'הועתק!' : 'העתק'}</span>
+                </button>
+              </div>
             </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[11px] text-slate-700 whitespace-pre-line max-h-36 overflow-y-auto font-sans leading-relaxed">
-              {messageText}
+            <textarea
+              value={messageText}
+              onChange={(e) => {
+                setMessageText(e.target.value);
+                setIsManuallyEdited(true);
+              }}
+              rows={8}
+              placeholder="כתוב כאן את הודעת בקשת התשלום..."
+              className="w-full bg-slate-50 hover:bg-white focus:bg-white text-slate-900 border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 rounded-2xl p-3 text-xs font-sans leading-relaxed transition-all resize-y"
+              dir="rtl"
+            />
+            <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1 px-1">
+              <span>💡 ניתן לערוך, להוסיף ברכה או לשנות את נוסח ההודעה לפני השליחה</span>
+              <span>{messageText.length} תווים</span>
             </div>
           </div>
 

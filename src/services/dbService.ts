@@ -1520,6 +1520,56 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
     console.warn('verifyCustomerByPhone supabase bookings query warning:', e);
   }
 
+  // 5. Query Supabase intake_requests table
+  try {
+    const { data: intakeData } = await supabase
+      .from('intake_requests')
+      .select('owner_name, owner_phone, dog_name, dog_breed')
+      .ilike('owner_phone', `%${matchSuffix}%`);
+
+    if (intakeData && Array.isArray(intakeData)) {
+      const match = intakeData.find((r: any) => {
+        const rDigits = (r.owner_phone || '').replace(/\D/g, '');
+        return rDigits && (rDigits.endsWith(matchSuffix) || rDigits.includes(matchSuffix));
+      });
+      if (match) {
+        return {
+          isKnown: true,
+          name: match.owner_name,
+          dogName: match.dog_name,
+          dogBreed: match.dog_breed,
+          totalVisits: 1,
+          isVip: false
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('verifyCustomerByPhone supabase intake_requests query warning:', e);
+  }
+
+  // 6. Check local/cloud settings intakeRequests
+  try {
+    const localSettingsStr = localStorage.getItem('dog_resort_settings') || localStorage.getItem('shmulik_dog_resort_settings_v2');
+    if (localSettingsStr) {
+      const parsed = JSON.parse(localSettingsStr);
+      const reqList = parsed?.intakeRequests || parsed?.data?.intakeRequests || [];
+      const match = reqList.find((r: any) => {
+        const rDigits = (r.ownerPhone || '').replace(/\D/g, '');
+        return rDigits && (rDigits.endsWith(matchSuffix) || rDigits.includes(matchSuffix));
+      });
+      if (match) {
+        return {
+          isKnown: true,
+          name: match.ownerName,
+          dogName: match.dogName,
+          dogBreed: match.dogBreed,
+          totalVisits: 1,
+          isVip: false
+        };
+      }
+    }
+  } catch (e) {}
+
   return {
     isKnown: false,
     totalVisits: 0,

@@ -26,6 +26,9 @@ export function getJewishHoliday(d: Date): string | null {
     const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
     const monthName = new Intl.DateTimeFormat('he-u-ca-hebrew', { month: 'long' }).format(d).trim();
 
+    if (monthName.includes('אלול')) {
+      if (day === 29) return 'ערב ראש השנה';
+    }
     if (monthName.includes('תשרי')) {
       if (day === 1 || day === 2) return 'ראש השנה';
       if (day === 9) return 'ערב יום כיפור';
@@ -45,7 +48,8 @@ export function getJewishHoliday(d: Date): string | null {
     if (monthName.includes('ניסן')) {
       if (day === 14) return 'ערב פסח';
       if (day === 15) return 'חג פסח';
-      if (day >= 16 && day <= 20) return 'חוה״מ פסח';
+      if (day >= 16 && day <= 19) return 'חוה״מ פסח';
+      if (day === 20) return 'ערב שביעי של פסח';
       if (day === 21) return 'שביעי של פסח';
     }
     if (monthName.includes('אייר')) {
@@ -303,3 +307,89 @@ export function formatShabbatHolidayGreeting(
   }
   return `שלום ${firstName} למרות שאין שירות לקוחות להולכים על 2 ${occasionWord}, אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.\nאז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.\n${cleanDog}`;
 }
+
+/**
+ * Check if outgoing communication to clients is forbidden right now due to Shabbat or Jewish Holidays.
+ * Rule: From Friday/Holiday eve at 14:00 until Motzei Shabbat/Chag (sunset + 40 mins, or next morning).
+ */
+export function isShabbatOrHolidayRestricted(now: Date = new Date()): { isRestricted: boolean; reason?: string } {
+  try {
+    const jerusalemFormatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Jerusalem',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    const formatted = jerusalemFormatter.format(now);
+    const [dPart, tPart] = formatted.split(', ');
+    const [d, m, y] = dPart.split('/').map(Number);
+    const [hour, minute] = tPart.split(':').map(Number);
+    const currentMinutes = hour * 60 + minute;
+
+    // Day of week in Israel (0 = Sunday, 5 = Friday, 6 = Saturday)
+    const jerusalemDateObj = new Date(Date.UTC(y, m - 1, d, hour, minute));
+    const dayOfWeek = jerusalemDateObj.getUTCDay();
+
+    // 1. Friday after 14:00
+    if (dayOfWeek === 5 && currentMinutes >= 14 * 60) {
+      return { isRestricted: true, reason: 'ערב שבת (לאחר 14:00) - איסור התקשרות עם לקוחות עד מוצאי שבת' };
+    }
+
+    // 2. Saturday (Shabbat) all day until after Havdalah / sunset + 40m (safe threshold ~20:45)
+    if (dayOfWeek === 6) {
+      const endOfShabbatMinutes = getYomKippurSunsetPlus40Minutes(now);
+      if (currentMinutes < endOfShabbatMinutes) {
+        return { isRestricted: true, reason: 'שבת קודש - איסור התקשרות עם לקוחות עד צאת השבת' };
+      }
+    }
+
+    // 3. Holiday Eves and Major Holidays
+    const holidayToday = getJewishHoliday(now);
+    if (holidayToday) {
+      if (holidayToday.startsWith('ערב ') && currentMinutes >= 14 * 60) {
+        return { isRestricted: true, reason: `${holidayToday} (לאחר 14:00) - איסור התקשרות עם לקוחות עד צאת החג` };
+      }
+      const majorHolidays = ['ראש השנה', 'יום כיפור', 'חג סוכות', 'שמחת תורה', 'חג פסח', 'שביעי של פסח', 'חג שבועות'];
+      if (majorHolidays.includes(holidayToday)) {
+        const endOfChagMinutes = getYomKippurSunsetPlus40Minutes(now);
+        if (currentMinutes < endOfChagMinutes) {
+          return { isRestricted: true, reason: `${holidayToday} - איסור התקשרות עם לקוחות עד צאת החג` };
+        }
+      }
+    }
+
+    return { isRestricted: false };
+  } catch (e) {
+    return { isRestricted: false };
+  }
+}
+
+/**
+ * Calculates the next valid communication date/time (Sunday - Thursday 09:30-18:30, Friday until 13:30).
+ * If targetDate falls into Shabbat, Holiday eve, or Holiday, it automatically shifts to the next allowed business morning (09:30 AM).
+ */
+export function getNextAllowedCommunicationDate(targetDate: Date = new Date()): Date {
+  const next = new Date(targetDate.getTime());
+  
+  // Loop up to 8 days forward to find the next valid time slot
+  for (let i = 0; i < 8; i++) {
+    const check = isShabbatOrHolidayRestricted(next);
+    const day = next.getDay();
+    const hours = next.getHours();
+
+    // If restricted by Shabbat/Holiday OR outside business hours (before 9:00 or after 19:00)
+    if (check.isRestricted || day === 6 || (day === 5 && hours >= 13) || hours < 9 || hours >= 19) {
+      // Advance to next day at 09:30 AM
+      next.setDate(next.getDate() + 1);
+      next.setHours(9, 30, 0, 0);
+    } else {
+      // Found a permitted window
+      return next;
+    }
+  }
+  return next;
+}
+

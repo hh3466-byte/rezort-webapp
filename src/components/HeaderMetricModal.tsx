@@ -243,8 +243,11 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const totalDebtSum = debtItems.reduce((acc, b) => {
         return acc + Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0));
       }, 0);
+      const totalDepositSum = debtItems.reduce((acc, b) => {
+        return acc + (Number(b.depositAmount) || 0);
+      }, 0);
       title = 'הזמנות עם חוב פתוח לתשלום';
-      subtitle = `${debtItems.length} הזמנות פעילות עם יתרת חוב לתשלום (סה״כ ₪${totalDebtSum.toLocaleString('he-IL')})`;
+      subtitle = `${debtItems.length} הזמנות פעילות עם חוב פתוח (יתרת חוב כוללת: ₪${totalDebtSum.toLocaleString('he-IL')} • שולמו מקדמות: ₪${totalDepositSum.toLocaleString('he-IL')})`;
       icon = <AlertCircle className="w-5 h-5 text-red-600" />;
       badgeColor = 'bg-red-50 text-red-700 border-red-200';
       filteredItems = debtItems;
@@ -569,6 +572,9 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                       <span className="font-black text-base sm:text-lg text-slate-900">
                         {b.dogName}
                       </span>
+                      <span className="text-xs sm:text-sm font-bold text-slate-500">
+                        ({b.ownerName})
+                      </span>
                       {b.dogBreed && (
                         <span className="text-xs text-slate-500 font-medium">
                           ({b.dogBreed})
@@ -624,16 +630,22 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   <div className="flex flex-wrap items-center justify-between md:justify-end gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
                     
                     {/* Financial Badge */}
-                    <div className="text-right pl-2">
-                      <div className="text-xs text-slate-500 font-medium">
-                        סה״כ: <span className="font-bold text-slate-900">₪{totalPrice.toLocaleString('he-IL')}</span>
+                    <div className="text-right pl-2 bg-slate-50/80 px-3 py-1.5 rounded-xl border border-slate-200/80 min-w-[130px]">
+                      <div className="text-xs text-slate-600 font-medium flex items-center justify-between gap-2">
+                        <span>סה״כ:</span>
+                        <span className="font-bold text-slate-900">₪{totalPrice.toLocaleString('he-IL')}</span>
+                      </div>
+                      <div className="text-xs text-emerald-700 font-semibold flex items-center justify-between gap-2">
+                        <span>שולם כמקדמה:</span>
+                        <span className="font-bold">₪{depositAmount.toLocaleString('he-IL')}</span>
                       </div>
                       {remainingDebt > 0 && b.paymentStatus !== 'fully_paid' ? (
-                        <div className="text-xs font-black text-red-600 flex items-center gap-1">
-                          <span>חוב: ₪{remainingDebt.toLocaleString('he-IL')}</span>
+                        <div className="text-xs font-black text-red-600 flex items-center justify-between gap-2 border-t border-red-200/60 pt-0.5 mt-0.5">
+                          <span>יתרת חוב:</span>
+                          <span>₪{remainingDebt.toLocaleString('he-IL')}</span>
                         </div>
                       ) : (
-                        <div className="text-xs font-bold text-green-600 flex items-center gap-1">
+                        <div className="text-xs font-bold text-green-600 flex items-center gap-1 border-t border-green-200/60 pt-0.5 mt-0.5">
                           <CheckCircle className="w-3.5 h-3.5" />
                           <span>שולם מלא</span>
                         </div>

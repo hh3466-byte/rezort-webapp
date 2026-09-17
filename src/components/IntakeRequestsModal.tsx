@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { IntakeRequest, IntakeRequestStatus, ResortSettings, Booking } from '../types';
 import { cleanPhoneNumber, getServiceTypeHebrew, getFirstName } from '../utils/whatsappUtils';
 import { formatClientPaymentLinkMessage, formatClientRejectionMessage, sendGreenApiDirectMessage } from '../services/notificationService';
+import { getNextAllowedCommunicationDate, isShabbatOrHolidayRestricted } from '../utils/jewishCalendar';
 import { SendIntakeModal } from './SendIntakeModal';
 import { 
   X, 
@@ -31,9 +32,20 @@ import {
   Dog,
   Mic,
   MicOff,
-  Bell
+  Bell,
+  Sparkles
 } from 'lucide-react';
 import { calculateDaysCount, addDays, formatDateIL, getDayNameHebrew, getBookingsForDate } from '../utils/dateUtils';
+import { generateUnansweredFollowUpMarketingText } from '../services/whatsappCrmService';
+import { 
+  normalizeHebrew, 
+  hasActiveBookingForIntake, 
+  getIntakeRequestAgeHours, 
+  getEffectiveIntakeStatus, 
+  isUnansweredIntakeRequest, 
+  isIntakeRequestNew, 
+  isIntakeRequestInTreatment 
+} from '../utils/intakeUtils';
 
 interface IntakeRequestsModalProps {
   requests: IntakeRequest[];
@@ -274,7 +286,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   onDeleteRequest,
   onSaveRequest
 }) => {
-  const [filter, setFilter] = useState<'all' | 'pending' | 'new' | 'in_progress' | 'payment_requested' | 'approved' | 'rejected'>(initialFilter || 'new');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'new' | 'in_progress' | 'payment_requested' | 'approved' | 'rejected' | 'archived_48h'>(initialFilter || 'new');
 
   useEffect(() => {
     if (initialFilter) {
@@ -366,23 +378,19 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  const isReqNew = (r: IntakeRequest) => r.status === 'pending' && (!r.internalNotes || !r.internalNotes.trim());
-  const isReqInTreatment = (r: IntakeRequest) => r.status === 'payment_requested' || (r.status === 'pending' && Boolean(r.internalNotes && r.internalNotes.trim()));
+  const hasActiveBooking = (r: IntakeRequest) => hasActiveBookingForIntake(r, bookings);
+  const getEffectiveStatus = (r: IntakeRequest) => getEffectiveIntakeStatus(r, bookings);
+  const getRequestAgeHours = (r: IntakeRequest) => getIntakeRequestAgeHours(r);
+  const isUnansweredRequest = (r: IntakeRequest) => isUnansweredIntakeRequest(r, bookings);
+  const isReqNew = (r: IntakeRequest) => isIntakeRequestNew(r, bookings);
+  const isReqInTreatment = (r: IntakeRequest) => isIntakeRequestInTreatment(r, bookings);
 
   const newCount = requests.filter(isReqNew).length;
   const inTreatmentCount = requests.filter(isReqInTreatment).length;
-  const pendingCount = requests.filter(r => r.status === 'pending').length;
-  const paymentRequestedCount = requests.filter(r => r.status === 'payment_requested').length;
-  const approvedCount = requests.filter(r => r.status === 'approved').length;
-
-  const normalizeHebrew = (str: string = '') => {
-    return str
-      .toLowerCase()
-      .trim()
-      .replace(/[״"׳']/g, '')
-      .replace(/ו{2,}/g, 'ו')
-      .replace(/י{2,}/g, 'י');
-  };
+  const pendingCount = requests.filter(r => getEffectiveStatus(r) === 'pending' && !isUnansweredRequest(r)).length;
+  const paymentRequestedCount = requests.filter(r => getEffectiveStatus(r) === 'payment_requested' && !isUnansweredRequest(r)).length;
+  const approvedCount = requests.filter(r => getEffectiveStatus(r) === 'approved').length;
+  const unansweredCount = requests.filter(isUnansweredRequest).length;
 
   const filteredRequests = requests.filter(r => {
     if (searchQuery.trim()) {
@@ -410,12 +418,14 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
       return matchName || matchDog || matchPhone || matchBreed || matchNotes || matchCore;
     }
 
+    const effectiveStatus = getEffectiveStatus(r);
     if (filter === 'new' && !isReqNew(r)) return false;
     if (filter === 'in_progress' && !isReqInTreatment(r)) return false;
-    if (filter === 'pending' && r.status !== 'pending') return false;
-    if (filter === 'payment_requested' && r.status !== 'payment_requested') return false;
-    if (filter === 'approved' && r.status !== 'approved') return false;
-    if (filter === 'rejected' && r.status !== 'rejected') return false;
+    if (filter === 'pending' && (effectiveStatus !== 'pending' || isUnansweredRequest(r))) return false;
+    if (filter === 'payment_requested' && (effectiveStatus !== 'payment_requested' || isUnansweredRequest(r))) return false;
+    if (filter === 'approved' && effectiveStatus !== 'approved') return false;
+    if (filter === 'rejected' && effectiveStatus !== 'rejected') return false;
+    if (filter === 'archived_48h' && !isUnansweredRequest(r)) return false;
     return true;
   });
 
@@ -477,6 +487,34 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     } catch (e) {
       console.warn('Error saving quick note:', e);
     }
+  };
+
+  const handleSendMarketingReminder = (req: IntakeRequest) => {
+    const cleanPhone = cleanPhoneNumber(req.ownerPhone);
+    const intlPhone = cleanPhone.startsWith('0')
+      ? '972' + cleanPhone.slice(1)
+      : (cleanPhone.startsWith('5') && cleanPhone.length === 9 ? '972' + cleanPhone : cleanPhone);
+
+    const intakeUrl = typeof window !== 'undefined' && window.location.origin ? `${window.location.origin}/?request=true` : undefined;
+    const msg = generateUnansweredFollowUpMarketingText(req.ownerName, req.dogName, req.serviceType, intakeUrl);
+    
+    // תזמון פולואפ אוטומטי למחרת באותה שעה - עם הגנה הרמטית מפני ערבי שבת/חג ושבתות
+    const rawTarget = new Date();
+    rawTarget.setDate(rawTarget.getDate() + 1);
+    const safeTarget = getNextAllowedCommunicationDate(rawTarget);
+    const timeStr = `${String(safeTarget.getHours()).padStart(2, '0')}:${String(safeTarget.getMinutes()).padStart(2, '0')}`;
+    const dateStr = `${String(safeTarget.getDate()).padStart(2, '0')}/${String(safeTarget.getMonth() + 1).padStart(2, '0')}`;
+    const dayName = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'][safeTarget.getDay()];
+    const isShifted = safeTarget.getDate() !== rawTarget.getDate() || safeTarget.getHours() !== rawTarget.getHours();
+    const followUpVal = isShifted
+      ? `יום ${dayName} (${dateStr}) בשעה ${timeStr} (הוסט עקב שבת/חג 🕯️)`
+      : `מחר (יום ${dayName} ${dateStr}) בשעה ${timeStr}`;
+    setFollowUpTimes(prev => ({ ...prev, [req.id]: followUpVal }));
+
+    handleAddQuickNote(req, `📲 נשלחה תזכורת שיווקית (לא ענה בטלפון - תזמון חזרה: ${followUpVal})`);
+    
+    const waUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank');
   };
 
   const handleSaveFreeTextNote = async (req: IntakeRequest) => {
@@ -781,6 +819,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               { id: 'in_progress', label: '🟡 בתהליך טיפול', count: inTreatmentCount, isHot: false },
               { id: 'payment_requested', label: '💳 נשלח קישור לתשלום', count: paymentRequestedCount, isHot: false },
               { id: 'approved', label: '🟢 נקלטו ביומן', count: approvedCount, isHot: false },
+              { id: 'archived_48h', label: '⌛ לא ענו / מעל 24 שעות', count: unansweredCount, isHot: false },
               { id: 'rejected', label: 'נדחו', count: requests.filter(r => r.status === 'rejected').length, isHot: false },
               { id: 'all', label: 'הכול', count: requests.length, isHot: false },
             ].map(tab => (
@@ -1018,6 +1057,17 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                           >
                             <CreditCard className="w-4 h-4 text-white shrink-0" />
                             <span>{req.status === 'payment_requested' ? 'שלח שוב קישור לתשלום 💬' : 'שלח קישור לתשלום 💳'}</span>
+                          </button>
+
+                          {/* כפתור תזכורת שיווקית (לא ענה בטלפון) עם קישורי פייסבוק ואינסטגרם */}
+                          <button
+                            type="button"
+                            onClick={() => handleSendMarketingReminder(req)}
+                            className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-sm transition-all shadow-xs cursor-pointer hover:shadow-md"
+                            title="שלח בוואטסאפ הודעה שיווקית מקיפה (מי אנחנו, פנסיון, אילוף, קישור לפייסבוק ולאינסטגרם) עבור לקוח שלא ענה"
+                          >
+                            <Sparkles className="w-4 h-4 text-amber-100 shrink-0" />
+                            <span>תזכורת שיווקית (לא ענה) ✨</span>
                           </button>
                         </div>
 
@@ -1266,10 +1316,12 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {[
                             { tag: '📞 לא ענה בטלפון', label: '📞 לא ענה', color: 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900' },
+                            { tag: '📲 נשלחה תזכורת שיווקית בוואטסאפ (פייסבוק/אינסטגרם)', label: '📲 תזכורת שיווקית', color: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-300 text-indigo-900' },
                             { tag: '🔄 צריך להתקשר אליו שוב', label: '🔄 צריך לחזור אליו', color: 'bg-orange-50 hover:bg-orange-100 border-orange-300 text-orange-900' },
                             { tag: '💬 שלחתי לו הודעה בוואטסאפ', label: '💬 שלחתי הודעה', color: 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-900' },
                             { tag: '🤝 שוחחנו בטלפון - סוכמו הפרטים', label: '🤝 שוחחנו - סוכם', color: 'bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-900' },
                             { tag: '❌ בוטל / לא רלוונטי', label: '❌ לא רלוונטי', color: 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-900' },
+                            { tag: '🚫 הלקוח לא ענה (הוסר מהרשימה עד שיפנה)', label: '🚫 לא ענה (הסר)', color: 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700' },
                           ].map((btn, idx) => (
                             <button
                               key={idx}
@@ -1327,21 +1379,37 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                           {/* Quick scheduling preset slots */}
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {[
+                              { label: '🕒 מחר באותה שעה (24 שעות)', getVal: () => {
+                                const raw = new Date(); raw.setDate(raw.getDate() + 1);
+                                const d = getNextAllowedCommunicationDate(raw);
+                                const dayName = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'][d.getDay()];
+                                const isShifted = d.getDate() !== raw.getDate();
+                                return isShifted
+                                  ? `יום ${dayName} (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) בשעה ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')} (שבת/חג 🕯️)`
+                                  : `מחר (יום ${dayName} ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) בשעה ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                              }},
                               { label: '⏱️ בעוד שעתיים', getVal: () => {
-                                const d = new Date(); d.setHours(d.getHours() + 2);
+                                const raw = new Date(); raw.setHours(raw.getHours() + 2);
+                                const d = getNextAllowedCommunicationDate(raw);
                                 return `היום בשעה ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
                               }},
                               { label: '🌅 מחר ב-10:00', getVal: () => {
-                                const d = new Date(); d.setDate(d.getDate() + 1);
-                                return `מחר (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) בשעה 10:00`;
+                                const raw = new Date(); raw.setDate(raw.getDate() + 1); raw.setHours(10, 0, 0, 0);
+                                const d = getNextAllowedCommunicationDate(raw);
+                                const dayName = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'][d.getDay()];
+                                return `יום ${dayName} (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) בשעה ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
                               }},
                               { label: '🌇 מחר ב-17:00', getVal: () => {
-                                const d = new Date(); d.setDate(d.getDate() + 1);
-                                return `מחר (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) בשעה 17:00`;
+                                const raw = new Date(); raw.setDate(raw.getDate() + 1); raw.setHours(17, 0, 0, 0);
+                                const d = getNextAllowedCommunicationDate(raw);
+                                const dayName = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'][d.getDay()];
+                                return `יום ${dayName} (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) בשעה ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
                               }},
                               { label: '📅 בעוד יומיים ב-11:00', getVal: () => {
-                                const d = new Date(); d.setDate(d.getDate() + 2);
-                                return `בעוד יומיים (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) בשעה 11:00`;
+                                const raw = new Date(); raw.setDate(raw.getDate() + 2); raw.setHours(11, 0, 0, 0);
+                                const d = getNextAllowedCommunicationDate(raw);
+                                const dayName = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'][d.getDay()];
+                                return `יום ${dayName} (${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}) בשעה ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
                               }},
                             ].map((slot, sIdx) => {
                               const val = slot.getVal();

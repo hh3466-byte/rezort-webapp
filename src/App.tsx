@@ -43,8 +43,8 @@ import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
 import { Guide } from './components/Guide';
 import { SendPaymentLinkModal } from './components/SendPaymentLinkModal';
-import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricModal';
 import { IntakeRequestsModal, calculateBoardingRate } from './components/IntakeRequestsModal';
+import { isIntakeRequestNew, isIntakeRequestInTreatment } from './utils/intakeUtils';
 import { CheckoutDebtAlertModal } from './components/CheckoutDebtAlertModal';
 import { PublicIntakePage } from './components/PublicIntakePage';
 import { SendIntakeModal } from './components/SendIntakeModal';
@@ -55,6 +55,7 @@ import { DailyDogUpdatesModal } from './components/DailyDogUpdatesModal';
 import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
 import { initDailyDogAutoSender } from './services/dailyDogAutoSender';
+import { initMorningReportScheduler } from './services/morningReportService';
 import { fetchNewCrmChatsCount } from './services/whatsappCrmService';
 
 export default function App() {
@@ -114,11 +115,9 @@ export default function App() {
   const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
   const [isDailyDogUpdatesOpen, setIsDailyDogUpdatesOpen] = useState(false);
   
-  const isReqNew = (r: IntakeRequest) => r.status === 'pending' && (!r.internalNotes || !r.internalNotes.trim());
-  const isReqInTreatment = (r: IntakeRequest) => r.status === 'payment_requested' || (r.status === 'pending' && Boolean(r.internalNotes && r.internalNotes.trim()));
-  const newIntakeCount = intakeRequests.filter(isReqNew).length;
-  const inProgressIntakeCount = intakeRequests.filter(isReqInTreatment).length;
-  const pendingIntakeCount = intakeRequests.filter(r => r.status === 'pending').length;
+  const newIntakeCount = intakeRequests.filter(r => isIntakeRequestNew(r, bookings)).length;
+  const inProgressIntakeCount = intakeRequests.filter(r => isIntakeRequestInTreatment(r, bookings)).length;
+  const pendingIntakeCount = newIntakeCount;
 
   // Manager Authentication State (Passcode 3466)
   // Seamless, smooth default access for the resort team (owner, Shmulik, and Talinka)
@@ -367,6 +366,17 @@ export default function App() {
   // 20:00 Daily Dog Evening Updates Auto-Sender Background Runner (Fail-safe auto dispatch)
   useEffect(() => {
     const cleanup = initDailyDogAutoSender(
+      () => bookings,
+      () => settings,
+      () => intakeRequests,
+      showToast
+    );
+    return cleanup;
+  }, [bookings, settings, intakeRequests]);
+
+  // 07:30 AM Daily Morning Report Auto-Sender to Shmulik (Questionnaires + New Leads + Dog Stats)
+  useEffect(() => {
+    const cleanup = initMorningReportScheduler(
       () => bookings,
       () => settings,
       () => intakeRequests,
@@ -993,7 +1003,7 @@ export default function App() {
           
           {/* Action Buttons (Right in RTL) */}
           <div className="flex items-center gap-2 flex-wrap py-1">
-            {/* 1. Button A: New Intake Requests (בקשות חדשות) */}
+            {/* 1. Button A: New Intake Questionnaires for Review (שאלונים חדשים לבדיקה) */}
             <button
               type="button"
               onClick={() => {
@@ -1006,10 +1016,10 @@ export default function App() {
                   ? 'bg-gradient-to-r from-rose-50 via-white to-rose-50 hover:from-rose-100 hover:to-rose-50 border-2 border-rose-500 text-rose-950 shadow-md shadow-rose-600/15 ring-2 ring-rose-400/25 hover:scale-[1.02] active:scale-95'
                   : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700'
               }`}
-              title="צפייה בבקשות קליטה חדשות מלקוחות שטרם טופלו"
+              title="צפייה בשאלוני קליטה חדשים מלקוחות שממתינים לבדיקה וקליטה ליומן"
             >
               <span className="text-base">📥</span>
-              <span className="font-black">בקשות חדשות</span>
+              <span className="font-black">שאלונים לבדיקה</span>
               {newIntakeCount > 0 ? (
                 <span className="relative flex items-center justify-center mr-0.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
@@ -1022,7 +1032,7 @@ export default function App() {
               )}
             </button>
 
-            {/* 2. Button B: In-Progress Intake Requests (בתהליך טיפול) */}
+            {/* 2. Button B: In-Progress Intake Requests (שאלונים בתהליך טיפול) */}
             <button
               type="button"
               onClick={() => {
@@ -1035,10 +1045,10 @@ export default function App() {
                   ? 'bg-gradient-to-r from-amber-50 via-white to-amber-50 hover:from-amber-100 hover:to-amber-50 border-2 border-amber-500 text-amber-950 shadow-md shadow-amber-600/15 ring-2 ring-amber-400/25 hover:scale-[1.02] active:scale-95'
                   : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700'
               }`}
-              title="צפייה בשאלוני קליטה שמולאו על ידי לקוחות וממתינים לבדיקה וקליטה ליומן"
+              title="צפייה בשאלונים פעילים הנמצאים בתהליך טיפול או בהמתנה לתשלום"
             >
-              <span className="text-base">📋</span>
-              <span className="font-black">שאלונים לבדיקה</span>
+              <span className="text-base">⏳</span>
+              <span className="font-black">שאלונים בתהליך</span>
               {inProgressIntakeCount > 0 ? (
                 <span className="relative inline-flex items-center justify-center min-w-[24px] h-[24px] px-1.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white text-xs sm:text-sm font-black font-mono rounded-full shadow-md ring-2 ring-white">
                   {inProgressIntakeCount}

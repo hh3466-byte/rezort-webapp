@@ -22,11 +22,19 @@ const GREEN_API_TOKEN = "ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b";
 
 const CLOSED_WEEKEND_HOLIDAY_MSG = `תודה על פנייתך, בחגים וסופי שבוע שירות הלקוחות שלנו סגור משעה 14:00 בשישי/ערב החג ועד למחרת השבת/או החג בשעה 09:30. כמובן שהמקום מאוייש והכלבים מקבלים טיפול מלא ומפנק. רק הבעלים שלהם צריכים להתגבר ולהתאפק עד ששרות הלקוחות יחזור לפעילות.תודה על ההבנה.`;
 
-const INTAKE_FORM_NEW_CLIENT_MSG = `שלום ותודה שפניתם לריזורט לכלב! 🐾🐶
-כדי שנוכל להתאים את השירות המדויק לכלבכם, לבדוק זמינות ולחסוך לכם זמן יקר בטלפון, אנא מלאו שאלון קליטה קצר (דקה אחת בלבד):
-👉 https://rezort-webapp.vercel.app/?request=true
+function getIntakeFormMessage(phone, senderName) {
+  const cleanPhone = (phone || '').replace(/\D/g, '');
+  const nameParam = senderName ? `&name=${encodeURIComponent(senderName.trim())}` : '';
+  const phoneParam = cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : '';
+  const link = `https://rezort-webapp.vercel.app/?request=true${phoneParam}${nameParam}`;
 
-מיד לאחר קבלת הפרטים צוות הריזורט ייצור עמכם קשר לתיאום סופי! 🦴`;
+  return `שלום ותודה שפניתם לריזורט לכלב! 🐾🐶
+כדי שנוכל לבדוק זמינות, להתאים את השירות המדויק לכלבכם ולחסוך לכם זמן יקר, אנא מלאו שאלון קליטה קצר (דקה אחת בלבד):
+👉 \u200E${link}
+
+⏰ *שימו לב:* אנחנו נמצאים כרגע במתחם ומטפלים במסירות בכלבים, ולא נשכח אתכם! 🐾
+מיד שנתפנה נעבור על פרטי השאלון ונחזור אליכם לשיחה בנוגע לתשובות לתיאום סופי. 🐕🤍`;
+}
 
 // Anti-spam cooldown memory (6 hours per phone)
 const cooldownMap = global._resortWaCooldown || (global._resortWaCooldown = new Map());
@@ -127,6 +135,7 @@ export default async function handler(req, res) {
   // Clean phone number
   const cleanPhone = chatId.replace('@c.us', '').replace(/[^0-9]/g, '');
   const phoneSuffix = cleanPhone.slice(-7); // Last 7 digits
+  const senderName = senderData.senderName || senderData.senderContactName || '';
 
   // 3. Anti-spam / Cooldown check (don't reply more than once every 6 hours)
   const nowMs = Date.now();
@@ -172,13 +181,13 @@ export default async function handler(req, res) {
       await sendWhatsAppMessage(chatId, CLOSED_WEEKEND_HOLIDAY_MSG);
       // Small pause of 1.2s before second message
       await new Promise(r => setTimeout(r, 1200));
-      await sendWhatsAppMessage(chatId, INTAKE_FORM_NEW_CLIENT_MSG);
+      await sendWhatsAppMessage(chatId, getIntakeFormMessage(cleanPhone, senderName));
     }
   } else {
     // Normal Business Hours
     if (!isExisting) {
       // New client in open hours: send ONLY intake form message
-      await sendWhatsAppMessage(chatId, INTAKE_FORM_NEW_CLIENT_MSG);
+      await sendWhatsAppMessage(chatId, getIntakeFormMessage(cleanPhone, senderName));
     }
     // Existing client in open hours: no auto-reply (human answers)
   }

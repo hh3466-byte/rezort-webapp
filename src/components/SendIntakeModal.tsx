@@ -51,9 +51,16 @@ export const SendIntakeModal: React.FC<SendIntakeModalProps> = ({
     ? intakeRequests.find(r => cleanPhoneNumber(r.ownerPhone).slice(-7) === phoneSuffix)
     : null;
 
-  const intakeUrl = typeof window !== 'undefined' 
+  const baseUrl = typeof window !== 'undefined' 
     ? `${window.location.origin}/?intake=true`
     : 'https://rezort-webapp.vercel.app/?intake=true';
+
+  const params = new URLSearchParams();
+  if (cleanPhone) params.append('phone', cleanPhone);
+  if (clientName.trim()) params.append('name', clientName.trim());
+  if (dogName.trim()) params.append('dog', dogName.trim());
+  const paramStr = params.toString();
+  const intakeUrl = paramStr ? `${baseUrl}&${paramStr}` : baseUrl;
 
   const generateWhatsAppMessage = () => {
     const greeting = clientName.trim() ? `שלום ${clientName.trim()}! 🐾🐶` : `שלום! 🐾🐶`;
@@ -61,12 +68,13 @@ export const SendIntakeModal: React.FC<SendIntakeModalProps> = ({
     const resortTitle = settings.resortName || 'הריזורט לכלב';
 
     return `${greeting}
-שמחנו לשוחח איתך ב${resortTitle}!
+שמחנו לשוחח איתך ב${resortTitle}! 🐾
 
 כדי שנוכל לבדוק התאמה, תפוסה פנויה ולשריין מקום ${forDog}, אנא מלא/י את שאלון בקשת הקליטה הקצר בקישור הבא:
-👉 ${intakeUrl}
+👉 \u200E${intakeUrl}
 
-מיד עם קבלת השאלון, נחזור אליך להשלמת התיאום! 🙏
+⏰ *שימו לב:* אנחנו נמצאים כרגע במתחם ומטפלים במסירות בכלבים, ולא נשכח אתכם! 🐾
+מיד שנתפנה נעבור על פרטי השאלון ונחזור אליכם לשיחה בנוגע לתשובות לתיאום סופי.
 
 בברכה חמה,
 צוות ${resortTitle} 🐕🤍`;

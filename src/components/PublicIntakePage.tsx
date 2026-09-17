@@ -93,15 +93,37 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
 }) => {
   const today = getTodayStr();
 
-  // Form State
-  const [ownerName, setOwnerName] = useState('');
-  const [ownerPhone, setOwnerPhone] = useState('');
-  const [ownerEmail, setOwnerEmail] = useState('');
-  const [dogName, setDogName] = useState('');
-  const [dogBreed, setDogBreed] = useState('');
-  const [dogAge, setDogAge] = useState('');
-  const [dogGender, setDogGender] = useState<'male' | 'female'>('male');
-  const [dogSize, setDogSize] = useState<'small' | 'medium' | 'large' | 'giant'>('medium');
+  // Saved profile cache key in localStorage
+  const SAVED_PROFILE_KEY = 'resort_intake_saved_profile';
+
+  const initialProfile = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem(SAVED_PROFILE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const searchParams = useMemo(() => {
+    if (typeof window === 'undefined') return new URLSearchParams();
+    return new URLSearchParams(window.location.search);
+  }, []);
+
+  const paramPhone = (searchParams.get('phone') || searchParams.get('p') || searchParams.get('tel') || '').trim();
+  const paramName = (searchParams.get('name') || searchParams.get('owner') || '').trim();
+  const paramDog = (searchParams.get('dog') || searchParams.get('dogName') || '').trim();
+
+  // Form State - Initialized from URL params, saved profile, or empty
+  const [ownerName, setOwnerName] = useState(paramName || initialProfile?.ownerName || '');
+  const [ownerPhone, setOwnerPhone] = useState(paramPhone || initialProfile?.ownerPhone || '');
+  const [ownerEmail, setOwnerEmail] = useState(initialProfile?.ownerEmail || '');
+  const [dogName, setDogName] = useState(paramDog || initialProfile?.dogName || '');
+  const [dogBreed, setDogBreed] = useState(initialProfile?.dogBreed || '');
+  const [dogAge, setDogAge] = useState(initialProfile?.dogAge || '');
+  const [dogGender, setDogGender] = useState<'male' | 'female'>(initialProfile?.dogGender || 'male');
+  const [dogSize, setDogSize] = useState<'small' | 'medium' | 'large' | 'giant'>(initialProfile?.dogSize || 'medium');
   const [serviceType, setServiceType] = useState<ServiceType>('boarding');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(addDays(today, 3));
@@ -417,6 +439,20 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
     };
 
     try {
+      // Save profile locally so client is remembered on this phone/browser
+      try {
+        localStorage.setItem(SAVED_PROFILE_KEY, JSON.stringify({
+          ownerName: ownerName.trim(),
+          ownerPhone: ownerPhone.trim(),
+          ownerEmail: ownerEmail.trim(),
+          dogName: dogName.trim(),
+          dogBreed: dogBreed.trim(),
+          dogAge: dogAge.trim(),
+          dogGender,
+          dogSize
+        }));
+      } catch (e) {}
+
       // 1. Save to Supabase and LocalStorage
       await saveIntakeRequestToDb(newRequest);
 
@@ -452,33 +488,28 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
             <CheckCircle2 className="w-10 h-10" />
           </div>
 
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             <h2 className="text-xl sm:text-2xl font-black text-[#0f4c3a] leading-snug">
-              תודה על משלוח שאלון בקשת הקליטה, בבקשה להמתין לתשובה. 🐾
+              תודה על משלוח שאלון בקשת הקליטה! 🐾
             </h2>
             <p className="text-sm font-bold text-slate-700">
               פרטי הבקשה עבור {dogName} נקלטו בהצלחה בריזורט לכלב.
             </p>
           </div>
 
-          <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-4 text-center space-y-2 text-xs text-slate-700">
-            <p className="text-emerald-950 font-bold leading-relaxed text-sm">
-              צוות הריזורט קיבל את השאלון ויחזור אליכם בהקדם למספר <span className="font-mono font-black text-emerald-800">{ownerPhone}</span>.
+          <div className="bg-emerald-50/90 border border-emerald-200 rounded-3xl p-5 text-center space-y-3 text-xs text-slate-700 shadow-sm">
+            <div className="text-3xl">🐕🤍</div>
+            <p className="text-emerald-950 font-black text-sm sm:text-base leading-relaxed">
+              אנחנו כרגע במתחם עם הכלבים ומטפלים בהם במסירות, ולא נשכח אתכם! 🐾
+            </p>
+            <p className="text-slate-600 font-medium text-xs sm:text-sm leading-relaxed">
+              מיד כשנתפנה נעבור ביסודיות על פרטי השאלון ונחזור אליכם לשיחה במספר <span className="font-mono font-black text-emerald-900 dir-ltr inline-block">{ownerPhone}</span> לתיאום סופי.
             </p>
           </div>
 
-          <div className="pt-2 space-y-2">
-            <a
-              href={`https://wa.me/${settings.managerPhone?.replace(/\D/g, '') || '0548765888'}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center justify-center gap-2 w-full bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold py-3 rounded-2xl text-sm transition-all cursor-pointer shadow-md"
-            >
-              <span>💬 פתח שיחה ישירה עם צוות הריזורט</span>
-            </a>
-
-            {/* Back to Management App is ONLY allowed for authorized staff during preview */}
-            {isStaffPreview && onBackToApp && (
+          {/* Back to Management App is ONLY allowed for authorized staff during preview */}
+          {isStaffPreview && onBackToApp && (
+            <div className="pt-2">
               <button
                 type="button"
                 onClick={onBackToApp}
@@ -486,8 +517,8 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               >
                 חזרה ליומן הניהול (תצוגת מנהל)
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     );

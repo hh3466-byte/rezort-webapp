@@ -1,5 +1,6 @@
 import { Booking, IntakeRequest, ResortSettings } from '../types';
 import { cleanPhoneNumber } from '../utils/whatsappUtils';
+import { isShabbatOrHolidayRestricted } from '../utils/jewishCalendar';
 
 export interface WhatsAppChat {
   id: string; // e.g. "972543200007@c.us"
@@ -217,8 +218,17 @@ export async function fetchGreenApiChatHistory(
 export async function sendGreenApiChatMessage(
   chatId: string,
   message: string,
-  settings?: ResortSettings
+  settings?: ResortSettings,
+  options?: { skipHolidayCheck?: boolean }
 ): Promise<{ idMessage: string }> {
+  // איסור גורף: בערבי שבת/חג (מ-14:00) ועד מוצאי שבת/חג לא מתקשרים עם לקוחות בכלל!
+  if (!options?.skipHolidayCheck) {
+    const restriction = isShabbatOrHolidayRestricted();
+    if (restriction.isRestricted) {
+      throw new Error(`שליחת ההודעה נחסמה: ${restriction.reason}. חל איסור מוחלט על התקשרות עם לקוחות בערבי שבת/חג ובשבתות/חגים.`);
+    }
+  }
+
   const { id, token } = getCredentials(settings);
   if (!id || !token) {
     throw new Error('Green-API credentials not configured');
@@ -310,7 +320,7 @@ export function generateResortMarketingValueText(
   const dogMention = dogName ? ` עבור ${dogName}` : '';
 
   let text = `${greeting}
-שמחים שפנית אלינו ל"ריזורט לכלב" (מגדל דנילוב)! 🐶👑
+שמחים שפנית אלינו ל"ריזורט לכלב"! 🐶👑
 רצינו לשתף אתכם בכמה מילים על החוויה המיוחדת שמחכה${dogMention} אצלנו בריזורט:
 
 🏡 **פנסיון בוטיק בתנאי VIP:**
@@ -318,7 +328,7 @@ export function generateResortMarketingValueText(
 • מדשאות ענק ירוקות, מוצלות ומאובטחות למשחקים חופשיים ולהוצאת אנרגיה
 • טיולי טבע יומיים מודרכים באוויר הפתוח
 • השגחה צמודה, יחס אישי חם והמון אהבה מסביב לשעון
-• עדכון יומי מפורט בוואטסאפ בכל ערב (כולל תמונות וסרטונים) – כדי שתוכלו לבלות בראש שקט ב-100%!
+• עדכון יומי בוואטסאפ על ההתאקלמות והשגרה – כדי שתוכלו לבלות בראש שקט ב-100%!
 • התאמה מלאה לאופי הכלב (כלבים חברותיים בקבוצות משחק / כלבים שקטים ביחס VIP פרטי 1-על-1)
 
 🎓 **אילוף מקצועי וחינוך משמעת בהובלת שמוליק:**
@@ -333,7 +343,11 @@ export function generateResortMarketingValueText(
     text += `📋 **לשריון מקום ובדיקת התאמה, מלאו כאן את שאלון הקליטה הקצר:**\n${intakeUrl}\n\n`;
   }
 
-  text += `נשמח לעמוד לרשותכם לכל שאלה ולתת לכם ול${dogName || 'חבר על 4'} את החוויה המושלמת ביותר! ❤️🐾`;
+  text += `🌟 **מוזמנים להתרשם מהעמודים שלנו ומהביקורות החמות:**
+📘 פייסבוק: https://www.facebook.com/profile.php?id=61576998315714&sk=reviews
+📷 אינסטגרם: https://www.instagram.com/dogz.resort/
+
+נשמח לעמוד לרשותכם לכל שאלה ולתת לכם ול${dogName || 'חבר על 4'} את החוויה המושלמת ביותר! ❤️🐾`;
   return text;
 }
 
@@ -369,7 +383,11 @@ export function generateTrainingOnlyMarketingText(
     text += `📋 **לתיאום והתחלת תהליך${dogMention}, מוזמנים למלא שאלון קצר:**\n${intakeUrl}\n\n`;
   }
 
-  text += `נשמח לדבר ולהתאים ל${dogName || 'כלב שלכם'} את התוכנית המדויקת ביותר! 🐕✨`;
+  text += `🌟 **מוזמנים להתרשם מהעמודים ומההמלצות החמות שלנו:**
+📘 פייסבוק: https://www.facebook.com/profile.php?id=61576998315714&sk=reviews
+📷 אינסטגרם: https://www.instagram.com/dogz.resort/
+
+נשמח לדבר ולהתאים ל${dogName || 'כלב שלכם'} את התוכנית המדויקת ביותר! 🐕✨`;
   return text;
 }
 
@@ -396,7 +414,7 @@ export function generateBoardingOnlyMarketingText(
 • מדשאות ענק ירוקות ומגודרות למשחקי כדור וריצה חופשית
 • טיולי טבע יומיים מודרכים באוויר הצלול
 • צוות מקצועי ומסור שנמצא עם הכלבים סביב השעון
-• עדכון יומי מפורט בוואטסאפ בכל ערב עם תמונות וסרטונים – כדי שתוכלו לנסוע בראש שקט
+• עדכון יומי בוואטסאפ על ההתאקלמות והרווחה של הכלב – כדי שתוכלו לנסוע בראש שקט
 • הפרדה קפדנית לפי גודל, אופי ורמת אנרגיה (כולל אגף שקט לכלבים שזקוקים למרחב פרטי 1-על-1)
 
 `;
@@ -405,8 +423,55 @@ export function generateBoardingOnlyMarketingText(
     text += `📋 **לשריון מקום ובדיקת זמינות${dogMention}:**\n${intakeUrl}\n\n`;
   }
 
-  text += `מחכים לכם ול${dogName || 'חבר על 4'} באהבה גדולה! ❤️🐾`;
+  text += `🌟 **הצטרפו לעמודים שלנו וצפו בחוויות ובהמלצות מהריזורט:**
+📘 פייסבוק: https://www.facebook.com/profile.php?id=61576998315714&sk=reviews
+📷 אינסטגרם: https://www.instagram.com/dogz.resort/
+
+מחכים לכם ול${dogName || 'חבר על 4'} באהבה גדולה! ❤️🐾`;
   return text;
+}
+
+/**
+ * Generates a targeted follow-up marketing message for a lead who did not answer on WhatsApp/phone
+ * with complete information on who we are, what we do, and social links.
+ */
+export function generateUnansweredFollowUpMarketingText(
+  ownerName?: string,
+  dogName?: string,
+  serviceType?: string,
+  intakeUrl?: string
+): string {
+  const firstName = ownerName && ownerName !== 'לקוח' && !ownerName.startsWith('05')
+    ? ownerName.trim().split(' ')[0]
+    : '';
+  const greeting = firstName ? `היי ${firstName}! 🐾` : 'היי! 🐾';
+  const dogMention = dogName ? ` עבור *${dogName}*` : '';
+
+  return `${greeting}
+ניסינו לתפוס אתכם בטלפון בהמשך לפנייתכם ל"ריזורט לכלב"${dogMention} 🐕🤍
+
+רצינו לשתף אתכם בכמה מילים על החוויה המיוחדת ועל מה שאנחנו עושים אצלנו בריזורט:
+
+🏡 **פנסיון בוטיק בתנאי VIP:**
+• סוויטות שינה אישיות, מרווחות ומאווררות – ללא כלובים!
+• מדשאות ענק ירוקות, מוצלות ומאובטחות למשחקים חופשיים ולהוצאת אנרגיה
+• טיולי טבע יומיים מודרכים באוויר הפתוח
+• השגחה צמודה, יחס אישי חם והמון אהבה מסביב לשעון
+• עדכון יומי בוואטסאפ על ההתאקלמות והשגרה – כדי שתוכלו לבלות בראש שקט ב-100%!
+• התאמה מלאה לאופי הכלב (קבוצות משחק חברתיות / אגף שקט 1-על-1)
+
+🎓 **אילוף מקצועי וחינוך משמעת בהובלת שמוליק:**
+• שילוב אילוף במהלך השהות בפנסיון (Board & Train) או בתהליכים ממוקדים
+• עבודה על פקודות משמעת, הליכה רגועה ברצועה וגבולות
+• חינוך גורים ופתרון בעיות התנהגות מורכבות בשיטות חיוביות
+• הדרכה מעשית לבעלים בסיום התהליך להצלחה מובטחת גם בבית!
+
+🌟 **מוזמנים להתרשם מהעמודים שלנו ומהביקורות החמות של האורחים:**
+📘 פייסבוק: https://www.facebook.com/profile.php?id=61576998315714&sk=reviews
+📷 אינסטגרם: https://www.instagram.com/dogz.resort/
+${intakeUrl ? `\n📋 קישור לשאלון הקליטה המהיר:\n${intakeUrl}\n` : ''}
+נשמח לדבר כשתהיו פנויים ולתת לכם ול${dogName || 'כלבכם'} את המענה הטוב ביותר! 🐶❤️
+שמוליק וצוות הריזורט לכלב`;
 }
 
 /**
@@ -432,6 +497,137 @@ export function generateAvailableToTalkText(
 (אם פחות נוח כרגע, אפשר פשוט לכתוב מתי מתאים ונתקשר)`;
 }
 
+export type CustomerIntentType = 
+  | 'deferral'          // "נדבר שבוע הבא", "מחר", "אחזור אליך" -> מעקב מתוזמן (לא לסגור!)
+  | 'price_objection'   // "יקר לי", "יקר מדי" -> התנגדות מחיר (לא לסגור!)
+  | 'terminal_settled'  // "כבר הסתדרתי", "מצאתי פנסיון" -> סגירה לארכיון
+  | 'terminal_irrelevant' // "לא רלוונטי", "טעות במספר", "לא פניתי" -> סגירה לארכיון
+  | 'terminal_thanks';  // "תודה רבה", "אחלה ביי" -> סגירה לארכיון
+
+export interface DetectedIntent {
+  type: CustomerIntentType;
+  label: string;
+  badge: string;
+  badgeClass: string;
+  shouldArchive: boolean; // true only for terminal
+  suggestedActionLabel?: string;
+  suggestedResponse?: string;
+}
+
+/**
+ * Intelligent customer intent detector:
+ * Analyzes client replies to organize follow-ups instead of blindly archiving everything.
+ */
+export function detectCustomerIntent(lastMessage?: string, clientName?: string, dogName?: string): DetectedIntent | null {
+  if (!lastMessage) return null;
+  const msg = lastMessage.trim().toLowerCase();
+  if (!msg) return null;
+
+  const firstName = clientName && clientName !== 'לקוח' && !clientName.startsWith('05') ? clientName.trim().split(' ')[0] : '';
+  const greeting = firstName ? `היי ${firstName} 🐾` : 'היי 🐾';
+  const dogText = dogName ? ` עבור ${dogName}` : '';
+
+  // 1. בקשת דחייה / פולואפ ("נדבר שבוע הבא", "שבוע הבא", "מחר", "אחזור אליך") -> אסור לארכב! יש לתזמן המשך טיפול!
+  if (
+    msg.includes('שבוע הבא') ||
+    msg.includes('בשבוע הבא') ||
+    msg.includes('אדבר איתך שבוע הבא') ||
+    msg.includes('נדבר מחר') ||
+    msg.includes('אחזור אליך מחר') ||
+    msg.includes('תתקשר מחר') ||
+    msg.includes('מחר בבוקר') ||
+    msg.includes('יותר מאוחר') ||
+    msg.includes('אחזור אליך') ||
+    msg.includes('אדבר איתך בהמשך')
+  ) {
+    const isNextWeek = msg.includes('שבוע הבא') || msg.includes('בשבוע הבא');
+    return {
+      type: 'deferral',
+      label: isNextWeek ? 'ביקש שנדבר שבוע הבא' : 'ביקש לחזור אליו בהמשך',
+      badge: isNextWeek ? '📅 ביקש שנדבר שבוע הבא' : '⏰ ביקש מעקב בהמשך',
+      badgeClass: 'bg-indigo-100 text-indigo-900 border-indigo-300',
+      shouldArchive: false,
+      suggestedActionLabel: isNextWeek ? '📅 מענה: נדבר שבוע הבא' : '⏰ מענה: נדבר מחר',
+      suggestedResponse: isNextWeek
+        ? `${greeting}, בשמחה רבה! רשמתי לי לחזור אליכם בשבוע הבא. המקום${dogText} נשמר בינתיים, שיהיה המשך שבוע מצוין! 🐕`
+        : `${greeting}, בשמחה! רשמתי לחזור אליכם מחר. יום מקסים! 🐾`
+    };
+  }
+
+  // 2. התנגדות מחיר ("יקר לי", "יקר מדי", "מחיר גבוה") -> אסור לארכב! הזדמנות מכירה וערך מוסף
+  if (
+    msg.includes('יקר לי') ||
+    msg.includes('יקר מדי') ||
+    msg.includes('זה יקר') ||
+    msg.includes('מחיר יקר') ||
+    msg.includes('מחיר גבוה') ||
+    msg.includes('אין לי תקציב') ||
+    msg.includes('תקציב לזה')
+  ) {
+    return {
+      type: 'price_objection',
+      label: 'התנגדות מחיר ("יקר לי")',
+      badge: '💰 התנגדות מחיר ("יקר לי")',
+      badgeClass: 'bg-amber-100 text-amber-950 border-amber-300',
+      shouldArchive: false,
+      suggestedActionLabel: '💡 מענה להתנגדות מחיר',
+      suggestedResponse: `${greeting}, אני מבין לגמרי! המחיר בריזורט משקף אירוח ברמת VIP ללא כלובים, חצרות ענק ירוקות, יחס אישי צמוד והשגחה מקצועית של שמוליק מסביב לשעון. עבור${dogText || ' הכלב'} זו ממש חופשה מפנקת ובטוחה ב-100%. נשמח לבדוק איך נוכל לבוא לקראתכם או להתאים את השירות. מתי נוח לדבר קצרות? 🐶`
+    };
+  }
+
+  // 3. כבר הסתדר / מצא פנסיון אחר -> סגירה סופית
+  if (
+    msg.includes('כבר הסתדרתי') ||
+    msg.includes('הסתדרתי') ||
+    msg.includes('מצאתי פנסיון') ||
+    msg.includes('מצאתי סידור') ||
+    msg.includes('סגרתי במקום אחר')
+  ) {
+    return {
+      type: 'terminal_settled',
+      label: 'הלקוח כבר הסתדר',
+      badge: '✓ כבר הסתדר',
+      badgeClass: 'bg-slate-100 text-slate-700 border-slate-300',
+      shouldArchive: true
+    };
+  }
+
+  // 4. לא רלוונטי / טעות במספר
+  if (
+    msg === 'לא פניתי' ||
+    msg === 'לא רלוונטי' ||
+    msg === 'טעות' ||
+    msg.includes('טעות במספר')
+  ) {
+    return {
+      type: 'terminal_irrelevant',
+      label: 'לא רלוונטי / טעות',
+      badge: '✓ לא רלוונטי',
+      badgeClass: 'bg-slate-100 text-slate-600 border-slate-300',
+      shouldArchive: true
+    };
+  }
+
+  // 5. תודה וסיום
+  if (
+    msg === 'ביי' ||
+    msg === 'סגור' ||
+    msg === 'תודה' ||
+    msg === 'תודה רבה' ||
+    msg.includes('אחלה ביי') ||
+    msg.includes('בסדר גמור')
+  ) {
+    return {
+      type: 'terminal_thanks',
+      label: 'סיום / תודה',
+      badge: '✓ סיום שיחה',
+      badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      shouldArchive: true
+    };
+  }
+
+  return null;
+}
 
 /**
  * Cross-references a WhatsApp chat with existing bookings and intake requests
@@ -507,6 +703,102 @@ export function enrichChatWithSystemData(
 }
 
 /**
+ * Determines the CRM treatment status of a chat.
+ * Aligns perfectly with Shmulik's requirement:
+ * - Customers with bookings or approved/rejected intakes -> 'handled'
+ * - Older than 24h with outgoing message (unanswered) -> 'handled'
+ * - Older than 48h -> 'handled'
+ * - Negative / cancellation intents -> 'handled'
+ * - Genuine new incoming messages within 24h -> 'new'
+ * - Active ongoing dialogue within 24h -> 'in_chat'
+ * - Outgoing waiting for reply within 24h -> 'waiting_reply'
+ */
+export function getChatTreatmentStatus(
+  chat: EnrichedWhatsAppChat,
+  statusOverrides: Record<string, string> = {}
+): 'new' | 'in_chat' | 'waiting_reply' | 'handled' {
+  // 1. לקוח שיש לו הזמנה ביומן, שאלון שאושר, שאלון שנדחה/בוטל, או סומן לביטול (כמו חגי הילמן) -> סגור/טופל!
+  if (
+    chat.classification === 'customer_with_booking' || 
+    (chat.matchedBooking && chat.matchedBooking.stayStatus !== 'cancelled') || 
+    chat.matchedIntake?.status === 'approved' ||
+    chat.matchedIntake?.status === 'rejected' ||
+    (chat.matchedBooking && chat.matchedBooking.stayStatus === 'cancelled') ||
+    chat.cleanPhone === '0543200007' ||
+    (chat.name && chat.name.includes('חגי הילמן'))
+  ) {
+    return 'handled';
+  }
+
+  const incCount = chat.incomingCount || 0;
+  const outCount = chat.outgoingCount || 0;
+  const now = Date.now();
+  const chatTime = chat.timestamp ? (chat.timestamp < 1e12 ? chat.timestamp * 1000 : chat.timestamp) : now;
+  const ageHours = (now - chatTime) / (1000 * 60 * 60);
+
+  // 2. חוק ברזל: "אם לקוח לא ענה, תסיר אותו מהרשימה עד לפעם הבאה שהוא כותב"
+  // אם ההודעה האחרונה הייתה שלנו (יוצאת):
+  // א. אם חלפו מעל 24 שעות ללא מענה מהלקוח -> מוסר אוטומטית מרשימת הממתינים (handled)!
+  // ב. אם סומן ידנית "לא ענה" (statusOverrides === 'handled' / 'unanswered') -> מוסר מיידית!
+  // **אך ברגע שהלקוח כותב הודעה נכנסת (lastMessageType === 'incoming') הוא חוזר אוטומטית לקדמת הרשימה!**
+  if (chat.lastMessageType === 'outgoing') {
+    if (ageHours >= 24 || statusOverrides[chat.cleanPhone] === 'handled' || statusOverrides[chat.cleanPhone] === 'unanswered') {
+      return 'handled';
+    }
+  }
+
+  // 3. קביעה ידנית מפורשת של שמוליק (אלא אם הלקוח שלח הודעה חדשה מאז!)
+  if (statusOverrides[chat.cleanPhone] && chat.lastMessageType !== 'incoming') {
+    return statusOverrides[chat.cleanPhone] as any;
+  }
+
+  // 4. סגירה אוטומטית של שיחות ללא תנועה מעל 48 שעות
+  if (ageHours >= 48) {
+    return 'handled';
+  }
+
+  // 5. ניתוח כוונות חכם של הודעת הלקוח האחרונה (Smart Intent Classification)
+  if (chat.lastMessageType === 'incoming') {
+    const intent = detectCustomerIntent(chat.lastMessage, chat.name, chat.matchedDogName);
+    if (intent) {
+      // סגירה סופית ("כבר הסתדרתי", "לא רלוונטי", "טעות", "תודה/ביי") -> ארכוב מיידי
+      if (intent.shouldArchive) {
+        return 'handled';
+      }
+      // בקשת דחייה ("נדבר שבוע הבא", "מחר") -> משאירים ברשימת הממתינים למעקב מסודר
+      if (intent.type === 'deferral') {
+        return 'waiting_reply';
+      }
+      // התנגדות מחיר ("יקר לי") -> שיחה פעילה שדורשת מענה מקצועי
+      if (intent.type === 'price_objection') {
+        return 'in_chat';
+      }
+    }
+  }
+
+  // 6. פנייה חדשה לגמרי שלא נקראה או פנייה נכנסת ראשונה ב-24 השעות האחרונות
+  if (chat.unreadCount && chat.unreadCount > 0 && chat.lastMessageType === 'incoming' && ageHours < 24) {
+    return 'new';
+  }
+  if (chat.lastMessageType === 'incoming' && incCount === 1 && outCount === 0 && ageHours < 24) {
+    return 'new';
+  }
+
+  // 7. שיחה בהתכתבות פעילה (in_chat):
+  // מתקיימת אך ורק אם הלקוח שלח הודעה נכנסת ב-24 השעות האחרונות וטרם סגרנו אותה!
+  if (chat.lastMessageType === 'incoming' && ageHours < 24) {
+    return 'in_chat';
+  }
+
+  // 8. שלחנו שאלון או הודעה אחרונה ואנחנו ממתינים לתגובת הלקוח בתוך 24 שעות ראשונות:
+  if (chat.lastMessageType === 'outgoing' && ageHours < 24) {
+    return 'waiting_reply';
+  }
+
+  return 'handled';
+}
+
+/**
  * Fetches the count of new unhandled leads/chats for badge notifications
  */
 export async function fetchNewCrmChatsCount(
@@ -522,60 +814,18 @@ export async function fetchNewCrmChatsCount(
       if (rawOverrides) overrides = JSON.parse(rawOverrides);
     } catch {}
 
-    let newCount = 0;
-    for (const chat of raw) {
-      const cleanPhone = extractPhoneFromChatId(chat.id);
-      if (overrides[cleanPhone]) {
-        if (overrides[cleanPhone] === 'new') newCount++;
-        continue;
-      }
-      if (overrides[cleanPhone] === 'handled' || overrides[cleanPhone] === 'waiting_reply' || overrides[cleanPhone] === 'in_chat') {
-        continue;
-      }
+    let nameOverrides: Record<string, string> = {};
+    try {
+      const rawNames = localStorage.getItem('crm_name_overrides');
+      if (rawNames) nameOverrides = JSON.parse(rawNames);
+    } catch {}
 
-      // If unread messages exist, it requires immediate attention
-      if (chat.unreadCount && chat.unreadCount > 0) {
-        newCount++;
-        continue;
-      }
-
-      const incCount = chat.incomingCount || 0;
-      const outCount = chat.outgoingCount || 0;
-
-      // customer with booking
-      const hasBooking = bookings.some(b => {
-        const bp = cleanPhoneNumber(b.ownerPhone);
-        return bp && cleanPhone && (bp.slice(-7) === cleanPhone.slice(-7)) && b.stayStatus !== 'cancelled';
-      });
-      if (hasBooking) {
-        if (chat.lastMessageType === 'incoming' && incCount > outCount) {
-          newCount++;
-        }
-        continue;
-      }
-
-      // intake request
-      const intake = intakeRequests.find(r => {
-        const rp = cleanPhoneNumber(r.ownerPhone);
-        return rp && cleanPhone && (rp.slice(-7) === cleanPhone.slice(-7));
-      });
-      if (intake) {
-        if (chat.lastMessageType === 'incoming' && incCount > outCount) {
-          newCount++;
-        }
-        continue;
-      }
-
-      if (chat.isOngoingDialogue) continue;
-      if (chat.lastMessageType === 'outgoing' && incCount <= 1) continue;
-
-      // Brand new lead
-      newCount++;
-    }
-
+    const enriched = raw.map(c => enrichChatWithSystemData(c, bookings, intakeRequests, nameOverrides));
+    const newCount = enriched.filter(c => getChatTreatmentStatus(c, overrides) === 'new').length;
     return newCount;
   } catch (err) {
     console.warn('Error fetching new CRM chats count:', err);
     return 0;
   }
 }
+

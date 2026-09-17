@@ -666,6 +666,10 @@ function doPost(e) {
         + "⏰ *שימו לב:* בסופי שבוע ובחגים שירות הלקוחות והמענה הטלפוני סגורים (סגור משישי ב-14:00 ועד ראשון ב-09:30).\n"
         + "בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐕🤍\n\n";
 
+      var intakeLinkWithParams = "https://rezort-webapp.vercel.app/?request=true"
+        + (cleanPhone ? ("&phone=" + encodeURIComponent(cleanPhone)) : "")
+        + (cleanName ? ("&name=" + encodeURIComponent(cleanName)) : "");
+
       if (isReturningCustomer) {
         message += "שמחנו לראות את הודעתך! " + (dogName ? "ד\"ש חם ל-" + dogName + "! 🐶\n" : "\n")
           + "נחזור אליך בשמחה ביום ראשון החל מהשעה 09:30.\n\n"
@@ -682,7 +686,7 @@ function doPost(e) {
       } else {
         // פנייה חדשה ראשונית בלבד - מקבל קישור לשאלון
         message += "אם פניתם לגבי קליטה או שריון מקום לכלבכם, נשמח מאוד שתמלאו שאלון קצר (דקה אחת בלבד) כדי שנוכל לחזור אליכם ראשונים עם כל הפרטים והזמינות ביום ראשון בבוקר:\n"
-          + "👉 https://rezort-webapp.vercel.app/?request=true\n\n"
+          + "👉 " + intakeLinkWithParams + "\n\n"
           + "שיהיה סוף שבוע נעים ושקט,\nשמוליק וצוות הריזורט לכלב 🐾✨";
         props.setProperty(intakeSentKey, new Date().toISOString());
       }
@@ -699,12 +703,17 @@ function doPost(e) {
         })).setMimeType(ContentService.MimeType.JSON);
       }
 
+      var intakeLinkWithParamsOpen = "https://rezort-webapp.vercel.app/?request=true"
+        + (cleanPhone ? ("&phone=" + encodeURIComponent(cleanPhone)) : "")
+        + (cleanName ? ("&name=" + encodeURIComponent(cleanName)) : "");
+
       // פנייה חדשה לגמרי בפעם הראשונה בלבד:
       message = "היי" + greetingName + "! 🐾🐶\n"
         + "תודה שפנית ל*ריזורט לכלב* – פנסיון בוטיק, אילוף וחוויות לכלבים!\n\n"
         + "כדי שנוכל לתת לכם את המענה הטוב והמדויק ביותר, אנא מלאו שאלון קצר (דקה אחת בלבד) עם פרטי הכלב והתאריכים המבוקשים:\n"
-        + "👉 https://rezort-webapp.vercel.app/?request=true\n\n"
-        + "מיד לאחר מילוי השאלון ניצור איתכם קשר טלפוני לתיאום סופי.\n\n"
+        + "👉 " + intakeLinkWithParamsOpen + "\n\n"
+        + "⏰ *שימו לב:* אנחנו נמצאים כרגע במתחם ומטפלים במסירות בכלבים, ולא נשכח אתכם! 🐾\n"
+        + "מיד שנתפנה נעבור על פרטי השאלון ונחזור אליכם לשיחה בנוגע לתשובות לתיאום סופי.\n\n"
         + "בברכה חמה,\nשמוליק וצוות הריזורט לכלב 🐕🤍";
       props.setProperty(intakeSentKey, new Date().toISOString());
     }

@@ -67,10 +67,16 @@ export function formatClientPaymentLinkMessage(
   amount?: number,
   customLink?: string
 ): string {
-  const paymentLink = 
+  let paymentLink = 
     customLink?.trim() ||
     settings.growPaymentLink || 
     'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
+
+  if (paymentLink.startsWith('//')) {
+    paymentLink = 'https:' + paymentLink;
+  } else if (!paymentLink.startsWith('http://') && !paymentLink.startsWith('https://')) {
+    paymentLink = 'https://' + paymentLink;
+  }
 
   const agreedAmount = amount !== undefined ? amount : (request.depositRequested || 0);
   const isFree = request.isFreeStay || agreedAmount === 0;
@@ -100,7 +106,7 @@ export function formatClientPaymentLinkMessage(
   return `היי ${firstName}, שמחנו לשוחח! 🐾🐶
 שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר ${stayText}.${amountSection}
 להשלמת השריון, מצורף הקישור המאובטח לתשלום${amountInstruction}:
-👉 ${paymentLink}
+👉 \u200E${paymentLink}
 
 (בתוך הקישור ניתן לשלם בנוחות ב-Bit, Apple Pay, Google Pay או כרטיס אשראי)
 
@@ -246,6 +252,8 @@ export async function sendResortEmailNotification(
 export const DEFAULT_GREEN_API_ID = '710722735421';
 export const DEFAULT_GREEN_API_TOKEN = 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b';
 
+import { isShabbatOrHolidayRestricted } from '../utils/jewishCalendar';
+
 /**
  * Send direct message via Green-API and return result
  */
@@ -253,8 +261,21 @@ export async function sendGreenApiDirectMessage(
   phone: string,
   message: string,
   idInstance?: string,
-  apiToken?: string
+  apiToken?: string,
+  options?: { skipHolidayCheck?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
+  // איסור גורף: בערבי שבת/חג (החל מ-14:00) ועד מוצאי שבת/חג לא מתקשרים עם לקוחות כלל!
+  if (!options?.skipHolidayCheck) {
+    const restriction = isShabbatOrHolidayRestricted();
+    if (restriction.isRestricted) {
+      console.warn(`[Blocked Message] ${restriction.reason} -> ${phone}`);
+      return {
+        success: false,
+        error: `הודעה נחסמה אוטומטית: ${restriction.reason}. חל איסור מוחלט על התקשרות עם לקוחות בערבי שבת/חג ובשבתות/חגים.`
+      };
+    }
+  }
+
   const cleanId = (idInstance || '').trim() || DEFAULT_GREEN_API_ID;
   const cleanTok = (apiToken || '').trim() || DEFAULT_GREEN_API_TOKEN;
   if (!cleanId || !cleanTok) {
@@ -338,7 +359,8 @@ export async function testGreenApiConnection(
         testPhone,
         '🐾 בדיקת חיבור Green-API – הריזורט לכלב! החיבור פועל בצורה מושלמת.',
         cleanId,
-        cleanTok
+        cleanTok,
+        { skipHolidayCheck: true }
       );
       if (sendRes.success) {
         return { success: true, state: 'authorized', message: 'מעולה! Green-API מחובר ומאושר, ונשלחה הודעת בדיקה בהצלחה!' };

@@ -41,7 +41,11 @@ import {
   generateResortMarketingValueText,
   generateTrainingOnlyMarketingText,
   generateBoardingOnlyMarketingText,
-  generateAvailableToTalkText
+  generateAvailableToTalkText,
+  generateUnansweredFollowUpMarketingText,
+  detectCustomerIntent,
+  DetectedIntent,
+  getChatTreatmentStatus as getChatStatusFromService
 } from '../services/whatsappCrmService';
 
 export const CRM_PRIORITY_ORDER: Record<'new' | 'in_chat' | 'waiting_reply' | 'handled', number> = {
@@ -146,54 +150,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   };
 
   const getChatTreatmentStatus = (chat: EnrichedWhatsAppChat): 'new' | 'in_chat' | 'waiting_reply' | 'handled' => {
-    // 1. קביעה ידנית מפורשת של שמוליק תמיד קודמת
-    if (statusOverrides[chat.cleanPhone]) {
-      return statusOverrides[chat.cleanPhone] as any;
-    }
-
-    // 2. לקוח שיש לו כבר הזמנה קיימת ביומן -> תמיד טופל (handled)
-    if (chat.classification === 'customer_with_booking') {
-      return 'handled';
-    }
-
-    // 3. לקוח שמילא שאלון קליטה:
-    //    אם אושר כבר כהזמנה ביומן -> טופל
-    //    אחרת -> שיחה בהתכתבות פעילה
-    if (chat.classification === 'intake_submitted') {
-      if (chat.matchedIntake?.status === 'approved') {
-        return 'handled';
-      }
-      return 'in_chat';
-    }
-
-    const incCount = chat.incomingCount || 0;
-    const outCount = chat.outgoingCount || 0;
-    const now = Date.now();
-    const ageHours = (now - (chat.timestamp || now)) / (1000 * 60 * 60);
-
-    // 4. מתבצעת התכתבות פעילה (מעל הודעה נכנסת 1, או שהיו הודעות משני הצדדים) -> בהתכתבות!
-    if (chat.isOngoingDialogue || incCount > 1 || (incCount >= 1 && outCount > 1)) {
-      return 'in_chat';
-    }
-
-    // 5. פנייה חדשה לגמרי: הודעה נכנסת ראשונה מהלקוח שטרם התפתחה להתכתבות
-    if (chat.lastMessageType === 'incoming' && incCount === 1 && outCount <= 1) {
-      return 'new';
-    }
-
-    // 6. שלחנו שאלון או הודעה ראשונה והלקוח טרם השיב:
-    // נשמרים תמיד בטאב "ממתינים לתגובה" כדי שתמיד ניתן יהיה ליצור איתם קשר!
-    // הסרה מהרשימה מתבצעת אך ורק בלחיצה יזומה של שמוליק על "סמן כטופל"
-    if (chat.lastMessageType === 'outgoing' && incCount <= 1) {
-      return 'waiting_reply';
-    }
-
-    // הודעה שלא נקראה -> חדש
-    if (chat.unreadCount && chat.unreadCount > 0) {
-      return 'new';
-    }
-
-    return 'new';
+    return getChatStatusFromService(chat, statusOverrides);
   };
 
   const [messageInput, setMessageInput] = useState('');
@@ -333,9 +290,9 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
       setSendSuccessToast(true);
       setTimeout(() => setSendSuccessToast(false), 2500);
       setTimeout(scrollToBottom, 50);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to send message:', err);
-      alert('שליחת ההודעה נכשלה. אנא נסה שוב או פתח את השיחה בוואטסאפ ווב.');
+      alert(err?.message || 'שליחת ההודעה נכשלה. אנא נסה שוב או פתח את השיחה בוואטסאפ ווב.');
     } finally {
       setIsSending(false);
     }
@@ -437,6 +394,9 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   const renderChatCard = (chat: EnrichedWhatsAppChat) => {
     const isSelected = selectedChat?.id === chat.id;
     const status = getChatTreatmentStatus(chat);
+    const detectedIntent = chat.lastMessageType === 'incoming'
+      ? detectCustomerIntent(chat.lastMessage, chat.name, chat.matchedDogName)
+      : null;
 
     return (
       <div
@@ -497,10 +457,17 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
             )}
           </div>
 
-          {/* Timestamp: Day of week, DD/MM, HH:MM */}
-          <div className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5 mt-1.5 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 w-fit shadow-2xs">
-            <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-            <span>{formatFullMessageDateIL(chat.timestamp || Date.now())}</span>
+          {/* Timestamp & Smart Intent Badge */}
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <div className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 w-fit shadow-2xs">
+              <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span>{formatFullMessageDateIL(chat.timestamp || Date.now())}</span>
+            </div>
+            {detectedIntent && (
+              <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border truncate max-w-[160px] shadow-2xs ${detectedIntent.badgeClass}`} title={detectedIntent.label}>
+                {detectedIntent.badge}
+              </span>
+            )}
           </div>
 
           {/* Priority Treatment Badge (Interactive 1-click cycle!) */}
@@ -565,20 +532,33 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
             )}
 
             {status === 'waiting_reply' && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedChat(chat);
-                  const intakeUrl = `${window.location.origin}/?intake=true`;
-                  const text = generateResortMarketingValueText(chat.name, chat.matchedDogName, intakeUrl);
-                  setMessageInput(text);
-                }}
-                className="text-[10px] font-black bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs"
-                title="טען הודעת שיווק מקיפה המפרטת על יתרונות הפנסיון והאילוף"
-              >
-                <span>🌟 שיווק פנסיון ואילוף</span>
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedChat(chat);
+                    const intakeUrl = `${window.location.origin}/?intake=true`;
+                    const text = generateResortMarketingValueText(chat.name, chat.matchedDogName, intakeUrl);
+                    setMessageInput(text);
+                  }}
+                  className="text-[10px] font-black bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs"
+                  title="טען הודעת שיווק מקיפה המפרטת על יתרונות הפנסיון והאילוף"
+                >
+                  <span>🌟 שיווק פנסיון</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateChatStatus(chat.cleanPhone, 'handled');
+                  }}
+                  className="text-[10px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 border border-slate-300 px-1.5 py-0.5 rounded-md inline-flex items-center gap-0.5 transition-all active:scale-95 cursor-pointer shadow-2xs"
+                  title="לא ענה - הסר מרשימת הממתינים. השיחה תחזור אוטומטית ברגע שהלקוח יכתוב שוב"
+                >
+                  <span>🚫 לא ענה</span>
+                </button>
+              </div>
             )}
 
             <div className="flex items-center gap-1">
@@ -1192,6 +1172,29 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   </button>
                 )}
 
+                {/* 🌟 1.0 Smart Intent Quick Action: Tailored response to client's intent */}
+                {(() => {
+                  const intent = selectedChat.lastMessageType === 'incoming'
+                    ? detectCustomerIntent(selectedChat.lastMessage, selectedChat.name, selectedChat.matchedDogName)
+                    : null;
+                  if (!intent?.suggestedActionLabel || !intent?.suggestedResponse) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setMessageInput(intent.suggestedResponse || '')}
+                      className={`font-black px-3 py-1 rounded-xl text-xs flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-xs active:scale-95 border animate-pulse ${
+                        intent.type === 'price_objection'
+                          ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700'
+                      }`}
+                      title={intent.label}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-yellow-200" />
+                      <span>{intent.suggestedActionLabel}</span>
+                    </button>
+                  );
+                })()}
+
                 {/* 1.1 Available to Talk (Apology for delay + check availability) */}
                 <button
                   type="button"
@@ -1316,6 +1319,35 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   title="הודעה שיווקית ממוקדת בפנסיון הבוטיק ותנאי ה-VIP"
                 >
                   <span>🏡 שיווק פנסיון</span>
+                </button>
+
+                {/* 10. Unanswered Marketing Follow-up (Send tomorrow at same hour) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const intakeUrl = `${window.location.origin}/?request=true`;
+                    const text = generateUnansweredFollowUpMarketingText(selectedChat.name, selectedChat.matchedDogName, undefined, intakeUrl);
+                    setMessageInput(text);
+                  }}
+                  className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען הודעת שיווק ומעקב ללקוח שלא ענה (מיועדת לשליחה למחרת באותה שעה)"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>📲 תזכורת (לא ענה - למחרת)</span>
+                </button>
+
+                {/* 11. Unanswered button - Remove from active queue until client writes again */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateChatStatus(selectedChat.cleanPhone, 'handled');
+                    setSendSuccessToast(true);
+                  }}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="לא ענה - הסר מהרשימה עכשיו. השיחה תחזור אוטומטית לקדמת הרשימה בפעם הבאה שהלקוח יכתוב"
+                >
+                  <X className="w-3.5 h-3.5 text-slate-500" />
+                  <span>🚫 לא ענה (הסר עד שיכתוב)</span>
                 </button>
               </div>
 

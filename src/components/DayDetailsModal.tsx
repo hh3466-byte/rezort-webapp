@@ -370,6 +370,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-base shrink-0">🐾</span>
             <span className={`font-black text-base sm:text-lg ${isEnded ? 'text-slate-700' : 'text-slate-900'}`}>{booking.dogName}</span>
+            <span className="text-xs sm:text-sm font-bold text-slate-500">({booking.ownerName})</span>
             {booking.dogBreed && (
               <span className="text-xs text-slate-500 font-normal">({booking.dogBreed})</span>
             )}
