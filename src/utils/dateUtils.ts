@@ -331,18 +331,51 @@ export const VERIFIED_GROW_LEDGER: VerifiedGrowTransaction[] = [
   { ref: '512844224', amount: 180, date: '2026-08-30', month: '2026-08', customerName: 'ישראל מנדל', dogName: 'קירה' }
 ];
 
+/**
+ * Direct digital bank transfers (העברות בנקאיות ישירות - אמצעי תשלום דיגיטלי)
+ */
+export interface DirectBankTransfer {
+  ref: string;
+  amount: number;
+  date: string;
+  month: string;
+  customerName: string;
+  dogName: string;
+  notes?: string;
+}
+
+export const VERIFIED_DIRECT_TRANSFERS: DirectBankTransfer[] = [
+  { ref: 'transfer-ronen-2000', amount: 2000, date: '2026-09-16', month: '2026-09', customerName: 'רונן מלמוד', dogName: 'לונה', notes: 'העברה בנקאית ישירה (קבלות מילואים)' },
+  { ref: 'transfer-ronen-4500', amount: 4500, date: '2026-09-16', month: '2026-09', customerName: 'רונן מלמוד', dogName: 'לונה', notes: 'העברה בנקאית ישירה (קבלות מילואים)' },
+];
+
 export interface MonthlyRevenueBreakdown {
-  growCleared: number;       // סכום שנסלק ב-GROW בחודש זה (ייכנס לבנק ב-10 לחודש הבא)
-  cashCollected: number;     // סכום שנסלק במזומן / ביט ישיר / העברה ללא GROW
-  totalCollected: number;    // סה"כ כלל התקבולים
+  // 1. נסלק החודש (והכוונה לכל אמצעי התשלום הדיגיטלי כולם: GROW + העברות בנקאיות דיגיטליות)
+  digitalCleared: number;
+
+  // 2. יכנס לבנק ב 10 לחודש הקרוב (סליקת כרטיסי אשראי GROW בלבד)
+  growClearedBankOn10th: number;
+  growCleared: number; // תאימות לאחור
+
+  // 3. נסלק במזומן (הכוונה לשטרות כסף פיזיים)
+  cashBanknotes: number;
+  cashCollected: number; // תאימות לאחור
+
+  // פירוט נוסף
+  directBankTransfers: number;
+  totalCollected: number; // דיגיטלי + שטרות
+
+  digitalPaidCount: number;
   growPaidCount: number;
+  bankTransferPaidCount: number;
   cashPaidCount: number;
 }
 
 /**
- * Breakdown of monthly revenue:
- * 1. growCleared: Only payments cleared in GROW this month (will enter bank on the 10th of next month)
- * 2. cashCollected: Payments collected directly in cash, bit, or bank transfer
+ * Breakdown of monthly revenue according to 3 core categories:
+ * 1. digitalCleared: נסלק החודש (כל אמצעי התשלום הדיגיטלי כולם: GROW + העברות בנקאיות)
+ * 2. growClearedBankOn10th: יכנס לבנק ב-10 לחודש הקרוב (סליקת GROW)
+ * 3. cashBanknotes: נסלק במזומן (הכוונה לשטרות כסף פיזיים)
  */
 export function getMonthlyRevenueBreakdown(
   targetMonthKey: string,
@@ -350,13 +383,13 @@ export function getMonthlyRevenueBreakdown(
   incomingGrowPayments?: any[]
 ): MonthlyRevenueBreakdown {
   const processedRefs = new Set<string>();
-  let growCleared = 0;
+  let growClearedBankOn10th = 0;
   let growPaidCount = 0;
 
-  // 1. Ledger transactions for this targetMonthKey
+  // 1. Ledger transactions for this targetMonthKey (סליקת GROW)
   VERIFIED_GROW_LEDGER.forEach(t => {
     if (t.month === targetMonthKey || t.date.startsWith(targetMonthKey)) {
-      growCleared += t.amount;
+      growClearedBankOn10th += t.amount;
       growPaidCount += 1;
       processedRefs.add(t.ref);
     }
@@ -369,7 +402,7 @@ export function getMonthlyRevenueBreakdown(
       if (ref && !processedRefs.has(ref)) {
         const pMonth = (p.created_at || '').substring(0, 7);
         if (pMonth === targetMonthKey && p.status !== 'dismissed') {
-          growCleared += Number(p.amount) || 0;
+          growClearedBankOn10th += Number(p.amount) || 0;
           growPaidCount += 1;
           processedRefs.add(ref);
         }
@@ -377,8 +410,18 @@ export function getMonthlyRevenueBreakdown(
     });
   }
 
-  // 3. Direct cash / non-GROW collections
-  let cashCollected = 0;
+  // 3. Direct bank transfers (העברות בנקאיות דיגיטליות)
+  let directBankTransfers = 0;
+  let bankTransferPaidCount = 0;
+  VERIFIED_DIRECT_TRANSFERS.forEach(t => {
+    if (t.month === targetMonthKey || t.date.startsWith(targetMonthKey)) {
+      directBankTransfers += t.amount;
+      bankTransferPaidCount += 1;
+    }
+  });
+
+  // 4. Physical Cash Banknotes (שטרות כסף פיזיים)
+  let cashBanknotes = 0;
   let cashPaidCount = 0;
 
   bookings.forEach(b => {
@@ -399,14 +442,14 @@ export function getMonthlyRevenueBreakdown(
     }
 
     const ownerName = b.ownerName || d.ownerName || '';
-    // Ronen Malamud paid via direct bank transfer for Miluim reserve duty receipts (not cash to Shmulik)
+    // Ronen Malamud paid via direct bank transfer for Miluim reserve duty receipts (handled via VERIFIED_DIRECT_TRANSFERS)
     if (ownerName.includes('רונן') || ownerName.includes('מלמוד')) {
       return;
     }
 
     const notes = ((b.notes || d.notes || '') + ' ' + (d.internalNotes || '')).trim();
 
-    // If booking matches a Grow transaction, it's counted under GROW
+    // If booking matches a Grow transaction, it's already counted under GROW
     const matchedGrow = VERIFIED_GROW_LEDGER.find(t => notes.includes(t.ref) || b.id.includes(t.ref));
     if (matchedGrow) {
       return;
@@ -422,23 +465,37 @@ export function getMonthlyRevenueBreakdown(
     const isInMonth = start.startsWith(targetMonthKey) || end.startsWith(targetMonthKey);
     if (!isInMonth) return;
 
-    // Direct Cash / Bit payments
+    // Direct Cash Banknotes (שטרות פיזיים)
     const payMethod = b.paymentMethod || d.paymentMethod || '';
-    const isDirectCashOrBit = payMethod === 'cash' || payMethod === 'bit' || payMethod === 'bank_transfer' || notes.includes('מזומן');
-    if (isDirectCashOrBit) {
+    const isDirectCash = payMethod === 'cash' || payMethod === 'bit' || notes.includes('מזומן');
+    if (isDirectCash) {
       const amt = paymentStatus === 'fully_paid' ? totalPrice : depAmount;
       if (amt > 0) {
-        cashCollected += amt;
+        cashBanknotes += amt;
         cashPaidCount += 1;
       }
     }
   });
 
+  // 1. נסלק החודש (דיגיטלי): כל אמצעי התשלום הדיגיטלי כולם (GROW + העברות בנקאיות)
+  const digitalCleared = growClearedBankOn10th + directBankTransfers;
+  const digitalPaidCount = growPaidCount + bankTransferPaidCount;
+
   return {
-    growCleared,
-    cashCollected,
-    totalCollected: growCleared + cashCollected,
+    digitalCleared,
+    growClearedBankOn10th,
+    cashBanknotes,
+
+    // Aliases for full backward compatibility
+    growCleared: growClearedBankOn10th,
+    cashCollected: cashBanknotes,
+
+    directBankTransfers,
+    totalCollected: digitalCleared + cashBanknotes,
+
+    digitalPaidCount,
     growPaidCount,
+    bankTransferPaidCount,
     cashPaidCount
   };
 }

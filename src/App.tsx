@@ -439,17 +439,23 @@ export default function App() {
     return acc + (Number(b.depositAmount) || 0);
   }, 0);
 
-  // Month-to-date collections calculation:
-  // 1. monthGrowCleared: מה שנסלק ב-GROW החודש וייכנס ב-10 לחודש הבא לחשבון הבנק
-  // 2. monthCashCollected: מה שנסלק במזומן / ישיר
+  // 3 Revenue Categories:
+  // 1. monthDigitalCleared: נסלק החודש (והכוונה לכל אמצעי התשלום הדיגיטלי כולם)
+  // 2. monthBankOn10th: יכנס לבנק ב-10 לחודש הקרוב (סליקת כרטיסי אשראי GROW)
+  // 3. monthCashBanknotes: נסלק במזומן (הכוונה לשטרות כסף פיזיים)
   const currentMonthKey = todayStr.substring(0, 7);
   const currentMonthRevenue = React.useMemo(() => {
     return getMonthlyRevenueBreakdown(currentMonthKey, activeBookings, pendingGrowPayments);
   }, [currentMonthKey, activeBookings, pendingGrowPayments]);
 
-  const monthToDateCollected = currentMonthRevenue.growCleared; // מציגים כסכום ראשי רק מה שנסלק ב-GROW וייכנס לבנק!
-  const monthCashCollected = currentMonthRevenue.cashCollected; // ניסלק במזומן
-  const monthPaidCount = currentMonthRevenue.growPaidCount;
+  const monthDigitalCleared = currentMonthRevenue.digitalCleared; // 1. נסלק החודש (דיגיטלי)
+  const monthBankOn10th = currentMonthRevenue.growClearedBankOn10th; // 2. יכנס לבנק ב-10 לחודש הקרוב
+  const monthCashBanknotes = currentMonthRevenue.cashBanknotes; // 3. נסלק במזומן (שטרות)
+  const monthTotalCollected = currentMonthRevenue.totalCollected; // סה"כ כולל
+
+  const monthToDateCollected = monthDigitalCleared;
+  const monthCashCollected = monthCashBanknotes;
+  const monthPaidCount = currentMonthRevenue.digitalPaidCount;
 
   // Active stays and dogs in current month
   const currentMonthStart = `${todayStr.substring(0, 7)}-01`;
@@ -1425,11 +1431,14 @@ export default function App() {
               <span 
                 onClick={() => setActiveHeaderMetric('revenue')} 
                 className="cursor-pointer hover:text-emerald-700 transition-colors shrink-0 flex items-center gap-1.5"
-                title="לחץ לפתיחת גרפי הכנסות ודוחות"
+                title="לחץ לפתיחת פירוט ודוחות הכנסות"
               >
-                <span>💰 נסלק ב-GROW: <strong className="text-[#0f766e]">₪{monthToDateCollected.toLocaleString('he-IL')}</strong></span>
+                <span>📱 1. נסלק (דיגיטלי): <strong className="text-[#0f766e]">₪{monthDigitalCleared.toLocaleString('he-IL')}</strong></span>
+                <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
+                  🏦 2. ייכנס ב-10: ₪{monthBankOn10th.toLocaleString('he-IL')}
+                </span>
                 <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
-                  ניסלק במזומן: ₪{monthCashCollected.toLocaleString('he-IL')}
+                  💵 3. מזומן (שטרות): ₪{monthCashBanknotes.toLocaleString('he-IL')}
                 </span>
               </span>
             </div>
@@ -1597,11 +1606,11 @@ export default function App() {
                 role="button"
                 tabIndex={0}
                 className="bg-white border border-slate-200 rounded-xl p-2.5 sm:p-3 shadow-2xs flex flex-col justify-between hover:border-emerald-400 hover:shadow-xs cursor-pointer transition-all active:scale-[0.99] group"
-                title="לחץ לצפייה בגרפי עמודות חודשיים ושנתיים וייצוא לאקסל"
+                title="לחץ לצפייה בפירוט 3 קטגוריות ההכנסה, גרפי עמודות חודשיים ושנתיים וייצוא לאקסל"
               >
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-500 group-hover:text-emerald-700 transition-colors truncate">
-                    הכנסות החודש (GROW לבנק)
+                    💰 1. נסלק החודש (דיגיטלי)
                   </span>
                   <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full border border-emerald-200">
                     🐾 {currentMonthActiveStays.length} שהויות
@@ -1612,10 +1621,10 @@ export default function App() {
                 <div className="flex items-end justify-between gap-1.5 my-0.5">
                   <div>
                     <div className="text-xl sm:text-2xl font-black text-[#0f766e] leading-tight">
-                      ₪{monthToDateCollected.toLocaleString('he-IL')}
+                      ₪{monthDigitalCleared.toLocaleString('he-IL')}
                     </div>
                     <div className="text-[9px] text-slate-400 font-medium">
-                      ייכנס ב-10 לחודש הבא ({monthPaidCount} עסקאות)
+                      כל אמצעי התשלום הדיגיטלי ({monthPaidCount} עסקאות)
                     </div>
                   </div>
 
@@ -1642,19 +1651,31 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* משבצת קטנה - ניסלק במזומן */}
-                <div className="mt-1 flex items-center justify-between bg-amber-50/90 border border-amber-200 px-2 py-0.5 rounded-md text-[10.5px]">
-                  <span className="font-bold text-amber-800 flex items-center gap-1">
-                    <span>💵</span>
-                    <span>ניסלק במזומן:</span>
-                  </span>
-                  <span className="font-black text-amber-950">
-                    ₪{monthCashCollected.toLocaleString('he-IL')}
-                  </span>
+                {/* שתי משבצות מובחנות: 2. יכנס לבנק ב-10 לחודש | 3. נסלק במזומן (שטרות) */}
+                <div className="space-y-1 mt-1">
+                  <div className="flex items-center justify-between bg-sky-50/90 border border-sky-200 px-2 py-0.5 rounded-md text-[10px]">
+                    <span className="font-bold text-sky-900 flex items-center gap-1">
+                      <span>🏦</span>
+                      <span>2. יכנס לבנק ב-10:</span>
+                    </span>
+                    <span className="font-black text-sky-950">
+                      ₪{monthBankOn10th.toLocaleString('he-IL')}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between bg-amber-50/90 border border-amber-200 px-2 py-0.5 rounded-md text-[10px]">
+                    <span className="font-bold text-amber-800 flex items-center gap-1">
+                      <span>💵</span>
+                      <span>3. נסלק במזומן (שטרות):</span>
+                    </span>
+                    <span className="font-black text-amber-950">
+                      ₪{monthCashBanknotes.toLocaleString('he-IL')}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100 mt-1">
-                  <span className="truncate">{monthPaidCount} שולמו ב-GROW</span>
+                  <span className="truncate font-semibold text-slate-600">סה״כ כולל: ₪{monthTotalCollected.toLocaleString('he-IL')}</span>
                   <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100">
                     גרפים 📊
                   </span>

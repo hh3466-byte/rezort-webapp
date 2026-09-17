@@ -59,6 +59,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [trainingFilter, setTrainingFilter] = useState<'all' | 'full' | 'day'>('all');
+  const [revenueCategoryFilter, setRevenueCategoryFilter] = useState<'all' | 'digital' | 'grow_10th' | 'cash_notes'>('all');
   const [chartMode, setChartMode] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedChartPeriod, setSelectedChartPeriod] = useState<string | null>(null);
 
@@ -72,7 +73,17 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
   // Compute monthly and yearly aggregates for the charts
   const { monthlyChartData, yearlyChartData, currentMonthCollected, allTimeCollected, monthlyMap } = useMemo(() => {
-    const monthlyMap: Record<string, { count: number; collected: number; cashCollected: number; expected: number; debt: number }> = {};
+    const monthlyMap: Record<string, {
+      count: number;
+      collected: number;
+      digitalCleared: number;
+      growClearedBankOn10th: number;
+      cashBanknotes: number;
+      cashCollected: number;
+      totalCollected: number;
+      expected: number;
+      debt: number;
+    }> = {};
     const yearlyMap: Record<string, { count: number; collected: number; expected: number; debt: number }> = {};
 
     let totalAllTime = 0;
@@ -96,7 +107,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       recentKeys.push(`${y}-${m}`);
     }
 
-    // Compute actual collections per month: GROW cleared as primary collected, plus cashCollected
+    // Compute actual collections per month across the 3 categories
     recentKeys.forEach(mKey => {
       const breakdown = getMonthlyRevenueBreakdown(mKey, activeBookings);
       let mExpected = 0;
@@ -112,15 +123,19 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       });
 
       monthlyMap[mKey] = {
-        count: breakdown.growPaidCount + breakdown.cashPaidCount,
-        collected: breakdown.growCleared, // Primary: GROW cleared (entering bank on 10th of next month)
-        cashCollected: breakdown.cashCollected,
+        count: breakdown.digitalPaidCount + breakdown.cashPaidCount,
+        collected: breakdown.digitalCleared, // 1. נסלק החודש (דיגיטלי)
+        digitalCleared: breakdown.digitalCleared,
+        growClearedBankOn10th: breakdown.growClearedBankOn10th,
+        cashBanknotes: breakdown.cashBanknotes,
+        cashCollected: breakdown.cashBanknotes,
+        totalCollected: breakdown.totalCollected,
         expected: mExpected,
         debt: mDebt
       };
 
       if (mKey === currentMonthKey) {
-        totalThisMonth = breakdown.growCleared;
+        totalThisMonth = breakdown.digitalCleared;
       }
     });
 
@@ -254,12 +269,29 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const paidItems = activeBookings.filter(b => {
         return (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid';
       });
-      const thisMonthCash = monthlyMap[currentMonthKey]?.cashCollected || 0;
-      title = 'הכנסות נסלקו ב-GROW (ייכנס לבנק ב-10 לחודש הבא)';
-      subtitle = `נסלק ב-GROW: ₪${currentMonthCollected.toLocaleString('he-IL')} • ניסלק במזומן: ₪${thisMonthCash.toLocaleString('he-IL')} • גרפי עמודות בשקלים וייצוא לאקסל`;
+      const curData = monthlyMap[currentMonthKey];
+      const digitalCleared = curData?.digitalCleared || 0;
+      const growClearedBankOn10th = curData?.growClearedBankOn10th || 0;
+      const cashBanknotes = curData?.cashBanknotes || 0;
+
+      title = 'פירוט הכנסות וסליקה: 1. דיגיטלי | 2. יכנס ב-10 (GROW) | 3. מזומן (שטרות)';
+      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')} • 2. ייכנס לבנק ב-10: ₪${growClearedBankOn10th.toLocaleString('he-IL')} • 3. נסלק במזומן (שטרות): ₪${cashBanknotes.toLocaleString('he-IL')}`;
       icon = <DollarSign className="w-5 h-5 text-emerald-700" />;
       badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
       filteredItems = paidItems;
+
+      // Filter by revenueCategoryFilter (all / digital / grow_10th / cash_notes)
+      if (revenueCategoryFilter !== 'all') {
+        filteredItems = filteredItems.filter(b => {
+          const notes = (b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '');
+          const isGrow = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref) || b.id.includes(t.ref));
+          const isBank = (b.ownerName || '').includes('רונן') || (b.ownerName || '').includes('מלמוד') || notes.includes('העברה בנקאית');
+          if (revenueCategoryFilter === 'grow_10th') return isGrow;
+          if (revenueCategoryFilter === 'digital') return isGrow || isBank;
+          if (revenueCategoryFilter === 'cash_notes') return !isGrow && !isBank;
+          return true;
+        });
+      }
 
       // Filter by chart column click if selected
       if (selectedChartPeriod) {
@@ -387,23 +419,62 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                 </button>
               </div>
 
-              {/* Summary KPIs */}
-              <div className="flex items-center gap-2">
-                <div className="bg-white border border-emerald-200/80 px-3 py-1.5 rounded-xl text-right shadow-2xs">
-                  <div className="text-[10px] font-bold text-slate-500">נסלק ב-GROW (ייכנס לבנק)</div>
-                  <div className="text-sm font-black text-emerald-700">₪{currentMonthCollected.toLocaleString('he-IL')}</div>
+              {/* Summary KPIs: 3 Categories + Total */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div 
+                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'digital' ? 'all' : 'digital')}
+                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
+                    revenueCategoryFilter === 'digital' ? 'bg-emerald-100 border-emerald-500 ring-2 ring-emerald-500' : 'bg-white border-emerald-200/90 hover:bg-emerald-50/50'
+                  }`}
+                  title="לחץ לסינון: 1. כל אמצעי התשלום הדיגיטלי כולם"
+                >
+                  <div className="text-[10px] font-bold text-emerald-800">1. נסלק החודש (דיגיטלי)</div>
+                  <div className="text-sm font-black text-emerald-700">
+                    ₪{(monthlyMap[currentMonthKey]?.digitalCleared || 0).toLocaleString('he-IL')}
+                  </div>
+                  <div className="text-[9px] text-slate-400">GROW + העברות בנקאיות</div>
                 </div>
-                <div className="bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl text-right shadow-2xs">
-                  <div className="text-[10px] font-bold text-amber-800">ניסלק במזומן / ישיר</div>
+
+                <div 
+                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'grow_10th' ? 'all' : 'grow_10th')}
+                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
+                    revenueCategoryFilter === 'grow_10th' ? 'bg-sky-100 border-sky-500 ring-2 ring-sky-500' : 'bg-sky-50 border-sky-200 hover:bg-sky-100/60'
+                  }`}
+                  title="לחץ לסינון: 2. סליקת כרטיסי אשראי GROW (ייכנס לבנק ב-10 לחודש הקרוב)"
+                >
+                  <div className="text-[10px] font-bold text-sky-800">2. יכנס לבנק ב-10 לחודש</div>
+                  <div className="text-sm font-black text-sky-900">
+                    ₪{(monthlyMap[currentMonthKey]?.growClearedBankOn10th || 0).toLocaleString('he-IL')}
+                  </div>
+                  <div className="text-[9px] text-sky-600 font-medium">סליקת כרטיסי אשראי GROW</div>
+                </div>
+
+                <div 
+                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'cash_notes' ? 'all' : 'cash_notes')}
+                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
+                    revenueCategoryFilter === 'cash_notes' ? 'bg-amber-100 border-amber-500 ring-2 ring-amber-500' : 'bg-amber-50 border-amber-200 hover:bg-amber-100/60'
+                  }`}
+                  title="לחץ לסינון: 3. נסלק במזומן (הכוונה לשטרות)"
+                >
+                  <div className="text-[10px] font-bold text-amber-800">3. נסלק במזומן (שטרות)</div>
                   <div className="text-sm font-black text-amber-900">
-                    ₪{(monthlyMap[currentMonthKey]?.cashCollected || 0).toLocaleString('he-IL')}
+                    ₪{(monthlyMap[currentMonthKey]?.cashBanknotes || 0).toLocaleString('he-IL')}
                   </div>
+                  <div className="text-[9px] text-amber-700 font-medium">שטרות כסף פיזיים</div>
                 </div>
-                <div className="bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-right shadow-2xs">
+
+                <div 
+                  onClick={() => setRevenueCategoryFilter('all')}
+                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
+                    revenueCategoryFilter === 'all' ? 'bg-slate-100 border-slate-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                  }`}
+                  title="לחץ להצגת סה״כ כלל ההכנסות"
+                >
                   <div className="text-[10px] font-bold text-slate-500">סה״כ כולל החודש</div>
-                  <div className="text-sm font-black text-slate-800">
-                    ₪{(currentMonthCollected + (monthlyMap[currentMonthKey]?.cashCollected || 0)).toLocaleString('he-IL')}
+                  <div className="text-sm font-black text-slate-900">
+                    ₪{(monthlyMap[currentMonthKey]?.totalCollected || 0).toLocaleString('he-IL')}
                   </div>
+                  <div className="text-[9px] text-slate-400">דיגיטלי + שטרות</div>
                 </div>
               </div>
             </div>
@@ -546,6 +617,48 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
               </button>
             </div>
           )}
+
+          {/* Sub-filter for Revenue metric: 3 Categories */}
+          {metricType === 'revenue' && (
+            <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+              <button
+                type="button"
+                onClick={() => setRevenueCategoryFilter('all')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                  revenueCategoryFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                הכל ({activeBookings.filter(b => (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setRevenueCategoryFilter('digital')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                  revenueCategoryFilter === 'digital' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                📱 1. נסלק החודש (דיגיטלי)
+              </button>
+              <button
+                type="button"
+                onClick={() => setRevenueCategoryFilter('grow_10th')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                  revenueCategoryFilter === 'grow_10th' ? 'bg-sky-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🏦 2. יכנס לבנק ב-10 (GROW)
+              </button>
+              <button
+                type="button"
+                onClick={() => setRevenueCategoryFilter('cash_notes')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                  revenueCategoryFilter === 'cash_notes' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                💵 3. נסלק במזומן (שטרות)
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Bookings List */}
@@ -606,17 +719,29 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         </span>
                       )}
 
-                      {/* Revenue Metric Badge: GROW vs Cash */}
+                      {/* Revenue Metric Badge: 3 Categories */}
                       {metricType === 'revenue' && (() => {
                         const notes = (b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '');
                         const isGrow = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref) || b.id.includes(t.ref));
-                        return isGrow ? (
-                          <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded border border-emerald-300">
-                            ✅ נסלק ב-GROW
-                          </span>
-                        ) : (
+                        const isBank = (b.ownerName || '').includes('רונן') || (b.ownerName || '').includes('מלמוד') || notes.includes('העברה בנקאית');
+                        
+                        if (isGrow) {
+                          return (
+                            <span className="text-[10px] bg-sky-50 text-sky-800 font-bold px-1.5 py-0.5 rounded border border-sky-300">
+                              💳 2. יכנס ב-10 לחודש (GROW)
+                            </span>
+                          );
+                        }
+                        if (isBank) {
+                          return (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-900 font-bold px-1.5 py-0.5 rounded border border-emerald-300">
+                              🏛️ 1. דיגיטלי (העברה בנקאית)
+                            </span>
+                          );
+                        }
+                        return (
                           <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded border border-amber-300">
-                            💵 ניסלק במזומן / ישיר
+                            💵 3. נסלק במזומן (שטרות)
                           </span>
                         );
                       })()}
