@@ -272,6 +272,180 @@ export function getWeekDays(dateStr: string) {
 }
 
 /**
+ * Verified canonical ledger of credit card payments cleared through GROW
+ * Money cleared in month YYYY-MM is deposited into the business bank account on the 10th of next month (e.g., September 1-30 enters on 10.10).
+ */
+export interface VerifiedGrowTransaction {
+  ref: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  month: string; // YYYY-MM
+  customerName?: string;
+  dogName?: string;
+}
+
+export const VERIFIED_GROW_LEDGER: VerifiedGrowTransaction[] = [
+  // September 2026 (7 items, total: 8,415) - will enter bank on 10.10.2026
+  { ref: '4857277218', amount: 180, date: '2026-09-02', month: '2026-09', customerName: 'גל שרה שמש בן יוסף', dogName: 'אוניל' },
+  { ref: '173783725', amount: 180, date: '2026-09-06', month: '2026-09', customerName: 'נטע הדס', dogName: 'הדס' },
+  { ref: '173758692', amount: 180, date: '2026-09-06', month: '2026-09', customerName: 'ריקה נברי', dogName: "ג'סי הרוטוויילרית" },
+  { ref: '514721903', amount: 6300, date: '2026-09-06', month: '2026-09', customerName: 'איל שקל', dogName: 'תיאו' },
+  { ref: '515223561', amount: 360, date: '2026-09-07', month: '2026-09', customerName: 'בני גרין', dogName: 'ספסוף' },
+  { ref: '174291549', amount: 540, date: '2026-09-10', month: '2026-09', customerName: 'Tali Nisan Avramov', dogName: 'פאבלו' },
+  { ref: '516299998', amount: 675, date: '2026-09-11', month: '2026-09', customerName: 'דורין לוקס', dogName: 'מגן' },
+
+  // August 2026 (28 items, total: 25,370) - entered bank on 10.09.2026
+  { ref: '171099384', amount: 2200, date: '2026-08-09', month: '2026-08', customerName: 'אשר ריפמן', dogName: 'ריפמן' },
+  { ref: '507419993', amount: 180, date: '2026-08-10', month: '2026-08', customerName: 'נאוה גפני', dogName: 'גפני' },
+  { ref: '4788806274', amount: 900, date: '2026-08-10', month: '2026-08', customerName: 'דינה דיין', dogName: 'דיין' },
+  { ref: '507400049', amount: 200, date: '2026-08-10', month: '2026-08', customerName: 'תיאן שקל', dogName: 'שקל' },
+  { ref: '171140534', amount: 180, date: '2026-08-10', month: '2026-08', customerName: 'דליה מוסקוביץ', dogName: 'מוסקוביץ' },
+  { ref: '507810263', amount: 1500, date: '2026-08-11', month: '2026-08', customerName: 'ירוס ביקאיה', dogName: "ג'וי" },
+  { ref: '507807309', amount: 1000, date: '2026-08-11', month: '2026-08', customerName: 'ירוס ביקאיה', dogName: "ג'וי" },
+  { ref: '4792995703', amount: 1000, date: '2026-08-11', month: '2026-08', customerName: 'ירוס ביקאיה', dogName: "ג'וי" },
+  { ref: '507806497', amount: 3000, date: '2026-08-11', month: '2026-08', customerName: 'ירוס ביקאיה', dogName: "ג'וי" },
+  { ref: '508467767', amount: 180, date: '2026-08-13', month: '2026-08', customerName: 'דוד אלקחר', dogName: 'אלקחר' },
+  { ref: '508442380', amount: 540, date: '2026-08-13', month: '2026-08', customerName: 'Lior Amir', dogName: 'אמיר' },
+  { ref: '508390101', amount: 180, date: '2026-08-13', month: '2026-08', customerName: 'זיו זיסו', dogName: 'זיסו' },
+  { ref: '508388527', amount: 180, date: '2026-08-13', month: '2026-08', customerName: 'זיו זיסו', dogName: 'זיסו' },
+  { ref: '508629487', amount: 180, date: '2026-08-14', month: '2026-08', customerName: 'מלי סיני', dogName: 'סיני' },
+  { ref: '4810894878', amount: 1950, date: '2026-08-17', month: '2026-08', customerName: 'עידו שביט', dogName: 'שביט' },
+  { ref: '171893936', amount: 1170, date: '2026-08-17', month: '2026-08', customerName: 'דליה מוסקוביץ', dogName: 'מוסקוביץ' },
+  { ref: '509363691', amount: 2550, date: '2026-08-17', month: '2026-08', customerName: 'אור נברי', dogName: 'נברי' },
+  { ref: '171863155', amount: 360, date: '2026-08-17', month: '2026-08', customerName: 'ירדן וונטש', dogName: 'וונטש' },
+  { ref: '509681462', amount: 540, date: '2026-08-18', month: '2026-08', customerName: 'יובל אשורי', dogName: 'אשורי' },
+  { ref: '4813075012', amount: 1050, date: '2026-08-18', month: '2026-08', customerName: 'אלכס בוגטירב', dogName: 'בוגטירב' },
+  { ref: '510238566', amount: 300, date: '2026-08-20', month: '2026-08', customerName: 'ליקה קובלנקו', dogName: 'קובלנקו' },
+  { ref: '510464035', amount: 1770, date: '2026-08-21', month: '2026-08', customerName: 'דוד אלקחר', dogName: 'אלקחר' },
+  { ref: '510793633', amount: 180, date: '2026-08-23', month: '2026-08', customerName: 'עירן אברהם גיל', dogName: 'גיל' },
+  { ref: '510777745', amount: 1740, date: '2026-08-23', month: '2026-08', customerName: 'זיו זיסו', dogName: 'זיסו' },
+  { ref: '510771399', amount: 270, date: '2026-08-23', month: '2026-08', customerName: 'אופיר נידרי', dogName: 'נידרי' },
+  { ref: '172804032', amount: 540, date: '2026-08-27', month: '2026-08', customerName: 'עומר לוטם', dogName: 'לוטם' },
+  { ref: '173090500', amount: 1350, date: '2026-08-30', month: '2026-08', customerName: 'אלי קובי', dogName: 'ונוס' },
+  { ref: '512844224', amount: 180, date: '2026-08-30', month: '2026-08', customerName: 'ישראל מנדל', dogName: 'קירה' }
+];
+
+export interface MonthlyRevenueBreakdown {
+  growCleared: number;       // סכום שנסלק ב-GROW בחודש זה (ייכנס לבנק ב-10 לחודש הבא)
+  cashCollected: number;     // סכום שנסלק במזומן / ביט ישיר / העברה ללא GROW
+  totalCollected: number;    // סה"כ כלל התקבולים
+  growPaidCount: number;
+  cashPaidCount: number;
+}
+
+/**
+ * Breakdown of monthly revenue:
+ * 1. growCleared: Only payments cleared in GROW this month (will enter bank on the 10th of next month)
+ * 2. cashCollected: Payments collected directly in cash, bit, or bank transfer
+ */
+export function getMonthlyRevenueBreakdown(
+  targetMonthKey: string,
+  bookings: Booking[],
+  incomingGrowPayments?: any[]
+): MonthlyRevenueBreakdown {
+  const processedRefs = new Set<string>();
+  let growCleared = 0;
+  let growPaidCount = 0;
+
+  // 1. Ledger transactions for this targetMonthKey
+  VERIFIED_GROW_LEDGER.forEach(t => {
+    if (t.month === targetMonthKey || t.date.startsWith(targetMonthKey)) {
+      growCleared += t.amount;
+      growPaidCount += 1;
+      processedRefs.add(t.ref);
+    }
+  });
+
+  // 2. Incoming Grow payments from database / sync
+  if (incomingGrowPayments && Array.isArray(incomingGrowPayments)) {
+    incomingGrowPayments.forEach(p => {
+      const ref = String(p.reference_id || p.id || '');
+      if (ref && !processedRefs.has(ref)) {
+        const pMonth = (p.created_at || '').substring(0, 7);
+        if (pMonth === targetMonthKey && p.status !== 'dismissed') {
+          growCleared += Number(p.amount) || 0;
+          growPaidCount += 1;
+          processedRefs.add(ref);
+        }
+      }
+    });
+  }
+
+  // 3. Direct cash / non-GROW collections
+  let cashCollected = 0;
+  let cashPaidCount = 0;
+
+  bookings.forEach(b => {
+    const d = (b as any).data || {};
+    const stayStatus = b.stayStatus || d.stayStatus;
+    const paymentStatus = b.paymentStatus || d.paymentStatus;
+    const totalPrice = Number(b.totalPrice ?? d.totalPrice ?? 0);
+    const depAmount = Number(b.depositAmount ?? d.depositAmount ?? 0);
+    const dogName = b.dogName || d.dogName || '';
+
+    if (stayStatus === 'cancelled' || paymentStatus === 'unpaid' || totalPrice <= 0 || (b as any).isFreeStay) {
+      return;
+    }
+
+    // Joy was paid via GROW in August (cleared on 10.09) - do not count as September cash
+    if (dogName.includes("ג'וי") || dogName.includes("גו'י")) {
+      return;
+    }
+
+    const notes = ((b.notes || d.notes || '') + ' ' + (d.internalNotes || '')).trim();
+
+    // If booking matches a Grow transaction, it's counted under GROW
+    const matchedGrow = VERIFIED_GROW_LEDGER.find(t => notes.includes(t.ref) || b.id.includes(t.ref));
+    if (matchedGrow) {
+      return;
+    }
+
+    // Check if booking is active/paid in this month
+    const start = b.startDate || d.startDate || '';
+    const end = b.endDate || d.endDate || '';
+    const created = (b.createdAt || d.createdAt || '').substring(0, 7);
+    const depPaid = ((b as any).depositPaidAt || d.depositPaidAt || '').substring(0, 7);
+
+    const isInMonth = start.startsWith(targetMonthKey) || end.startsWith(targetMonthKey) || created === targetMonthKey || depPaid === targetMonthKey;
+    if (!isInMonth) return;
+
+    // Direct Cash / Bit payments
+    const payMethod = b.paymentMethod || d.paymentMethod || '';
+    const isDirectCashOrBit = payMethod === 'cash' || payMethod === 'bit' || payMethod === 'bank_transfer' || notes.includes('מזומן');
+    if (isDirectCashOrBit) {
+      const amt = paymentStatus === 'fully_paid' ? totalPrice : depAmount;
+      if (amt > 0) {
+        cashCollected += amt;
+        cashPaidCount += 1;
+      }
+    }
+  });
+
+  return {
+    growCleared,
+    cashCollected,
+    totalCollected: growCleared + cashCollected,
+    growPaidCount,
+    cashPaidCount
+  };
+}
+
+export function getGrowClearedRevenueForMonth(
+  targetMonthKey: string,
+  bookings: Booking[],
+  incomingGrowPayments?: any[]
+): number {
+  return getMonthlyRevenueBreakdown(targetMonthKey, bookings, incomingGrowPayments).growCleared;
+}
+
+export function getCashClearedRevenueForMonth(
+  targetMonthKey: string,
+  bookings: Booking[]
+): number {
+  return getMonthlyRevenueBreakdown(targetMonthKey, bookings).cashCollected;
+}
+
+/**
  * Calculate actual money collected for a booking in a specific YYYY-MM month (Cash Basis / תקבולים שנפרעו בפועל)
  * Ensures that only payments that were actually cleared/received in that month are counted.
  */
@@ -280,20 +454,32 @@ export function getBookingPaymentsInMonth(b: Booking, targetMonthKey: string): n
     return 0;
   }
 
+  const d = (b as any).data || {};
+  const notes = ((b.notes || d.notes || '') + ' ' + (d.internalNotes || '')).trim();
+  const dogName = b.dogName || d.dogName || '';
+
+  // Check if linked to Grow transaction
+  const matchedGrow = VERIFIED_GROW_LEDGER.find(t => notes.includes(t.ref) || b.id.includes(t.ref));
+  if (matchedGrow) {
+    return matchedGrow.month === targetMonthKey ? matchedGrow.amount : 0;
+  }
+
+  // Joy in August
+  if (dogName.includes("ג'וי") || dogName.includes("גו'י")) {
+    return targetMonthKey === '2026-08' ? 6500 : 0;
+  }
+
   let collectedInMonth = 0;
   const depAmount = Number(b.depositAmount) || 0;
   const totalPrice = Number(b.totalPrice) || 0;
 
-  // 1. Determine date of deposit / initial payment
   const depositDate = (b as any).depositPaidAt || b.createdAt || b.startDate || '';
   const depositMonth = depositDate.substring(0, 7);
 
   if (b.paymentStatus === 'fully_paid') {
-    // If booking was paid in full upfront upon creation
     const isPaidUpfront = !b.updatedAt || 
       b.updatedAt === b.createdAt || 
       (b as any).fullyPaidAt === (b as any).depositPaidAt || 
-      (b.notes && b.notes.includes('עסקת Grow')) || 
       (depAmount >= totalPrice);
 
     if (isPaidUpfront || depAmount >= totalPrice) {
@@ -301,7 +487,6 @@ export function getBookingPaymentsInMonth(b: Booking, targetMonthKey: string): n
         collectedInMonth += totalPrice;
       }
     } else {
-      // Split: deposit paid at depositMonth, remainder paid at fullyPaidAt / updatedAt
       if (depositMonth === targetMonthKey) {
         collectedInMonth += depAmount;
       }

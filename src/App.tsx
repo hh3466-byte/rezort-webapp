@@ -22,7 +22,17 @@ import {
   updateVoucherStatusInDb
 } from './services/dbService';
 import { parseVoiceOrWhatsAppText } from './services/agentService';
-import { getTodayStr, getBookingsForDate, addDays, HEBREW_MONTHS, getBookingPaymentsInMonth, calculateDaysCount } from './utils/dateUtils';
+import { 
+  getTodayStr, 
+  getBookingsForDate, 
+  addDays, 
+  HEBREW_MONTHS, 
+  getBookingPaymentsInMonth, 
+  calculateDaysCount,
+  getMonthlyRevenueBreakdown,
+  getGrowClearedRevenueForMonth,
+  getCashClearedRevenueForMonth
+} from './utils/dateUtils';
 
 import { CalendarView } from './components/CalendarView';
 import { OccupancyForecast } from './components/OccupancyForecast';
@@ -428,12 +438,17 @@ export default function App() {
     return acc + (Number(b.depositAmount) || 0);
   }, 0);
 
-  // Month-to-date collections calculation (הכנסות שנפרעו בפועל מתחילת החודש הנוכחי - Cash Basis)
+  // Month-to-date collections calculation:
+  // 1. monthGrowCleared: מה שנסלק ב-GROW החודש וייכנס ב-10 לחודש הבא לחשבון הבנק
+  // 2. monthCashCollected: מה שנסלק במזומן / ישיר
   const currentMonthKey = todayStr.substring(0, 7);
-  const monthToDateCollected = activeBookings.reduce((acc, b) => {
-    return acc + getBookingPaymentsInMonth(b, currentMonthKey);
-  }, 0);
-  const monthPaidCount = activeBookings.filter(b => getBookingPaymentsInMonth(b, currentMonthKey) > 0).length;
+  const currentMonthRevenue = React.useMemo(() => {
+    return getMonthlyRevenueBreakdown(currentMonthKey, activeBookings, pendingGrowPayments);
+  }, [currentMonthKey, activeBookings, pendingGrowPayments]);
+
+  const monthToDateCollected = currentMonthRevenue.growCleared; // מציגים כסכום ראשי רק מה שנסלק ב-GROW וייכנס לבנק!
+  const monthCashCollected = currentMonthRevenue.cashCollected; // ניסלק במזומן
+  const monthPaidCount = currentMonthRevenue.growPaidCount;
 
   // Active stays and dogs in current month
   const currentMonthStart = `${todayStr.substring(0, 7)}-01`;
@@ -443,7 +458,7 @@ export default function App() {
   const currentMonthActiveStays = activeBookings.filter(b => b.startDate <= currentMonthEnd && b.endDate >= currentMonthStart);
   const currentMonthUniqueDogs = new Set(currentMonthActiveStays.map(b => b.dogName)).size;
 
-  // Mini columns data for the last 4 months (עמודות לחודשים אחרונים לפי פירעון בפועל)
+  // Mini columns data for the last 4 months (עמודות לחודשים אחרונים לפי סליקת GROW שנכנסת לבנק)
   const recentMonthsMiniData = React.useMemo(() => {
     const list = [];
     const dateObj = new Date(todayStr + 'T12:00:00');
@@ -459,9 +474,7 @@ export default function App() {
       }
       const mStr = String(m + 1).padStart(2, '0');
       const ymPrefix = `${y}-${mStr}`;
-      const rev = activeBookings.reduce((sum, b) => {
-        return sum + getBookingPaymentsInMonth(b, ymPrefix);
-      }, 0);
+      const rev = getGrowClearedRevenueForMonth(ymPrefix, activeBookings, pendingGrowPayments);
       list.push({
         label: HEBREW_MONTHS[m].slice(0, 3),
         fullName: `${HEBREW_MONTHS[m]} ${y}`,
@@ -470,7 +483,7 @@ export default function App() {
       });
     }
     return list;
-  }, [activeBookings, todayStr]);
+  }, [activeBookings, pendingGrowPayments, todayStr]);
   const maxRecentMiniRev = Math.max(1, ...recentMonthsMiniData.map(d => d.revenue));
 
   const openDebtTotal = activeBookings.reduce((acc, b) => {
@@ -1410,10 +1423,13 @@ export default function App() {
               <span className="text-slate-200">|</span>
               <span 
                 onClick={() => setActiveHeaderMetric('revenue')} 
-                className="cursor-pointer hover:text-emerald-700 transition-colors shrink-0"
+                className="cursor-pointer hover:text-emerald-700 transition-colors shrink-0 flex items-center gap-1.5"
                 title="לחץ לפתיחת גרפי הכנסות ודוחות"
               >
-                💰 הכנסות החודש: <strong className="text-[#0f766e]">₪{monthToDateCollected.toLocaleString('he-IL')}</strong>
+                <span>💰 נסלק ב-GROW: <strong className="text-[#0f766e]">₪{monthToDateCollected.toLocaleString('he-IL')}</strong></span>
+                <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
+                  ניסלק במזומן: ₪{monthCashCollected.toLocaleString('he-IL')}
+                </span>
               </span>
             </div>
 
@@ -1584,7 +1600,7 @@ export default function App() {
               >
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-500 group-hover:text-emerald-700 transition-colors truncate">
-                    הכנסות החודש
+                    הכנסות החודש (GROW לבנק)
                   </span>
                   <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full border border-emerald-200">
                     🐾 {currentMonthActiveStays.length} שהויות
@@ -1598,7 +1614,7 @@ export default function App() {
                       ₪{monthToDateCollected.toLocaleString('he-IL')}
                     </div>
                     <div className="text-[9px] text-slate-400 font-medium">
-                      {currentMonthUniqueDogs} כלבים · {monthPaidCount} שולמו
+                      ייכנס ב-10 לחודש הבא ({monthPaidCount} עסקאות)
                     </div>
                   </div>
 
@@ -1625,8 +1641,19 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100">
-                  <span className="truncate">{monthPaidCount} שולמו</span>
+                {/* משבצת קטנה - ניסלק במזומן */}
+                <div className="mt-1 flex items-center justify-between bg-amber-50/90 border border-amber-200 px-2 py-0.5 rounded-md text-[10.5px]">
+                  <span className="font-bold text-amber-800 flex items-center gap-1">
+                    <span>💵</span>
+                    <span>ניסלק במזומן:</span>
+                  </span>
+                  <span className="font-black text-amber-950">
+                    ₪{monthCashCollected.toLocaleString('he-IL')}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100 mt-1">
+                  <span className="truncate">{monthPaidCount} שולמו ב-GROW</span>
                   <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100">
                     גרפים 📊
                   </span>

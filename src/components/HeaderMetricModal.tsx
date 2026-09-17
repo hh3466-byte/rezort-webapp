@@ -23,7 +23,7 @@ import {
   Home
 } from 'lucide-react';
 import { Booking, ResortSettings, StayStatus } from '../types';
-import { getTodayStr, calculateDaysCount, formatDateIL, getBookingsForDate, getBookingPaymentsInMonth } from '../utils/dateUtils';
+import { getTodayStr, calculateDaysCount, formatDateIL, getBookingsForDate, getBookingPaymentsInMonth, getMonthlyRevenueBreakdown, VERIFIED_GROW_LEDGER } from '../utils/dateUtils';
 import { generatePaymentReminderMessage, openWhatsAppMessage, getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { exportRevenueChartsToExcel, ChartPeriodItem } from '../utils/exportUtils';
 
@@ -71,8 +71,8 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   }, [bookings]);
 
   // Compute monthly and yearly aggregates for the charts
-  const { monthlyChartData, yearlyChartData, currentMonthCollected, allTimeCollected } = useMemo(() => {
-    const monthlyMap: Record<string, { count: number; collected: number; expected: number; debt: number }> = {};
+  const { monthlyChartData, yearlyChartData, currentMonthCollected, allTimeCollected, monthlyMap } = useMemo(() => {
+    const monthlyMap: Record<string, { count: number; collected: number; cashCollected: number; expected: number; debt: number }> = {};
     const yearlyMap: Record<string, { count: number; collected: number; expected: number; debt: number }> = {};
 
     let totalAllTime = 0;
@@ -96,19 +96,13 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       recentKeys.push(`${y}-${m}`);
     }
 
-    // Compute actual collections per month (Cash Basis)
+    // Compute actual collections per month: GROW cleared as primary collected, plus cashCollected
     recentKeys.forEach(mKey => {
-      let mCollected = 0;
+      const breakdown = getMonthlyRevenueBreakdown(mKey, activeBookings);
       let mExpected = 0;
       let mDebt = 0;
-      let mCount = 0;
 
       activeBookings.forEach(b => {
-        const amt = getBookingPaymentsInMonth(b, mKey);
-        if (amt > 0) {
-          mCollected += amt;
-          mCount += 1;
-        }
         if (b.startDate && b.startDate.startsWith(mKey)) {
           const exp = Number(b.totalPrice) || 0;
           mExpected += exp;
@@ -118,14 +112,15 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       });
 
       monthlyMap[mKey] = {
-        count: mCount,
-        collected: mCollected,
+        count: breakdown.growPaidCount + breakdown.cashPaidCount,
+        collected: breakdown.growCleared, // Primary: GROW cleared (entering bank on 10th of next month)
+        cashCollected: breakdown.cashCollected,
         expected: mExpected,
         debt: mDebt
       };
 
       if (mKey === currentMonthKey) {
-        totalThisMonth = mCollected;
+        totalThisMonth = breakdown.growCleared;
       }
     });
 
@@ -191,7 +186,8 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       monthlyChartData: monthlyList,
       yearlyChartData: yearlyList,
       currentMonthCollected: totalThisMonth,
-      allTimeCollected: totalAllTime
+      allTimeCollected: totalAllTime,
+      monthlyMap
     };
   }, [activeBookings, currentMonthKey, currentYearKey]);
 
@@ -258,8 +254,9 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const paidItems = activeBookings.filter(b => {
         return (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid';
       });
-      title = 'הכנסות מתחילת החודש ודוחות עמודות';
-      subtitle = `מתחילת החודש נגבו ₪${currentMonthCollected.toLocaleString('he-IL')} • גרפי עמודות בשקלים וייצוא לאקסל`;
+      const thisMonthCash = monthlyMap[currentMonthKey]?.cashCollected || 0;
+      title = 'הכנסות נסלקו ב-GROW (ייכנס לבנק ב-10 לחודש הבא)';
+      subtitle = `נסלק ב-GROW: ₪${currentMonthCollected.toLocaleString('he-IL')} • ניסלק במזומן: ₪${thisMonthCash.toLocaleString('he-IL')} • גרפי עמודות בשקלים וייצוא לאקסל`;
       icon = <DollarSign className="w-5 h-5 text-emerald-700" />;
       badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
       filteredItems = paidItems;
@@ -393,12 +390,20 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
               {/* Summary KPIs */}
               <div className="flex items-center gap-2">
                 <div className="bg-white border border-emerald-200/80 px-3 py-1.5 rounded-xl text-right shadow-2xs">
-                  <div className="text-[10px] font-bold text-slate-500">הכנסות החודש הנוכחי</div>
+                  <div className="text-[10px] font-bold text-slate-500">נסלק ב-GROW (ייכנס לבנק)</div>
                   <div className="text-sm font-black text-emerald-700">₪{currentMonthCollected.toLocaleString('he-IL')}</div>
                 </div>
+                <div className="bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl text-right shadow-2xs">
+                  <div className="text-[10px] font-bold text-amber-800">ניסלק במזומן / ישיר</div>
+                  <div className="text-sm font-black text-amber-900">
+                    ₪{(monthlyMap[currentMonthKey]?.cashCollected || 0).toLocaleString('he-IL')}
+                  </div>
+                </div>
                 <div className="bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-right shadow-2xs">
-                  <div className="text-[10px] font-bold text-slate-500">סה״כ מצטבר במערכת</div>
-                  <div className="text-sm font-black text-slate-800">₪{allTimeCollected.toLocaleString('he-IL')}</div>
+                  <div className="text-[10px] font-bold text-slate-500">סה״כ כולל החודש</div>
+                  <div className="text-sm font-black text-slate-800">
+                    ₪{(currentMonthCollected + (monthlyMap[currentMonthKey]?.cashCollected || 0)).toLocaleString('he-IL')}
+                  </div>
                 </div>
               </div>
             </div>
@@ -600,6 +605,21 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                           📅 שוריין
                         </span>
                       )}
+
+                      {/* Revenue Metric Badge: GROW vs Cash */}
+                      {metricType === 'revenue' && (() => {
+                        const notes = (b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '');
+                        const isGrow = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref) || b.id.includes(t.ref));
+                        return isGrow ? (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded border border-emerald-300">
+                            ✅ נסלק ב-GROW
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded border border-amber-300">
+                            💵 ניסלק במזומן / ישיר
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     {/* Metadata: Owner, Phone, Dates */}
