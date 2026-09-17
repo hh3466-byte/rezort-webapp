@@ -996,8 +996,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                           <span className="font-mono font-black text-slate-900" dir="ltr">{req.ownerPhone}</span>
                         </div>
 
-                        {/* שורה שלישית: לחץ לוואטסאפ איתו */}
-                        <div className="pt-0.5">
+                        {/* שורה שלישית: לחץ לוואטסאפ איתו + שלח קישור לתשלום */}
+                        <div className="pt-0.5 flex items-center gap-2 flex-wrap">
                           <a
                             href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(`שלום ${getFirstName(req.ownerName)}, כאן שמוליק מ${settings.resortName} 🐾 בהמשך לשאלון בקשת הקליטה ששלחתם עבור ${req.dogName}`)}`}
                             target="_blank"
@@ -1008,6 +1008,17 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                             <MessageCircle className="w-4 h-4 fill-white/20 shrink-0" />
                             <span>לחץ לוואטסאפ איתו</span>
                           </a>
+
+                          {/* כפתור שליחת קישור לתשלום - ממוקם בראש הכרטיס לגישה מהירה ומיידית */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPaymentPrompt(req)}
+                            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-black px-4 py-2 rounded-xl text-sm transition-all shadow-xs cursor-pointer hover:shadow-md"
+                            title="הגדר סכום שסוכם ושלח או שלח שוב קישור לתשלום ישירות לוואטסאפ של הלקוח"
+                          >
+                            <CreditCard className="w-4 h-4 text-white shrink-0" />
+                            <span>{req.status === 'payment_requested' ? 'שלח שוב קישור לתשלום 💬' : 'שלח קישור לתשלום 💳'}</span>
+                          </button>
                         </div>
 
                         {/* שורה רביעית: הזמנה נכנסה ב: DD.MM בשעה HH:MM */}
@@ -1425,16 +1436,6 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         <span>ערוך פרטים ✏️</span>
                       </button>
 
-                      {/* Send Grow Payment Link button */}
-                      <button
-                        type="button"
-                        onClick={() => handleOpenPaymentPrompt(req)}
-                        className="bg-blue-50 hover:bg-blue-100 active:scale-98 text-blue-900 border border-blue-300 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                        title="הגדר סכום שסוכם ושלח או שלח שוב קישור לתשלום ישירות לוואטסאפ של הלקוח"
-                      >
-                        <CreditCard className="w-3.5 h-3.5 text-blue-600" />
-                        <span>{req.status === 'payment_requested' ? 'שלח שוב קישור 💬' : 'שלח קישור לתשלום 💬'}</span>
-                      </button>
 
                       {/* Approve and Book on calendar */}
                       <button
@@ -2070,21 +2071,21 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 
       {/* QUICK PAYMENT PROMPT MODAL */}
       {paymentPromptRequest && (
-        <div className="fixed inset-0 z-70 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150" dir="rtl">
-          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-70 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-5 animate-in fade-in duration-150" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-lg w-full max-h-[92dvh] sm:max-h-[90vh] shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
             
             {/* Header */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 bg-blue-50/70 flex items-center justify-between">
+            <div className="p-3.5 sm:p-4 border-b border-slate-100 bg-blue-50/80 shrink-0 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-900 flex items-center justify-center font-black text-lg shadow-2xs">
                   💳
                 </div>
                 <div>
-                  <h3 className="text-base sm:text-lg font-black text-slate-900">
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
                     שליחת קישור לתשלום בוואטסאפ
                   </h3>
                   <p className="text-xs text-slate-500 font-medium">
-                    עבור {paymentPromptRequest.ownerName} ({paymentPromptRequest.dogName})
+                    עבור {paymentPromptRequest.ownerName} ({paymentPromptRequest.dogName}) · {paymentPromptRequest.ownerPhone}
                   </p>
                 </div>
               </div>
@@ -2097,8 +2098,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               </button>
             </div>
 
-            {/* Content */}
-            <div className="p-4 sm:p-5 space-y-4 text-xs">
+            {/* Scrollable Content (Keyboard-friendly & Mobile-safe) */}
+            <div className="p-3.5 sm:p-5 space-y-3.5 text-xs overflow-y-auto flex-1 min-h-0">
               {/* Live Occupancy Calendar for Requested Dates */}
               <RequestedDatesCalendar
                 startDate={paymentPromptRequest.startDate}
@@ -2137,7 +2138,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 </button>
               </div>
 
-              {/* Amount input */}
+              {/* Amount input - NO autoFocus so keyboard doesn't open unexpectedly on mobile */}
               <div className="space-y-1.5">
                 <label className="text-xs font-black text-slate-900 block">
                   💰 הסכום שסוכם (₪):
@@ -2150,7 +2151,6 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     onChange={(e) => setPaymentAmount(e.target.value)}
                     placeholder="לדוגמה: 500"
                     className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-blue-500 rounded-xl px-4 py-2.5 text-base font-black font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                    autoFocus
                   />
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">₪</span>
                 </div>
@@ -2170,7 +2170,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     placeholder="https://pay.grow.link/..."
                   />
                   <span className="text-[10px] text-slate-400 block">
-                    (ברירת מחדל: עמוד Grow של הריזורט לתשלום מאובטח ב-Bit, Apple Pay ואשראי. ניתן להדביק קישור ספציפי אם הפקת באפליקציית Grow).
+                    (ברירת מחדל: עמוד Grow של הריזורט לתשלום מאובטח ב-Bit, Apple Pay ואשראי).
                   </span>
                 </div>
               )}
@@ -2178,7 +2178,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               {/* Message preview snippet */}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-[11px] text-slate-700 space-y-1">
                 <span className="font-bold text-slate-500 block">תצוגה מקדימה של הודעת הוואטסאפ שתשלח:</span>
-                <div className="text-slate-800 whitespace-pre-wrap font-sans bg-white p-2.5 rounded-xl border border-slate-200">
+                <div className="text-slate-800 whitespace-pre-wrap font-sans bg-white p-2.5 rounded-xl border border-slate-200 break-all select-all leading-relaxed" dir="rtl">
                   {formatClientPaymentLinkMessage(
                     paymentPromptRequest,
                     settings,
@@ -2197,38 +2197,19 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 
             </div>
 
-            {/* Footer */}
-            <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => { setPaymentPromptRequest(null); setPaymentSendError(null); }}
-                  className="bg-white hover:bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-xl border border-slate-300 cursor-pointer shadow-2xs text-xs"
-                >
-                  ביטול
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const msg = formatClientPaymentLinkMessage(
-                      paymentPromptRequest,
-                      settings,
-                      parseFloat(paymentAmount) || 0,
-                      customPaymentLink
-                    );
-                    navigator.clipboard.writeText(msg);
-                    setCopiedPaymentLink(true);
-                    setTimeout(() => setCopiedPaymentLink(false), 2000);
-                  }}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-2 rounded-xl border border-slate-300 cursor-pointer shadow-2xs text-xs flex items-center gap-1"
-                >
-                  {copiedPaymentLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedPaymentLink ? 'ההודעה הועתקה!' : 'העתק הודעה'}</span>
-                </button>
-              </div>
-              
+            {/* Sticky, Foolproof Footer for Shmulik - Always visible at bottom */}
+            <div className="p-3 sm:p-4 border-t border-slate-200 bg-white shrink-0 flex flex-col gap-2.5 z-10 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
               {parseFloat(paymentAmount) === 0 ? (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isSendingPayment}
+                    onClick={() => handleConfirmSendPayment('green_api')}
+                    className="bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-black py-3 px-4 rounded-2xl shadow-md cursor-pointer flex items-center justify-center gap-2 text-sm sm:text-base transition-all disabled:opacity-50 flex-1"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    <span>{isSendingPayment ? 'שולח אישור...' : '⚡ אשר ושלח הודעה בוואטסאפ (₪0)'}</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -2240,64 +2221,86 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       });
                       setPaymentPromptRequest(null);
                     }}
-                    className="bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white font-black px-3.5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 text-xs"
+                    className="bg-purple-600 hover:bg-purple-700 active:scale-98 text-white font-black px-4 py-2.5 rounded-xl shadow-xs cursor-pointer flex items-center justify-center gap-1.5 text-xs sm:text-sm"
                   >
                     <CheckCircle className="w-4 h-4" />
-                    <span>קלוט ליומן ב-₪0 🟢</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSendingPayment}
-                    onClick={() => handleConfirmSendPayment('green_api')}
-                    className="bg-[#065f46] hover:bg-[#044e45] active:scale-98 text-white font-black px-3.5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-1.5 text-xs"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>אישור בוואטסאפ 📲</span>
+                    <span>קלוט ישירות ליומן ב-₪0</span>
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  {/* Direct Native WhatsApp Link (Unblockable!) */}
-                  {(() => {
-                    const cleanP = cleanPhoneNumber(paymentPromptRequest.ownerPhone);
-                    const intlP = cleanP.startsWith('0') 
-                      ? '972' + cleanP.substring(1) 
-                      : (cleanP.startsWith('5') && cleanP.length === 9 ? '972' + cleanP : cleanP);
-                    const fullMsg = formatClientPaymentLinkMessage(
-                      { ...paymentPromptRequest, depositRequested: Number(paymentAmount) || 0, status: 'payment_requested' },
-                      settings,
-                      Number(paymentAmount) || 0,
-                      customPaymentLink
-                    );
-                    const waLink = `https://wa.me/${intlP}?text=${encodeURIComponent(fullMsg)}`;
-                    return (
-                      <a
-                        href={waLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={() => {
-                          onUpdateStatus(paymentPromptRequest.id, 'payment_requested');
-                          setPaymentPromptRequest(null);
-                        }}
-                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                        title="פתח שיחת וואטסאפ במכשיר הנוכחי (ללא חסימות)"
-                      >
-                        <span>📱 פתח בוואטסאפ</span>
-                      </a>
-                    );
-                  })()}
-
-                  {/* Direct Autonomous Green-API button */}
+                <div className="flex flex-col gap-2">
+                  {/* Giant Primary Send Button for Shmulik */}
                   <button
                     type="button"
                     disabled={isSendingPayment}
                     onClick={() => handleConfirmSendPayment('green_api')}
-                    className="bg-[#065f46] hover:bg-[#044e45] active:scale-98 text-white font-black px-4 sm:px-5 py-2 rounded-xl shadow-xs cursor-pointer flex items-center gap-2 transition-all text-xs sm:text-sm disabled:opacity-50"
+                    className="bg-[#065f46] hover:bg-[#044e45] active:scale-98 text-white font-black py-3.5 px-5 rounded-2xl shadow-lg cursor-pointer flex items-center justify-center gap-2.5 text-base sm:text-lg transition-all disabled:opacity-50 w-full"
                     title="שליחה ישירה מוואטסאפ הריזורט ללקוח ברקע (עובד אוטומטית גם מהנייד וגם מהמחשב)"
                   >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>{isSendingPayment ? 'שולח קישור...' : '⚡ שלח ישירות בוואטסאפ'}</span>
+                    <MessageCircle className="w-5 h-5" />
+                    <span>{isSendingPayment ? 'שולח קישור ללקוח...' : `⚡ שלח קישור בוואטסאפ (₪${paymentAmount || 0})`}</span>
                   </button>
+
+                  {/* Secondary Options Strip */}
+                  <div className="flex items-center justify-between gap-1.5 pt-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => { setPaymentPromptRequest(null); setPaymentSendError(null); }}
+                        className="bg-white hover:bg-slate-100 text-slate-600 font-bold px-3 py-1.5 rounded-xl border border-slate-200 cursor-pointer shadow-2xs text-xs"
+                      >
+                        ביטול
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const msg = formatClientPaymentLinkMessage(
+                            paymentPromptRequest,
+                            settings,
+                            parseFloat(paymentAmount) || 0,
+                            customPaymentLink
+                          );
+                          navigator.clipboard.writeText(msg);
+                          setCopiedPaymentLink(true);
+                          setTimeout(() => setCopiedPaymentLink(false), 2000);
+                        }}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-2.5 py-1.5 rounded-xl border border-slate-200 cursor-pointer text-xs flex items-center gap-1"
+                      >
+                        {copiedPaymentLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedPaymentLink ? 'הועתק!' : 'העתק'}</span>
+                      </button>
+                    </div>
+
+                    {/* Direct Native WhatsApp Link (Backup if Green-API fails) */}
+                    {(() => {
+                      const cleanP = cleanPhoneNumber(paymentPromptRequest.ownerPhone);
+                      const intlP = cleanP.startsWith('0') 
+                        ? '972' + cleanP.substring(1) 
+                        : (cleanP.startsWith('5') && cleanP.length === 9 ? '972' + cleanP : cleanP);
+                      const fullMsg = formatClientPaymentLinkMessage(
+                        { ...paymentPromptRequest, depositRequested: Number(paymentAmount) || 0, status: 'payment_requested' },
+                        settings,
+                        Number(paymentAmount) || 0,
+                        customPaymentLink
+                      );
+                      const waLink = `https://wa.me/${intlP}?text=${encodeURIComponent(fullMsg)}`;
+                      return (
+                        <a
+                          href={waLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => {
+                            onUpdateStatus(paymentPromptRequest.id, 'payment_requested');
+                            setPaymentPromptRequest(null);
+                          }}
+                          className="text-emerald-700 hover:text-emerald-800 font-bold px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1 hover:underline"
+                          title="פתח שיחת וואטסאפ במכשיר הנוכחי (גיבוי ידני)"
+                        >
+                          <span>📱 פתח בוואטסאפ</span>
+                        </a>
+                      );
+                    })()}
+                  </div>
                 </div>
               )}
             </div>
