@@ -56,6 +56,7 @@ import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
 import { initDailyDogAutoSender } from './services/dailyDogAutoSender';
 import { initMorningReportScheduler } from './services/morningReportService';
+import { initOrangeFollowUpScheduler } from './services/orangeFollowUpService';
 import { fetchNewCrmChatsCount } from './services/whatsappCrmService';
 
 export default function App() {
@@ -377,6 +378,17 @@ export default function App() {
   // 07:30 AM Daily Morning Report Auto-Sender to Shmulik (Questionnaires + New Leads + Dog Stats)
   useEffect(() => {
     const cleanup = initMorningReportScheduler(
+      () => bookings,
+      () => settings,
+      () => intakeRequests,
+      showToast
+    );
+    return cleanup;
+  }, [bookings, settings, intakeRequests]);
+
+  // 08:30 AM Orange Button (In-Progress) Marketing Follow-Up Scheduler
+  useEffect(() => {
+    const cleanup = initOrangeFollowUpScheduler(
       () => bookings,
       () => settings,
       () => intakeRequests,
