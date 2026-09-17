@@ -285,14 +285,20 @@ export interface VerifiedGrowTransaction {
 }
 
 export const VERIFIED_GROW_LEDGER: VerifiedGrowTransaction[] = [
-  // September 2026 (7 items, total: 8,415) - will enter bank on 10.10.2026
+  // September 2026 Grow transactions (13 confirmed items = ₪14,548) - will enter bank on 10.10.2026
   { ref: '4857277218', amount: 180, date: '2026-09-02', month: '2026-09', customerName: 'גל שרה שמש בן יוסף', dogName: 'אוניל' },
+  { ref: '173760086', amount: 400, date: '2026-09-06', month: '2026-09', customerName: 'נתנאל קרטה', dogName: 'קרטה' },
   { ref: '173783725', amount: 180, date: '2026-09-06', month: '2026-09', customerName: 'נטע הדס', dogName: 'הדס' },
   { ref: '173758692', amount: 180, date: '2026-09-06', month: '2026-09', customerName: 'ריקה נברי', dogName: "ג'סי הרוטוויילרית" },
   { ref: '514721903', amount: 6300, date: '2026-09-06', month: '2026-09', customerName: 'איל שקל', dogName: 'תיאו' },
   { ref: '515223561', amount: 360, date: '2026-09-07', month: '2026-09', customerName: 'בני גרין', dogName: 'ספסוף' },
   { ref: '174291549', amount: 540, date: '2026-09-10', month: '2026-09', customerName: 'Tali Nisan Avramov', dogName: 'פאבלו' },
-  { ref: '516299998', amount: 675, date: '2026-09-11', month: '2026-09', customerName: 'דורין לוקס', dogName: 'מגן' },
+  { ref: '516299998', amount: 2700, date: '2026-09-11', month: '2026-09', customerName: 'דורין לוקס', dogName: 'מגן' },
+  { ref: '516703080', amount: 990, date: '2026-09-14', month: '2026-09', customerName: 'יניב אלעד', dogName: "ג'נגו" },
+  { ref: '4888806968', amount: 108, date: '2026-09-14', month: '2026-09', customerName: 'גל שרה שמש בן יוסף', dogName: 'אוניל' },
+  { ref: '517029357', amount: 540, date: '2026-09-15', month: '2026-09', customerName: 'תם דנינו', dogName: 'מימי רוז' },
+  { ref: '517441750', amount: 720, date: '2026-09-16', month: '2026-09', customerName: 'יונתן וולפין', dogName: 'זיפו' },
+  { ref: '517823870', amount: 1350, date: '2026-09-17', month: '2026-09', customerName: 'רעות פויר', dogName: 'טר' },
 
   // August 2026 (28 items, total: 25,370) - entered bank on 10.09.2026
   { ref: '171099384', amount: 2200, date: '2026-08-09', month: '2026-08', customerName: 'אשר ריפמן', dogName: 'ריפמן' },
@@ -392,6 +398,12 @@ export function getMonthlyRevenueBreakdown(
       return;
     }
 
+    const ownerName = b.ownerName || d.ownerName || '';
+    // Ronen Malamud paid via direct bank transfer for Miluim reserve duty receipts (not cash to Shmulik)
+    if (ownerName.includes('רונן') || ownerName.includes('מלמוד')) {
+      return;
+    }
+
     const notes = ((b.notes || d.notes || '') + ' ' + (d.internalNotes || '')).trim();
 
     // If booking matches a Grow transaction, it's counted under GROW
@@ -400,13 +412,14 @@ export function getMonthlyRevenueBreakdown(
       return;
     }
 
-    // Check if booking is active/paid in this month
+    // Check if booking is active in this month
     const start = b.startDate || d.startDate || '';
     const end = b.endDate || d.endDate || '';
-    const created = (b.createdAt || d.createdAt || '').substring(0, 7);
-    const depPaid = ((b as any).depositPaidAt || d.depositPaidAt || '').substring(0, 7);
 
-    const isInMonth = start.startsWith(targetMonthKey) || end.startsWith(targetMonthKey) || created === targetMonthKey || depPaid === targetMonthKey;
+    // Ignore advance deposits for future stays (e.g. November)
+    if (start > `${targetMonthKey}-31`) return;
+
+    const isInMonth = start.startsWith(targetMonthKey) || end.startsWith(targetMonthKey);
     if (!isInMonth) return;
 
     // Direct Cash / Bit payments

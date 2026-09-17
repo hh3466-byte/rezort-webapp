@@ -35,6 +35,7 @@ import {
 } from './utils/dateUtils';
 
 import { CalendarView } from './components/CalendarView';
+import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricModal';
 import { OccupancyForecast } from './components/OccupancyForecast';
 import { BookingsList } from './components/BookingsList';
 import { CustomersView } from './components/CustomersView';
