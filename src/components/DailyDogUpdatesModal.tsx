@@ -100,9 +100,9 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
       const isFemale = Boolean(
         b.dogGender === 'female_spayed' || 
         b.dogGender === 'female_intact' ||
-        intakeMatch?.dogGender === 'female' ||
-        intakeMatch?.dogGender === 'female_spayed' ||
-        intakeMatch?.dogGender === 'female_intact' ||
+        (intakeMatch?.dogGender as string) === 'female' ||
+        (intakeMatch?.dogGender as string) === 'female_spayed' ||
+        (intakeMatch?.dogGender as string) === 'female_intact' ||
         (b.notes && (b.notes.includes('נקבה') || b.notes.includes('מעוקרת'))) ||
         (b.behaviorNotes && (b.behaviorNotes.includes('נקבה') || b.behaviorNotes.includes('מעוקרת'))) ||
         ['לונה', 'קירה', 'מימי', 'ניצה', 'גולי', 'ג\'ולי', 'נולי', 'שירלי', 'מיה', 'בלה', 'בל', 'רובי'].some(fn => b.dogName.includes(fn))
@@ -146,9 +146,9 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
       const isFemale = Boolean(
         item.booking.dogGender === 'female_spayed' || 
         item.booking.dogGender === 'female_intact' ||
-        item.intakeMatch?.dogGender === 'female' ||
-        item.intakeMatch?.dogGender === 'female_spayed' ||
-        item.intakeMatch?.dogGender === 'female_intact' ||
+        (item.intakeMatch?.dogGender as string) === 'female' ||
+        (item.intakeMatch?.dogGender as string) === 'female_spayed' ||
+        (item.intakeMatch?.dogGender as string) === 'female_intact' ||
         (item.booking.notes && (item.booking.notes.includes('נקבה') || item.booking.notes.includes('מעוקרת'))) ||
         (item.booking.behaviorNotes && (item.booking.behaviorNotes.includes('נקבה') || item.booking.behaviorNotes.includes('מעוקרת'))) ||
         ['לונה', 'קירה', 'מימי', 'ניצה', 'גולי', 'ג\'ולי', 'נולי', 'שירלי', 'מיה', 'בלה', 'בל', 'רובי'].some(fn => item.booking.dogName.includes(fn))

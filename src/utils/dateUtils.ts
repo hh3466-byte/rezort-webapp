@@ -381,6 +381,7 @@ export interface MonthlyRevenueBreakdown {
 
   // 2. יכנס לבנק ב 10 לחודש הקרוב (סליקת כרטיסי אשראי GROW)
   growClearedBankOn10th: number;
+  growCleared: number; // תאימות מלאה לאחור
 
   // 3. יכנס לבנק ב 10 בעוד חודשיים (תשלומי המשך של עסקאות בתשלומים)
   bankOn10thInTwoMonths: number;

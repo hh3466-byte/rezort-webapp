@@ -59,7 +59,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [trainingFilter, setTrainingFilter] = useState<'all' | 'full' | 'day'>('all');
-  const [revenueCategoryFilter, setRevenueCategoryFilter] = useState<'all' | 'digital' | 'grow_10th' | 'grow_in_2_months' | 'cash'>('all');
+  const [revenueCategoryFilter, setRevenueCategoryFilter] = useState<'all' | 'digital' | 'grow_10th' | 'direct_transfer' | 'grow_in_2_months' | 'cash'>('all');
   const [chartMode, setChartMode] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedChartPeriod, setSelectedChartPeriod] = useState<string | null>(null);
 
@@ -78,6 +78,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       collected: number;
       digitalCleared: number;
       growClearedBankOn10th: number;
+      directBankTransfers: number;
       bankOn10thInTwoMonths: number;
       cashBanknotes: number;
       cashCollected: number;
@@ -128,6 +129,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
         collected: breakdown.digitalCleared, // 1. נסלק החודש (דיגיטלי)
         digitalCleared: breakdown.digitalCleared,
         growClearedBankOn10th: breakdown.growClearedBankOn10th,
+        directBankTransfers: breakdown.directBankTransfers,
         bankOn10thInTwoMonths: breakdown.bankOn10thInTwoMonths,
         cashBanknotes: breakdown.cashCollected,
         cashCollected: breakdown.cashCollected,
@@ -274,16 +276,17 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const curData = monthlyMap[currentMonthKey];
       const digitalCleared = curData?.digitalCleared || 0;
       const growClearedBankOn10th = curData?.growClearedBankOn10th || 0;
+      const directBankTransfers = curData?.directBankTransfers || 0;
       const bankOn10thInTwoMonths = curData?.bankOn10thInTwoMonths || 0;
       const cashCollected = curData?.cashCollected || 0;
 
-      title = 'פירוט הכנסות וסליקה: דיגיטלי, יכנס ב-10, יכנס בעוד חודשיים, ומזומן';
-      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')} • 2. ייכנס לבנק ב-10: ₪${growClearedBankOn10th.toLocaleString('he-IL')} • 3. יכנס בעוד חודשיים: ₪${bankOn10thInTwoMonths.toLocaleString('he-IL')} • 4. נסלק במזומן: ₪${cashCollected.toLocaleString('he-IL')}`;
+      title = 'פירוט הכנסות וסליקה: דיגיטלי, יכנס ב-10, העברות ישירות, יכנס בעוד חודשיים, ומזומן';
+      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')} • 2. ייכנס לבנק ב-10: ₪${growClearedBankOn10th.toLocaleString('he-IL')}${directBankTransfers > 0 ? ` • ישיר לחשבון: ₪${directBankTransfers.toLocaleString('he-IL')}` : ''} • 3. יכנס בעוד חודשיים: ₪${bankOn10thInTwoMonths.toLocaleString('he-IL')} • 4. נסלק במזומן: ₪${cashCollected.toLocaleString('he-IL')}`;
       icon = <DollarSign className="w-5 h-5 text-emerald-700" />;
       badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
       filteredItems = paidItems;
 
-      // Filter by revenueCategoryFilter (all / digital / grow_10th / grow_in_2_months / cash)
+      // Filter by revenueCategoryFilter (all / digital / grow_10th / direct_transfer / grow_in_2_months / cash)
       if (revenueCategoryFilter !== 'all') {
         filteredItems = filteredItems.filter(b => {
           const notes = (b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '');
@@ -292,6 +295,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
           const isInstallment = notes.includes('מתוך') || notes.includes('תשלום ראשון') || (b.ownerName || '').includes('דורין') || (b.ownerName || '').includes('לוקס');
 
           if (revenueCategoryFilter === 'grow_10th') return isGrow;
+          if (revenueCategoryFilter === 'direct_transfer') return isBank;
           if (revenueCategoryFilter === 'grow_in_2_months') return isInstallment;
           if (revenueCategoryFilter === 'digital') return isGrow || isBank;
           if (revenueCategoryFilter === 'cash') return !isGrow && !isBank;
@@ -454,6 +458,22 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   </div>
                   <div className="text-[9px] text-sky-600 font-medium">סליקת כרטיסי אשראי GROW</div>
                 </div>
+
+                {(monthlyMap[currentMonthKey]?.directBankTransfers || 0) > 0 && (
+                  <div 
+                    onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'direct_transfer' ? 'all' : 'direct_transfer')}
+                    className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
+                      revenueCategoryFilter === 'direct_transfer' ? 'bg-teal-100 border-teal-500 ring-2 ring-teal-500' : 'bg-teal-50 border-teal-200 hover:bg-teal-100/60'
+                    }`}
+                    title="לחץ לסינון: העברות בנקאיות ישירות שהופקדו ישירות לחשבון הבנק"
+                  >
+                    <div className="text-[10px] font-bold text-teal-800">הועבר ישירות לחשבון</div>
+                    <div className="text-sm font-black text-teal-900">
+                      ₪{(monthlyMap[currentMonthKey]?.directBankTransfers || 0).toLocaleString('he-IL')}
+                    </div>
+                    <div className="text-[9px] text-teal-700 font-medium">כבר בחשבון הבנק</div>
+                  </div>
+                )}
 
                 <div 
                   onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'grow_in_2_months' ? 'all' : 'grow_in_2_months')}
@@ -668,6 +688,17 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
               >
                 🏦 2. יכנס לבנק ב-10 (GROW)
               </button>
+              {(monthlyMap[currentMonthKey]?.directBankTransfers || 0) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setRevenueCategoryFilter('direct_transfer')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                    revenueCategoryFilter === 'direct_transfer' ? 'bg-teal-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  🏛️ הועבר ישירות לחשבון
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setRevenueCategoryFilter('grow_in_2_months')}
@@ -771,8 +802,8 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         }
                         if (isBank) {
                           return (
-                            <span className="text-[10px] bg-emerald-100 text-emerald-900 font-bold px-1.5 py-0.5 rounded border border-emerald-300">
-                              🏛️ 1. דיגיטלי (העברה בנקאית)
+                            <span className="text-[10px] bg-teal-50 text-teal-900 font-bold px-1.5 py-0.5 rounded border border-teal-300">
+                              🏛️ הועבר ישירות לחשבון (כבר בבנק)
                             </span>
                           );
                         }

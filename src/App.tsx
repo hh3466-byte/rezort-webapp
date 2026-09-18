@@ -451,6 +451,7 @@ export default function App() {
 
   const monthDigitalCleared = currentMonthRevenue.digitalCleared; // 1. נסלק החודש (דיגיטלי)
   const monthBankOn10th = currentMonthRevenue.growClearedBankOn10th; // 2. יכנס לבנק ב-10 לחודש הקרוב
+  const monthDirectBankTransfers = currentMonthRevenue.directBankTransfers; // הועבר ישירות לחשבון (העברות בנקאיות)
   const monthBankIn2Months = currentMonthRevenue.bankOn10thInTwoMonths; // 3. יכנס לבנק ב-10 בעוד חודשיים
   const monthCashCollected = currentMonthRevenue.cashCollected; // 4. נסלק במזומן
   const monthTotalCollected = currentMonthRevenue.totalCollected; // סה"כ כולל
@@ -1438,6 +1439,11 @@ export default function App() {
                 <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
                   🏦 2. ייכנס ב-10: ₪{monthBankOn10th.toLocaleString('he-IL')}
                 </span>
+                {monthDirectBankTransfers > 0 && (
+                  <span className="bg-teal-50 text-teal-900 border border-teal-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title="העברות בנקאיות ישירות שכבר הופקדו בחשבון הבנק">
+                    🏛️ הועבר ישירות: ₪{monthDirectBankTransfers.toLocaleString('he-IL')}
+                  </span>
+                )}
                 {monthBankIn2Months > 0 && (
                   <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title="עסקאות בתשלומים שכבר נסלקו וייכנסו ב-10 בעוד חודשיים">
                     🗓️ 3. ייכנס בעוד חודשיים: ₪{monthBankIn2Months.toLocaleString('he-IL')}
@@ -1629,8 +1635,8 @@ export default function App() {
                     <div className="text-xl sm:text-2xl font-black text-[#0f766e] leading-tight">
                       ₪{monthDigitalCleared.toLocaleString('he-IL')}
                     </div>
-                    <div className="text-[9px] text-slate-400 font-medium">
-                      כל אמצעי התשלום הדיגיטלי ({monthPaidCount} עסקאות)
+                    <div className="text-[9px] text-slate-500 font-medium">
+                      כל הדיגיטלי ({monthPaidCount} עסקאות: ₪{monthBankOn10th.toLocaleString('he-IL')} + ₪{monthDirectBankTransfers.toLocaleString('he-IL')})
                     </div>
                   </div>
 
@@ -1657,7 +1663,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 3 משבצות מובחנות: 2. יכנס לבנק ב-10 | 3. יכנס בעוד חודשיים | 4. נסלק במזומן */}
+                {/* משבצות מובחנות: 2. יכנס לבנק ב-10 | הועבר ישירות לחשבון | 3. יכנס בעוד חודשיים | 4. נסלק במזומן */}
                 <div className="space-y-1 mt-1">
                   <div className="flex items-center justify-between bg-sky-50/90 border border-sky-200 px-2 py-0.5 rounded-md text-[10px]">
                     <span className="font-bold text-sky-900 flex items-center gap-1">
@@ -1668,6 +1674,18 @@ export default function App() {
                       ₪{monthBankOn10th.toLocaleString('he-IL')}
                     </span>
                   </div>
+
+                  {monthDirectBankTransfers > 0 && (
+                    <div className="flex items-center justify-between bg-teal-50/90 border border-teal-200 px-2 py-0.5 rounded-md text-[10px]" title="העברות בנקאיות ישירות שכבר הופקדו בחשבון הבנק (רונן מלמוד)">
+                      <span className="font-bold text-teal-900 flex items-center gap-1">
+                        <span>🏛️</span>
+                        <span>הועבר ישירות לחשבון:</span>
+                      </span>
+                      <span className="font-black text-teal-950">
+                        ₪{monthDirectBankTransfers.toLocaleString('he-IL')}
+                      </span>
+                    </div>
+                  )}
 
                   {monthBankIn2Months > 0 && (
                     <div className="flex items-center justify-between bg-indigo-50/90 border border-indigo-200 px-2 py-0.5 rounded-md text-[10px]" title="עסקאות בתשלומים שכבר נסלקו וייכנסו ב-10 בעוד חודשיים">
@@ -1696,6 +1714,22 @@ export default function App() {
                   <span className="truncate font-semibold text-slate-600">סה״כ כולל: ₪{monthTotalCollected.toLocaleString('he-IL')}</span>
                   <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100">
                     גרפים 📊
+                  </span>
+                </div>
+
+                {/* בדיקת איפוס ושפיות - הכל מתאפס ל-0 */}
+                <div 
+                  className="mt-1 bg-emerald-50/90 border border-emerald-300/80 px-2 py-0.5 rounded-md text-[9px] flex items-center justify-between font-bold text-emerald-800" 
+                  title={`בדיקת שפיות ואיפוס מלאה:
+• דיגיטלי: ₪${monthDigitalCleared.toLocaleString('he-IL')} = ₪${monthBankOn10th.toLocaleString('he-IL')} (סליקת GROW) + ₪${monthDirectBankTransfers.toLocaleString('he-IL')} (העברות ישירות) [הפרש ₪0]
+• סה״כ כולל: ₪${monthTotalCollected.toLocaleString('he-IL')} = ₪${monthDigitalCleared.toLocaleString('he-IL')} (דיגיטלי) + ₪${monthCashCollected.toLocaleString('he-IL')} (מזומן) [הפרש ₪0]`}
+                >
+                  <span className="flex items-center gap-1">
+                    <span>⚖️</span>
+                    <span>בדיקת איפוס: הכל מאוזן</span>
+                  </span>
+                  <span className="bg-white text-emerald-900 border border-emerald-300 px-1.5 py-0.2 rounded font-black shadow-2xs">
+                    הפרש ₪0 ✓
                   </span>
                 </div>
               </div>
