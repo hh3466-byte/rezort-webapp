@@ -15,8 +15,8 @@ envContent.split('\n').forEach(line => {
 
 const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
 
-async function generateAndSendReport(reportType = 'weekly') {
-  console.log(`[Report] Generating ${reportType} report...`);
+async function generateAndSendReport(reportType = 'weekly', customPhone = '0543200007') {
+  console.log(`[Report] Generating ${reportType} report for phone: ${customPhone}...`);
 
   // 1. Fetch settings to get Green API credentials and target phone
   const { data: settingsRows } = await supabase.from('settings').select('*');
@@ -24,7 +24,7 @@ async function generateAndSendReport(reportType = 'weekly') {
   
   const greenApiId = settingsData.greenApiIdInstance || '7105267323';
   const greenApiToken = settingsData.greenApiToken || 'f6ce83ecde134f719b9175ef36e5ca9a2245b73d8f814980a3';
-  const targetPhone = settingsData.whatsappNotificationPhone || settingsData.managerPhone || '0548765888';
+  const targetPhone = customPhone || settingsData.ownerPhone || '0543200007';
   const cleanPhone = targetPhone.replace(/\D/g, '').replace(/^0/, '972');
 
   // 2. Fetch all bookings
@@ -128,4 +128,5 @@ async function generateAndSendReport(reportType = 'weekly') {
 }
 
 const arg = process.argv[2] || 'weekly';
-generateAndSendReport(arg);
+const phoneArg = process.argv[3] || '0543200007';
+generateAndSendReport(arg, phoneArg);
