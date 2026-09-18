@@ -439,10 +439,11 @@ export default function App() {
     return acc + (Number(b.depositAmount) || 0);
   }, 0);
 
-  // 3 Revenue Categories:
+  // 4 Revenue Categories:
   // 1. monthDigitalCleared: נסלק החודש (והכוונה לכל אמצעי התשלום הדיגיטלי כולם)
   // 2. monthBankOn10th: יכנס לבנק ב-10 לחודש הקרוב (סליקת כרטיסי אשראי GROW)
-  // 3. monthCashBanknotes: נסלק במזומן (הכוונה לשטרות כסף פיזיים)
+  // 3. monthBankIn2Months: יכנס לבנק ב-10 בעוד חודשיים (תשלומי המשך / עסקאות בתשלומים)
+  // 4. monthCashCollected: נסלק במזומן (ללא המילה שטרות)
   const currentMonthKey = todayStr.substring(0, 7);
   const currentMonthRevenue = React.useMemo(() => {
     return getMonthlyRevenueBreakdown(currentMonthKey, activeBookings, pendingGrowPayments);
@@ -450,11 +451,11 @@ export default function App() {
 
   const monthDigitalCleared = currentMonthRevenue.digitalCleared; // 1. נסלק החודש (דיגיטלי)
   const monthBankOn10th = currentMonthRevenue.growClearedBankOn10th; // 2. יכנס לבנק ב-10 לחודש הקרוב
-  const monthCashBanknotes = currentMonthRevenue.cashBanknotes; // 3. נסלק במזומן (שטרות)
+  const monthBankIn2Months = currentMonthRevenue.bankOn10thInTwoMonths; // 3. יכנס לבנק ב-10 בעוד חודשיים
+  const monthCashCollected = currentMonthRevenue.cashCollected; // 4. נסלק במזומן
   const monthTotalCollected = currentMonthRevenue.totalCollected; // סה"כ כולל
 
   const monthToDateCollected = monthDigitalCleared;
-  const monthCashCollected = monthCashBanknotes;
   const monthPaidCount = currentMonthRevenue.digitalPaidCount;
 
   // Active stays and dogs in current month
@@ -1437,8 +1438,13 @@ export default function App() {
                 <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
                   🏦 2. ייכנס ב-10: ₪{monthBankOn10th.toLocaleString('he-IL')}
                 </span>
+                {monthBankIn2Months > 0 && (
+                  <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title="עסקאות בתשלומים שכבר נסלקו וייכנסו ב-10 בעוד חודשיים">
+                    🗓️ 3. ייכנס בעוד חודשיים: ₪{monthBankIn2Months.toLocaleString('he-IL')}
+                  </span>
+                )}
                 <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
-                  💵 3. מזומן (שטרות): ₪{monthCashBanknotes.toLocaleString('he-IL')}
+                  💵 4. נסלק במזומן: ₪{monthCashCollected.toLocaleString('he-IL')}
                 </span>
               </span>
             </div>
@@ -1651,7 +1657,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* שתי משבצות מובחנות: 2. יכנס לבנק ב-10 לחודש | 3. נסלק במזומן (שטרות) */}
+                {/* 3 משבצות מובחנות: 2. יכנס לבנק ב-10 | 3. יכנס בעוד חודשיים | 4. נסלק במזומן */}
                 <div className="space-y-1 mt-1">
                   <div className="flex items-center justify-between bg-sky-50/90 border border-sky-200 px-2 py-0.5 rounded-md text-[10px]">
                     <span className="font-bold text-sky-900 flex items-center gap-1">
@@ -1663,13 +1669,25 @@ export default function App() {
                     </span>
                   </div>
 
+                  {monthBankIn2Months > 0 && (
+                    <div className="flex items-center justify-between bg-indigo-50/90 border border-indigo-200 px-2 py-0.5 rounded-md text-[10px]" title="עסקאות בתשלומים שכבר נסלקו וייכנסו ב-10 בעוד חודשיים">
+                      <span className="font-bold text-indigo-900 flex items-center gap-1">
+                        <span>🗓️</span>
+                        <span>3. יכנס בעוד חודשיים:</span>
+                      </span>
+                      <span className="font-black text-indigo-950">
+                        ₪{monthBankIn2Months.toLocaleString('he-IL')}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between bg-amber-50/90 border border-amber-200 px-2 py-0.5 rounded-md text-[10px]">
                     <span className="font-bold text-amber-800 flex items-center gap-1">
                       <span>💵</span>
-                      <span>3. נסלק במזומן (שטרות):</span>
+                      <span>4. נסלק במזומן:</span>
                     </span>
                     <span className="font-black text-amber-950">
-                      ₪{monthCashBanknotes.toLocaleString('he-IL')}
+                      ₪{monthCashCollected.toLocaleString('he-IL')}
                     </span>
                   </div>
                 </div>

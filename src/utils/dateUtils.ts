@@ -349,21 +349,49 @@ export const VERIFIED_DIRECT_TRANSFERS: DirectBankTransfer[] = [
   { ref: 'transfer-ronen-4500', amount: 4500, date: '2026-09-16', month: '2026-09', customerName: 'רונן מלמוד', dogName: 'לונה', notes: 'העברה בנקאית ישירה (קבלות מילואים)' },
 ];
 
+/**
+ * Future installment credits (עסקאות בתשלומים שייכנסו לבנק ב-10 של החודשים הבאים)
+ */
+export interface FutureInstallmentCredit {
+  ref: string;
+  customerName: string;
+  dogName: string;
+  originalMonth: string; // YYYY-MM
+  installmentNum: number;
+  totalInstallments: number;
+  payoutDate: string; // YYYY-MM-10
+  payoutMonth: string; // YYYY-MM
+  amount: number;
+}
+
+export const KNOWN_FUTURE_INSTALLMENTS: FutureInstallmentCredit[] = [
+  // דורין לוקס (מגן) - עסקה 516299998 מ-11.09.2026 (4 תשלומים של 675 ₪):
+  // תשלום 1: נכנס ב-10.10.2026 (ה-10 לחודש הקרוב)
+  // תשלום 2: נכנס ב-10.11.2026 (ה-10 בעוד חודשיים)
+  { ref: '516299998-inst-2', customerName: 'דורין לוקס', dogName: 'מגן', originalMonth: '2026-09', installmentNum: 2, totalInstallments: 4, payoutDate: '2026-11-10', payoutMonth: '2026-11', amount: 675 },
+  // תשלום 3: נכנס ב-10.12.2026 (בעוד 3 חודשים)
+  { ref: '516299998-inst-3', customerName: 'דורין לוקס', dogName: 'מגן', originalMonth: '2026-09', installmentNum: 3, totalInstallments: 4, payoutDate: '2026-12-10', payoutMonth: '2026-12', amount: 675 },
+  // תשלום 4: נכנס ב-10.01.2027 (בעוד 4 חודשים)
+  { ref: '516299998-inst-4', customerName: 'דורין לוקס', dogName: 'מגן', originalMonth: '2026-09', installmentNum: 4, totalInstallments: 4, payoutDate: '2027-01-10', payoutMonth: '2027-01', amount: 675 },
+];
+
 export interface MonthlyRevenueBreakdown {
   // 1. נסלק החודש (והכוונה לכל אמצעי התשלום הדיגיטלי כולם: GROW + העברות בנקאיות דיגיטליות)
   digitalCleared: number;
 
-  // 2. יכנס לבנק ב 10 לחודש הקרוב (סליקת כרטיסי אשראי GROW בלבד)
+  // 2. יכנס לבנק ב 10 לחודש הקרוב (סליקת כרטיסי אשראי GROW)
   growClearedBankOn10th: number;
-  growCleared: number; // תאימות לאחור
 
-  // 3. נסלק במזומן (הכוונה לשטרות כסף פיזיים)
-  cashBanknotes: number;
-  cashCollected: number; // תאימות לאחור
+  // 3. יכנס לבנק ב 10 בעוד חודשיים (תשלומי המשך של עסקאות בתשלומים)
+  bankOn10thInTwoMonths: number;
+
+  // 4. נסלק במזומן
+  cashCollected: number;
+  cashBanknotes: number; // תאימות לאחור
 
   // פירוט נוסף
   directBankTransfers: number;
-  totalCollected: number; // דיגיטלי + שטרות
+  totalCollected: number; // דיגיטלי + מזומן
 
   digitalPaidCount: number;
   growPaidCount: number;
@@ -372,10 +400,11 @@ export interface MonthlyRevenueBreakdown {
 }
 
 /**
- * Breakdown of monthly revenue according to 3 core categories:
- * 1. digitalCleared: נסלק החודש (כל אמצעי התשלום הדיגיטלי כולם: GROW + העברות בנקאיות)
+ * Breakdown of monthly revenue according to the core categories:
+ * 1. digitalCleared: נסלק החודש (כל אמצעי התשלום הדיגיטלי כולם)
  * 2. growClearedBankOn10th: יכנס לבנק ב-10 לחודש הקרוב (סליקת GROW)
- * 3. cashBanknotes: נסלק במזומן (הכוונה לשטרות כסף פיזיים)
+ * 3. bankOn10thInTwoMonths: יכנס לבנק ב-10 בעוד חודשיים (תשלומי המשך / עסקאות בתשלומים)
+ * 4. cashCollected: נסלק במזומן
  */
 export function getMonthlyRevenueBreakdown(
   targetMonthKey: string,
@@ -420,8 +449,21 @@ export function getMonthlyRevenueBreakdown(
     }
   });
 
-  // 4. Physical Cash Banknotes (שטרות כסף פיזיים)
-  let cashBanknotes = 0;
+  // 4. Future installments entering bank on the 10th in two months (בעוד חודשיים)
+  const [ty, tm] = targetMonthKey.split('-').map(Number);
+  const targetDate = new Date(ty, (tm || 1) - 1, 1);
+  targetDate.setMonth(targetDate.getMonth() + 2);
+  const inTwoMonthsKey = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`;
+
+  let bankOn10thInTwoMonths = 0;
+  KNOWN_FUTURE_INSTALLMENTS.forEach(inst => {
+    if (inst.payoutMonth === inTwoMonthsKey || (inst.originalMonth === targetMonthKey && inst.installmentNum === 2)) {
+      bankOn10thInTwoMonths += inst.amount;
+    }
+  });
+
+  // 5. Direct Cash (נסלק במזומן)
+  let cashCollected = 0;
   let cashPaidCount = 0;
 
   bookings.forEach(b => {
@@ -465,13 +507,13 @@ export function getMonthlyRevenueBreakdown(
     const isInMonth = start.startsWith(targetMonthKey) || end.startsWith(targetMonthKey);
     if (!isInMonth) return;
 
-    // Direct Cash Banknotes (שטרות פיזיים)
+    // Direct Cash (נסלק במזומן)
     const payMethod = b.paymentMethod || d.paymentMethod || '';
     const isDirectCash = payMethod === 'cash' || payMethod === 'bit' || notes.includes('מזומן');
     if (isDirectCash) {
       const amt = paymentStatus === 'fully_paid' ? totalPrice : depAmount;
       if (amt > 0) {
-        cashBanknotes += amt;
+        cashCollected += amt;
         cashPaidCount += 1;
       }
     }
@@ -484,14 +526,15 @@ export function getMonthlyRevenueBreakdown(
   return {
     digitalCleared,
     growClearedBankOn10th,
-    cashBanknotes,
+    bankOn10thInTwoMonths,
+    cashCollected,
+    cashBanknotes: cashCollected,
 
     // Aliases for full backward compatibility
     growCleared: growClearedBankOn10th,
-    cashCollected: cashBanknotes,
 
     directBankTransfers,
-    totalCollected: digitalCleared + cashBanknotes,
+    totalCollected: digitalCleared + cashCollected,
 
     digitalPaidCount,
     growPaidCount,

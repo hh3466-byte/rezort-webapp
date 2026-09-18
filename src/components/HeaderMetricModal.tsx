@@ -59,7 +59,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [trainingFilter, setTrainingFilter] = useState<'all' | 'full' | 'day'>('all');
-  const [revenueCategoryFilter, setRevenueCategoryFilter] = useState<'all' | 'digital' | 'grow_10th' | 'cash_notes'>('all');
+  const [revenueCategoryFilter, setRevenueCategoryFilter] = useState<'all' | 'digital' | 'grow_10th' | 'grow_in_2_months' | 'cash'>('all');
   const [chartMode, setChartMode] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedChartPeriod, setSelectedChartPeriod] = useState<string | null>(null);
 
@@ -78,6 +78,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       collected: number;
       digitalCleared: number;
       growClearedBankOn10th: number;
+      bankOn10thInTwoMonths: number;
       cashBanknotes: number;
       cashCollected: number;
       totalCollected: number;
@@ -107,7 +108,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       recentKeys.push(`${y}-${m}`);
     }
 
-    // Compute actual collections per month across the 3 categories
+    // Compute actual collections per month across the 4 categories
     recentKeys.forEach(mKey => {
       const breakdown = getMonthlyRevenueBreakdown(mKey, activeBookings);
       let mExpected = 0;
@@ -127,8 +128,9 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
         collected: breakdown.digitalCleared, // 1. נסלק החודש (דיגיטלי)
         digitalCleared: breakdown.digitalCleared,
         growClearedBankOn10th: breakdown.growClearedBankOn10th,
-        cashBanknotes: breakdown.cashBanknotes,
-        cashCollected: breakdown.cashBanknotes,
+        bankOn10thInTwoMonths: breakdown.bankOn10thInTwoMonths,
+        cashBanknotes: breakdown.cashCollected,
+        cashCollected: breakdown.cashCollected,
         totalCollected: breakdown.totalCollected,
         expected: mExpected,
         debt: mDebt
@@ -272,23 +274,27 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const curData = monthlyMap[currentMonthKey];
       const digitalCleared = curData?.digitalCleared || 0;
       const growClearedBankOn10th = curData?.growClearedBankOn10th || 0;
-      const cashBanknotes = curData?.cashBanknotes || 0;
+      const bankOn10thInTwoMonths = curData?.bankOn10thInTwoMonths || 0;
+      const cashCollected = curData?.cashCollected || 0;
 
-      title = 'פירוט הכנסות וסליקה: 1. דיגיטלי | 2. יכנס ב-10 (GROW) | 3. מזומן (שטרות)';
-      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')} • 2. ייכנס לבנק ב-10: ₪${growClearedBankOn10th.toLocaleString('he-IL')} • 3. נסלק במזומן (שטרות): ₪${cashBanknotes.toLocaleString('he-IL')}`;
+      title = 'פירוט הכנסות וסליקה: דיגיטלי, יכנס ב-10, יכנס בעוד חודשיים, ומזומן';
+      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')} • 2. ייכנס לבנק ב-10: ₪${growClearedBankOn10th.toLocaleString('he-IL')} • 3. יכנס בעוד חודשיים: ₪${bankOn10thInTwoMonths.toLocaleString('he-IL')} • 4. נסלק במזומן: ₪${cashCollected.toLocaleString('he-IL')}`;
       icon = <DollarSign className="w-5 h-5 text-emerald-700" />;
       badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
       filteredItems = paidItems;
 
-      // Filter by revenueCategoryFilter (all / digital / grow_10th / cash_notes)
+      // Filter by revenueCategoryFilter (all / digital / grow_10th / grow_in_2_months / cash)
       if (revenueCategoryFilter !== 'all') {
         filteredItems = filteredItems.filter(b => {
           const notes = (b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '');
           const isGrow = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref) || b.id.includes(t.ref));
           const isBank = (b.ownerName || '').includes('רונן') || (b.ownerName || '').includes('מלמוד') || notes.includes('העברה בנקאית');
+          const isInstallment = notes.includes('מתוך') || notes.includes('תשלום ראשון') || (b.ownerName || '').includes('דורין') || (b.ownerName || '').includes('לוקס');
+
           if (revenueCategoryFilter === 'grow_10th') return isGrow;
+          if (revenueCategoryFilter === 'grow_in_2_months') return isInstallment;
           if (revenueCategoryFilter === 'digital') return isGrow || isBank;
-          if (revenueCategoryFilter === 'cash_notes') return !isGrow && !isBank;
+          if (revenueCategoryFilter === 'cash') return !isGrow && !isBank;
           return true;
         });
       }
@@ -450,17 +456,31 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                 </div>
 
                 <div 
-                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'cash_notes' ? 'all' : 'cash_notes')}
+                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'grow_in_2_months' ? 'all' : 'grow_in_2_months')}
                   className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
-                    revenueCategoryFilter === 'cash_notes' ? 'bg-amber-100 border-amber-500 ring-2 ring-amber-500' : 'bg-amber-50 border-amber-200 hover:bg-amber-100/60'
+                    revenueCategoryFilter === 'grow_in_2_months' ? 'bg-indigo-100 border-indigo-500 ring-2 ring-indigo-500' : 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100/60'
                   }`}
-                  title="לחץ לסינון: 3. נסלק במזומן (הכוונה לשטרות)"
+                  title="לחץ לסינון: 3. עסקאות בתשלומים שיכנסו לבנק ב-10 בעוד חודשיים"
                 >
-                  <div className="text-[10px] font-bold text-amber-800">3. נסלק במזומן (שטרות)</div>
-                  <div className="text-sm font-black text-amber-900">
-                    ₪{(monthlyMap[currentMonthKey]?.cashBanknotes || 0).toLocaleString('he-IL')}
+                  <div className="text-[10px] font-bold text-indigo-900">3. יכנס בעוד חודשיים</div>
+                  <div className="text-sm font-black text-indigo-950">
+                    ₪{(monthlyMap[currentMonthKey]?.bankOn10thInTwoMonths || 0).toLocaleString('he-IL')}
                   </div>
-                  <div className="text-[9px] text-amber-700 font-medium">שטרות כסף פיזיים</div>
+                  <div className="text-[9px] text-indigo-700 font-medium">תשלומי המשך מובטחים</div>
+                </div>
+
+                <div 
+                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'cash' ? 'all' : 'cash')}
+                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
+                    revenueCategoryFilter === 'cash' ? 'bg-amber-100 border-amber-500 ring-2 ring-amber-500' : 'bg-amber-50 border-amber-200 hover:bg-amber-100/60'
+                  }`}
+                  title="לחץ לסינון: 4. נסלק במזומן"
+                >
+                  <div className="text-[10px] font-bold text-amber-800">4. נסלק במזומן</div>
+                  <div className="text-sm font-black text-amber-900">
+                    ₪{(monthlyMap[currentMonthKey]?.cashCollected || 0).toLocaleString('he-IL')}
+                  </div>
+                  <div className="text-[9px] text-amber-700 font-medium">תשלום מזומן ישיר</div>
                 </div>
 
                 <div 
@@ -474,7 +494,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   <div className="text-sm font-black text-slate-900">
                     ₪{(monthlyMap[currentMonthKey]?.totalCollected || 0).toLocaleString('he-IL')}
                   </div>
-                  <div className="text-[9px] text-slate-400">דיגיטלי + שטרות</div>
+                  <div className="text-[9px] text-slate-400">דיגיטלי + מזומן</div>
                 </div>
               </div>
             </div>
@@ -618,7 +638,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
             </div>
           )}
 
-          {/* Sub-filter for Revenue metric: 3 Categories */}
+          {/* Sub-filter for Revenue metric: 4 Categories */}
           {metricType === 'revenue' && (
             <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
               <button
@@ -650,12 +670,21 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setRevenueCategoryFilter('cash_notes')}
+                onClick={() => setRevenueCategoryFilter('grow_in_2_months')}
                 className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                  revenueCategoryFilter === 'cash_notes' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  revenueCategoryFilter === 'grow_in_2_months' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                💵 3. נסלק במזומן (שטרות)
+                🗓️ 3. יכנס בעוד חודשיים
+              </button>
+              <button
+                type="button"
+                onClick={() => setRevenueCategoryFilter('cash')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                  revenueCategoryFilter === 'cash' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                💵 4. נסלק במזומן
               </button>
             </div>
           )}
@@ -719,12 +748,20 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         </span>
                       )}
 
-                      {/* Revenue Metric Badge: 3 Categories */}
+                      {/* Revenue Metric Badge: 4 Categories */}
                       {metricType === 'revenue' && (() => {
                         const notes = (b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '');
                         const isGrow = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref) || b.id.includes(t.ref));
                         const isBank = (b.ownerName || '').includes('רונן') || (b.ownerName || '').includes('מלמוד') || notes.includes('העברה בנקאית');
+                        const isInstallment = notes.includes('מתוך') || notes.includes('תשלום ראשון') || (b.ownerName || '').includes('דורין') || (b.ownerName || '').includes('לוקס');
                         
+                        if (isInstallment) {
+                          return (
+                            <span className="text-[10px] bg-indigo-50 text-indigo-900 font-bold px-1.5 py-0.5 rounded border border-indigo-300">
+                              🗓️ 2+3. נסלק בתשלומים (יכנס ב-10 ובחודש הבא)
+                            </span>
+                          );
+                        }
                         if (isGrow) {
                           return (
                             <span className="text-[10px] bg-sky-50 text-sky-800 font-bold px-1.5 py-0.5 rounded border border-sky-300">
@@ -741,7 +778,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         }
                         return (
                           <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded border border-amber-300">
-                            💵 3. נסלק במזומן (שטרות)
+                            💵 4. נסלק במזומן
                           </span>
                         );
                       })()}
