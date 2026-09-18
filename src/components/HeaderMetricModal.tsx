@@ -284,8 +284,8 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const bankOn10thInTwoMonths = curData?.bankOn10thInTwoMonths || 0;
       const cashCollected = curData?.cashCollected || 0;
 
-      title = `פירוט הכנסות וסליקה: דיגיטלי, יכנס ב-10, העברות ישירות, יכנס ב-${inTwoMonthsDateLabel}, ומזומן`;
-      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')} • 2. ייכנס לבנק ב-${next10thDateLabel}: ₪${growClearedBankOn10th.toLocaleString('he-IL')}${directBankTransfers > 0 ? ` • ישיר לחשבון: ₪${directBankTransfers.toLocaleString('he-IL')}` : ''} • 3. יכנס לבנק ב-${inTwoMonthsDateLabel}: ₪${bankOn10thInTwoMonths.toLocaleString('he-IL')} • 4. נסלק במזומן: ₪${cashCollected.toLocaleString('he-IL')}`;
+      title = `פירוט הכנסות וסליקה: דיגיטלי, העברות ישירות, יכנס ב-10, יכנס ב-${inTwoMonthsDateLabel}, ומזומן`;
+      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')}${directBankTransfers > 0 ? ` • ישיר לחשבון: ₪${directBankTransfers.toLocaleString('he-IL')}` : ''} • 2. ייכנס לבנק ב-${next10thDateLabel}: ₪${growClearedBankOn10th.toLocaleString('he-IL')} • 3. יכנס לבנק ב-${inTwoMonthsDateLabel}: ₪${bankOn10thInTwoMonths.toLocaleString('he-IL')} • 4. נסלק במזומן: ₪${cashCollected.toLocaleString('he-IL')}`;
       icon = <DollarSign className="w-5 h-5 text-emerald-700" />;
       badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
       filteredItems = paidItems;
@@ -449,20 +449,6 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   <div className="text-[9px] text-slate-400">כלל התשלומים הדיגיטליים</div>
                 </div>
 
-                <div 
-                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'grow_10th' ? 'all' : 'grow_10th')}
-                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
-                    revenueCategoryFilter === 'grow_10th' ? 'bg-sky-100 border-sky-500 ring-2 ring-sky-500' : 'bg-sky-50 border-sky-200 hover:bg-sky-100/60'
-                  }`}
-                  title="לחץ לסינון: 2. סליקת כרטיסי אשראי GROW (ייכנס לבנק ב-10 לחודש הקרוב)"
-                >
-                  <div className="text-[10px] font-bold text-sky-800">2. יכנס לבנק ב-{next10thDateLabel}</div>
-                  <div className="text-sm font-black text-sky-900">
-                    ₪{(monthlyMap[currentMonthKey]?.growClearedBankOn10th || 0).toLocaleString('he-IL')}
-                  </div>
-                  <div className="text-[9px] text-sky-600 font-medium">סליקת כרטיסי אשראי GROW</div>
-                </div>
-
                 {(monthlyMap[currentMonthKey]?.directBankTransfers || 0) > 0 && (
                   <div 
                     onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'direct_transfer' ? 'all' : 'direct_transfer')}
@@ -478,6 +464,20 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                     <div className="text-[9px] text-teal-700 font-medium">כבר בחשבון הבנק</div>
                   </div>
                 )}
+
+                <div 
+                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'grow_10th' ? 'all' : 'grow_10th')}
+                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
+                    revenueCategoryFilter === 'grow_10th' ? 'bg-sky-100 border-sky-500 ring-2 ring-sky-500' : 'bg-sky-50 border-sky-200 hover:bg-sky-100/60'
+                  }`}
+                  title="לחץ לסינון: 2. סליקת כרטיסי אשראי GROW (ייכנס לבנק ב-10 לחודש הקרוב)"
+                >
+                  <div className="text-[10px] font-bold text-sky-800">2. יכנס לבנק ב-{next10thDateLabel}</div>
+                  <div className="text-sm font-black text-sky-900">
+                    ₪{(monthlyMap[currentMonthKey]?.growClearedBankOn10th || 0).toLocaleString('he-IL')}
+                  </div>
+                  <div className="text-[9px] text-sky-600 font-medium">סליקת כרטיסי אשראי GROW</div>
+                </div>
 
                 <div 
                   onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'grow_in_2_months' ? 'all' : 'grow_in_2_months')}
@@ -683,15 +683,6 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
               >
                 📱 1. נסלק החודש (דיגיטלי)
               </button>
-              <button
-                type="button"
-                onClick={() => setRevenueCategoryFilter('grow_10th')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                  revenueCategoryFilter === 'grow_10th' ? 'bg-sky-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                🏦 2. יכנס לבנק ב-{next10thDateLabel} (GROW)
-              </button>
               {(monthlyMap[currentMonthKey]?.directBankTransfers || 0) > 0 && (
                 <button
                   type="button"
@@ -703,6 +694,15 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   🏛️ הועבר ישירות לחשבון
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => setRevenueCategoryFilter('grow_10th')}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                  revenueCategoryFilter === 'grow_10th' ? 'bg-sky-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🏦 2. יכנס לבנק ב-{next10thDateLabel} (GROW)
+              </button>
               <button
                 type="button"
                 onClick={() => setRevenueCategoryFilter('grow_in_2_months')}

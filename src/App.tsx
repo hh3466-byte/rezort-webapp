@@ -1443,14 +1443,14 @@ export default function App() {
                 title="לחץ לפתיחת פירוט ודוחות הכנסות"
               >
                 <span>📱 1. נסלק (דיגיטלי): <strong className="text-[#0f766e]">₪{monthDigitalCleared.toLocaleString('he-IL')}</strong></span>
-                <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
-                  🏦 2. ייכנס ב-{next10thDateLabel}: ₪{monthBankOn10th.toLocaleString('he-IL')}
-                </span>
                 {monthDirectBankTransfers > 0 && (
                   <span className="bg-teal-50 text-teal-900 border border-teal-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title="העברות בנקאיות ישירות שכבר הופקדו בחשבון הבנק">
                     🏛️ הועבר ישירות: ₪{monthDirectBankTransfers.toLocaleString('he-IL')}
                   </span>
                 )}
+                <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
+                  🏦 2. ייכנס ב-{next10thDateLabel}: ₪{monthBankOn10th.toLocaleString('he-IL')}
+                </span>
                 {monthBankIn2Months > 0 && (
                   <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title={`עסקאות בתשלומים שיכנסו לבנק ב-${inTwoMonthsDateLabel}`}>
                     🗓️ 3. ייכנס ב-{inTwoMonthsDateLabel}: ₪{monthBankIn2Months.toLocaleString('he-IL')}
@@ -1643,7 +1643,7 @@ export default function App() {
                       ₪{monthDigitalCleared.toLocaleString('he-IL')}
                     </div>
                     <div className="text-[9px] text-slate-500 font-medium">
-                      כל הדיגיטלי ({monthPaidCount} עסקאות: ₪{monthBankOn10th.toLocaleString('he-IL')} + ₪{monthDirectBankTransfers.toLocaleString('he-IL')})
+                      כל הדיגיטלי ({monthPaidCount} עסקאות: ₪{monthDirectBankTransfers.toLocaleString('he-IL')} + ₪{monthBankOn10th.toLocaleString('he-IL')})
                     </div>
                   </div>
 
@@ -1670,18 +1670,8 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* משבצות מובחנות: 2. יכנס לבנק ב-10 | הועבר ישירות לחשבון | 3. יכנס בעוד חודשיים | 4. נסלק במזומן */}
+                {/* משבצות מובחנות: הועבר ישירות לחשבון | 2. יכנס לבנק ב-10.10 | 3. יכנס לבנק ב-10.11 | 4. נסלק במזומן */}
                 <div className="space-y-1 mt-1">
-                  <div className="flex items-center justify-between bg-sky-50/90 border border-sky-200 px-2 py-0.5 rounded-md text-[10px]">
-                    <span className="font-bold text-sky-900 flex items-center gap-1">
-                      <span>🏦</span>
-                      <span>2. יכנס לבנק ב-{next10thDateLabel}:</span>
-                    </span>
-                    <span className="font-black text-sky-950">
-                      ₪{monthBankOn10th.toLocaleString('he-IL')}
-                    </span>
-                  </div>
-
                   {monthDirectBankTransfers > 0 && (
                     <div className="flex items-center justify-between bg-teal-50/90 border border-teal-200 px-2 py-0.5 rounded-md text-[10px]" title="העברות בנקאיות ישירות שכבר הופקדו בחשבון הבנק (רונן מלמוד)">
                       <span className="font-bold text-teal-900 flex items-center gap-1">
@@ -1693,6 +1683,16 @@ export default function App() {
                       </span>
                     </div>
                   )}
+
+                  <div className="flex items-center justify-between bg-sky-50/90 border border-sky-200 px-2 py-0.5 rounded-md text-[10px]">
+                    <span className="font-bold text-sky-900 flex items-center gap-1">
+                      <span>🏦</span>
+                      <span>2. יכנס לבנק ב-{next10thDateLabel}:</span>
+                    </span>
+                    <span className="font-black text-sky-950">
+                      ₪{monthBankOn10th.toLocaleString('he-IL')}
+                    </span>
+                  </div>
 
                   {monthBankIn2Months > 0 && (
                     <div className="flex items-center justify-between bg-indigo-50/90 border border-indigo-200 px-2 py-0.5 rounded-md text-[10px]" title={`עסקאות בתשלומים שיכנסו לבנק ב-${inTwoMonthsDateLabel}`}>

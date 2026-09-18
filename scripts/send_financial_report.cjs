@@ -104,10 +104,10 @@ async function generateAndSendReport(reportType = 'weekly', customPhone = '05432
 *פירוט תזרים והכנסות לחודש ${currentMonthKey}:*
 ━━━━━━━━━━━━━━━━━━━━━
 📱 *1. נסלק החודש (דיגיטלי):* ₪${digitalCleared.toLocaleString('he-IL')}
-   • 🏦 *2. יכנס לבנק ב-10 (10.10):* ₪${grow10th.toLocaleString('he-IL')}
-     (סליקת אשראי GROW מאומתת - 13 עסקאות מובטחות)
    • 🏛️ *הועבר ישירות לחשבון (כבר בבנק):* ₪${bankTransfers.toLocaleString('he-IL')}
      (העברות בנקאיות ישירות - רונן מלמוד, לונה)
+   • 🏦 *2. יכנס לבנק ב-10 (10.10):* ₪${grow10th.toLocaleString('he-IL')}
+     (סליקת אשראי GROW מאומתת - 13 עסקאות מובטחות)
 
 🗓️ *3. יכנס לבנק ב-10 בעוד חודשיים (10.11):* ₪${inTwoMonths.toLocaleString('he-IL')}
    (תשלומי המשך מובטחים של עסקאות בתשלומים - דורין לוקס)
@@ -147,8 +147,8 @@ async function generateAndSendReport(reportType = 'weekly', customPhone = '05432
 
 ━━━━━━━━━━━━━━━━━━━━━
 📱 *1. נסלק בערוצים דיגיטליים:* ₪${digitalCleared.toLocaleString('he-IL')}
-   • 🏦 *2. תקבולים מ-GROW ב-10 הקרוב:* ₪${grow10th.toLocaleString('he-IL')}
    • 🏛️ *הועבר ישירות לחשבון (כבר בבנק):* ₪${bankTransfers.toLocaleString('he-IL')}
+   • 🏦 *2. תקבולים מ-GROW ב-10 הקרוב:* ₪${grow10th.toLocaleString('he-IL')}
 🗓️ *3. תקבולים ב-10 בעוד חודשיים:* ₪${inTwoMonths.toLocaleString('he-IL')} (עסקאות בתשלומים)
 💵 *4. נסלק במזומן:* ₪${cashCollected.toLocaleString('he-IL')}
 ━━━━━━━━━━━━━━━━━━━━━
