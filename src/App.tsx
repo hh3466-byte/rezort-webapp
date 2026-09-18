@@ -47,7 +47,7 @@ import { GrowPaymentsModal, LinkedPaymentDetails } from './components/GrowPaymen
 import { PaymentModal } from './components/PaymentModal';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
-import { ManagerLoginGate } from './components/ManagerLoginGate';
+import { WhatsAppAuthGate } from './components/WhatsAppAuthGate';
 import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2, LogOut, Lock, ArrowLeft, Search, BarChart3 } from 'lucide-react';
 import { formatPhoneForWhatsApp } from './utils/whatsappUtils';
 import { SettingsModal } from './components/SettingsModal';
@@ -133,26 +133,31 @@ export default function App() {
   const inProgressIntakeCount = intakeRequests.filter(r => isIntakeRequestInTreatment(r, bookings)).length;
   const pendingIntakeCount = newIntakeCount;
 
-  // Manager Authentication State (Passcode 3466)
-  // Seamless, smooth default access for the resort team (owner, Shmulik, and Talinka)
+  // Manager Authentication State (WhatsApp OTP / Authorized Device)
+  // Whitelist: User (054-3200007), Shmulik (054-8765888 / 050-6336896)
   const [isManagerAuthenticated, setIsManagerAuthenticated] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       if (sessionStorage.getItem('resort_manager_locked') === 'true') {
         return false;
       }
-      return true;
+      const isDeviceAuthorized = localStorage.getItem('resort_authorized_manager_device');
+      if (isDeviceAuthorized) {
+        return true;
+      }
+      return false;
     }
-    return true;
+    return false;
   });
   const [isStaffPreviewMode, setIsStaffPreviewMode] = useState(false);
 
   const handleManagerLogout = () => {
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('resort_manager_locked', 'true');
+      localStorage.removeItem('resort_authorized_manager_device');
     }
     setIsManagerAuthenticated(false);
     setIsStaffPreviewMode(false);
-    showToast('🔒 מערכת היומן ננעלה.');
+    showToast('🔒 מערכת היומן ננעלה וההרשאה למכשיר בוטלה.');
   };
 
   const [isManagerAuthOpen, setIsManagerAuthOpen] = useState(false);
@@ -996,16 +1001,17 @@ export default function App() {
     );
   }
 
-  // 2. If system is manually locked by manager
+  // 2. If device not authorized via WhatsApp OTP
   if (!isManagerAuthenticated) {
     return (
-      <ManagerLoginGate
+      <WhatsAppAuthGate
+        settings={settings}
         onSuccess={() => {
           if (typeof window !== 'undefined') {
             sessionStorage.removeItem('resort_manager_locked');
           }
           setIsManagerAuthenticated(true);
-          showToast('ברוך הבא! נעילת יומן שוחררה בהצלחה 🐾');
+          showToast('ברוך הבא! מכשירך אושר בהצלחה בוואטסאפ 🐾');
         }}
         onGoToPublicIntake={() => {
           setIsStaffPreviewMode(false);
@@ -1509,31 +1515,31 @@ export default function App() {
             <div className="bg-white border border-slate-200/90 rounded-2xl p-3 sm:p-3.5 shadow-2xs">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-3.5 items-stretch">
                 
-                {/* RIGHT WING (cols-6): Operational 4-Pods (תפוסה, פנסיון, אילוף, חוב) */}
-                <div className="lg:col-span-6 flex flex-col justify-between gap-1.5">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-[11px] font-black text-slate-500 flex items-center gap-1.5">
+                {/* RIGHT WING (cols-5): Operational 4-Pods arranged in 2x2 Grid (No Wasted Space) */}
+                <div className="lg:col-span-5 bg-slate-50/60 border border-slate-200/90 rounded-2xl p-3 flex flex-col justify-between gap-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between px-0.5">
+                    <span className="text-xs font-black text-slate-700 flex items-center gap-1.5">
                       <span>🐕</span>
                       <span>פעילות היום בריזורט</span>
                     </span>
-                    <span className="text-[10px] text-slate-400 font-semibold">
-                      4 מוקדי תפעול שוטף
+                    <span className="text-[10px] text-slate-500 font-bold bg-white px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs">
+                      4 מוקדי תפעול
                     </span>
                   </div>
 
-                  {/* 4 Pods in a unified, level grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {/* 4 Pods in a 2x2 Grid filling the height seamlessly */}
+                  <div className="grid grid-cols-2 gap-2 flex-1 items-stretch">
                     
                     {/* Pod 1: תפוסה כללית */}
                     <div 
                       onClick={() => setActiveHeaderMetric('occupancy')}
                       role="button"
                       tabIndex={0}
-                      className="bg-slate-50/80 hover:bg-emerald-50/60 border border-slate-200/80 hover:border-emerald-300 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
+                      className="bg-white hover:bg-emerald-50/60 border border-slate-200/90 hover:border-emerald-300 rounded-xl p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
                       title="לחץ לעיון ועריכת כלבי התפוסה הכללית היום"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-emerald-800 transition-colors truncate">
+                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-emerald-800 transition-colors">
                           תפוסה כללית
                         </span>
                         <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
@@ -1544,10 +1550,10 @@ export default function App() {
                           {Math.round((totalDogsToday / Math.max(1, settings.maxCapacity)) * 100)}%
                         </span>
                       </div>
-                      <div className="text-xl sm:text-2xl font-black text-slate-900 my-0.5 text-right">
+                      <div className="text-lg sm:text-xl font-black text-slate-900 my-0.5 text-right">
                         {totalDogsToday} <span className="text-[11px] font-semibold text-slate-400">/ {settings.maxCapacity}</span>
                       </div>
-                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-200/60">
+                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100">
                         <span className="truncate">{freeSlots > 0 ? `${freeSlots} פנויים` : 'מלא 🔴'}</span>
                         <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100">
                           עיון 🔍
@@ -1560,21 +1566,21 @@ export default function App() {
                       onClick={() => setActiveHeaderMetric('boarding')}
                       role="button"
                       tabIndex={0}
-                      className="bg-slate-50/80 hover:bg-sky-50/60 border border-slate-200/80 hover:border-sky-300 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
+                      className="bg-white hover:bg-sky-50/60 border border-slate-200/90 hover:border-sky-300 rounded-xl p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
                       title="לחץ לעיון ועריכת כלבי הפנסיון והדייקר היום"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-sky-800 transition-colors truncate">
+                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-sky-800 transition-colors">
                           פנסיון
                         </span>
                         <span className="text-[9px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.2 rounded-full border border-sky-200">
                           🏨 לינה
                         </span>
                       </div>
-                      <div className="text-xl sm:text-2xl font-black text-slate-900 my-0.5 text-right">
+                      <div className="text-lg sm:text-xl font-black text-slate-900 my-0.5 text-right">
                         {boardingToday} <span className="text-[11px] font-semibold text-slate-400">כלבים</span>
                       </div>
-                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-200/60">
+                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100">
                         <span className="truncate">{boardingToday === 0 ? 'אין לינה' : `${boardingToday} בפנסיון`}</span>
                         <span className="text-[10px] text-sky-700 font-bold opacity-80 group-hover:opacity-100">
                           עיון 🔍
@@ -1587,11 +1593,11 @@ export default function App() {
                       onClick={() => setActiveHeaderMetric('training')}
                       role="button"
                       tabIndex={0}
-                      className="bg-slate-50/80 hover:bg-purple-50/60 border border-slate-200/80 hover:border-purple-300 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
+                      className="bg-white hover:bg-purple-50/60 border border-slate-200/90 hover:border-purple-300 rounded-xl p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
                       title="לחץ לעיון ועריכת כלבי האילוף היום"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-purple-800 transition-colors truncate">
+                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-purple-800 transition-colors">
                           באילוף
                         </span>
                         <span className="text-[9px] font-black text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded-full border border-purple-200">
@@ -1599,13 +1605,13 @@ export default function App() {
                         </span>
                       </div>
                       <div className="flex items-baseline gap-1 my-0.5">
-                        <span className="text-lg sm:text-xl font-black text-purple-600">{fullTrainingToday}</span>
+                        <span className="text-base sm:text-lg font-black text-purple-600">{fullTrainingToday}</span>
                         <span className="text-[10px] font-bold text-slate-600">🎓 מלא</span>
                         <span className="text-slate-300 text-xs">|</span>
-                        <span className="text-lg sm:text-xl font-black text-indigo-600">{dayTrainingToday}</span>
+                        <span className="text-base sm:text-lg font-black text-indigo-600">{dayTrainingToday}</span>
                         <span className="text-[10px] font-bold text-slate-600">🦮</span>
                       </div>
-                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-200/60">
+                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100">
                         <span className="truncate">{trainingToday > 0 ? `${trainingToday} בתהליך` : 'אין אילוף'}</span>
                         <span className="text-[10px] text-purple-700 font-bold opacity-80 group-hover:opacity-100">
                           עיון 🔍
@@ -1618,11 +1624,11 @@ export default function App() {
                       onClick={() => setActiveHeaderMetric('debt')}
                       role="button"
                       tabIndex={0}
-                      className="bg-slate-50/80 hover:bg-red-50/60 border border-slate-200/80 hover:border-red-300 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
+                      className="bg-white hover:bg-red-50/60 border border-slate-200/90 hover:border-red-300 rounded-xl p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
                       title="לחץ לעיון ועריכת ההזמנות עם יתרת חוב פתוח"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-red-800 transition-colors truncate">
+                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-red-800 transition-colors">
                           חוב פתוח
                         </span>
                         <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
@@ -1633,10 +1639,10 @@ export default function App() {
                           {openDebtTotal === 0 ? '🟢 נקי' : `🔴 ${unpaidCount}`}
                         </span>
                       </div>
-                      <div className="text-xl sm:text-2xl font-black text-[#0f766e] my-0.5 text-right">
+                      <div className="text-lg sm:text-xl font-black text-[#0f766e] my-0.5 text-right">
                         ₪{openDebtTotal.toLocaleString('he-IL')}
                       </div>
-                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-200/60">
+                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100">
                         <span className="truncate">{openDebtTotal === 0 ? 'הכול שולם 🥳' : `${unpaidCount} עם יתרה`}</span>
                         <span className="text-[10px] text-red-600 font-bold opacity-80 group-hover:opacity-100">
                           עיון 🔍
@@ -1647,9 +1653,9 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* LEFT WING (cols-6): Monthly Financial Flow & Breakdown */}
+                {/* LEFT WING (cols-7): Monthly Financial Flow & Breakdown (Enlarged & Spacious) */}
                 <div 
-                  className="lg:col-span-6 bg-gradient-to-br from-emerald-50/45 via-teal-50/30 to-slate-50/70 border border-emerald-200/80 rounded-2xl p-3 flex flex-col justify-between gap-2.5 shadow-2xs hover:border-emerald-300 transition-all"
+                  className="lg:col-span-7 bg-gradient-to-br from-emerald-50/45 via-teal-50/30 to-slate-50/70 border border-emerald-200/80 rounded-2xl p-3 flex flex-col justify-between gap-2.5 shadow-2xs hover:border-emerald-300 transition-all"
                 >
                   {/* Financial Top Row: Title + Main Amount + Graphs Button */}
                   <div className="flex items-start justify-between gap-2">
