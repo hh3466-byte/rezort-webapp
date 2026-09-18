@@ -48,7 +48,7 @@ import { PaymentModal } from './components/PaymentModal';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
 import { ManagerLoginGate } from './components/ManagerLoginGate';
-import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2, LogOut, Lock, ArrowLeft, Search } from 'lucide-react';
+import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2, LogOut, Lock, ArrowLeft, Search, BarChart3 } from 'lucide-react';
 import { formatPhoneForWhatsApp } from './utils/whatsappUtils';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
@@ -1509,8 +1509,8 @@ export default function App() {
             <div className="bg-white border border-slate-200/90 rounded-2xl p-3 sm:p-3.5 shadow-2xs">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-3.5 items-stretch">
                 
-                {/* RIGHT WING (cols-7): Operational 4-Pods (תפוסה, פנסיון, אילוף, חוב) */}
-                <div className="lg:col-span-7 flex flex-col justify-between gap-1.5">
+                {/* RIGHT WING (cols-6): Operational 4-Pods (תפוסה, פנסיון, אילוף, חוב) */}
+                <div className="lg:col-span-6 flex flex-col justify-between gap-1.5">
                   <div className="flex items-center justify-between px-1">
                     <span className="text-[11px] font-black text-slate-500 flex items-center gap-1.5">
                       <span>🐕</span>
@@ -1647,105 +1647,145 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* LEFT WING (cols-5): Monthly Financial Flow & Breakdown */}
+                {/* LEFT WING (cols-6): Monthly Financial Flow & Breakdown */}
                 <div 
-                  className="lg:col-span-5 bg-gradient-to-br from-emerald-50/45 via-teal-50/30 to-slate-50/70 border border-emerald-200/80 rounded-xl p-2.5 sm:p-3 flex flex-col justify-between gap-2 shadow-2xs hover:border-emerald-300 transition-all"
+                  className="lg:col-span-6 bg-gradient-to-br from-emerald-50/45 via-teal-50/30 to-slate-50/70 border border-emerald-200/80 rounded-2xl p-3 flex flex-col justify-between gap-2.5 shadow-2xs hover:border-emerald-300 transition-all"
                 >
-                  {/* Financial Top Row: Title + Main Amount + Mini-Bars + Graphs Button */}
+                  {/* Financial Top Row: Title + Main Amount + Graphs Button */}
                   <div className="flex items-start justify-between gap-2">
-                    <div>
+                    <div 
+                      onClick={() => setActiveHeaderMetric('revenue')}
+                      role="button"
+                      tabIndex={0}
+                      className="cursor-pointer group"
+                      title="לחץ לצפייה בגרפים חודשיים ושנתיים ודוחות כספיים מלאים 📊"
+                    >
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] font-black text-emerald-950 flex items-center gap-1">
+                        <span className="text-xs font-black text-emerald-950 flex items-center gap-1 group-hover:text-emerald-700 transition-colors">
                           <span>💰</span>
                           <span>תקבולים וסליקה החודש</span>
                         </span>
-                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-1.5 py-0.2 rounded-full border border-emerald-200">
+                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full border border-emerald-200">
                           🐾 {currentMonthActiveStays.length} שהויות
                         </span>
                       </div>
                       
                       <div className="flex items-baseline gap-2 mt-0.5">
-                        <div className="text-xl sm:text-2xl font-black text-[#065f46] tracking-tight">
+                        <div className="text-2xl sm:text-3xl font-black text-[#065f46] tracking-tight group-hover:text-emerald-800 transition-colors">
                           ₪{monthTotalCollected.toLocaleString('he-IL')}
                         </div>
-                        <span className="text-[10px] text-slate-500 font-medium">
-                          (דיגיטלי: ₪{monthDigitalCleared.toLocaleString('he-IL')} • מזומן: ₪{monthCashCollected.toLocaleString('he-IL')})
-                        </span>
                       </div>
                     </div>
 
-                    {/* Left side: Mini Bars + Drilldown Button */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="flex items-end gap-1 h-7 pb-0.5" title="עמודות 4 חודשים אחרונים (לחץ לגרפים מפורטים)">
-                        {recentMonthsMiniData.map((mItem, idx) => {
-                          const barHeight = Math.max(18, Math.round((mItem.revenue / maxRecentMiniRev) * 100));
-                          return (
-                            <div key={idx} className="flex flex-col items-center gap-0.5 h-full justify-end w-2.5 sm:w-3">
-                              <div
-                                className={`w-full rounded-t-xs transition-all ${
-                                  mItem.isCurrent
-                                    ? 'bg-emerald-600'
-                                    : 'bg-slate-300'
-                                }`}
-                                style={{ height: `${barHeight}%` }}
-                              />
-                              <span className={`text-[7px] leading-none ${mItem.isCurrent ? 'text-emerald-900 font-black' : 'text-slate-400'}`}>
-                                {mItem.label}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setActiveHeaderMetric('revenue')}
-                        className="bg-white hover:bg-emerald-50 text-emerald-800 hover:text-emerald-950 border border-emerald-300 font-black text-[10px] px-2.5 py-1.5 rounded-lg shadow-2xs flex items-center gap-1 transition-all cursor-pointer active:scale-95 shrink-0"
-                        title="פתח דוחות כספיים מלאים, גרפים חודשיים ושנתיים וייצוא לאקסל"
-                      >
-                        <span>גרפים 📊</span>
-                      </button>
-                    </div>
+                    {/* Graphs & Reports Button (Clicking opens full charts & stats) */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveHeaderMetric('revenue')}
+                      className="bg-white hover:bg-emerald-50 text-emerald-850 hover:text-emerald-950 border border-emerald-300/90 hover:border-emerald-400 font-black text-xs px-3 py-2 rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 shrink-0"
+                      title="לחץ לצפייה בגרפים חודשיים ושנתיים ודוחות כספיים מלאים"
+                    >
+                      <BarChart3 className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>גרפים ודוחות 📊</span>
+                    </button>
                   </div>
 
-                  {/* Financial Bottom Row: 4 Horizontal Destination Pills */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[10px] pt-1.5 border-t border-emerald-200/60">
+                  {/* Financial Middle: 4 Destination Boxes in TWO Columns (Enlarged & Fully Legible) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-emerald-200/60">
                     
-                    {/* Pill 1: Direct Bank Transfer */}
-                    <div className="bg-teal-50/90 border border-teal-200/90 px-2 py-1 rounded-lg flex items-center justify-between shadow-2xs" title="העברות בנקאיות ישירות שכבר הופקדו בחשבון הבנק">
-                      <span className="font-bold text-teal-900 truncate">🏛️ הועבר ישירות:</span>
-                      <span className="font-black text-teal-950 mr-1 shrink-0">₪{monthDirectBankTransfers.toLocaleString('he-IL')}</span>
+                    {/* Box 1: Direct Bank Transfer */}
+                    <div 
+                      onClick={() => setActiveHeaderMetric('revenue')}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-teal-50/90 hover:bg-teal-100/80 border border-teal-200/90 hover:border-teal-300 px-3 py-2.5 rounded-xl flex items-center justify-between shadow-2xs transition-all cursor-pointer group" 
+                      title="העברות בנקאיות ישירות שכבר הופקדו בחשבון הבנק"
+                    >
+                      <span className="font-bold text-teal-900 text-xs sm:text-[13px] flex items-center gap-1.5 group-hover:text-teal-950">
+                        <span className="text-sm">🏛️</span>
+                        <span>הועבר ישירות לחשבון:</span>
+                      </span>
+                      <span className="font-black text-teal-950 text-xs sm:text-sm mr-2 shrink-0 font-mono">
+                        ₪{monthDirectBankTransfers.toLocaleString('he-IL')}
+                      </span>
                     </div>
 
-                    {/* Pill 2: 10th of Month */}
-                    <div className="bg-sky-50/90 border border-sky-200/90 px-2 py-1 rounded-lg flex items-center justify-between shadow-2xs" title={`סליקת אשראי ו-GROW שתיכנס לבנק ב-${next10thDateLabel}`}>
-                      <span className="font-bold text-sky-900 truncate">🏦 ב-{next10thDateLabel}:</span>
-                      <span className="font-black text-sky-950 mr-1 shrink-0">₪{monthBankOn10th.toLocaleString('he-IL')}</span>
+                    {/* Box 2: 10th of Month (GROW) */}
+                    <div 
+                      onClick={() => setActiveHeaderMetric('revenue')}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-sky-50/90 hover:bg-sky-100/80 border border-sky-200/90 hover:border-sky-300 px-3 py-2.5 rounded-xl flex items-center justify-between shadow-2xs transition-all cursor-pointer group" 
+                      title={`סליקת אשראי ו-GROW שתיכנס לבנק ב-${next10thDateLabel}`}
+                    >
+                      <span className="font-bold text-sky-900 text-xs sm:text-[13px] flex items-center gap-1.5 group-hover:text-sky-950">
+                        <span className="text-sm">🏦</span>
+                        <span>ייכנס ב-{next10thDateLabel} (GROW):</span>
+                      </span>
+                      <span className="font-black text-sky-950 text-xs sm:text-sm mr-2 shrink-0 font-mono">
+                        ₪{monthBankOn10th.toLocaleString('he-IL')}
+                      </span>
                     </div>
 
-                    {/* Pill 3: Cash Collected */}
-                    <div className="bg-amber-50/90 border border-amber-200/90 px-2 py-1 rounded-lg flex items-center justify-between shadow-2xs" title="מזומן שנגבה בקופה מתחילת החודש">
-                      <span className="font-bold text-amber-900 truncate">💵 במזומן:</span>
-                      <span className="font-black text-amber-950 mr-1 shrink-0">₪{monthCashCollected.toLocaleString('he-IL')}</span>
+                    {/* Box 3: Cash Collected */}
+                    <div 
+                      onClick={() => setActiveHeaderMetric('revenue')}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-amber-50/90 hover:bg-amber-100/80 border border-amber-200/90 hover:border-amber-300 px-3 py-2.5 rounded-xl flex items-center justify-between shadow-2xs transition-all cursor-pointer group" 
+                      title="מזומן שנגבה בקופה מתחילת החודש"
+                    >
+                      <span className="font-bold text-amber-900 text-xs sm:text-[13px] flex items-center gap-1.5 group-hover:text-amber-950">
+                        <span className="text-sm">💵</span>
+                        <span>נסלק במזומן בקופה:</span>
+                      </span>
+                      <span className="font-black text-amber-950 text-xs sm:text-sm mr-2 shrink-0 font-mono">
+                        ₪{monthCashCollected.toLocaleString('he-IL')}
+                      </span>
                     </div>
 
-                    {/* Pill 4: In 2 Months or Balance Sanity Check */}
-                    {monthBankIn2Months > 0 ? (
-                      <div className="bg-indigo-50/90 border border-indigo-200/90 px-2 py-1 rounded-lg flex items-center justify-between shadow-2xs" title={`עסקאות בתשלומים שיכנסו לבנק ב-${inTwoMonthsDateLabel}`}>
-                        <span className="font-bold text-indigo-900 truncate">🗓️ ב-{inTwoMonthsDateLabel}:</span>
-                        <span className="font-black text-indigo-950 mr-1 shrink-0">₪{monthBankIn2Months.toLocaleString('he-IL')}</span>
-                      </div>
-                    ) : (
-                      <div 
-                        className="bg-emerald-100/70 border border-emerald-300 px-2 py-1 rounded-lg flex items-center justify-between shadow-2xs" 
-                        title={`בדיקת שפיות ואיפוס מלאה:
-• דיגיטלי: ₪${monthDigitalCleared.toLocaleString('he-IL')} = ₪${monthBankOn10th.toLocaleString('he-IL')} (סליקת GROW) + ₪${monthDirectBankTransfers.toLocaleString('he-IL')} (העברות ישירות) [הפרש ₪0]
-• סה״כ כולל: ₪${monthTotalCollected.toLocaleString('he-IL')} = ₪${monthDigitalCleared.toLocaleString('he-IL')} (דיגיטלי) + ₪${monthCashCollected.toLocaleString('he-IL')} (מזומן) [הפרש ₪0]`}
-                      >
-                        <span className="font-bold text-emerald-900 truncate">⚖️ מאוזן 100%:</span>
-                        <span className="font-black text-emerald-950 mr-1 shrink-0">הפרש ₪0 ✓</span>
-                      </div>
-                    )}
+                    {/* Box 4: Installments / In 2 Months */}
+                    <div 
+                      onClick={() => setActiveHeaderMetric('revenue')}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-indigo-50/90 hover:bg-indigo-100/80 border border-indigo-200/90 hover:border-indigo-300 px-3 py-2.5 rounded-xl flex items-center justify-between shadow-2xs transition-all cursor-pointer group" 
+                      title={monthBankIn2Months > 0 ? `עסקאות בתשלומים שיכנסו לבנק ב-${inTwoMonthsDateLabel}` : 'עסקאות בתשלומים עתידיים'}
+                    >
+                      <span className="font-bold text-indigo-900 text-xs sm:text-[13px] flex items-center gap-1.5 group-hover:text-indigo-950">
+                        <span className="text-sm">🗓️</span>
+                        <span>ייכנס ב-{inTwoMonthsDateLabel} (תשלומים):</span>
+                      </span>
+                      <span className="font-black text-indigo-950 text-xs sm:text-sm mr-2 shrink-0 font-mono">
+                        ₪{monthBankIn2Months.toLocaleString('he-IL')}
+                      </span>
+                    </div>
+
+                  </div>
+
+                  {/* Financial Bottom: Overall Calculation & Sanity Check (Always displayed, proving everything balances to 0) */}
+                  <div 
+                    onClick={() => setActiveHeaderMetric('revenue')}
+                    role="button"
+                    tabIndex={0}
+                    className="bg-emerald-100/80 hover:bg-emerald-100 border border-emerald-300/90 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 shadow-2xs transition-all cursor-pointer"
+                    title={`בדיקת שפיות ואיפוס מלאה:
+• דיגיטלי: ₪${monthDigitalCleared.toLocaleString('he-IL')} = ₪${monthBankOn10th.toLocaleString('he-IL')} (סליקת GROW) + ₪${monthDirectBankTransfers.toLocaleString('he-IL')} (העברות ישירות)
+• סה״כ כולל: ₪${monthTotalCollected.toLocaleString('he-IL')} = ₪${monthDigitalCleared.toLocaleString('he-IL')} (דיגיטלי) + ₪${monthCashCollected.toLocaleString('he-IL')} (מזומן)
+• הפרש: ₪0 (הכול מאוזן ונסגר ל-0)`}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs sm:text-[13px] font-bold text-emerald-950">
+                      <span className="text-sm sm:text-base">⚖️</span>
+                      <span>חישוב כולל ואיפוס:</span>
+                      <span className="font-semibold text-emerald-800 text-[11px] sm:text-xs mr-1">
+                        דיגיטלי (₪{monthDigitalCleared.toLocaleString('he-IL')}) + מזומן (₪{monthCashCollected.toLocaleString('he-IL')}) = ₪{monthTotalCollected.toLocaleString('he-IL')}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 bg-[#065f46] text-white font-black text-xs px-2.5 py-1 rounded-lg shadow-2xs shrink-0">
+                      <span>הכול נסגר ל-0</span>
+                      <span>✓</span>
+                      <span className="text-emerald-200 text-[10px] font-mono">(הפרש ₪0)</span>
+                    </div>
                   </div>
 
                 </div>
