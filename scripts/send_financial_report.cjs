@@ -69,7 +69,6 @@ async function generateAndSendReport(reportType = 'weekly', customPhone = '05432
 *פירוט 4 קטגוריות ההכנסה לחודש ${currentMonthKey}:*
 ━━━━━━━━━━━━━━━━━━━━━
 📱 *1. נסלק החודש (דיגיטלי):* ₪${digitalCleared.toLocaleString('he-IL')}
-   (סליקת כרטיסי אשראי GROW: ₪${grow10th.toLocaleString('he-IL')} + העברות בנקאיות לקבלות מילואים: ₪${bankTransfers.toLocaleString('he-IL')})
 
 🏦 *2. יכנס לבנק ב-10 לחודש הקרוב (10.10):* ₪${grow10th.toLocaleString('he-IL')}
    (סליקת GROW מאומתת - 13 עסקאות מובטחות שמופקדות לבנק)
@@ -85,8 +84,7 @@ async function generateAndSendReport(reportType = 'weekly', customPhone = '05432
 🐕 *שהויות פעילות החודש:* ${sepBookings.length} הזמנות
 
 ✅ *סטטוס בדיקת שפיות:*
-• כל עסקאות ה-GROW מצולבות מול חשבוניות ואסמכתאות.
-• העברות בנקאיות ישירות (רונן מלמוד) מתועדות לצורך קבלות מילואים.
+• כלל התשלומים הדיגיטליים מצולבים ומאומתים במערכת.
 • אין חריגות או כספים לא מאומתים במערכת.
 
 שבת שלום! צוות המערכת 🐕🤍`;

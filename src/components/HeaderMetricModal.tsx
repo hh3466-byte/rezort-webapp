@@ -438,7 +438,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   <div className="text-sm font-black text-emerald-700">
                     ₪{(monthlyMap[currentMonthKey]?.digitalCleared || 0).toLocaleString('he-IL')}
                   </div>
-                  <div className="text-[9px] text-slate-400">GROW + העברות בנקאיות</div>
+                  <div className="text-[9px] text-slate-400">כלל התשלומים הדיגיטליים</div>
                 </div>
 
                 <div 
