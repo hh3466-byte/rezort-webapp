@@ -1444,7 +1444,7 @@ export default function App() {
               >
                 <span>📱 1. נסלק (דיגיטלי): <strong className="text-[#0f766e]">₪{monthDigitalCleared.toLocaleString('he-IL')}</strong></span>
                 <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
-                  🏦 2. ייכנס ב-10: ₪{monthBankOn10th.toLocaleString('he-IL')}
+                  🏦 2. ייכנס ב-{next10thDateLabel}: ₪{monthBankOn10th.toLocaleString('he-IL')}
                 </span>
                 {monthDirectBankTransfers > 0 && (
                   <span className="bg-teal-50 text-teal-900 border border-teal-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title="העברות בנקאיות ישירות שכבר הופקדו בחשבון הבנק">
@@ -1675,7 +1675,7 @@ export default function App() {
                   <div className="flex items-center justify-between bg-sky-50/90 border border-sky-200 px-2 py-0.5 rounded-md text-[10px]">
                     <span className="font-bold text-sky-900 flex items-center gap-1">
                       <span>🏦</span>
-                      <span>2. יכנס לבנק ב-10:</span>
+                      <span>2. יכנס לבנק ב-{next10thDateLabel}:</span>
                     </span>
                     <span className="font-black text-sky-950">
                       ₪{monthBankOn10th.toLocaleString('he-IL')}
