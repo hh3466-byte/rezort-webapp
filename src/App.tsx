@@ -456,6 +456,13 @@ export default function App() {
   const monthCashCollected = currentMonthRevenue.cashCollected; // 4. נסלק במזומן
   const monthTotalCollected = currentMonthRevenue.totalCollected; // סה"כ כולל
 
+  // Dynamic labels for upcoming 10th payout dates (e.g. 10.10 and 10.11)
+  const [curYearNum, curMonthNum] = currentMonthKey.split('-').map(Number);
+  const nextMonthDateObj = new Date(curYearNum, (curMonthNum || 1), 10);
+  const next10thDateLabel = `10.${String(nextMonthDateObj.getMonth() + 1).padStart(2, '0')}`;
+  const inTwoMonthsDateObj = new Date(curYearNum, (curMonthNum || 1) + 1, 10);
+  const inTwoMonthsDateLabel = `10.${String(inTwoMonthsDateObj.getMonth() + 1).padStart(2, '0')}`;
+
   const monthToDateCollected = monthDigitalCleared;
   const monthPaidCount = currentMonthRevenue.digitalPaidCount;
 
@@ -1445,8 +1452,8 @@ export default function App() {
                   </span>
                 )}
                 {monthBankIn2Months > 0 && (
-                  <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title="עסקאות בתשלומים שכבר נסלקו וייכנסו ב-10 בעוד חודשיים">
-                    🗓️ 3. ייכנס בעוד חודשיים: ₪{monthBankIn2Months.toLocaleString('he-IL')}
+                  <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title={`עסקאות בתשלומים שיכנסו לבנק ב-${inTwoMonthsDateLabel}`}>
+                    🗓️ 3. ייכנס ב-{inTwoMonthsDateLabel}: ₪{monthBankIn2Months.toLocaleString('he-IL')}
                   </span>
                 )}
                 <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
@@ -1688,10 +1695,10 @@ export default function App() {
                   )}
 
                   {monthBankIn2Months > 0 && (
-                    <div className="flex items-center justify-between bg-indigo-50/90 border border-indigo-200 px-2 py-0.5 rounded-md text-[10px]" title="עסקאות בתשלומים שכבר נסלקו וייכנסו ב-10 בעוד חודשיים">
+                    <div className="flex items-center justify-between bg-indigo-50/90 border border-indigo-200 px-2 py-0.5 rounded-md text-[10px]" title={`עסקאות בתשלומים שיכנסו לבנק ב-${inTwoMonthsDateLabel}`}>
                       <span className="font-bold text-indigo-900 flex items-center gap-1">
                         <span>🗓️</span>
-                        <span>3. יכנס בעוד חודשיים:</span>
+                        <span>3. יכנס לבנק ב-{inTwoMonthsDateLabel}:</span>
                       </span>
                       <span className="font-black text-indigo-950">
                         ₪{monthBankIn2Months.toLocaleString('he-IL')}

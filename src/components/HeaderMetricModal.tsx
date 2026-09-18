@@ -67,6 +67,9 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   const currentMonthKey = todayStr.substring(0, 7); // e.g. 2026-09
   const currentYearKey = todayStr.substring(0, 4);
 
+  const [curYNum, curMNum] = currentMonthKey.split('-').map(Number);
+  const inTwoMonthsDateLabel = `10.${String(new Date(curYNum, (curMNum || 1) + 1, 10).getMonth() + 1).padStart(2, '0')}`;
+
   const activeBookings = useMemo(() => {
     return bookings.filter(b => b.stayStatus !== 'cancelled');
   }, [bookings]);
@@ -280,8 +283,8 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const bankOn10thInTwoMonths = curData?.bankOn10thInTwoMonths || 0;
       const cashCollected = curData?.cashCollected || 0;
 
-      title = 'פירוט הכנסות וסליקה: דיגיטלי, יכנס ב-10, העברות ישירות, יכנס בעוד חודשיים, ומזומן';
-      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')} • 2. ייכנס לבנק ב-10: ₪${growClearedBankOn10th.toLocaleString('he-IL')}${directBankTransfers > 0 ? ` • ישיר לחשבון: ₪${directBankTransfers.toLocaleString('he-IL')}` : ''} • 3. יכנס בעוד חודשיים: ₪${bankOn10thInTwoMonths.toLocaleString('he-IL')} • 4. נסלק במזומן: ₪${cashCollected.toLocaleString('he-IL')}`;
+      title = `פירוט הכנסות וסליקה: דיגיטלי, יכנס ב-10, העברות ישירות, יכנס ב-${inTwoMonthsDateLabel}, ומזומן`;
+      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')} • 2. ייכנס לבנק ב-10: ₪${growClearedBankOn10th.toLocaleString('he-IL')}${directBankTransfers > 0 ? ` • ישיר לחשבון: ₪${directBankTransfers.toLocaleString('he-IL')}` : ''} • 3. יכנס לבנק ב-${inTwoMonthsDateLabel}: ₪${bankOn10thInTwoMonths.toLocaleString('he-IL')} • 4. נסלק במזומן: ₪${cashCollected.toLocaleString('he-IL')}`;
       icon = <DollarSign className="w-5 h-5 text-emerald-700" />;
       badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
       filteredItems = paidItems;
@@ -482,7 +485,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   }`}
                   title="לחץ לסינון: 3. עסקאות בתשלומים שיכנסו לבנק ב-10 בעוד חודשיים"
                 >
-                  <div className="text-[10px] font-bold text-indigo-900">3. יכנס בעוד חודשיים</div>
+                  <div className="text-[10px] font-bold text-indigo-900">3. יכנס לבנק ב-{inTwoMonthsDateLabel}</div>
                   <div className="text-sm font-black text-indigo-950">
                     ₪{(monthlyMap[currentMonthKey]?.bankOn10thInTwoMonths || 0).toLocaleString('he-IL')}
                   </div>
@@ -706,7 +709,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   revenueCategoryFilter === 'grow_in_2_months' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                🗓️ 3. יכנס בעוד חודשיים
+                🗓️ 3. יכנס לבנק ב-{inTwoMonthsDateLabel}
               </button>
               <button
                 type="button"
