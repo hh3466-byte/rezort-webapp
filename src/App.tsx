@@ -63,10 +63,11 @@ import { getDateShabbatOrHoliday } from './utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './components/ShabbatHolidayGreetingModal';
 import { VoucherModal } from './components/VoucherModal';
 import { DailyDogUpdatesModal } from './components/DailyDogUpdatesModal';
+import { TomorrowOverviewModal } from './components/TomorrowOverviewModal';
 import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
 import { initDailyDogAutoSender } from './services/dailyDogAutoSender';
-import { initMorningReportScheduler } from './services/morningReportService';
+import { initTomorrowOverviewScheduler } from './services/morningReportService';
 import { initOrangeFollowUpScheduler } from './services/orangeFollowUpService';
 import { fetchNewCrmChatsCount } from './services/whatsappCrmService';
 
@@ -126,6 +127,7 @@ export default function App() {
   const [intakeModalFilter, setIntakeModalFilter] = useState<'new' | 'in_progress' | 'all' | 'payment_requested' | 'approved' | 'rejected'>('new');
   const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
   const [isDailyDogUpdatesOpen, setIsDailyDogUpdatesOpen] = useState(false);
+  const [isTomorrowOverviewModalOpen, setIsTomorrowOverviewModalOpen] = useState(false);
   
   const newIntakeCount = intakeRequests.filter(r => isIntakeRequestNew(r, bookings)).length;
   const inProgressIntakeCount = intakeRequests.filter(r => isIntakeRequestInTreatment(r, bookings)).length;
@@ -386,9 +388,9 @@ export default function App() {
     return cleanup;
   }, [bookings, settings, intakeRequests]);
 
-  // 07:30 AM Daily Morning Report Auto-Sender to Shmulik (Questionnaires + New Leads + Dog Stats)
+  // 19:00 Daily Tomorrow Overview Auto-Sender to Shmulik (Arrivals, Departures, Debts, Capacity, Notes)
   useEffect(() => {
-    const cleanup = initMorningReportScheduler(
+    const cleanup = initTomorrowOverviewScheduler(
       () => bookings,
       () => settings,
       () => intakeRequests,
@@ -1189,6 +1191,19 @@ export default function App() {
               )}
             </button>
 
+            {/* 2.5. Tomorrow Overview to Shmulik (19:00) */}
+            <button
+              type="button"
+              onClick={() => setIsTomorrowOverviewModalOpen(true)}
+              id="btn-tomorrow-overview-top"
+              className="bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 active:scale-95 border border-indigo-300 text-indigo-950 font-black px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+              title="מה קורה מחר? סקירה יומית מלאה לשמוליק ב-19:00 (כניסות, שחרורים, יתרות לתשלום, תפוסה ודגשים)"
+            >
+              <span className="text-base">📋</span>
+              <span className="hidden sm:inline">מה קורה מחר (19:00)</span>
+              <span className="sm:hidden">מחר (19:00)</span>
+            </button>
+
             {/* 3. New Booking */}
             <button
               onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
@@ -1442,22 +1457,22 @@ export default function App() {
                 className="cursor-pointer hover:text-emerald-700 transition-colors shrink-0 flex items-center gap-1.5"
                 title="לחץ לפתיחת פירוט ודוחות הכנסות"
               >
-                <span>📱 1. נסלק (דיגיטלי): <strong className="text-[#0f766e]">₪{monthDigitalCleared.toLocaleString('he-IL')}</strong></span>
+                <span>💰 תקבולים החודש: <strong className="text-[#065f46]">₪{monthTotalCollected.toLocaleString('he-IL')}</strong></span>
                 {monthDirectBankTransfers > 0 && (
                   <span className="bg-teal-50 text-teal-900 border border-teal-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title="העברות בנקאיות ישירות שכבר הופקדו בחשבון הבנק">
-                    🏛️ הועבר ישירות: ₪{monthDirectBankTransfers.toLocaleString('he-IL')}
+                    🏛️ הועבר: ₪{monthDirectBankTransfers.toLocaleString('he-IL')}
                   </span>
                 )}
                 <span className="bg-sky-50 text-sky-900 border border-sky-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
-                  🏦 2. ייכנס ב-{next10thDateLabel}: ₪{monthBankOn10th.toLocaleString('he-IL')}
+                  🏦 ב-{next10thDateLabel}: ₪{monthBankOn10th.toLocaleString('he-IL')}
                 </span>
                 {monthBankIn2Months > 0 && (
                   <span className="bg-indigo-50 text-indigo-900 border border-indigo-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title={`עסקאות בתשלומים שיכנסו לבנק ב-${inTwoMonthsDateLabel}`}>
-                    🗓️ 3. ייכנס ב-{inTwoMonthsDateLabel}: ₪{monthBankIn2Months.toLocaleString('he-IL')}
+                    🗓️ ב-{inTwoMonthsDateLabel}: ₪{monthBankIn2Months.toLocaleString('he-IL')}
                   </span>
                 )}
                 <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded text-[11px] font-bold">
-                  💵 4. נסלק במזומן: ₪{monthCashCollected.toLocaleString('he-IL')}
+                  💵 מזומן: ₪{monthCashCollected.toLocaleString('he-IL')}
                 </span>
               </span>
             </div>
@@ -1490,257 +1505,252 @@ export default function App() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
-              
-              {/* Card 1 (Right in RTL): תפוסה כללית */}
-              <div 
-                onClick={() => setActiveHeaderMetric('occupancy')}
-                role="button"
-                tabIndex={0}
-                className="bg-white border border-slate-200 rounded-xl p-2.5 sm:p-3 shadow-2xs flex flex-col justify-between hover:border-emerald-400 hover:shadow-xs cursor-pointer transition-all active:scale-[0.99] group"
-                title="לחץ לעיון ועריכת כלבי התפוסה הכללית היום"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500 group-hover:text-emerald-700 transition-colors truncate">
-                    תפוסה כללית
-                  </span>
-                  <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full border ${
-                    totalDogsToday >= settings.maxCapacity 
-                      ? 'bg-red-50 text-red-700 border-red-200' 
-                      : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                  }`}>
-                    {Math.round((totalDogsToday / Math.max(1, settings.maxCapacity)) * 100)}%
-                  </span>
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-slate-900 my-0.5 text-right">
-                  {totalDogsToday} <span className="text-[11px] font-semibold text-slate-400">/ {settings.maxCapacity}</span>
-                </div>
-                <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100">
-                  <span className="truncate">{freeSlots > 0 ? `${freeSlots} פנויים` : 'מלא 🔴'}</span>
-                  <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100">
-                    עיון 🔍
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 2: פנסיון ומשפחתון */}
-              <div 
-                onClick={() => setActiveHeaderMetric('boarding')}
-                role="button"
-                tabIndex={0}
-                className="bg-white border border-slate-200 rounded-xl p-2.5 sm:p-3 shadow-2xs flex flex-col justify-between hover:border-sky-400 hover:shadow-xs cursor-pointer transition-all active:scale-[0.99] group"
-                title="לחץ לעיון ועריכת כלבי הפנסיון והדייקר היום"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500 group-hover:text-sky-700 transition-colors truncate">
-                    פנסיון ומשפחתון
-                  </span>
-                  <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.2 rounded-full border border-sky-200">
-                    🏨 לינה
-                  </span>
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-slate-900 my-0.5 text-right">
-                  {boardingToday} <span className="text-[11px] font-semibold text-slate-400">כלבים</span>
-                </div>
-                <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100">
-                  <span className="truncate">{boardingToday === 0 ? 'אין לינה' : `${boardingToday} בפנסיון`}</span>
-                  <span className="text-[10px] text-sky-700 font-bold opacity-80 group-hover:opacity-100">
-                    עיון 🔍
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 3: באילוף היום */}
-              <div 
-                onClick={() => setActiveHeaderMetric('training')}
-                role="button"
-                tabIndex={0}
-                className="bg-white border border-slate-200 rounded-xl p-2.5 sm:p-3 shadow-2xs flex flex-col justify-between hover:border-purple-400 hover:shadow-xs cursor-pointer transition-all active:scale-[0.99] group col-span-2 sm:col-span-1"
-                title="לחץ לעיון ועריכת כלבי האילוף היום"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500 group-hover:text-purple-700 transition-colors truncate">
-                    באילוף היום
-                  </span>
-                  <span className="text-[10px] font-black text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded-full border border-purple-200">
-                    סה״כ {trainingToday}
-                  </span>
-                </div>
-
-                {/* Compact Split: תהליך אילוף vs אילוף ביומיות */}
-                <div className="flex items-center justify-between gap-1 my-0.5 pt-0.5">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-lg sm:text-xl font-black text-purple-600">{fullTrainingToday}</span>
-                    <span className="text-[10px] font-bold text-slate-600">🎓 מלא</span>
-                  </div>
-                  <div className="text-slate-200">|</div>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-lg sm:text-xl font-black text-indigo-600">{dayTrainingToday}</span>
-                    <span className="text-[10px] font-bold text-slate-600">🦮 יומיות</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100">
-                  <span className="truncate">{fullTrainingToday} מלא · {dayTrainingToday} ביומיות</span>
-                  <span className="text-[10px] text-purple-700 font-bold opacity-80 group-hover:opacity-100">
-                    עיון 🔍
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 4: חוב פתוח */}
-              <div 
-                onClick={() => setActiveHeaderMetric('debt')}
-                role="button"
-                tabIndex={0}
-                className="bg-white border border-slate-200 rounded-xl p-2.5 sm:p-3 shadow-2xs flex flex-col justify-between hover:border-red-400 hover:shadow-xs cursor-pointer transition-all active:scale-[0.99] group"
-                title="לחץ לעיון ועריכת ההזמנות עם יתרת חוב פתוח"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500 group-hover:text-red-700 transition-colors truncate">
-                    חוב פתוח
-                  </span>
-                  <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full border ${
-                    openDebtTotal === 0
-                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                      : 'bg-red-50 text-red-700 border-red-200'
-                  }`}>
-                    {openDebtTotal === 0 ? '🟢 הכול שולם' : `🔴 ${unpaidCount} ממתינות`}
-                  </span>
-                </div>
-                <div className="text-xl sm:text-2xl font-black text-[#0f766e] my-0.5 text-right">
-                  ₪{openDebtTotal.toLocaleString('he-IL')}
-                </div>
-                <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100">
-                  <span className="truncate">{openDebtTotal === 0 ? 'הכול שולם 🥳' : `${unpaidCount} עם יתרה`}</span>
-                  <span className="text-[10px] text-red-600 font-bold opacity-80 group-hover:opacity-100">
-                    עיון 🔍
-                  </span>
-                </div>
-              </div>
-
-              {/* Card 5 (Left in RTL): הכנסות מתחילת החודש ועמודות לחודשים אחרונים */}
-              <div 
-                onClick={() => setActiveHeaderMetric('revenue')}
-                role="button"
-                tabIndex={0}
-                className="bg-white border border-slate-200 rounded-xl p-2.5 sm:p-3 shadow-2xs flex flex-col justify-between hover:border-emerald-400 hover:shadow-xs cursor-pointer transition-all active:scale-[0.99] group"
-                title="לחץ לצפייה בפירוט 3 קטגוריות ההכנסה, גרפי עמודות חודשיים ושנתיים וייצוא לאקסל"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500 group-hover:text-emerald-700 transition-colors truncate">
-                    💰 1. נסלק החודש (דיגיטלי)
-                  </span>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-full border border-emerald-200">
-                    🐾 {currentMonthActiveStays.length} שהויות
-                  </span>
-                </div>
-
-                {/* Revenue Amount + Mini Column Bars Side-by-Side */}
-                <div className="flex items-end justify-between gap-1.5 my-0.5">
-                  <div>
-                    <div className="text-xl sm:text-2xl font-black text-[#0f766e] leading-tight">
-                      ₪{monthDigitalCleared.toLocaleString('he-IL')}
-                    </div>
-                    <div className="text-[9px] text-slate-500 font-medium">
-                      כל הדיגיטלי ({monthPaidCount} עסקאות: ₪{monthDirectBankTransfers.toLocaleString('he-IL')} + ₪{monthBankOn10th.toLocaleString('he-IL')})
-                    </div>
-                  </div>
-
-                  {/* 4 Mini Month Bars in same row! */}
-                  <div className="flex items-end gap-1 h-7 pb-0.5 shrink-0" title="עמודות 4 חודשים אחרונים (לחץ לגרפים מפורטים)">
-                    {recentMonthsMiniData.map((mItem, idx) => {
-                      const barHeight = Math.max(18, Math.round((mItem.revenue / maxRecentMiniRev) * 100));
-                      return (
-                        <div key={idx} className="flex flex-col items-center gap-0.5 h-full justify-end w-2.5 sm:w-3">
-                          <div
-                            className={`w-full rounded-t-xs transition-all ${
-                              mItem.isCurrent
-                                ? 'bg-emerald-600 group-hover:bg-emerald-700'
-                                : 'bg-slate-300 group-hover:bg-slate-400'
-                            }`}
-                            style={{ height: `${barHeight}%` }}
-                          />
-                          <span className={`text-[7px] sm:text-[8px] leading-none ${mItem.isCurrent ? 'text-emerald-900 font-black' : 'text-slate-400'}`}>
-                            {mItem.label}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* משבצות מובחנות: הועבר ישירות לחשבון | 2. יכנס לבנק ב-10.10 | 3. יכנס לבנק ב-10.11 | 4. נסלק במזומן */}
-                <div className="space-y-1 mt-1">
-                  {monthDirectBankTransfers > 0 && (
-                    <div className="flex items-center justify-between bg-teal-50/90 border border-teal-200 px-2 py-0.5 rounded-md text-[10px]" title="העברות בנקאיות ישירות שכבר הופקדו בחשבון הבנק (רונן מלמוד)">
-                      <span className="font-bold text-teal-900 flex items-center gap-1">
-                        <span>🏛️</span>
-                        <span>הועבר ישירות לחשבון:</span>
-                      </span>
-                      <span className="font-black text-teal-950">
-                        ₪{monthDirectBankTransfers.toLocaleString('he-IL')}
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between bg-sky-50/90 border border-sky-200 px-2 py-0.5 rounded-md text-[10px]">
-                    <span className="font-bold text-sky-900 flex items-center gap-1">
-                      <span>🏦</span>
-                      <span>2. יכנס לבנק ב-{next10thDateLabel}:</span>
+            {/* Integrated Command Bar: Operations (Right) + Financial Flow (Left) */}
+            <div className="bg-white border border-slate-200/90 rounded-2xl p-3 sm:p-3.5 shadow-2xs">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 lg:gap-3.5 items-stretch">
+                
+                {/* RIGHT WING (cols-7): Operational 4-Pods (תפוסה, פנסיון, אילוף, חוב) */}
+                <div className="lg:col-span-7 flex flex-col justify-between gap-1.5">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[11px] font-black text-slate-500 flex items-center gap-1.5">
+                      <span>🐕</span>
+                      <span>פעילות היום בריזורט</span>
                     </span>
-                    <span className="font-black text-sky-950">
-                      ₪{monthBankOn10th.toLocaleString('he-IL')}
+                    <span className="text-[10px] text-slate-400 font-semibold">
+                      4 מוקדי תפעול שוטף
                     </span>
                   </div>
 
-                  {monthBankIn2Months > 0 && (
-                    <div className="flex items-center justify-between bg-indigo-50/90 border border-indigo-200 px-2 py-0.5 rounded-md text-[10px]" title={`עסקאות בתשלומים שיכנסו לבנק ב-${inTwoMonthsDateLabel}`}>
-                      <span className="font-bold text-indigo-900 flex items-center gap-1">
-                        <span>🗓️</span>
-                        <span>3. יכנס לבנק ב-{inTwoMonthsDateLabel}:</span>
-                      </span>
-                      <span className="font-black text-indigo-950">
-                        ₪{monthBankIn2Months.toLocaleString('he-IL')}
-                      </span>
+                  {/* 4 Pods in a unified, level grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    
+                    {/* Pod 1: תפוסה כללית */}
+                    <div 
+                      onClick={() => setActiveHeaderMetric('occupancy')}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-slate-50/80 hover:bg-emerald-50/60 border border-slate-200/80 hover:border-emerald-300 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
+                      title="לחץ לעיון ועריכת כלבי התפוסה הכללית היום"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-emerald-800 transition-colors truncate">
+                          תפוסה כללית
+                        </span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
+                          totalDogsToday >= settings.maxCapacity 
+                            ? 'bg-red-50 text-red-700 border-red-200' 
+                            : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        }`}>
+                          {Math.round((totalDogsToday / Math.max(1, settings.maxCapacity)) * 100)}%
+                        </span>
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-slate-900 my-0.5 text-right">
+                        {totalDogsToday} <span className="text-[11px] font-semibold text-slate-400">/ {settings.maxCapacity}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-200/60">
+                        <span className="truncate">{freeSlots > 0 ? `${freeSlots} פנויים` : 'מלא 🔴'}</span>
+                        <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100">
+                          עיון 🔍
+                        </span>
+                      </div>
                     </div>
-                  )}
 
-                  <div className="flex items-center justify-between bg-amber-50/90 border border-amber-200 px-2 py-0.5 rounded-md text-[10px]">
-                    <span className="font-bold text-amber-800 flex items-center gap-1">
-                      <span>💵</span>
-                      <span>4. נסלק במזומן:</span>
-                    </span>
-                    <span className="font-black text-amber-950">
-                      ₪{monthCashCollected.toLocaleString('he-IL')}
-                    </span>
+                    {/* Pod 2: פנסיון ומשפחתון */}
+                    <div 
+                      onClick={() => setActiveHeaderMetric('boarding')}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-slate-50/80 hover:bg-sky-50/60 border border-slate-200/80 hover:border-sky-300 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
+                      title="לחץ לעיון ועריכת כלבי הפנסיון והדייקר היום"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-sky-800 transition-colors truncate">
+                          פנסיון
+                        </span>
+                        <span className="text-[9px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.2 rounded-full border border-sky-200">
+                          🏨 לינה
+                        </span>
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-slate-900 my-0.5 text-right">
+                        {boardingToday} <span className="text-[11px] font-semibold text-slate-400">כלבים</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-200/60">
+                        <span className="truncate">{boardingToday === 0 ? 'אין לינה' : `${boardingToday} בפנסיון`}</span>
+                        <span className="text-[10px] text-sky-700 font-bold opacity-80 group-hover:opacity-100">
+                          עיון 🔍
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Pod 3: באילוף היום */}
+                    <div 
+                      onClick={() => setActiveHeaderMetric('training')}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-slate-50/80 hover:bg-purple-50/60 border border-slate-200/80 hover:border-purple-300 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
+                      title="לחץ לעיון ועריכת כלבי האילוף היום"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-purple-800 transition-colors truncate">
+                          באילוף
+                        </span>
+                        <span className="text-[9px] font-black text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded-full border border-purple-200">
+                          סה״כ {trainingToday}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-1 my-0.5">
+                        <span className="text-lg sm:text-xl font-black text-purple-600">{fullTrainingToday}</span>
+                        <span className="text-[10px] font-bold text-slate-600">🎓 מלא</span>
+                        <span className="text-slate-300 text-xs">|</span>
+                        <span className="text-lg sm:text-xl font-black text-indigo-600">{dayTrainingToday}</span>
+                        <span className="text-[10px] font-bold text-slate-600">🦮</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-200/60">
+                        <span className="truncate">{trainingToday > 0 ? `${trainingToday} בתהליך` : 'אין אילוף'}</span>
+                        <span className="text-[10px] text-purple-700 font-bold opacity-80 group-hover:opacity-100">
+                          עיון 🔍
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Pod 4: חוב פתוח */}
+                    <div 
+                      onClick={() => setActiveHeaderMetric('debt')}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-slate-50/80 hover:bg-red-50/60 border border-slate-200/80 hover:border-red-300 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
+                      title="לחץ לעיון ועריכת ההזמנות עם יתרת חוב פתוח"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-red-800 transition-colors truncate">
+                          חוב פתוח
+                        </span>
+                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
+                          openDebtTotal === 0
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : 'bg-red-50 text-red-700 border-red-200'
+                        }`}>
+                          {openDebtTotal === 0 ? '🟢 נקי' : `🔴 ${unpaidCount}`}
+                        </span>
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-[#0f766e] my-0.5 text-right">
+                        ₪{openDebtTotal.toLocaleString('he-IL')}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-200/60">
+                        <span className="truncate">{openDebtTotal === 0 ? 'הכול שולם 🥳' : `${unpaidCount} עם יתרה`}</span>
+                        <span className="text-[10px] text-red-600 font-bold opacity-80 group-hover:opacity-100">
+                          עיון 🔍
+                        </span>
+                      </div>
+                    </div>
+
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100 mt-1">
-                  <span className="truncate font-semibold text-slate-600">סה״כ כולל: ₪{monthTotalCollected.toLocaleString('he-IL')}</span>
-                  <span className="text-[10px] text-emerald-700 font-bold opacity-80 group-hover:opacity-100">
-                    גרפים 📊
-                  </span>
-                </div>
-
-                {/* בדיקת איפוס ושפיות - הכל מתאפס ל-0 */}
+                {/* LEFT WING (cols-5): Monthly Financial Flow & Breakdown */}
                 <div 
-                  className="mt-1 bg-emerald-50/90 border border-emerald-300/80 px-2 py-0.5 rounded-md text-[9px] flex items-center justify-between font-bold text-emerald-800" 
-                  title={`בדיקת שפיות ואיפוס מלאה:
+                  className="lg:col-span-5 bg-gradient-to-br from-emerald-50/45 via-teal-50/30 to-slate-50/70 border border-emerald-200/80 rounded-xl p-2.5 sm:p-3 flex flex-col justify-between gap-2 shadow-2xs hover:border-emerald-300 transition-all"
+                >
+                  {/* Financial Top Row: Title + Main Amount + Mini-Bars + Graphs Button */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-black text-emerald-950 flex items-center gap-1">
+                          <span>💰</span>
+                          <span>תקבולים וסליקה החודש</span>
+                        </span>
+                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-1.5 py-0.2 rounded-full border border-emerald-200">
+                          🐾 {currentMonthActiveStays.length} שהויות
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-baseline gap-2 mt-0.5">
+                        <div className="text-xl sm:text-2xl font-black text-[#065f46] tracking-tight">
+                          ₪{monthTotalCollected.toLocaleString('he-IL')}
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          (דיגיטלי: ₪{monthDigitalCleared.toLocaleString('he-IL')} • מזומן: ₪{monthCashCollected.toLocaleString('he-IL')})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Left side: Mini Bars + Drilldown Button */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-end gap-1 h-7 pb-0.5" title="עמודות 4 חודשים אחרונים (לחץ לגרפים מפורטים)">
+                        {recentMonthsMiniData.map((mItem, idx) => {
+                          const barHeight = Math.max(18, Math.round((mItem.revenue / maxRecentMiniRev) * 100));
+                          return (
+                            <div key={idx} className="flex flex-col items-center gap-0.5 h-full justify-end w-2.5 sm:w-3">
+                              <div
+                                className={`w-full rounded-t-xs transition-all ${
+                                  mItem.isCurrent
+                                    ? 'bg-emerald-600'
+                                    : 'bg-slate-300'
+                                }`}
+                                style={{ height: `${barHeight}%` }}
+                              />
+                              <span className={`text-[7px] leading-none ${mItem.isCurrent ? 'text-emerald-900 font-black' : 'text-slate-400'}`}>
+                                {mItem.label}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveHeaderMetric('revenue')}
+                        className="bg-white hover:bg-emerald-50 text-emerald-800 hover:text-emerald-950 border border-emerald-300 font-black text-[10px] px-2.5 py-1.5 rounded-lg shadow-2xs flex items-center gap-1 transition-all cursor-pointer active:scale-95 shrink-0"
+                        title="פתח דוחות כספיים מלאים, גרפים חודשיים ושנתיים וייצוא לאקסל"
+                      >
+                        <span>גרפים 📊</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Financial Bottom Row: 4 Horizontal Destination Pills */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-[10px] pt-1.5 border-t border-emerald-200/60">
+                    
+                    {/* Pill 1: Direct Bank Transfer */}
+                    <div className="bg-teal-50/90 border border-teal-200/90 px-2 py-1 rounded-lg flex items-center justify-between shadow-2xs" title="העברות בנקאיות ישירות שכבר הופקדו בחשבון הבנק">
+                      <span className="font-bold text-teal-900 truncate">🏛️ הועבר ישירות:</span>
+                      <span className="font-black text-teal-950 mr-1 shrink-0">₪{monthDirectBankTransfers.toLocaleString('he-IL')}</span>
+                    </div>
+
+                    {/* Pill 2: 10th of Month */}
+                    <div className="bg-sky-50/90 border border-sky-200/90 px-2 py-1 rounded-lg flex items-center justify-between shadow-2xs" title={`סליקת אשראי ו-GROW שתיכנס לבנק ב-${next10thDateLabel}`}>
+                      <span className="font-bold text-sky-900 truncate">🏦 ב-{next10thDateLabel}:</span>
+                      <span className="font-black text-sky-950 mr-1 shrink-0">₪{monthBankOn10th.toLocaleString('he-IL')}</span>
+                    </div>
+
+                    {/* Pill 3: Cash Collected */}
+                    <div className="bg-amber-50/90 border border-amber-200/90 px-2 py-1 rounded-lg flex items-center justify-between shadow-2xs" title="מזומן שנגבה בקופה מתחילת החודש">
+                      <span className="font-bold text-amber-900 truncate">💵 במזומן:</span>
+                      <span className="font-black text-amber-950 mr-1 shrink-0">₪{monthCashCollected.toLocaleString('he-IL')}</span>
+                    </div>
+
+                    {/* Pill 4: In 2 Months or Balance Sanity Check */}
+                    {monthBankIn2Months > 0 ? (
+                      <div className="bg-indigo-50/90 border border-indigo-200/90 px-2 py-1 rounded-lg flex items-center justify-between shadow-2xs" title={`עסקאות בתשלומים שיכנסו לבנק ב-${inTwoMonthsDateLabel}`}>
+                        <span className="font-bold text-indigo-900 truncate">🗓️ ב-{inTwoMonthsDateLabel}:</span>
+                        <span className="font-black text-indigo-950 mr-1 shrink-0">₪{monthBankIn2Months.toLocaleString('he-IL')}</span>
+                      </div>
+                    ) : (
+                      <div 
+                        className="bg-emerald-100/70 border border-emerald-300 px-2 py-1 rounded-lg flex items-center justify-between shadow-2xs" 
+                        title={`בדיקת שפיות ואיפוס מלאה:
 • דיגיטלי: ₪${monthDigitalCleared.toLocaleString('he-IL')} = ₪${monthBankOn10th.toLocaleString('he-IL')} (סליקת GROW) + ₪${monthDirectBankTransfers.toLocaleString('he-IL')} (העברות ישירות) [הפרש ₪0]
 • סה״כ כולל: ₪${monthTotalCollected.toLocaleString('he-IL')} = ₪${monthDigitalCleared.toLocaleString('he-IL')} (דיגיטלי) + ₪${monthCashCollected.toLocaleString('he-IL')} (מזומן) [הפרש ₪0]`}
-                >
-                  <span className="flex items-center gap-1">
-                    <span>⚖️</span>
-                    <span>בדיקת איפוס: הכל מאוזן</span>
-                  </span>
-                  <span className="bg-white text-emerald-900 border border-emerald-300 px-1.5 py-0.2 rounded font-black shadow-2xs">
-                    הפרש ₪0 ✓
-                  </span>
-                </div>
-              </div>
+                      >
+                        <span className="font-bold text-emerald-900 truncate">⚖️ מאוזן 100%:</span>
+                        <span className="font-black text-emerald-950 mr-1 shrink-0">הפרש ₪0 ✓</span>
+                      </div>
+                    )}
+                  </div>
 
+                </div>
+
+              </div>
             </div>
           </div>
         )}
@@ -2194,6 +2204,18 @@ export default function App() {
           settings={settings}
           intakeRequests={intakeRequests}
           onClose={() => setIsDailyDogUpdatesOpen(false)}
+          showToast={showToast}
+        />
+      )}
+
+      {/* Tomorrow 19:00 Overview to Shmulik Modal */}
+      {isTomorrowOverviewModalOpen && (
+        <TomorrowOverviewModal
+          isOpen={isTomorrowOverviewModalOpen}
+          onClose={() => setIsTomorrowOverviewModalOpen(false)}
+          bookings={bookings}
+          settings={settings}
+          intakeRequests={intakeRequests}
           showToast={showToast}
         />
       )}

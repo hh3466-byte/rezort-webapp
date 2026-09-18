@@ -142,6 +142,8 @@ export interface ResortSettings {
   autoCheckVaccination: boolean;
   whatsappBookingConfirmationTemplate?: string;
   whatsappPaymentReminderTemplate?: string;
+  lastTomorrowOverviewSentDate?: string;
+  lastTomorrowOverviewSentTimestamp?: string;
 }
 
 export type AgentIntent = 
