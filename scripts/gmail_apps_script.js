@@ -40,6 +40,7 @@ function processResortEmails() {
   if (!threads || threads.length === 0) {
     Logger.log("תיבת הדואר נקייה.");
     try { checkUpcomingDeparturesWithDebtAndAlert(); } catch (eDebt) {}
+    try { checkAndTriggerMotzeiShabbatDogUpdates(); } catch (eM) {}
     return;
   }
 
@@ -382,6 +383,9 @@ function processResortEmails() {
   try {
     checkUpcomingDeparturesWithDebtAndAlert();
   } catch (eDebt) {}
+  try {
+    checkAndTriggerMotzeiShabbatDogUpdates();
+  } catch (eM) {}
 
   Logger.log("=== סיום ריצה: " + growCount + " תשלומי Grow נקלטו, " + morningDeletedCount + " חשבוניות מורנינג נמחקו, " + yanivDeletedCount + " מיילי יניב נמחקו ===");
 }
@@ -1443,22 +1447,36 @@ function sendDailyDogEveningUpdates() {
     var now = new Date();
     var israelTz = "Asia/Jerusalem";
 
-    // 1. בדיקת זמנים: יום שישי חסום ב-100% (ערב שבת). במוצאי שבת שולחים נוסח סופ"ש מיוחד.
+    // 1. בדיקת זמנים וכלל ברזל: שקט מוחלט ללקוחות משישי 14:00 וכל השבת/חג
     var dayOfWeek = parseInt(Utilities.formatDate(now, israelTz, "u"), 10); // 1=Mon, ..., 5=Fri, 6=Sat, 7=Sun
+    var hour = parseInt(Utilities.formatDate(now, israelTz, "H"), 10);
+    var minute = parseInt(Utilities.formatDate(now, israelTz, "m"), 10);
+    var currentMinutes = hour * 60 + minute;
 
-    // יום שישי בערב: שקט מוחלט! לעולם לא שולחים הודעות בערב שבת
+    // יום שישי: החל משעה 14:00 - כלל ברזל: שקט מוחלט ללקוחות!
     if (dayOfWeek === 5) {
-      Logger.log("ערב שבת (יום שישי): שקט מוחלט - לא נשלחות הודעות יומיות. שבת שלום!");
-      return;
+      if (hour >= 14) {
+        Logger.log("ערב שבת (יום שישי לאחר 14:00): כלל ברזל - שקט מוחלט ללקוחות. לא נשלחות הודעות.");
+        return;
+      }
     }
 
-    // יום כיפור או חגים: שקט מוחלט!
+    // יום שבת: כלל ברזל - אסור לשלוח לפני 40 דקות לאחר צאת השבת!
+    if (dayOfWeek === 6) {
+      var satSendMinutes = getMotzeiShabbatSendMinutesAppScript(now);
+      if (currentMinutes < satSendMinutes) {
+        Logger.log("יום שבת: כלל ברזל - שקט מוחלט עד 40 דק' מצאת השבת (" + formatMinutesAsTimeStringAppScript(satSendMinutes) + "). לא נשלחות הודעות כעת.");
+        return;
+      }
+    }
+
+    // יום כיפור: שקט מוחלט!
     if (isYomKippurNow(now, israelTz)) {
       Logger.log("יום כיפור: שקט מוחלט - לא נשלחות הודעות יומיות.");
       return;
     }
 
-    // בדיקת חגים מול Hebcal
+    // בדיקת חגים מול Hebcal: שקט מוחלט עד 40 דק' מצאת החג
     try {
       var yStr = Utilities.formatDate(now, israelTz, "yyyy-MM-dd");
       var yr = Utilities.formatDate(now, israelTz, "yyyy");
@@ -1468,8 +1486,16 @@ function sendDailyDogEveningUpdates() {
         var hItems = (JSON.parse(hRes.getContentText())).items || [];
         for (var hi = 0; hi < hItems.length; hi++) {
           if (hItems[hi].date === yStr) {
-            Logger.log("חג (" + (hItems[hi].hebrew || hItems[hi].title) + "): שקט מוחלט - לא נשלחות הודעות יומיות.");
-            return;
+            var isErev = (hItems[hi].title || "").match(/Erev/i);
+            if (isErev && hour >= 14) {
+              Logger.log("ערב חג (" + (hItems[hi].hebrew || hItems[hi].title) + "): כלל ברזל - שקט מוחלט מ-14:00.");
+              return;
+            }
+            var chagSendMinutes = getMotzeiShabbatSendMinutesAppScript(now);
+            if (currentMinutes < chagSendMinutes) {
+              Logger.log("חג (" + (hItems[hi].hebrew || hItems[hi].title) + "): כלל ברזל - שקט מוחלט לפני צאת החג + 40 דק'. השליחה תתאפשר רק בשעה " + formatMinutesAsTimeStringAppScript(chagSendMinutes));
+              return;
+            }
           }
         }
       }
@@ -1478,7 +1504,7 @@ function sendDailyDogEveningUpdates() {
     // האם מדובר במוצאי שבת?
     var isMotzaeiShabbat = (dayOfWeek === 6);
     if (isMotzaeiShabbat) {
-      Logger.log("מוצאי שבת: נשלחת הודעת סיכום סופ\"ש מיוחדת ומותאמת אישית לכלבים המתארחים! 🐾✨");
+      Logger.log("מוצאי שבת (40 דקות לאחר צאת שבת): נשלחת הודעת סיכום סופ\"ש מיוחדת ומותאמת אישית לכלבים המתארחים! 🐾✨");
     }
 
     var todayStr = Utilities.formatDate(now, israelTz, "yyyy-MM-dd");
@@ -1581,6 +1607,181 @@ function sendDailyDogEveningUpdates() {
     Logger.log("הסתיים משלוח עדכונים יומיים: נשלחו " + sentCount + " הודעות מתוך " + activeBookings.length + " כלבים.");
   } catch (err) {
     Logger.log("sendDailyDogEveningUpdates error: " + err.toString());
+  }
+}
+
+/**
+ * חישוב זמן שקיעת השמש בישראל לפי קווי רוחב ואורך
+ */
+function getIsraelSunsetMinutesAppScript(date) {
+  try {
+    var lat = 32.085;
+    var lon = 34.781;
+    var d = date || new Date();
+    var startOfYear = new Date(d.getFullYear(), 0, 0);
+    var dayOfYear = Math.floor((d.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+    var gamma = (2 * Math.PI / 365) * (dayOfYear - 1);
+    var eqtime = 229.18 * (0.000075 + 0.001868 * Math.cos(gamma) - 0.032077 * Math.sin(gamma) - 0.014615 * Math.cos(2 * gamma) - 0.040849 * Math.sin(2 * gamma));
+    var decl = 0.006918 - 0.399912 * Math.cos(gamma) + 0.070257 * Math.sin(gamma) - 0.006758 * Math.cos(2 * gamma) + 0.000907 * Math.sin(2 * gamma);
+    var latRad = lat * Math.PI / 180;
+    var zenithRad = 90.8333 * Math.PI / 180;
+    var cosHourAngle = (Math.cos(zenithRad) / (Math.cos(latRad) * Math.cos(decl))) - (Math.tan(latRad) * Math.tan(decl));
+    var hourAngle = Math.acos(cosHourAngle) * 180 / Math.PI;
+    var sunsetUtcMinutes = 720 - 4 * lon - eqtime + hourAngle * 4;
+
+    var tzOffset = parseInt(Utilities.formatDate(d, "Asia/Jerusalem", "Z"), 10) / 100;
+    var tzHours = (tzOffset >= 2 && tzOffset <= 3) ? tzOffset : 3;
+
+    var sunsetIsraelMinutes = sunsetUtcMinutes + tzHours * 60;
+    return Math.round(sunsetIsraelMinutes);
+  } catch (e) {
+    return 18 * 60 + 40; // Fallback: 18:40
+  }
+}
+
+/**
+ * שעת היעד לשליחה לפי כלל הברזל של שמוליק:
+ * הבדלה (שקיעה + 35 דק') + 40 דקות נוספות = שקיעה + 75 דקות
+ */
+function getMotzeiShabbatSendMinutesAppScript(date) {
+  return getIsraelSunsetMinutesAppScript(date) + 75;
+}
+
+function formatMinutesAsTimeStringAppScript(minutes) {
+  var h = Math.floor(minutes / 60) % 24;
+  var m = Math.round(minutes % 60);
+  return (h < 10 ? "0" + h : h) + ":" + (m < 10 ? "0" + m : m);
+}
+
+/**
+ * =========================================================================
+ * כלל ברזל של שמוליק: שליחה אוטומטית בענן 40 דקות בדיוק לאחר צאת השבת או החג
+ * גם אם כל המחשבים והדפדפנים סגורים!
+ * נבדקת ומופעלת מתוך processResortEmails שרץ כל 5 דקות בענן.
+ * =========================================================================
+ */
+function checkAndTriggerMotzeiShabbatDogUpdates() {
+  try {
+    var now = new Date();
+    var israelTz = "Asia/Jerusalem";
+    var dayOfWeek = parseInt(Utilities.formatDate(now, israelTz, "u"), 10); // 1=Mon, ..., 6=Sat, 7=Sun
+    var hour = parseInt(Utilities.formatDate(now, israelTz, "H"), 10);
+    var minute = parseInt(Utilities.formatDate(now, israelTz, "m"), 10);
+    var currentMinutes = hour * 60 + minute;
+    var todayStr = Utilities.formatDate(now, israelTz, "yyyy-MM-dd");
+
+    // בדיקה האם היום שבת או חג
+    var isSat = (dayOfWeek === 6);
+    var isHoliday = false;
+    var holidayTitle = "";
+
+    if (!isSat) {
+      try {
+        var yr = Utilities.formatDate(now, israelTz, "yyyy");
+        var mo = Utilities.formatDate(now, israelTz, "M");
+        var hRes = UrlFetchApp.fetch("https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=off&mod=off&nx=off&year=" + yr + "&month=" + mo + "&ss=off&mf=off&c=off&geo=none&i=on", { muteHttpExceptions: true });
+        if (hRes.getResponseCode() === 200) {
+          var hItems = (JSON.parse(hRes.getContentText())).items || [];
+          for (var hi = 0; hi < hItems.length; hi++) {
+            if (hItems[hi].date === todayStr && !hItems[hi].title.match(/Erev/i)) {
+              isHoliday = true;
+              holidayTitle = hItems[hi].hebrew || hItems[hi].title;
+              break;
+            }
+          }
+        }
+      } catch (eH) {}
+    }
+
+    if (!isSat && !isHoliday) {
+      return; // לא שבת ולא חג, אין צורך בשיגור מוצ״ש
+    }
+
+    // חישוב מועד השליחה: צאת שבת/חג (שקיעה + 35 דק') + 40 דקות = שקיעה + 75 דקות
+    var sendMinutes = getMotzeiShabbatSendMinutesAppScript(now);
+
+    // בדיקה האם הגענו לזמן השליחה (חלון של 3 שעות מעת הפתיחה)
+    if (currentMinutes < sendMinutes || currentMinutes > (sendMinutes + 180)) {
+      return;
+    }
+
+    // בדיקת מנעול מניעת כפילויות למוצ״ש זה
+    var props = PropertiesService.getScriptProperties();
+    var lockKey = "motzei_shabbat_dispatched_" + todayStr;
+    if (props.getProperty(lockKey) === "true") {
+      return; // כבר נשלח בהצלחה היום
+    }
+
+    Logger.log("🚀 [כלל ברזל] הגיע המועד המדויק (40 דקות לאחר צאת " + (isSat ? "השבת" : holidayTitle) + " בשעה " + formatMinutesAsTimeStringAppScript(sendMinutes) + ")! מפעיל שיגור אוטומטי בענן...");
+
+    // 1. שליחת הודעת ד״ש חם מהכלב (ההודעה שמופיעה בצילום המסך) לכל הכלבים הפעילים
+    sendShabbatOrHolidayGreetingsFromCloud(todayStr, isSat ? "בסופ\"ש" : "בחג");
+
+    // 2. שליחת יומן עדכון ערב יומי מותאם לכלבים הלנים הלילה
+    sendDailyDogEveningUpdates();
+
+    // סימון שנשלח בהצלחה
+    props.setProperty(lockKey, "true");
+    Logger.log("✅ [כלל ברזל] השיגור האוטומטי למוצאי " + (isSat ? "שבת" : holidayTitle) + " הושלם בהצלחה!");
+  } catch (e) {
+    Logger.log("checkAndTriggerMotzeiShabbatDogUpdates error: " + e.toString());
+  }
+}
+
+/**
+ * שליחת הודעות ד״ש חם מכלבי הריזורט מהענן 40 דקות לאחר צאת השבת/החג
+ */
+function sendShabbatOrHolidayGreetingsFromCloud(todayStr, occasionWord) {
+  try {
+    var queryUrl = SUPABASE_URL + "/rest/v1/bookings?start_date=lte." + todayStr + "&end_date=gte." + todayStr + "&stay_status=neq.cancelled&select=*";
+    var res = UrlFetchApp.fetch(queryUrl, {
+      method: "get",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+      muteHttpExceptions: true
+    });
+
+    if (res.getResponseCode() !== 200) return;
+    var bookings = JSON.parse(res.getContentText());
+    if (!bookings || bookings.length === 0) return;
+
+    var props = PropertiesService.getScriptProperties();
+    var sentCount = 0;
+
+    for (var i = 0; i < bookings.length; i++) {
+      var b = bookings[i];
+      var greetKey = "shabbat_greet_sent_" + b.id + "_" + todayStr;
+      if (props.getProperty(greetKey) === "true") continue;
+
+      var phone = (b.owner_phone || "").replace(/[^0-9]/g, "");
+      if (!phone) continue;
+      var intlPhone = phone.indexOf("0") === 0 ? "972" + phone.substring(1) : phone;
+      var chatId = intlPhone + "@c.us";
+
+      var firstName = (b.owner_name || "").trim().split(/\s+/)[0] || b.owner_name;
+      var dogName = (b.dog_name || "").trim();
+
+      var text = "שלום " + firstName + " למרות שאין שירות לקוחות להולכים על 2 " + occasionWord + ", אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.\n" +
+                 "אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.\n" +
+                 dogName;
+
+      var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+      var sendRes = UrlFetchApp.fetch(sendUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ chatId: chatId, message: text }),
+        muteHttpExceptions: true
+      });
+
+      if (sendRes.getResponseCode() === 200) {
+        props.setProperty(greetKey, "true");
+        sentCount++;
+        Logger.log("נשלח בהצלחה ד\"ש חם ל-" + dogName + " (" + firstName + ")");
+      }
+      Utilities.sleep(1200);
+    }
+    Logger.log("ד\"ש חם מהריזורט: נשלחו " + sentCount + " הודעות.");
+  } catch (e) {
+    Logger.log("sendShabbatOrHolidayGreetingsFromCloud error: " + e.toString());
   }
 }
 

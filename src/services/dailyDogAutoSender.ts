@@ -8,48 +8,41 @@ import {
   isDogIsolationRequired, 
   isDogInTraining 
 } from '../data/dailyDogTemplates';
-import { isYomKippurActiveNow } from '../utils/jewishCalendar';
+import { isCustomerMessagingRestrictedNow } from '../utils/jewishCalendar';
 
 let autoSenderInterval: any = null;
 let isSendingInProgress = false;
 
 /**
- * Checks if current time in Israel is within the evening window (20:00 to 22:59)
- * and verifies it is not Friday night (ערב שבת) or Yom Kippur.
+ * Checks if current time in Israel is eligible for evening updates / weekend greetings:
+ * 1. On Friday from 14:00 and throughout Shabbat/Chag until 40m after Havdalah: strictly NOT eligible.
+ * 2. On Saturday (or Chag) starting at Havdalah + 40 minutes (until 23:30): ELIGIBLE!
+ * 3. On regular weekdays (Sun-Thu) between 20:00 and 22:59: ELIGIBLE.
  */
 export function isEveningUpdateEligibleNow(): { eligible: boolean; reason?: string } {
-  if (isYomKippurActiveNow()) {
-    return { eligible: false, reason: 'יום כיפור חל כעת - שקט מוחלט' };
+  const now = new Date();
+  const restriction = isCustomerMessagingRestrictedNow(now);
+
+  if (restriction.isRestricted) {
+    return { eligible: false, reason: restriction.reason };
   }
 
-  const now = new Date();
-  const israelTz = 'Asia/Jerusalem';
+  // Motzei Shabbat / Motzei Chag window: reached 40 minutes after Havdalah!
+  if (restriction.isMotzeiShabbatEligibleNow) {
+    return { eligible: true };
+  }
 
+  // Regular business days (Sunday - Thursday): window is 20:00 - 22:59
+  const israelTz = 'Asia/Jerusalem';
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone: israelTz,
     hour: 'numeric',
-    minute: 'numeric',
-    weekday: 'short',
     hour12: false
   });
+  const hour = parseInt(dtf.format(now), 10);
 
-  const parts = dtf.formatToParts(now);
-  let hour = 0;
-  let weekday = '';
-
-  for (const p of parts) {
-    if (p.type === 'hour') hour = parseInt(p.value, 10);
-    if (p.type === 'weekday') weekday = p.value;
-  }
-
-  // Friday night (ערב שבת) -> no messages sent
-  if (weekday === 'Fri') {
-    return { eligible: false, reason: 'ערב שבת (יום שישי) - שקט מוחלט' };
-  }
-
-  // Eligible only between 20:00 and 22:59
   if (hour < 20 || hour >= 23) {
-    return { eligible: false, reason: `מחוץ לשעות השליחה (השעה הנוכחית: ${hour}:00, חלון השליחה: 20:00-23:00)` };
+    return { eligible: false, reason: `מחוץ לשעות השליחה (השעה הנוכחית: ${hour}:00, חלון השליחה הרגיל: 20:00-23:00)` };
   }
 
   return { eligible: true };

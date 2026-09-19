@@ -33,8 +33,9 @@ import {
   Mic,
   MicOff,
   Bell,
-  Sparkles
+  MapPin
 } from 'lucide-react';
+import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import { calculateDaysCount, addDays, formatDateIL, getDayNameHebrew, getBookingsForDate } from '../utils/dateUtils';
 import { generateUnansweredFollowUpMarketingText } from '../services/whatsappCrmService';
 import { 
@@ -1033,6 +1034,21 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                           <span>בעלים: <strong className="text-slate-950">{req.ownerName}</strong></span>
                           <span className="text-slate-400">·</span>
                           <span className="font-mono font-black text-slate-900" dir="ltr">{req.ownerPhone}</span>
+                          {req.ownerAddress && (
+                            <span className="text-xs font-bold text-slate-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl flex items-center gap-1.5 shadow-2xs">
+                              <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span>{req.ownerAddress}</span>
+                              <a
+                                href={getWazeNavigationUrl(req.ownerAddress, req.ownerCoordinates)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mr-1 text-[11px] text-sky-700 hover:text-sky-900 font-black underline flex items-center gap-0.5"
+                                title="נווט לבית הבעלים ב-Waze במקרה חירום"
+                              >
+                                <span>🚗 Waze</span>
+                              </a>
+                            </span>
+                          )}
                         </div>
 
                         {/* שורה שלישית: לחץ לוואטסאפ איתו + שלח קישור לתשלום */}

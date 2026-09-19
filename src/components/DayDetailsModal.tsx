@@ -18,8 +18,10 @@ import {
   Edit2,
   Trash2,
   Gift,
-  CreditCard
+  CreditCard,
+  MapPin
 } from 'lucide-react';
+import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import { Booking, ResortSettings } from '../types';
 import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage, cleanPhoneNumber } from '../utils/whatsappUtils';
@@ -396,6 +398,22 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
               <Calendar className="w-3.5 h-3.5 text-amber-600" />
               <span>{formatDateIL(booking.startDate)} עד {formatDateIL(booking.endDate)}</span>
             </span>
+            {booking.ownerAddress && (
+              <span className="flex items-center gap-1.5 font-bold text-slate-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md shadow-2xs">
+                <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>{booking.ownerAddress}</span>
+                <a
+                  href={getWazeNavigationUrl(booking.ownerAddress, booking.ownerCoordinates)}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="mr-1 text-[11px] text-sky-700 hover:text-sky-900 font-black underline flex items-center gap-0.5"
+                  title="נווט לבית הבעלים ב-Waze במקרה חירום"
+                >
+                  <span>🚗 Waze</span>
+                </a>
+              </span>
+            )}
           </div>
 
           {booking.placementNotes && (

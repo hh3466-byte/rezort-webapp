@@ -28,6 +28,8 @@ export interface Booking {
   behaviorNotes?: string;
   placementNotes?: string; // דגשי שיבוץ והוראות מיוחדות (למשל: לשים רק עם ג'נגו / תוקפת דרך גדר)
   emergencyContact?: string;
+  ownerAddress?: string; // כתובת מגורים של הבעלים (חיוני לאיתור במקרה בריחה וחירום)
+  ownerCoordinates?: { lat: number; lng: number }; // קואורדינטות GPS לניווט ישיר ב-Waze
   // Extended fields from the streamlined wizard
   dogAgeGroup?: 'puppy' | 'young' | 'adult' | 'senior';
   dogGender?: 'male_neutered' | 'female_spayed' | 'male_intact' | 'female_intact';
@@ -53,6 +55,7 @@ export interface Customer {
   phone: string;
   name: string;
   email?: string;
+  address?: string; // כתובת מגורים
   dogs: {
     name: string;
     breed: string;
@@ -90,6 +93,8 @@ export interface IntakeRequest {
   ownerName: string;
   ownerPhone: string;
   ownerEmail?: string;
+  ownerAddress: string; // כתובת מגורים מלאה של הבעלים (שדה חובה לאיתור כלב שברח)
+  ownerCoordinates?: { lat: number; lng: number }; // קואורדינטות GPS מזיהוי מיקום
   dogName: string;
   dogBreed: string;
   dogAge?: string;

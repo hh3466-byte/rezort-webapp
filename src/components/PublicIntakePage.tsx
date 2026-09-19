@@ -28,9 +28,13 @@ import {
   FileText,
   X,
   Shield,
-  Search
+  Search,
+  MapPin,
+  Navigation,
+  Loader2
 } from 'lucide-react';
 import { SendIntakeModal } from './SendIntakeModal';
+import { getCurrentCoordinates, reverseGeocodeCoordinates } from '../utils/geolocationUtils';
 
 // 7 Clauses of Resort By-Laws (תקנון הריזורט לכלב)
 const RESORT_BYLAWS_SECTIONS = [
@@ -119,6 +123,12 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   const [ownerName, setOwnerName] = useState(paramName || initialProfile?.ownerName || '');
   const [ownerPhone, setOwnerPhone] = useState(paramPhone || initialProfile?.ownerPhone || '');
   const [ownerEmail, setOwnerEmail] = useState(initialProfile?.ownerEmail || '');
+  const [ownerAddress, setOwnerAddress] = useState(initialProfile?.ownerAddress || '');
+  const [ownerCoordinates, setOwnerCoordinates] = useState<{ lat: number; lng: number } | undefined>(initialProfile?.ownerCoordinates);
+  const [isReturningAddress, setIsReturningAddress] = useState(false);
+  const [isLocatingGps, setIsLocatingGps] = useState(false);
+  const [gpsSuccessNotice, setGpsSuccessNotice] = useState<string | null>(null);
+
   const [dogName, setDogName] = useState(paramDog || initialProfile?.dogName || '');
   const [dogBreed, setDogBreed] = useState(initialProfile?.dogBreed || '');
   const [dogAge, setDogAge] = useState(initialProfile?.dogAge || '');
@@ -129,6 +139,55 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   const [endDate, setEndDate] = useState(addDays(today, 3));
   const [isFlexibleDates, setIsFlexibleDates] = useState(false);
   
+  // Client Relationship & Voucher Code State
+  type ClientOriginType = 'new' | 'returning' | 'referral';
+  const [clientOrigin, setClientOrigin] = useState<ClientOriginType>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const v = (params.get('voucher') || '').trim();
+      const vUpper = v.toUpperCase();
+      if (vUpper.startsWith('FRIEND-') || v.startsWith('חבר-')) return 'referral';
+      if (vUpper.startsWith('VIP-') || v.startsWith('פינוק-') || v.startsWith('ויאיפי-') || v.startsWith('יום-כיף-')) return 'returning';
+    }
+    return initialProfile?.clientOrigin || 'new';
+  });
+  const [referralFriendName, setReferralFriendName] = useState(initialProfile?.referralFriendName || '');
+  const [voucherCode, setVoucherCode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const v = (params.get('voucher') || '').trim();
+      if (v) return v;
+    }
+    return initialProfile?.voucherCode || '';
+  });
+  const [selectedBenefitId, setSelectedBenefitId] = useState<string>(initialProfile?.selectedBenefitId || 'discount_100');
+
+  // GPS Auto-Detect Handler
+  const handleDetectGpsAddress = async () => {
+    setIsLocatingGps(true);
+    setErrorMessage(null);
+    setGpsSuccessNotice(null);
+
+    try {
+      const coords = await getCurrentCoordinates();
+      setOwnerCoordinates(coords);
+      const res = await reverseGeocodeCoordinates(coords.lat, coords.lng);
+      if (res.address) {
+        setOwnerAddress(res.address);
+        setGpsSuccessNotice(`הכתובת זוהתה בהצלחה: ${res.address}`);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'לא הצלחנו לזהות את המיקום. אנא הקלד את הכתובת ידנית.');
+    } finally {
+      setIsLocatingGps(false);
+    }
+  };
+
+  const matchedVoucher = useMemo(() => {
+    if (!voucherCode.trim()) return null;
+    return findVoucherByCode(voucherCode.trim());
+  }, [voucherCode]);
+
   // Mandatory Vetting Questions State
   const [isFriendlyWithDogs, setIsFriendlyWithDogs] = useState<'yes' | 'no' | 'depends'>('yes');
   const [isNeutered, setIsNeutered] = useState<boolean>(true);
@@ -156,34 +215,6 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
 
-  // Client Relationship & Voucher Code State
-  type ClientOriginType = 'new' | 'returning' | 'referral';
-  const [clientOrigin, setClientOrigin] = useState<ClientOriginType>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const v = (params.get('voucher') || '').trim();
-      const vUpper = v.toUpperCase();
-      if (vUpper.startsWith('FRIEND-') || v.startsWith('חבר-')) return 'referral';
-      if (vUpper.startsWith('VIP-') || v.startsWith('פינוק-') || v.startsWith('ויאיפי-') || v.startsWith('יום-כיף-')) return 'returning';
-    }
-    return 'new';
-  });
-  const [referralFriendName, setReferralFriendName] = useState('');
-  const [voucherCode, setVoucherCode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      return (params.get('voucher') || '').trim();
-    }
-    return '';
-  });
-
-  const matchedVoucher = useMemo(() => {
-    if (!voucherCode.trim()) return null;
-    return findVoucherByCode(voucherCode.trim());
-  }, [voucherCode]);
-
-  // Customer's choice of perk/benefit
-  const [selectedBenefitId, setSelectedBenefitId] = useState<string>('discount_100');
 
   // Phone number verification hook (debounce 400ms)
   useEffect(() => {
@@ -205,6 +236,11 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
           // Autofill empty fields if available
           if (result.name && !ownerName.trim()) {
             setOwnerName(result.name);
+          }
+          if (result.address && !ownerAddress.trim()) {
+            setOwnerAddress(result.address);
+            if (result.coordinates) setOwnerCoordinates(result.coordinates);
+            setIsReturningAddress(true);
           }
           if (result.dogName && !dogName.trim()) {
             setDogName(result.dogName);
@@ -347,6 +383,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       setErrorMessage('נא למלא את שם הכלב/ה (שדה חובה)');
       return false;
     }
+    if (!ownerAddress.trim() || ownerAddress.trim().length < 4) {
+      setErrorMessage('חובה למלא כתובת מגורים מלאה (עיר, רחוב ומספר בית)');
+      return false;
+    }
     if (!dogBreed.trim()) {
       setErrorMessage('נא למלא את גזע הכלב (שדה חובה - אם מעורב כתבו מעורב)');
       return false;
@@ -406,6 +446,8 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       ownerName: ownerName.trim(),
       ownerPhone: ownerPhone.trim(),
       ownerEmail: ownerEmail.trim() || undefined,
+      ownerAddress: ownerAddress.trim(),
+      ownerCoordinates: ownerCoordinates,
       dogName: dogName.trim(),
       dogBreed: dogBreed.trim(),
       dogAge: dogAge.trim() || undefined,
@@ -445,6 +487,8 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
           ownerName: ownerName.trim(),
           ownerPhone: ownerPhone.trim(),
           ownerEmail: ownerEmail.trim(),
+          ownerAddress: ownerAddress.trim(),
+          ownerCoordinates: ownerCoordinates,
           dogName: dogName.trim(),
           dogBreed: dogBreed.trim(),
           dogAge: dogAge.trim(),
@@ -943,6 +987,96 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   placeholder="name@example.com"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
                 />
+              </div>
+            </div>
+
+            {/* Mandatory Owner Home Address with GPS Auto-detection */}
+            <div className="bg-slate-50/80 border-2 border-emerald-100 rounded-2xl p-3.5 sm:p-4 space-y-2.5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>כתובת מגורים (עיר, רחוב ומספר בית)</span>
+                  <span className="text-red-500">*</span>
+                </label>
+
+                {/* GPS Auto-Detect Button */}
+                <button
+                  type="button"
+                  onClick={handleDetectGpsAddress}
+                  disabled={isLocatingGps}
+                  className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  title="זהה את הכתובת הנוכחית שלי באמצעות GPS"
+                >
+                  {isLocatingGps ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>מאתר כתובת ב-GPS...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Navigation className="w-3.5 h-3.5" />
+                      <span>זהה כתובת ב-GPS 📍</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  value={ownerAddress}
+                  onChange={(e) => {
+                    setOwnerAddress(e.target.value);
+                    if (gpsSuccessNotice) setGpsSuccessNotice(null);
+                  }}
+                  placeholder="למשל: הרצל 15, ראשון לציון"
+                  className="w-full bg-white border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-none transition-all"
+                />
+              </div>
+
+              {isReturningAddress && (
+                <div className="flex items-center justify-between text-xs text-indigo-950 bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 font-bold animate-in fade-in">
+                  <div className="flex items-center gap-1.5">
+                    <span>🏠</span>
+                    <span>זוהתה כתובת משהות קודמת: <strong>{ownerAddress}</strong></span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOwnerAddress('');
+                      setIsReturningAddress(false);
+                      setGpsSuccessNotice(null);
+                    }}
+                    className="text-indigo-700 hover:text-indigo-900 font-black underline text-[11px] cursor-pointer"
+                  >
+                    עברתי דירה / עדכן כתובת ✏️
+                  </button>
+                </div>
+              )}
+
+              {gpsSuccessNotice && (
+                <div className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-300 rounded-xl p-2 flex items-center gap-2 animate-in fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{gpsSuccessNotice} (ניתן לערוך ידנית במידת הצורך).</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium pt-0.5">
+                <span>🔄 <strong>לקוח חוזר ועברת דירה?</strong> ניתן לעדכן כתובת חופשית בכל עת או בלחיצה על זיהוי GPS.</span>
+                {ownerAddress && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOwnerAddress('');
+                      setIsReturningAddress(false);
+                      setGpsSuccessNotice(null);
+                    }}
+                    className="text-slate-400 hover:text-red-600 font-bold underline cursor-pointer shrink-0 mr-2"
+                  >
+                    נקה שדה
+                  </button>
+                )}
               </div>
             </div>
           </div>

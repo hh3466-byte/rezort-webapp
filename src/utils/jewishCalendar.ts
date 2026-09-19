@@ -186,7 +186,10 @@ export function getDateShabbatOrHoliday(dateStrOrObj: string | Date): HolidayInf
 /**
  * Calculate the exact end of Yom Kippur in Israel (40 minutes after sunset)
  */
-export function getYomKippurSunsetPlus40Minutes(date: Date = new Date()): number {
+/**
+ * Calculate the exact sunset in Israel (accounting for daylight saving time UTC+2 or UTC+3)
+ */
+export function getIsraelSunsetMinutes(date: Date = new Date()): number {
   try {
     const lat = 32.085;
     const lon = 34.781;
@@ -200,11 +203,70 @@ export function getYomKippurSunsetPlus40Minutes(date: Date = new Date()): number
     const cosHourAngle = (Math.cos(zenithRad) / (Math.cos(latRad) * Math.cos(decl))) - (Math.tan(latRad) * Math.tan(decl));
     const hourAngle = Math.acos(cosHourAngle) * 180 / Math.PI;
     const sunsetUtcMinutes = 720 - 4 * lon - eqtime + hourAngle * 4;
-    const sunsetIsraelMinutes = sunsetUtcMinutes + 180;
-    return Math.round(sunsetIsraelMinutes + 40);
+
+    // Detect Israel timezone offset dynamically (UTC+2 in winter, UTC+3 in summer)
+    const dtf = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jerusalem', timeZoneName: 'shortOffset' });
+    const tzParts = dtf.formatToParts(date);
+    const tzOffsetStr = tzParts.find(p => p.type === 'timeZoneName')?.value || 'GMT+3';
+    const tzMatch = tzOffsetStr.match(/GMT([+-]\d+)/);
+    const tzHours = tzMatch ? parseInt(tzMatch[1], 10) : 3;
+
+    const sunsetIsraelMinutes = sunsetUtcMinutes + tzHours * 60;
+    return Math.round(sunsetIsraelMinutes);
   } catch (e) {
-    return 19 * 60 + 20; // Safe fallback: 19:20
+    return 18 * 60 + 40; // Fallback: 18:40
   }
+}
+
+/**
+ * Calculate Havdalah (צאת השבת או צאת החג) in Israel (typically ~35 minutes after sunset)
+ */
+export function getIsraelHavdalahMinutes(date: Date = new Date()): number {
+  const sunsetMinutes = getIsraelSunsetMinutes(date);
+  return sunsetMinutes + 35;
+}
+
+/**
+ * Calculate the exact send time according to Shmulik's Iron Rule:
+ * בדיוק 40 דקות לאחר צאת השבת או החג (הבדלה + 40 דקות = שקיעה + 75 דקות)
+ */
+export function getMotzeiShabbatSendTimeMinutes(date: Date = new Date()): number {
+  const havdalahMinutes = getIsraelHavdalahMinutes(date);
+  return havdalahMinutes + 40;
+}
+
+/**
+ * Helper to format minutes from midnight as HH:MM
+ */
+export function formatMinutesAsTimeString(minutes: number): string {
+  const h = Math.floor(minutes / 60) % 24;
+  const m = Math.round(minutes % 60);
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Get comprehensive schedule times for Shabbat / Holiday
+ */
+export function getShabbatOrHolidaySchedule(date: Date = new Date()) {
+  const sunsetMins = getIsraelSunsetMinutes(date);
+  const havdalahMins = getIsraelHavdalahMinutes(date);
+  const sendMins = getMotzeiShabbatSendTimeMinutes(date);
+
+  return {
+    sunsetMinutes: sunsetMins,
+    sunsetString: formatMinutesAsTimeString(sunsetMins),
+    havdalahMinutes: havdalahMins,
+    havdalahString: formatMinutesAsTimeString(havdalahMins),
+    sendMinutes: sendMins,
+    sendString: formatMinutesAsTimeString(sendMins)
+  };
+}
+
+/**
+ * Calculate the exact end of Yom Kippur in Israel (40 minutes after sunset / Havdalah)
+ */
+export function getYomKippurSunsetPlus40Minutes(date: Date = new Date()): number {
+  return getIsraelHavdalahMinutes(date);
 }
 
 /**
@@ -225,9 +287,9 @@ export function isYomKippurActiveNow(now: Date = new Date()): boolean {
     // ערב יום כיפור (ט' בתשרי) החל משעה 14:00
     if (hDay === 9 && currentMinutes >= 14 * 60) return true;
 
-    // יום כיפור עצמו (י' בתשרי) עד 40 דקות בדיוק אחרי שקיעת השמש
+    // יום כיפור עצמו (י' בתשרי) עד צאת החג
     if (hDay === 10) {
-      const endMinutes = getYomKippurSunsetPlus40Minutes(now);
+      const endMinutes = getIsraelHavdalahMinutes(now);
       return currentMinutes < endMinutes;
     }
 
@@ -308,11 +370,24 @@ export function formatShabbatHolidayGreeting(
   return `שלום ${firstName} למרות שאין שירות לקוחות להולכים על 2 ${occasionWord}, אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.\nאז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.\n${cleanDog}`;
 }
 
+export interface CustomerMessagingRestrictionResult {
+  isRestricted: boolean;
+  reason?: string;
+  allowedSendTime?: string;
+  havdalahTimeStr?: string;
+  sendTimeStr?: string;
+  isMotzeiShabbatEligibleNow?: boolean;
+}
+
 /**
- * Check if outgoing communication to clients is forbidden right now due to Shabbat or Jewish Holidays.
- * Rule: From Friday/Holiday eve at 14:00 until Motzei Shabbat/Chag (sunset + 40 mins, or next morning).
+ * =========================================================================
+ * כלל ברזל של שמוליק: חסימת הודעות ללקוחות בסופי שבוע וחגים
+ * =========================================================================
+ * 1. מיום שישי בשעה 14:00 ועד 40 דקות לאחר צאת השבת – איסור מוחלט על שליחת הודעות ללקוחות!
+ * 2. בערבי חג החל משעה 14:00 ועד 40 דקות לאחר צאת החג – איסור מוחלט על שליחת הודעות ללקוחות!
+ * 3. בדיוק 40 דקות לאחר צאת השבת או החג (הבדלה בישראל + 40 דקות) – השליחה נפתחת אוטומטית!
  */
-export function isShabbatOrHolidayRestricted(now: Date = new Date()): { isRestricted: boolean; reason?: string } {
+export function isCustomerMessagingRestrictedNow(now: Date = new Date()): CustomerMessagingRestrictionResult {
   try {
     const jerusalemFormatter = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Asia/Jerusalem',
@@ -333,38 +408,123 @@ export function isShabbatOrHolidayRestricted(now: Date = new Date()): { isRestri
     const jerusalemDateObj = new Date(Date.UTC(y, m - 1, d, hour, minute));
     const dayOfWeek = jerusalemDateObj.getUTCDay();
 
+    // Calculate schedule for today
+    const schedule = getShabbatOrHolidaySchedule(now);
+
     // 1. Friday after 14:00
-    if (dayOfWeek === 5 && currentMinutes >= 14 * 60) {
-      return { isRestricted: true, reason: 'ערב שבת (לאחר 14:00) - איסור התקשרות עם לקוחות עד מוצאי שבת' };
+    if (dayOfWeek === 5) {
+      if (currentMinutes >= 14 * 60) {
+        // Calculate Saturday schedule for next day
+        const saturday = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        const satSchedule = getShabbatOrHolidaySchedule(saturday);
+        return {
+          isRestricted: true,
+          reason: 'כלל ברזל: שקט מוחלט ללקוחות מיום שישי ב-14:00 ועד 40 דקות לאחר צאת השבת',
+          allowedSendTime: `במוצאי שבת בשעה ${satSchedule.sendString} (40 דק׳ לאחר צאת השבת)`,
+          havdalahTimeStr: satSchedule.havdalahString,
+          sendTimeStr: satSchedule.sendString,
+          isMotzeiShabbatEligibleNow: false
+        };
+      }
     }
 
-    // 2. Saturday (Shabbat) all day until after Havdalah / sunset + 40m (safe threshold ~20:45)
+    // 2. Saturday (Shabbat) all day until exactly 40 minutes after Havdalah
     if (dayOfWeek === 6) {
-      const endOfShabbatMinutes = getYomKippurSunsetPlus40Minutes(now);
-      if (currentMinutes < endOfShabbatMinutes) {
-        return { isRestricted: true, reason: 'שבת קודש - איסור התקשרות עם לקוחות עד צאת השבת' };
+      if (currentMinutes < schedule.sendMinutes) {
+        return {
+          isRestricted: true,
+          reason: `כלל ברזל: שבת קודש - שקט מוחלט ללקוחות. ההודעות ישלחו אוטומטית 40 דקות לאחר צאת השבת (בשעה ${schedule.sendString})`,
+          allowedSendTime: `היום במוצאי שבת בשעה ${schedule.sendString}`,
+          havdalahTimeStr: schedule.havdalahString,
+          sendTimeStr: schedule.sendString,
+          isMotzeiShabbatEligibleNow: false
+        };
+      }
+      // Reached 40 minutes after Havdalah! (Window: from sendMinutes up to 23:30)
+      if (currentMinutes >= schedule.sendMinutes && currentMinutes <= 23 * 60 + 30) {
+        return {
+          isRestricted: false,
+          allowedSendTime: 'עכשיו (מוצאי שבת, לאחר 40 דקות מצאת השבת)',
+          havdalahTimeStr: schedule.havdalahString,
+          sendTimeStr: schedule.sendString,
+          isMotzeiShabbatEligibleNow: true
+        };
       }
     }
 
     // 3. Holiday Eves and Major Holidays
     const holidayToday = getJewishHoliday(now);
     if (holidayToday) {
-      if (holidayToday.startsWith('ערב ') && currentMinutes >= 14 * 60) {
-        return { isRestricted: true, reason: `${holidayToday} (לאחר 14:00) - איסור התקשרות עם לקוחות עד צאת החג` };
+      if (holidayToday === 'יום כיפור' || holidayToday === 'ערב יום כיפור') {
+        if (isYomKippurActiveNow(now)) {
+          return {
+            isRestricted: true,
+            reason: 'יום כיפור קדוש: שקט מוחלט - איסור מוחלט על שליחת הודעות ללקוחות',
+            allowedSendTime: `במוצאי יום כיפור בשעה ${schedule.sendString}`,
+            havdalahTimeStr: schedule.havdalahString,
+            sendTimeStr: schedule.sendString,
+            isMotzeiShabbatEligibleNow: false
+          };
+        }
       }
-      const majorHolidays = ['ראש השנה', 'יום כיפור', 'חג סוכות', 'שמחת תורה', 'חג פסח', 'שביעי של פסח', 'חג שבועות'];
+
+      if (holidayToday.startsWith('ערב ') && currentMinutes >= 14 * 60) {
+        const nextDay = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        const nextSchedule = getShabbatOrHolidaySchedule(nextDay);
+        return {
+          isRestricted: true,
+          reason: `כלל ברזל: ${holidayToday} (לאחר 14:00) - שקט מוחלט ללקוחות עד 40 דקות לאחר צאת החג`,
+          allowedSendTime: `במוצאי החג בשעה ${nextSchedule.sendString}`,
+          havdalahTimeStr: nextSchedule.havdalahString,
+          sendTimeStr: nextSchedule.sendString,
+          isMotzeiShabbatEligibleNow: false
+        };
+      }
+
+      const majorHolidays = ['ראש השנה', 'חג סוכות', 'שמחת תורה', 'חג פסח', 'שביעי של פסח', 'חג שבועות'];
       if (majorHolidays.includes(holidayToday)) {
-        const endOfChagMinutes = getYomKippurSunsetPlus40Minutes(now);
-        if (currentMinutes < endOfChagMinutes) {
-          return { isRestricted: true, reason: `${holidayToday} - איסור התקשרות עם לקוחות עד צאת החג` };
+        if (currentMinutes < schedule.sendMinutes) {
+          return {
+            isRestricted: true,
+            reason: `כלל ברזל: ${holidayToday} - שקט מוחלט ללקוחות עד 40 דקות לאחר צאת החג (בשעה ${schedule.sendString})`,
+            allowedSendTime: `הערב במוצאי החג בשעה ${schedule.sendString}`,
+            havdalahTimeStr: schedule.havdalahString,
+            sendTimeStr: schedule.sendString,
+            isMotzeiShabbatEligibleNow: false
+          };
+        }
+        if (currentMinutes >= schedule.sendMinutes && currentMinutes <= 23 * 60 + 30) {
+          return {
+            isRestricted: false,
+            allowedSendTime: 'עכשיו (מוצאי חג, לאחר 40 דקות מצאת החג)',
+            havdalahTimeStr: schedule.havdalahString,
+            sendTimeStr: schedule.sendString,
+            isMotzeiShabbatEligibleNow: true
+          };
         }
       }
     }
 
-    return { isRestricted: false };
+    return {
+      isRestricted: false,
+      havdalahTimeStr: schedule.havdalahString,
+      sendTimeStr: schedule.sendString,
+      isMotzeiShabbatEligibleNow: false
+    };
   } catch (e) {
     return { isRestricted: false };
   }
+}
+
+/**
+ * Backward compatible wrapper for isShabbatOrHolidayRestricted
+ */
+export function isShabbatOrHolidayRestricted(now: Date = new Date()): { isRestricted: boolean; reason?: string } {
+  const res = isCustomerMessagingRestrictedNow(now);
+  return {
+    isRestricted: res.isRestricted,
+    reason: res.reason
+  };
 }
 
 /**

@@ -27,7 +27,7 @@ import {
   pickDailyDogTemplate, 
   DailyDogTemplate 
 } from '../data/dailyDogTemplates';
-import { isYomKippurActiveNow } from '../utils/jewishCalendar';
+import { isYomKippurActiveNow, isCustomerMessagingRestrictedNow } from '../utils/jewishCalendar';
 
 interface DailyDogUpdatesModalProps {
   bookings: Booking[];
@@ -59,6 +59,7 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
 }) => {
   const todayStr = getTodayStr();
   const isKippur = isYomKippurActiveNow();
+  const customerRestriction = isCustomerMessagingRestrictedNow();
 
   // Active dogs staying tonight at the resort
   const activeTonightBookings = useMemo(() => {
@@ -187,6 +188,10 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
 
   // Send single message
   const handleSendSingle = async (bookingId: string) => {
+    if (customerRestriction.isRestricted) {
+      showToast(`⛔ ${customerRestriction.reason}`);
+      return;
+    }
     if (isKippur) {
       showToast('🕯️ יום כיפור חל כעת: שקט מוחלט! לא נשלחות הודעות.');
       return;
@@ -233,6 +238,10 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
 
   // Batch send to all unsent dogs
   const handleBatchSend = async () => {
+    if (customerRestriction.isRestricted) {
+      showToast(`⛔ ${customerRestriction.reason}`);
+      return;
+    }
     if (isKippur) {
       showToast('🕯️ יום כיפור חל כעת: שקט מוחלט! לא נשלחות הודעות.');
       return;
@@ -443,6 +452,21 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Iron Rule Restriction Banner */}
+        {customerRestriction.isRestricted && (
+          <div className="bg-amber-500/10 border-b border-amber-300 p-3 sm:px-6 flex items-start gap-3 text-xs text-amber-950 font-bold" dir="rtl">
+            <span className="text-base shrink-0 mt-0.5">🛡️</span>
+            <div>
+              <span className="font-black text-amber-900 block text-xs sm:text-sm">
+                כלל ברזל: שקט מוחלט ללקוחות משישי 14:00 וכל השבת והחג
+              </span>
+              <span className="text-slate-600 font-medium leading-relaxed block mt-0.5">
+                שליחת הודעות לבעלי הכלבים חסומה. יומן העדכונים יישלח אוטומטית בענן <strong>במוצאי שבת בשעה {customerRestriction.sendTimeStr}</strong> (40 דק׳ בדיוק לאחר צאת השבת) – גם כשהדפדפנים סגורים!
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Content - Dog List */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-slate-50/50">

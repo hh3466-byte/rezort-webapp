@@ -20,12 +20,14 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Download,
-  Home
+  Home,
+  MapPin
 } from 'lucide-react';
 import { Booking, ResortSettings, ServiceType, PaymentStatus, StayStatus } from '../types';
 import { formatDateIL, calculateDaysCount } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage } from '../utils/whatsappUtils';
 import { exportBookingsToCSV } from '../utils/exportUtils';
+import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 
 interface BookingsListProps {
   bookings: Booking[];
@@ -363,6 +365,22 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                       <span className="flex items-center gap-1 font-mono text-slate-800" dir="ltr">
                         <Phone className="w-3.5 h-3.5 text-green-600" /> {b.ownerPhone}
                       </span>
+                      {b.ownerAddress && (
+                        <span className="flex items-center gap-1.5 text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
+                          <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                          <span className="truncate max-w-[200px]" title={b.ownerAddress}>{b.ownerAddress}</span>
+                          <a
+                            href={getWazeNavigationUrl(b.ownerAddress, b.ownerCoordinates)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[11px] font-bold text-sky-700 bg-sky-100 hover:bg-sky-200 px-1.5 py-0.5 rounded flex items-center gap-0.5 transition-colors"
+                            title="פתח ניווט ישיר לכתובת ב-Waze"
+                          >
+                            🚗 Waze
+                          </a>
+                        </span>
+                      )}
                       <span className="flex items-center gap-1 text-slate-800">
                         <Calendar className="w-3.5 h-3.5 text-amber-600" />
                         <span>{formatDateIL(b.startDate)} עד {formatDateIL(b.endDate)}</span>

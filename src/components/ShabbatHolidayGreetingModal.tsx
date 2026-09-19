@@ -3,7 +3,7 @@ import { X, MessageCircle, Copy, Check, Calendar, Sparkles, Dog, Phone, RotateCc
 import { Booking, ResortSettings } from '../types';
 import { getBookingsForDate, formatDateIL, getDayNameHebrew } from '../utils/dateUtils';
 import { cleanPhoneNumber } from '../utils/whatsappUtils';
-import { getDateShabbatOrHoliday, formatShabbatHolidayGreeting, getOccasionWord } from '../utils/jewishCalendar';
+import { getDateShabbatOrHoliday, formatShabbatHolidayGreeting, getOccasionWord, isCustomerMessagingRestrictedNow } from '../utils/jewishCalendar';
 import { sendGreenApiDirectMessage } from '../services/notificationService';
 
 interface ShabbatHolidayGreetingModalProps {
@@ -55,7 +55,13 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
     }
   }, [sentMap, storageKey]);
 
+  const customerRestriction = isCustomerMessagingRestrictedNow();
+
   const handleSendWhatsApp = (booking: Booking) => {
+    if (customerRestriction.isRestricted) {
+      alert(`${customerRestriction.reason}\n\nההודעה תשלח אוטומטית: ${customerRestriction.allowedSendTime}`);
+      return;
+    }
     const cleanPhone = cleanPhoneNumber(booking.ownerPhone);
     const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
     const msg = formatShabbatHolidayGreeting(booking.ownerName, booking.dogName, template, dateStr);
@@ -81,6 +87,10 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
   const [singleSendingId, setSingleSendingId] = useState<string | null>(null);
 
   const handleSendGreenApiSingle = async (b: Booking) => {
+    if (customerRestriction.isRestricted) {
+      alert(`${customerRestriction.reason}\n\nההודעה תשלח אוטומטית: ${customerRestriction.allowedSendTime}`);
+      return;
+    }
     if (!settings.greenApiIdInstance || !settings.greenApiToken) {
       handleSendWhatsApp(b);
       return;
@@ -103,6 +113,10 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
   };
 
   const handleBulkSendGreenApi = async () => {
+    if (customerRestriction.isRestricted) {
+      alert(`${customerRestriction.reason}\n\nההודעות ישלחו אוטומטית: ${customerRestriction.allowedSendTime}`);
+      return;
+    }
     if (!settings.greenApiIdInstance || !settings.greenApiToken) return;
     const unsentBookings = dayBookings.filter(b => !sentMap[b.id]);
     if (unsentBookings.length === 0) {
@@ -212,6 +226,24 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
           </button>
         </div>
 
+        {/* Iron Rule Restriction Banner */}
+        {customerRestriction.isRestricted && (
+          <div className="bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-amber-500/10 border-b-2 border-amber-500 text-amber-950 p-3.5 px-4 sm:px-5 flex items-start gap-3 shadow-2xs text-xs leading-relaxed" dir="rtl">
+            <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center text-base shrink-0 shadow-xs mt-0.5">
+              🛡️
+            </div>
+            <div className="space-y-0.5">
+              <div className="font-black text-amber-950 text-xs sm:text-sm">
+                כלל ברזל: שקט מוחלט ללקוחות משישי 14:00 וכל השבת והחג
+              </div>
+              <p className="text-slate-700 font-medium">
+                חל איסור מוחלט על שליחת הודעות ללקוחות במהלך השבת או החג.
+                ההודעה האמורה תישלח לבעלים באופן אוטומטי בענן <strong>במוצאי שבת בשעה {customerRestriction.sendTimeStr}</strong> (40 דק׳ בדיוק לאחר צאת השבת) – גם כשהדפדפנים סגורים!
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Progress Bar & Template Customizer */}
         <div className="bg-slate-50 px-4 sm:px-5 py-3 border-b border-slate-200 space-y-2.5 text-xs">
           {/* Progress Bar & Bulk Action */}
@@ -227,12 +259,23 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
             {hasGreenApi && (
               <button
                 type="button"
-                disabled={isBulkSending || (dayBookings.length > 0 && sentCount === dayBookings.length)}
+                disabled={isBulkSending || customerRestriction.isRestricted || (dayBookings.length > 0 && sentCount === dayBookings.length)}
                 onClick={handleBulkSendGreenApi}
-                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black px-3.5 py-1.5 rounded-xl shadow-xs text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                className={`font-black px-3.5 py-1.5 rounded-xl shadow-xs text-xs flex items-center gap-1.5 transition-all ${
+                  customerRestriction.isRestricted
+                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95'
+                }`}
+                title={customerRestriction.isRestricted ? customerRestriction.reason : 'שליחה אוטומטית ברקע לכל הכלבים'}
               >
                 <Zap className="w-3.5 h-3.5 fill-amber-300 text-amber-300 shrink-0" />
-                <span>{isBulkSending ? (bulkStatusText || 'שולח ברקע...') : 'שלח לכל הכלבים ברקע (Green-API)'}</span>
+                <span>
+                  {customerRestriction.isRestricted
+                    ? `שליחה נעולה (תשלח במוצ״ש ב-${customerRestriction.sendTimeStr})`
+                    : isBulkSending
+                    ? (bulkStatusText || 'שולח ברקע...')
+                    : 'שלח לכל הכלבים ברקע (Green-API)'}
+                </span>
               </button>
             )}
           </div>
@@ -364,32 +407,45 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
                       {hasGreenApi && (
                         <button
                           type="button"
-                          disabled={singleSendingId === b.id || isBulkSending}
+                          disabled={singleSendingId === b.id || isBulkSending || customerRestriction.isRestricted}
                           onClick={() => handleSendGreenApiSingle(b)}
-                          className={`font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
-                            isSent
-                              ? 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-300'
-                              : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+                          className={`font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs ${
+                            customerRestriction.isRestricted
+                              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                              : isSent
+                              ? 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-300 cursor-pointer active:scale-95'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 cursor-pointer active:scale-95'
                           }`}
-                          title="שליחה מיידית ברקע ללא פתיחת לשונית בדפדפן"
+                          title={customerRestriction.isRestricted ? customerRestriction.reason : "שליחה מיידית ברקע ללא פתיחת לשונית בדפדפן"}
                         >
                           <Zap className="w-3.5 h-3.5 fill-amber-300 text-amber-300 shrink-0" />
-                          <span>{singleSendingId === b.id ? 'שולח...' : isSent ? 'שלח שוב ברקע' : 'שלח ברקע (API)'}</span>
+                          <span>
+                            {customerRestriction.isRestricted
+                              ? 'שליחה נעולה'
+                              : singleSendingId === b.id
+                              ? 'שולח...'
+                              : isSent
+                              ? 'שלח שוב ברקע'
+                              : 'שלח ברקע (API)'}
+                          </span>
                         </button>
                       )}
 
                       <button
                         type="button"
+                        disabled={customerRestriction.isRestricted}
                         onClick={() => handleSendWhatsApp(b)}
-                        className={`font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 ${
-                          isSent
-                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                            : 'bg-[#25D366] hover:bg-[#1EBE5D] text-white shadow-emerald-500/20'
+                        className={`font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs ${
+                          customerRestriction.isRestricted
+                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                            : isSent
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95'
+                            : 'bg-[#25D366] hover:bg-[#1EBE5D] text-white shadow-emerald-500/20 cursor-pointer active:scale-95'
                         }`}
-                        title="פתח ב-WhatsApp Web"
+                        title={customerRestriction.isRestricted ? customerRestriction.reason : "פתח ב-WhatsApp Web"}
                       >
                         <MessageCircle className="w-4 h-4 fill-white/20 shrink-0" />
-                        <span>{isSent ? 'שלח שוב בוואטסאפ' : 'פתח בוואטסאפ'}</span>
+                        <span>{customerRestriction.isRestricted ? 'נעול' : isSent ? 'שלח שוב בוואטסאפ' : 'פתח בוואטסאפ'}</span>
                       </button>
                     </div>
                   </div>

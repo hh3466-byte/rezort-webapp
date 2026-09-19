@@ -407,40 +407,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </span>
                 </div>
 
-                {/* 11:00 Shabbat & Holiday Alert Settings */}
-                <div className="p-4 bg-gradient-to-r from-red-50 via-rose-50 to-amber-50 border border-red-200 rounded-2xl space-y-2.5 mt-2">
+                {/* Iron Rule: Weekend & Holiday Customer Messaging Policy */}
+                <div className="p-4 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border border-amber-300 rounded-2xl space-y-2.5 mt-2" dir="rtl">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">🔔</span>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center text-lg shrink-0 shadow-xs">
+                        🛡️
+                      </div>
                       <div>
                         <div className="text-xs font-black text-slate-900">
-                          תזכורות שעה 11:00 (ד״ש שבת וחג לשמוליק)
+                          כלל ברזל: שקט מוחלט ללקוחות משישי 14:00 וכל השבת והחג
                         </div>
-                        <div className="text-[11px] text-slate-500">
-                          חלון קופץ במסך + צליל התראה + התראת פוש לדפדפן
+                        <div className="text-[11px] text-slate-500 font-medium">
+                          משלוח אוטומטי בענן 40 דק׳ לאחר צאת השבת/החג
                         </div>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const res = await testSystemNotification();
-                        if (res.permission === 'granted' && res.notificationSent) {
-                          alert('מעולה שמוליק! צליל ההתראה והתראת הפוש פועלים בהצלחה.');
-                        } else if (res.permission === 'denied') {
-                          alert('צליל ההתראה הושמע בהצלחה. שים לב: התראות הדפדפן חסומות כרגע בהגדרות הדפדפן שלך.');
-                        } else {
-                          alert('צליל ההתראה הושמע בהצלחה!');
-                        }
-                      }}
-                      className="bg-white hover:bg-red-50 text-red-900 border border-red-300 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95 shrink-0"
-                    >
-                      <Volume2 className="w-3.5 h-3.5 text-red-600" />
-                      <span>בדוק צליל והתראה</span>
-                    </button>
                   </div>
-                  <div className="text-[11px] text-slate-600 bg-white/80 p-2.5 rounded-xl border border-red-100 leading-relaxed">
-                    💡 <strong>איך זה עובד:</strong> בכל שבת וחג בשעה 11:00 בבוקר (או ברגע ששמוליק פותח את היומן לאחר שעה זו), המערכת משמיעה צליל ופותחת אוטומטית את חלון שליחת הד״ש לבעלי הכלבים הנוכחים בריזורט, כך ששמוליק לא מפספס אף לקוח.
+                  <div className="text-[11px] text-slate-700 bg-white/90 p-3 rounded-xl border border-amber-200 leading-relaxed space-y-1">
+                    <div>
+                      🔒 <strong>חסימה הרמטית:</strong> מיום שישי בשעה 14:00 ובמהלך כל השבת והחג חל איסור מוחלט על שליחת הודעות ללקוחות.
+                    </div>
+                    <div>
+                      🚀 <strong>שליחה אוטומטית בענן:</strong> בדיוק 40 דקות לאחר צאת השבת או החג, המערכת משגרת אוטומטית את הודעות הד״ש ויומן העדכונים לכל בעלי הכלבים – <strong>גם כאשר כל המחשבים והדפדפנים סגורים לחלוטין!</strong>
+                    </div>
                   </div>
                 </div>
               </div>

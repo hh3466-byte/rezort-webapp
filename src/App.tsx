@@ -59,7 +59,7 @@ import { isIntakeRequestNew, isIntakeRequestInTreatment } from './utils/intakeUt
 import { CheckoutDebtAlertModal } from './components/CheckoutDebtAlertModal';
 import { PublicIntakePage } from './components/PublicIntakePage';
 import { SendIntakeModal } from './components/SendIntakeModal';
-import { getDateShabbatOrHoliday } from './utils/jewishCalendar';
+import { getDateShabbatOrHoliday, isCustomerMessagingRestrictedNow } from './utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './components/ShabbatHolidayGreetingModal';
 import { VoucherModal } from './components/VoucherModal';
 import { DailyDogUpdatesModal } from './components/DailyDogUpdatesModal';
@@ -324,63 +324,10 @@ export default function App() {
     }
   };
 
-  // 11:00 AM Scheduled Push & In-App Auto Reminder for Shabbat / Holiday (Disabled on Yom Kippur)
-  useEffect(() => {
-    if (!todayHolidayInfo.isSpecial || todayHolidayInfo.isYomKippur || totalDogsToday === 0) return;
+  // כלל ברזל: שקט מוחלט ללקוחות משישי 14:00 וכל השבת והחג.
+  // אין תזכורות פופ-אפ ואין שליחת הודעות ללקוחות ב-11:00 בבוקר בשבת.
+  // ההודעות משוגרות אוטומטית בענן 40 דקות בדיוק לאחר צאת השבת/החג!
 
-    const checkAndTrigger11AmReminder = () => {
-      const now = new Date();
-      const hour = now.getHours();
-
-      // Trigger at 11:00 AM or later today
-      if (hour >= 11) {
-        let sentCount = 0;
-        try {
-          const saved = localStorage.getItem(`shabbat_greetings_${todayStr}`);
-          const map = saved ? JSON.parse(saved) : {};
-          sentCount = todayBookings.filter(b => map[b.id]).length;
-        } catch {}
-
-        const unsent = todayBookings.length - sentCount;
-        if (unsent > 0) {
-          // 1. In-App Auto Popup: Pop up greeting modal directly on screen with audio chime
-          const inAppOpenedKey = `shabbat_11am_inapp_opened_${todayStr}`;
-          if (!sessionStorage.getItem(inAppOpenedKey)) {
-            sessionStorage.setItem(inAppOpenedKey, 'true');
-            playNotificationChime();
-            setGreetingModalDate(todayStr);
-            showToast(`🔔 שעה 11:00! נפתחה רשימת ד״ש ${todayHolidayInfo.label} לשליחה בוואטסאפ ל-${unsent} כלבים.`);
-          }
-
-          // 2. Browser Native Push Notification (fires if browser/tab is in background)
-          const pushSentKey = `shabbat_11am_push_sent_${todayStr}`;
-          if (!localStorage.getItem(pushSentKey) && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-            try {
-              const notif = new Notification(`🐾 תזכורת לשמוליק: ד״ש ${todayHolidayInfo.label}!`, {
-                body: `השעה 11:00! ישנם ${totalDogsToday} כלבים בריזורט (${unsent} טרם קיבלו ד״ש). לחץ כאן לשליחה בוואטסאפ לבעלים.`,
-                icon: '/favicon.ico',
-                tag: `shabbat-greeting-${todayStr}`,
-                requireInteraction: true
-              });
-              notif.onclick = () => {
-                window.focus();
-                playNotificationChime();
-                setGreetingModalDate(todayStr);
-                notif.close();
-              };
-              localStorage.setItem(pushSentKey, 'true');
-            } catch (err) {
-              console.warn('Native notification error:', err);
-            }
-          }
-        }
-      }
-    };
-
-    checkAndTrigger11AmReminder();
-    const interval = setInterval(checkAndTrigger11AmReminder, 15000);
-    return () => clearInterval(interval);
-  }, [todayHolidayInfo.isSpecial, todayHolidayInfo.label, totalDogsToday, todayBookings, todayStr]);
 
   // 20:00 Daily Dog Evening Updates Auto-Sender Background Runner (Fail-safe auto dispatch)
   useEffect(() => {
@@ -1341,84 +1288,102 @@ export default function App() {
         </div>
 
         {/* Shabbat / Jewish Holiday Dog Greetings Reminder Banner for Shmulik */}
-        {todayHolidayInfo.isSpecial && totalDogsToday > 0 && !isGreetingBannerDismissed && (
-          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-            {todayUnsentGreetingsCount > 0 ? (
-              <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white rounded-2xl p-3 sm:p-4 shadow-md border border-red-500/60 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                  <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl shrink-0 shadow-xs ring-1 ring-white/30">
-                    {todayHolidayInfo.icon || '🕯️'}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-black text-sm sm:text-base tracking-tight">
-                        תזכורת לשמוליק – ד״ש {todayHolidayInfo.label} לבעלי הכלבים!
-                      </span>
-                      <span className="bg-amber-400 text-slate-950 text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-2xs">
-                        נותרו {todayUnsentGreetingsCount} לשליחה
-                      </span>
-                      {notificationPermission === 'granted' ? (
-                        <span className="bg-white/20 text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/30 flex items-center gap-1">
-                          <span>🔔</span>
-                          <span>תזכורת פוש ב-11:00 פעילה</span>
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={requestNotificationPermission}
-                          className="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/30 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                          title="אפשר קבלת התראת פוש ב-11:00 בבוקר"
-                        >
-                          <span>🔔</span>
-                          <span>הפעל תזכורת פוש ב-11:00</span>
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={handleTestNotification}
-                        className="bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/30 flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                        title="בדוק השמעת צליל והתראת פוש עכשיו"
-                      >
-                        <Volume2 className="w-3 h-3" />
-                        <span>בדוק צליל והתראה</span>
-                      </button>
+        {todayHolidayInfo.isSpecial && totalDogsToday > 0 && !isGreetingBannerDismissed && (() => {
+          const rest = isCustomerMessagingRestrictedNow();
+          if (rest.isRestricted) {
+            return (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white rounded-2xl p-3 sm:p-4 shadow-md border border-amber-400/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl shrink-0 shadow-xs ring-1 ring-white/30">
+                      🛡️
                     </div>
-                    <p className="text-xs text-red-100 font-medium mt-0.5">
-                      נוכחים היום {totalDogsToday} כלבים בריזורט ({todayGreetingsSentCount} נשלחו עד כה). שלח להם ד״ש משמח בוואטסאפ בקליק!
-                    </p>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-sm sm:text-base tracking-tight">
+                          כלל ברזל: שקט מוחלט ללקוחות משישי 14:00 וכל השבת והחג
+                        </span>
+                        <span className="bg-white/20 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full">
+                          {totalDogsToday} כלבים בריזורט
+                        </span>
+                      </div>
+                      <p className="text-xs text-amber-100 font-medium mt-0.5">
+                        הודעות הד״ש והעדכונים ישלחו אוטומטית בענן 40 דקות לאחר צאת השבת/החג {rest.sendTimeStr ? `בשעה ${rest.sendTimeStr}` : ''} (גם כשהדפדפנים סגורים).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setGreetingModalDate(todayStr)}
+                      className="w-full sm:w-auto bg-white/90 hover:bg-white text-slate-900 font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shrink-0"
+                    >
+                      <MessageCircle className="w-4 h-4 text-amber-700" />
+                      <span>צפה בנוסח וברשימה</span>
+                    </button>
                   </div>
                 </div>
+              </div>
+            );
+          }
 
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setGreetingModalDate(todayStr)}
-                    className="w-full sm:w-auto bg-white hover:bg-red-50 text-red-950 font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shrink-0"
-                  >
-                    <MessageCircle className="w-4 h-4 text-red-600" />
-                    <span>שלח ד״ש עכשיו לבעלים</span>
-                  </button>
+          if (todayUnsentGreetingsCount > 0) {
+            return (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white rounded-2xl p-3 sm:p-4 shadow-md border border-emerald-400/60 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl shrink-0 shadow-xs ring-1 ring-white/30">
+                      🚀
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-black text-sm sm:text-base tracking-tight">
+                          מוצאי שבת/חג – חלון המשלוח האוטומטי פעיל (40 דק׳ לאחר צאת השבת)!
+                        </span>
+                        <span className="bg-amber-400 text-slate-950 text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-2xs">
+                          {todayUnsentGreetingsCount} להשלמה
+                        </span>
+                      </div>
+                      <p className="text-xs text-emerald-100 font-medium mt-0.5">
+                        הודעות הד״ש החם נשלחות כעת אוטומטית ברקע לכל {totalDogsToday} הכלבים בריזורט.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setGreetingModalDate(todayStr)}
+                      className="w-full sm:w-auto bg-white hover:bg-emerald-50 text-emerald-950 font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shrink-0"
+                    >
+                      <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      <span>צפה ברשימה ובהתקדמות</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            ) : (
-              <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-3.5 py-2.5 text-xs font-bold flex items-center justify-between shadow-2xs">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">🎉</span>
-                  <span className="font-black text-emerald-950">
-                    מעולה שמוליק! כל {totalDogsToday} הודעות הד״ש ל{todayHolidayInfo.label} נשלחו בהצלחה לבעלים.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setGreetingModalDate(todayStr)}
-                  className="text-emerald-700 hover:text-emerald-900 underline font-black text-xs cursor-pointer"
-                >
-                  פתח רשימה
-                </button>
+            );
+          }
+
+          return (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-3.5 py-2.5 text-xs font-bold flex items-center justify-between shadow-2xs">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🎉</span>
+                <span className="font-black text-emerald-950">
+                  מעולה שמוליק! כל {totalDogsToday} הודעות הד״ש נשלחו בהצלחה לבעלים.
+                </span>
               </div>
-            )}
-          </div>
-        )}
+              <button
+                type="button"
+                onClick={() => setGreetingModalDate(todayStr)}
+                className="text-emerald-700 hover:text-emerald-900 underline font-black text-xs cursor-pointer"
+              >
+                פתח רשימה
+              </button>
+            </div>
+          );
+        })()}
 
         {/* Header Metrics Section: Ultra-Compact & Space-Efficient (Hidden on mobile when in WhatsApp CRM to maximize full-screen view) */}
         <div className={activeTab === 'whatsapp' ? 'hidden sm:block' : ''}>
@@ -2301,55 +2266,7 @@ export default function App() {
         onClose={() => setIsManagerAuthOpen(false)}
       />
 
-      {/* Persistent Floating 11:00 Alert Bar for Shabbat / Holiday (Never on Yom Kippur) */}
-      {todayHolidayInfo.isSpecial && !todayHolidayInfo.isYomKippur && todayUnsentGreetingsCount > 0 && new Date().getHours() >= 11 && !greetingModalDate && !isGreetingFloatingSnoozed && (
-        <div 
-          className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-6 sm:w-[420px] z-40 bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white p-3.5 rounded-2xl shadow-2xl border-2 border-white/40 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-5 duration-300 ring-4 ring-red-600/20"
-          dir="rtl"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl shrink-0 backdrop-blur-xs ring-1 ring-white/30">
-              ⏰
-            </div>
-            <div className="min-w-0">
-              <div className="font-black text-xs sm:text-sm tracking-tight flex items-center gap-1.5">
-                <span>שמוליק, שעה 11:00 חלפה!</span>
-                <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-1.5 py-0.2 rounded-full">
-                  {todayUnsentGreetingsCount}
-                </span>
-              </div>
-              <p className="text-[11px] text-red-100 font-medium truncate mt-0.5">
-                נותרו {todayUnsentGreetingsCount} כלבים ללא ד״ש {todayHolidayInfo.label}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                playNotificationChime();
-                setGreetingModalDate(todayStr);
-              }}
-              className="bg-white hover:bg-red-50 text-red-950 font-black px-3.5 py-2 rounded-xl text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
-            >
-              <MessageCircle className="w-3.5 h-3.5 text-red-600" />
-              <span>שלח עכשיו</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsGreetingFloatingSnoozed(true);
-                setTimeout(() => setIsGreetingFloatingSnoozed(false), 15 * 60 * 1000);
-                showToast('התזכורת תושתק ל-15 דקות ⏳');
-              }}
-              className="text-white/70 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition-colors cursor-pointer text-xs"
-              title="השתק ל-15 דקות"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
+
 
       {/* Persistent Floating Alert for Pending Grow Payments (when modal is snoozed/minimized) */}
       {pendingGrowPayments.length > 0 && isGrowPaymentsMinimized && !bookingWizardOpen.isOpen && !isGrowFloatingSnoozed && (

@@ -614,6 +614,7 @@ export const saveBookingToDb = async (booking: Booking): Promise<void> => {
       owner_name: updatedBooking.ownerName,
       owner_phone: updatedBooking.ownerPhone,
       owner_email: updatedBooking.ownerEmail || '',
+      owner_address: updatedBooking.ownerAddress || '',
       service_type: updatedBooking.serviceType,
       start_date: updatedBooking.startDate,
       end_date: updatedBooking.endDate,
@@ -944,6 +945,7 @@ export const saveIntakeRequestToDb = async (request: IntakeRequest): Promise<voi
         owner_name: request.ownerName,
         owner_phone: request.ownerPhone,
         owner_email: request.ownerEmail || '',
+        owner_address: request.ownerAddress || '',
         dog_name: request.dogName,
         dog_breed: request.dogBreed || '',
         dog_age: request.dogAge || '',
@@ -1145,7 +1147,13 @@ export const subscribeToIntakeRequests = (
       if (data && data.length > 0) {
         const mapped: IntakeRequest[] = data.map((row: any) => {
           if (row.data && typeof row.data === 'object') {
-            return { ...row.data, id: row.id, status: row.status || row.data.status };
+            return {
+              ...row.data,
+              id: row.id,
+              status: row.status || row.data.status,
+              ownerAddress: row.data.ownerAddress || row.owner_address || '',
+              ownerCoordinates: row.data.ownerCoordinates || undefined,
+            };
           }
           return {
             id: row.id,
@@ -1154,6 +1162,8 @@ export const subscribeToIntakeRequests = (
             ownerName: row.owner_name,
             ownerPhone: row.owner_phone,
             ownerEmail: row.owner_email || '',
+            ownerAddress: row.owner_address || row.data?.ownerAddress || '',
+            ownerCoordinates: row.data?.ownerCoordinates || undefined,
             dogName: row.dog_name,
             dogBreed: row.dog_breed || '',
             dogAge: row.dog_age || '',
@@ -1400,6 +1410,8 @@ export interface PhoneVerificationResult {
   name?: string;
   dogName?: string;
   dogBreed?: string;
+  address?: string;
+  coordinates?: { lat: number; lng: number };
   totalVisits: number;
   isVip: boolean;
 }
@@ -1428,11 +1440,15 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
     if (matchedLocalBookings.length > 0) {
       const latest = matchedLocalBookings[matchedLocalBookings.length - 1];
       const totalVisits = matchedLocalBookings.length;
+      const addr = latest.ownerAddress || (latest as any).address || (latest as any).data?.ownerAddress;
+      const coords = latest.ownerCoordinates || (latest as any).data?.ownerCoordinates;
       return {
         isKnown: true,
         name: latest.ownerName,
         dogName: latest.dogName,
         dogBreed: latest.dogBreed,
+        address: addr,
+        coordinates: coords,
         totalVisits,
         isVip: totalVisits >= 4 || matchedLocalBookings.some(b => (b as any).isVip)
       };
@@ -1465,7 +1481,7 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
   try {
     const { data: custData, error: custErr } = await supabase
       .from(CUSTOMERS_TABLE)
-      .select('name, phone, dogs, total_visits, is_vip')
+      .select('name, phone, dogs, total_visits, is_vip, address, data')
       .ilike('phone', `%${matchSuffix}%`);
 
     if (!custErr && custData && Array.isArray(custData)) {
@@ -1476,11 +1492,14 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
 
       if (match) {
         const dog = Array.isArray(match.dogs) && match.dogs.length > 0 ? match.dogs[0] : undefined;
+        const addr = match.address || match.data?.address || match.data?.ownerAddress;
         return {
           isKnown: true,
           name: match.name,
           dogName: typeof dog === 'string' ? dog : dog?.name,
           dogBreed: typeof dog === 'object' ? dog?.breed : undefined,
+          address: addr,
+          coordinates: match.data?.ownerCoordinates,
           totalVisits: Number(match.total_visits) || 1,
           isVip: Boolean(match.is_vip) || (Number(match.total_visits) >= 4)
         };
@@ -1494,7 +1513,7 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
   try {
     const { data: bkData, error: bkErr } = await supabase
       .from(BOOKINGS_TABLE)
-      .select('owner_name, owner_phone, dog_name, dog_breed')
+      .select('owner_name, owner_phone, dog_name, dog_breed, owner_address, data')
       .ilike('owner_phone', `%${matchSuffix}%`);
 
     if (!bkErr && bkData && Array.isArray(bkData)) {
@@ -1506,11 +1525,15 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
       if (matches.length > 0) {
         const latest = matches[matches.length - 1];
         const totalVisits = matches.length;
+        const addr = latest.owner_address || latest.data?.ownerAddress;
+        const coords = latest.data?.ownerCoordinates;
         return {
           isKnown: true,
           name: latest.owner_name,
           dogName: latest.dog_name,
           dogBreed: latest.dog_breed,
+          address: addr,
+          coordinates: coords,
           totalVisits,
           isVip: totalVisits >= 4
         };
@@ -1524,7 +1547,7 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
   try {
     const { data: intakeData } = await supabase
       .from('intake_requests')
-      .select('owner_name, owner_phone, dog_name, dog_breed')
+      .select('owner_name, owner_phone, dog_name, dog_breed, owner_address, data')
       .ilike('owner_phone', `%${matchSuffix}%`);
 
     if (intakeData && Array.isArray(intakeData)) {
@@ -1533,11 +1556,15 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
         return rDigits && (rDigits.endsWith(matchSuffix) || rDigits.includes(matchSuffix));
       });
       if (match) {
+        const addr = match.owner_address || match.data?.ownerAddress;
+        const coords = match.data?.ownerCoordinates;
         return {
           isKnown: true,
           name: match.owner_name,
           dogName: match.dog_name,
           dogBreed: match.dog_breed,
+          address: addr,
+          coordinates: coords,
           totalVisits: 1,
           isVip: false
         };

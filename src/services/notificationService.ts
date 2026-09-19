@@ -24,7 +24,7 @@ export function formatIntakeNotification(request: IntakeRequest): string {
 --------------------------------
 👤 *בעלים:* ${request.ownerName}
 📞 *טלפון:* ${request.ownerPhone}
-🐶 *כלב:* ${request.dogName} (${request.dogBreed || 'מעורב'}) | *מין:* ${request.dogGender === 'female' ? 'נקבה ♀️' : 'זכר ♂️'}
+${request.ownerAddress ? `🏠 *כתובת מגורים:* ${request.ownerAddress}\n` : ''}🐶 *כלב:* ${request.dogName} (${request.dogBreed || 'מעורב'}) | *מין:* ${request.dogGender === 'female' ? 'נקבה ♀️' : 'זכר ♂️'}
 🎂 *גיל/גודל:* ${request.dogAge || 'לא צוין'} | ${request.dogSize === 'small' ? 'קטן' : request.dogSize === 'medium' ? 'בינוני' : request.dogSize === 'large' ? 'גדול' : 'ענק'}
 🏨 *שירות מבוקש:* ${serviceName}
 ${datesLine}
@@ -48,8 +48,9 @@ export function formatBookingConfirmedNotification(booking: Booking): string {
 
   return `🎉 *הזמנה חדשה נקלטה ביומן הריזורט לכלב!*
 --------------------------------
-🐶 *כלב:* ${booking.dogName} (${booking.dogBreed || 'מעורב'})
-👤 *בעלים:* ${booking.ownerName} (${booking.ownerPhone})
+👤 *בעלים:* ${booking.ownerName}
+📞 *טלפון:* ${booking.ownerPhone}
+${booking.ownerAddress ? `🏠 *כתובת מגורים:* ${booking.ownerAddress}\n` : ''}🐶 *כלב:* ${booking.dogName} (${booking.dogBreed || 'מעורב'})
 🏨 *שירות:* ${serviceName}
 📅 *תאריכים:* מ-${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}
 💰 *סה״כ לתשלום:* ₪${booking.totalPrice}
@@ -252,7 +253,7 @@ export async function sendResortEmailNotification(
 export const DEFAULT_GREEN_API_ID = '710722735421';
 export const DEFAULT_GREEN_API_TOKEN = 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b';
 
-import { isShabbatOrHolidayRestricted } from '../utils/jewishCalendar';
+import { isCustomerMessagingRestrictedNow } from '../utils/jewishCalendar';
 
 /**
  * Send direct message via Green-API and return result
@@ -264,14 +265,14 @@ export async function sendGreenApiDirectMessage(
   apiToken?: string,
   options?: { skipHolidayCheck?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
-  // איסור גורף: בערבי שבת/חג (החל מ-14:00) ועד מוצאי שבת/חג לא מתקשרים עם לקוחות כלל!
+  // כלל ברזל של שמוליק: מיום שישי ב-14:00 וכל השבת והחג – שקט מוחלט ללקוחות עד 40 דקות לאחר צאת השבת/חג!
   if (!options?.skipHolidayCheck) {
-    const restriction = isShabbatOrHolidayRestricted();
+    const restriction = isCustomerMessagingRestrictedNow();
     if (restriction.isRestricted) {
-      console.warn(`[Blocked Message] ${restriction.reason} -> ${phone}`);
+      console.warn(`[Blocked Customer Message] ${restriction.reason} -> ${phone}`);
       return {
         success: false,
-        error: `הודעה נחסמה אוטומטית: ${restriction.reason}. חל איסור מוחלט על התקשרות עם לקוחות בערבי שבת/חג ובשבתות/חגים.`
+        error: `הודעה נחסמה אוטומטית (כלל ברזל): ${restriction.reason}. ${restriction.allowedSendTime ? `השליחה תתאפשר אוטומטית: ${restriction.allowedSendTime}.` : ''}`
       };
     }
   }

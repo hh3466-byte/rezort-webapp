@@ -123,7 +123,7 @@ export const WhatsAppAuthGate: React.FC<WhatsAppAuthGateProps> = ({
         // Even if Green-API is slow or fails, we allow entry via Step 2 and keep code ready
         setStep('enter_otp');
         setResendCountdown(60);
-        setErrorMsg('הודעת וואטסאפ נשלחת למכשירך. ניתן גם להזין את קוד הגיבוי במידת הצורך.');
+        setErrorMsg('הודעת וואטסאפ נשלחת למכשירך.');
       }
     } catch (err: any) {
       setIsSending(false);
