@@ -28,6 +28,7 @@ import {
   Minus,
   Save,
   Trash2,
+  Sparkles,
   RotateCcw,
   Dog,
   Mic,
