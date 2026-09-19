@@ -77,20 +77,30 @@ export async function runAutoDailyDogUpdates(
 
   const todayStr = getTodayStr();
 
-  // Filter dogs active tonight
-  const activeTonight = bookings.filter(b => {
+  // Filter dogs active tonight and deduplicate by phone + dog name to avoid duplicate sends if duplicate bookings exist
+  const seenDogsMap = new Set<string>();
+  const activeTonightUnique = bookings.filter(b => {
     if (b.stayStatus === 'cancelled') return false;
-    return b.startDate <= todayStr && b.endDate > todayStr;
+    const isStaying = b.startDate <= todayStr && b.endDate > todayStr;
+    if (!isStaying) return false;
+    
+    const phone = cleanPhoneNumber(b.ownerPhone);
+    const dog = (b.dogName || '').trim().toLowerCase();
+    const dogKey = `${phone}_${dog}`;
+    if (seenDogsMap.has(dogKey)) return false;
+    seenDogsMap.add(dogKey);
+    return true;
   });
 
-  if (activeTonight.length === 0) {
+  if (activeTonightUnique.length === 0) {
     return { sentCount: 0, errors: [] };
   }
 
   // Filter unsent dogs (Check BOTH local device storage AND shared Supabase database)
-  const unsentDogs = activeTonight.filter(b => {
+  const unsentDogs = activeTonightUnique.filter(b => {
     const key = `daily_dog_sent_${b.id}_${todayStr}`;
-    const sentLocally = localStorage.getItem(key) === 'true';
+    const dogPhoneKey = `daily_dog_sent_${cleanPhoneNumber(b.ownerPhone)}_${(b.dogName || '').trim().toLowerCase()}_${todayStr}`;
+    const sentLocally = localStorage.getItem(key) === 'true' || localStorage.getItem(dogPhoneKey) === 'true';
     const sentInDb = b.lastDailyDogUpdateSent === todayStr || (b as any)?.data?.lastDailyDogUpdateSent === todayStr;
     return !sentLocally && !sentInDb;
   });
@@ -105,9 +115,14 @@ export async function runAutoDailyDogUpdates(
 
   console.log(`[AutoSender 20:00] מתחיל משלוח אוטומטי ל-${unsentDogs.length} כלבים שטרם עודכנו...`);
 
+  const processedDogsInBatch = new Set<string>();
+
   for (const b of unsentDogs) {
     const cleanPhone = cleanPhoneNumber(b.ownerPhone);
     if (!cleanPhone || cleanPhone.length < 9) continue;
+    const dogDedupKey = `${cleanPhone}_${(b.dogName || '').trim().toLowerCase()}`;
+    if (processedDogsInBatch.has(dogDedupKey)) continue;
+    processedDogsInBatch.add(dogDedupKey);
 
     // Cross reference intake for friendly/isolation status
     const intakeMatch = intakeRequests.find(r => {
@@ -141,6 +156,7 @@ export async function runAutoDailyDogUpdates(
       const res = await sendGreenApiDirectMessage(cleanPhone, formattedText, greenApiId, greenApiToken);
       if (res.success) {
         localStorage.setItem(`daily_dog_sent_${b.id}_${todayStr}`, 'true');
+        localStorage.setItem(`daily_dog_sent_${cleanPhone}_${(b.dogName || '').trim().toLowerCase()}_${todayStr}`, 'true');
         // Persist to Supabase so NO other device or browser ever re-sends today!
         try {
           const updatedBooking: Booking = {

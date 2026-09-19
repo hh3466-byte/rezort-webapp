@@ -71,17 +71,30 @@ export function formatTomorrowOverviewReport(
 
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
 
+  // Helper to deduplicate bookings by owner phone + dog name to protect against duplicate database rows
+  const deduplicateBookings = (list: Booking[]): Booking[] => {
+    const seen = new Set<string>();
+    return list.filter(b => {
+      const phone = (b.ownerPhone || '').replace(/\D/g, '');
+      const dog = (b.dogName || '').trim().toLowerCase();
+      const key = `${phone}_${dog}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   // Incoming dogs tomorrow (start date === tomorrow)
-  const incomingDogs = activeBookings.filter(b => b.startDate === tomorrowStr);
+  const incomingDogs = deduplicateBookings(activeBookings.filter(b => b.startDate === tomorrowStr));
 
   // Departing dogs tomorrow (end date === tomorrow)
-  const departingDogs = activeBookings.filter(b => b.endDate === tomorrowStr);
+  const departingDogs = deduplicateBookings(activeBookings.filter(b => b.endDate === tomorrowStr));
 
   // Dogs staying overnight at the end of tomorrow (start <= tomorrow AND end > tomorrow)
-  const endOfDayDogs = activeBookings.filter(b => b.startDate <= tomorrowStr && b.endDate > tomorrowStr);
+  const endOfDayDogs = deduplicateBookings(activeBookings.filter(b => b.startDate <= tomorrowStr && b.endDate > tomorrowStr));
 
   // Dogs present during daytime tomorrow
-  const presentDaytimeDogs = activeBookings.filter(b => b.startDate <= tomorrowStr && b.endDate >= tomorrowStr);
+  const presentDaytimeDogs = deduplicateBookings(activeBookings.filter(b => b.startDate <= tomorrowStr && b.endDate >= tomorrowStr));
 
   const maxCapacity = Number(settings.maxCapacity) || 10;
   const occupancyPercent = maxCapacity > 0 ? Math.round((endOfDayDogs.length / maxCapacity) * 100) : 0;

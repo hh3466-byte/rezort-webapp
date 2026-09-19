@@ -605,31 +605,39 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   className={`rounded-2xl border p-3 flex flex-col justify-start transition-all ${
                     isToday
                       ? 'bg-emerald-50/70 border-2 border-emerald-500 shadow-md ring-2 ring-emerald-500/20'
+                      : holidayInfo.isYomKippur
+                      ? 'bg-purple-50/40 border-purple-200 hover:border-purple-300 shadow-2xs hover:shadow-xs'
                       : 'bg-slate-50/50 border-slate-200 hover:border-slate-300 shadow-2xs hover:shadow-xs'
                   }`}
                 >
-                  {/* Header: Day Name + Date + Today Badge + Holiday Badge */}
-                  <div className="pb-2 border-b border-slate-200 flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-extrabold text-sm text-slate-900 block">
-                          יום {day.dayName}
-                        </span>
-                        {holidayInfo.isSpecial && (
-                          <span className="text-[10px] bg-emerald-100 text-emerald-900 border border-emerald-300 font-black px-1.5 py-0.2 rounded-full shadow-2xs">
-                            {holidayInfo.icon} {holidayInfo.label}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-xs text-slate-500 font-medium">
+                  {/* Header: Day Name + Date (Right) & Badges (Left empty space) */}
+                  <div className="pb-2 border-b border-slate-200 flex items-start justify-between gap-1.5 min-h-[46px]">
+                    <div className="flex flex-col justify-center">
+                      <span className="font-extrabold text-sm text-slate-900 leading-tight">
+                        יום {day.dayName}
+                      </span>
+                      <span className="text-xs text-slate-500 font-medium leading-tight mt-0.5">
                         {formatDateIL(day.dateStr)}
                       </span>
                     </div>
-                    {isToday && (
-                      <span className="text-[11px] bg-emerald-600 text-white font-black px-2 py-0.5 rounded-full shadow-2xs animate-pulse">
-                        היום ⭐
-                      </span>
-                    )}
+
+                    {/* Left side empty space: Badges */}
+                    <div className="flex flex-col items-end justify-center gap-1 shrink-0">
+                      {isToday && (
+                        <span className="text-[11px] bg-emerald-600 text-white font-black px-2 py-0.5 rounded-full shadow-2xs animate-pulse">
+                          היום ⭐
+                        </span>
+                      )}
+                      {holidayInfo.calendarBadge && (
+                        <span
+                          className={`text-[11px] px-2 py-0.5 rounded-lg font-black inline-flex items-center gap-1 shadow-2xs tracking-wide ${holidayInfo.calendarBadge.badgeClass}`}
+                          title={holidayInfo.calendarBadge.label}
+                        >
+                          <span>{holidayInfo.calendarBadge.icon}</span>
+                          <span>{holidayInfo.calendarBadge.label}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Occupancy & Free Spots Badge (בצורה מלאה ולא מוסתרת) */}
@@ -829,12 +837,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       >
                         {dayObj.dayNumber}
                       </span>
-                      {holidayInfo.isSpecial && (
+                      {holidayInfo.calendarBadge && (
                         <span 
-                          className="text-[9px] font-black bg-amber-100 text-amber-950 border border-amber-300 px-1 py-0.2 rounded leading-none truncate max-w-[62px]"
-                          title={holidayInfo.label}
+                          className={`text-[9px] font-black px-1.5 py-0.2 rounded leading-none truncate max-w-[70px] shadow-2xs ${holidayInfo.calendarBadge.badgeClass}`}
+                          title={holidayInfo.calendarBadge.label}
                         >
-                          {holidayInfo.icon} {holidayInfo.label}
+                          {holidayInfo.calendarBadge.icon} {holidayInfo.calendarBadge.shortLabel || holidayInfo.calendarBadge.label}
                         </span>
                       )}
                     </div>
@@ -939,6 +947,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               const dayBookings = getBookingsForDate(activeBookings, day.dateStr);
               const isToday = day.isToday;
               const isFull = dayBookings.length >= settings.maxCapacity;
+              const holidayInfo = getDateShabbatOrHoliday(day.dateStr);
 
               return (
                 <div
@@ -946,24 +955,37 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   className={`rounded-2xl border p-3 flex flex-col justify-between transition-all ${
                     isToday
                       ? 'bg-emerald-50/50 border-2 border-emerald-500 shadow-sm'
+                      : holidayInfo.isYomKippur
+                      ? 'bg-purple-50/40 border-purple-200 hover:border-purple-300 shadow-2xs hover:shadow-xs'
                       : 'bg-slate-50/50 border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  {/* Header: Day Name + Date */}
-                  <div className="pb-2 border-b border-slate-200 flex items-center justify-between">
-                    <div>
-                      <span className="font-extrabold text-sm text-slate-900 block">
+                  {/* Header: Day Name + Date (Right) & Badges (Left empty area) */}
+                  <div className="pb-2 border-b border-slate-200 flex items-start justify-between gap-1.5 min-h-[44px]">
+                    <div className="flex flex-col justify-center">
+                      <span className="font-extrabold text-sm text-slate-900 leading-tight">
                         יום {day.dayName}
                       </span>
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-slate-500 font-medium leading-tight mt-0.5">
                         {formatDateIL(day.dateStr)}
                       </span>
                     </div>
-                    {isToday && (
-                      <span className="text-[10px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-full">
-                        היום
-                      </span>
-                    )}
+                    <div className="flex flex-col items-end justify-center gap-1 shrink-0">
+                      {isToday && (
+                        <span className="text-[10px] bg-emerald-600 text-white font-black px-2 py-0.5 rounded-full shadow-2xs animate-pulse">
+                          היום ⭐
+                        </span>
+                      )}
+                      {holidayInfo.calendarBadge && (
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-lg font-black inline-flex items-center gap-1 shadow-2xs ${holidayInfo.calendarBadge.badgeClass}`}
+                          title={holidayInfo.calendarBadge.label}
+                        >
+                          <span>{holidayInfo.calendarBadge.icon}</span>
+                          <span>{holidayInfo.calendarBadge.label}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Occupancy Mini Progress Bar */}

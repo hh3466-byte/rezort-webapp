@@ -3,19 +3,51 @@
  * Uses native Intl.DateTimeFormat (Hebrew calendar) for 100% offline, accurate holiday detection.
  */
 
+export type HolidayCategory = 
+  | 'yom_kippur'
+  | 'holiday'
+  | 'eve'
+  | 'chol_hamoed'
+  | 'memorial'
+  | 'fast'
+  | 'national'
+  | 'shabbat';
+
+export interface CalendarBadgeInfo {
+  label: string;
+  shortLabel?: string;
+  icon: string;
+  category: HolidayCategory;
+  badgeClass: string;
+}
+
+export interface HolidayDetail {
+  name: string;
+  shortName?: string;
+  category: HolidayCategory;
+  icon: string;
+  badgeClass: string;
+}
+
 export interface HolidayInfo {
   isSpecial: boolean;
   label: string;
+  shortLabel?: string;
   icon: string;
   isShabbat: boolean;
   holidayName: string | null;
   isYomKippur?: boolean;
+  category?: HolidayCategory;
+  badgeClass?: string;
+  hasCalendarBadge: boolean;
+  calendarBadge: CalendarBadgeInfo | null;
 }
 
 /**
- * Returns Jewish Holiday name if the date falls on a holiday or eve of holiday, otherwise null.
+ * Returns detailed holiday information (name, category, icon, styling badge)
+ * Supports all Jewish holidays, holiday eves, Chol HaMoed, Memorial days, and fasts.
  */
-export function getJewishHoliday(d: Date): string | null {
+export function getJewishHolidayDetail(d: Date): HolidayDetail | null {
   try {
     const parts = new Intl.DateTimeFormat('en-u-ca-hebrew', {
       day: 'numeric',
@@ -25,50 +57,298 @@ export function getJewishHoliday(d: Date): string | null {
     
     const day = parseInt(parts.find(p => p.type === 'day')?.value || '0', 10);
     const monthName = new Intl.DateTimeFormat('he-u-ca-hebrew', { month: 'long' }).format(d).trim();
+    const dayOfWeek = d.getDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
 
+    // 1. אלול
     if (monthName.includes('אלול')) {
-      if (day === 29) return 'ערב ראש השנה';
+      if (day === 29) {
+        return {
+          name: 'ערב ראש השנה',
+          shortName: 'ערב ר״ה',
+          category: 'eve',
+          icon: '🍯',
+          badgeClass: 'bg-orange-100 text-orange-950 border border-orange-300 font-bold shadow-2xs'
+        };
+      }
     }
+
+    // 2. תשרי
     if (monthName.includes('תשרי')) {
-      if (day === 1 || day === 2) return 'ראש השנה';
-      if (day === 9) return 'ערב יום כיפור';
-      if (day === 10) return 'יום כיפור';
-      if (day === 14) return 'ערב סוכות';
-      if (day === 15) return 'חג סוכות';
-      if (day >= 16 && day <= 20) return 'חוה״מ סוכות';
-      if (day === 21) return 'הושענא רבה';
-      if (day === 22) return 'שמחת תורה';
+      if (day === 1 || day === 2) {
+        return {
+          name: 'ראש השנה',
+          shortName: 'ראש השנה',
+          category: 'holiday',
+          icon: '🍏',
+          badgeClass: 'bg-amber-100 text-amber-950 border border-amber-300 font-black shadow-2xs'
+        };
+      }
+      if (day === 3 && dayOfWeek !== 6) {
+        return {
+          name: 'צום גדליה',
+          shortName: 'צום גדליה',
+          category: 'fast',
+          icon: '🕯️',
+          badgeClass: 'bg-zinc-200 text-zinc-900 border border-zinc-400 font-bold shadow-2xs'
+        };
+      }
+      if (day === 4 && dayOfWeek === 0) {
+        return {
+          name: 'צום גדליה (נדחה)',
+          shortName: 'צום גדליה',
+          category: 'fast',
+          icon: '🕯️',
+          badgeClass: 'bg-zinc-200 text-zinc-900 border border-zinc-400 font-bold shadow-2xs'
+        };
+      }
+      if (day === 9) {
+        return {
+          name: 'ערב יום כיפור',
+          shortName: 'ערב כיפור',
+          category: 'yom_kippur',
+          icon: '🕯️',
+          badgeClass: 'bg-purple-100 text-purple-950 border border-purple-300 font-extrabold shadow-2xs'
+        };
+      }
+      if (day === 10) {
+        return {
+          name: 'יום כיפור',
+          shortName: 'כיפור',
+          category: 'yom_kippur',
+          icon: '🕯️',
+          badgeClass: 'bg-purple-900 text-white border border-purple-950 font-black shadow-xs'
+        };
+      }
+      if (day === 14) {
+        return {
+          name: 'ערב סוכות',
+          shortName: 'ערב סוכות',
+          category: 'eve',
+          icon: '🌿',
+          badgeClass: 'bg-orange-100 text-orange-950 border border-orange-300 font-bold shadow-2xs'
+        };
+      }
+      if (day === 15) {
+        return {
+          name: 'חג סוכות',
+          shortName: 'סוכות',
+          category: 'holiday',
+          icon: '🌿',
+          badgeClass: 'bg-emerald-100 text-emerald-950 border border-emerald-300 font-black shadow-2xs'
+        };
+      }
+      if (day >= 16 && day <= 20) {
+        return {
+          name: 'חוה״מ סוכות',
+          shortName: 'חוה״מ',
+          category: 'chol_hamoed',
+          icon: '🌿',
+          badgeClass: 'bg-sky-100 text-sky-950 border border-sky-300 font-bold shadow-2xs'
+        };
+      }
+      if (day === 21) {
+        return {
+          name: 'הושענא רבה',
+          shortName: 'הושענא רבה',
+          category: 'eve',
+          icon: '🌿',
+          badgeClass: 'bg-orange-100 text-orange-950 border border-orange-300 font-bold shadow-2xs'
+        };
+      }
+      if (day === 22) {
+        return {
+          name: 'שמחת תורה',
+          shortName: 'שמחת תורה',
+          category: 'holiday',
+          icon: '📜',
+          badgeClass: 'bg-amber-100 text-amber-950 border border-amber-300 font-black shadow-2xs'
+        };
+      }
+      if (day === 23) {
+        return {
+          name: 'איסרו חג',
+          shortName: 'איסרו חג',
+          category: 'national',
+          icon: '🌿',
+          badgeClass: 'bg-emerald-50 text-emerald-950 border border-emerald-300 font-bold shadow-2xs'
+        };
+      }
     }
-    if (monthName.includes('כסלו') || monthName.includes('טבת')) {
-      if (monthName.includes('כסלו') && day >= 25) return 'חנוכה';
-      if (monthName.includes('טבת') && day <= 3) return 'חנוכה';
+
+    // 3. חשוון
+    if (monthName.includes('חשוון')) {
+      if ((day === 12 && dayOfWeek !== 5) || (day === 11 && dayOfWeek === 4)) {
+        return {
+          name: 'יום הזיכרון ליצחק רבין',
+          shortName: 'יום רבין',
+          category: 'memorial',
+          icon: '🕯️',
+          badgeClass: 'bg-slate-800 text-white border border-slate-900 font-black shadow-xs'
+        };
+      }
+      if (day === 29) {
+        return {
+          name: 'חג הסיגד',
+          shortName: 'הסיגד',
+          category: 'national',
+          icon: '🌿',
+          badgeClass: 'bg-yellow-100 text-yellow-950 border border-yellow-300 font-bold shadow-2xs'
+        };
+      }
     }
-    if (monthName.includes('שבט') && day === 15) return 'ט״ו בשבט';
-    if ((monthName.includes('אדר') || monthName.includes('אדר ב')) && (day === 14 || day === 15)) return 'פורים';
+
+    // 4. כסלו
+    if (monthName.includes('כסלו')) {
+      if (day >= 25) {
+        return {
+          name: 'חנוכה',
+          shortName: 'חנוכה',
+          category: 'national',
+          icon: '🕎',
+          badgeClass: 'bg-indigo-100 text-indigo-950 border border-indigo-300 font-bold shadow-2xs'
+        };
+      }
+    }
+
+    // 5. טבת
+    if (monthName.includes('טבת')) {
+      if (day <= 2 || (day === 3 && dayOfWeek !== 6)) {
+        return {
+          name: 'חנוכה',
+          shortName: 'חנוכה',
+          category: 'national',
+          icon: '🕎',
+          badgeClass: 'bg-indigo-100 text-indigo-950 border border-indigo-300 font-bold shadow-2xs'
+        };
+      }
+      if (day === 10) {
+        return {
+          name: 'צום עשרה בטבת',
+          shortName: 'עשרה בטבת',
+          category: 'fast',
+          icon: '🕯️',
+          badgeClass: 'bg-zinc-200 text-zinc-900 border border-zinc-400 font-bold shadow-2xs'
+        };
+      }
+    }
+
+    // 6. שבט
+    if (monthName.includes('שבט')) {
+      if (day === 15) {
+        return {
+          name: 'ט״ו בשבט',
+          shortName: 'ט״ו בשבט',
+          category: 'national',
+          icon: '🌳',
+          badgeClass: 'bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold shadow-2xs'
+        };
+      }
+    }
+
+    // 7. אדר / אדר א׳ / אדר ב׳
+    if (monthName.includes('אדר')) {
+      if (monthName.includes('אדר א') || monthName.includes('אדר א׳')) {
+        if (day === 14) return { name: 'פורים קטן', shortName: 'פורים קטן', category: 'national', icon: '🎭', badgeClass: 'bg-fuchsia-100 text-fuchsia-950 border border-fuchsia-300 font-bold shadow-2xs' };
+        if (day === 15) return { name: 'שושן פורים קטן', shortName: 'שושן פורים', category: 'national', icon: '🎭', badgeClass: 'bg-fuchsia-50 text-fuchsia-900 border border-fuchsia-200 font-bold shadow-2xs' };
+      } else {
+        if ((day === 13 && dayOfWeek !== 6) || (day === 11 && dayOfWeek === 4)) {
+          return { name: 'תענית אסתר', shortName: 'תענית אסתר', category: 'fast', icon: '🕯️', badgeClass: 'bg-zinc-200 text-zinc-900 border border-zinc-400 font-bold shadow-2xs' };
+        }
+        if (day === 14) {
+          return { name: 'פורים', shortName: 'פורים', category: 'national', icon: '🎭', badgeClass: 'bg-fuchsia-100 text-fuchsia-950 border border-fuchsia-300 font-black shadow-2xs' };
+        }
+        if (day === 15) {
+          return { name: 'שושן פורים', shortName: 'שושן פורים', category: 'national', icon: '🎭', badgeClass: 'bg-fuchsia-50 text-fuchsia-900 border border-fuchsia-200 font-bold shadow-2xs' };
+        }
+      }
+    }
+
+    // 8. ניסן
     if (monthName.includes('ניסן')) {
-      if (day === 14) return 'ערב פסח';
-      if (day === 15) return 'חג פסח';
-      if (day >= 16 && day <= 19) return 'חוה״מ פסח';
-      if (day === 20) return 'ערב שביעי של פסח';
-      if (day === 21) return 'שביעי של פסח';
+      if (day === 14) {
+        return { name: 'ערב פסח', shortName: 'ערב פסח', category: 'eve', icon: '🍷', badgeClass: 'bg-orange-100 text-orange-950 border border-orange-300 font-bold shadow-2xs' };
+      }
+      if (day === 15) {
+        return { name: 'חג פסח', shortName: 'פסח', category: 'holiday', icon: '🍷', badgeClass: 'bg-amber-100 text-amber-950 border border-amber-300 font-black shadow-2xs' };
+      }
+      if (day >= 16 && day <= 19) {
+        return { name: 'חוה״מ פסח', shortName: 'חוה״מ', category: 'chol_hamoed', icon: '🌸', badgeClass: 'bg-sky-100 text-sky-950 border border-sky-300 font-bold shadow-2xs' };
+      }
+      if (day === 20) {
+        return { name: 'ערב שביעי של פסח', shortName: 'ערב שביעי', category: 'eve', icon: '🌸', badgeClass: 'bg-orange-100 text-orange-950 border border-orange-300 font-bold shadow-2xs' };
+      }
+      if (day === 21) {
+        return { name: 'שביעי של פסח', shortName: 'שביעי של פסח', category: 'holiday', icon: '🌸', badgeClass: 'bg-amber-100 text-amber-950 border border-amber-300 font-black shadow-2xs' };
+      }
+      if (day === 22) {
+        return { name: 'מימונה', shortName: 'מימונה', category: 'national', icon: '🥞', badgeClass: 'bg-amber-50 text-amber-950 border border-amber-300 font-bold shadow-2xs' };
+      }
+      if ((day === 27 && dayOfWeek !== 5 && dayOfWeek !== 0) || (day === 26 && dayOfWeek === 4) || (day === 28 && dayOfWeek === 1)) {
+        return { name: 'יום השואה והגבורה', shortName: 'יום השואה', category: 'memorial', icon: '🕯️', badgeClass: 'bg-slate-800 text-white border border-slate-900 font-black shadow-xs' };
+      }
     }
+
+    // 9. אייר
     if (monthName.includes('אייר')) {
-      if (day === 4) return 'יום הזיכרון';
-      if (day === 5) return 'יום העצמאות';
-      if (day === 18) return 'ל״ג בעומר';
-      if (day === 28) return 'יום ירושלים';
+      let yomZikaronDay = 4;
+      let yomAtzmautDay = 5;
+      if (dayOfWeek === 3 && day === 3) { yomZikaronDay = 3; yomAtzmautDay = 4; }
+      else if (dayOfWeek === 2 && day === 2) { yomZikaronDay = 2; yomAtzmautDay = 3; }
+      else if (dayOfWeek === 1 && day === 5) { yomZikaronDay = 5; yomAtzmautDay = 6; }
+      if (day === yomZikaronDay) {
+        return { name: 'יום הזיכרון לחללי צה״ל', shortName: 'יום הזיכרון', category: 'memorial', icon: '🕯️', badgeClass: 'bg-slate-800 text-white border border-slate-900 font-black shadow-xs' };
+      }
+      if (day === yomAtzmautDay) {
+        return { name: 'יום העצמאות', shortName: 'עצמאות', category: 'national', icon: '🇮🇱', badgeClass: 'bg-blue-100 text-blue-950 border border-blue-300 font-black shadow-2xs' };
+      }
+      if (day === 18) {
+        return { name: 'ל״ג בעומר', shortName: 'ל״ג בעומר', category: 'national', icon: '🔥', badgeClass: 'bg-amber-100 text-amber-950 border border-amber-300 font-bold shadow-2xs' };
+      }
+      if (day === 28) {
+        return { name: 'יום ירושלים', shortName: 'יום ירושלים', category: 'national', icon: '🦁', badgeClass: 'bg-sky-100 text-sky-950 border border-sky-300 font-bold shadow-2xs' };
+      }
     }
+
+    // 10. סיוון
     if (monthName.includes('סיוון')) {
-      if (day === 5) return 'ערב שבועות';
-      if (day === 6) return 'חג שבועות';
+      if (day === 5) {
+        return { name: 'ערב שבועות', shortName: 'ערב שבועות', category: 'eve', icon: '🌾', badgeClass: 'bg-orange-100 text-orange-950 border border-orange-300 font-bold shadow-2xs' };
+      }
+      if (day === 6) {
+        return { name: 'חג שבועות', shortName: 'שבועות', category: 'holiday', icon: '🌾', badgeClass: 'bg-amber-100 text-amber-950 border border-amber-300 font-black shadow-2xs' };
+      }
     }
-    if (monthName.includes('אב') && day === 9) {
-      return 'תשעה באב';
+
+    // 11. תמוז
+    if (monthName.includes('תמוז')) {
+      if ((day === 17 && dayOfWeek !== 6) || (day === 18 && dayOfWeek === 0)) {
+        return { name: 'צום י״ז בתמוז', shortName: 'י״ז בתמוז', category: 'fast', icon: '🕯️', badgeClass: 'bg-zinc-200 text-zinc-900 border border-zinc-400 font-bold shadow-2xs' };
+      }
     }
+
+    // 12. אב
+    if (monthName.includes('אב')) {
+      if ((day === 9 && dayOfWeek !== 6) || (day === 10 && dayOfWeek === 0)) {
+        return { name: 'תשעה באב', shortName: 'תשעה באב', category: 'fast', icon: '🕯️', badgeClass: 'bg-slate-800 text-white border border-slate-900 font-black shadow-xs' };
+      }
+      if (day === 15) {
+        return { name: 'ט״ו באב (יום האהבה)', shortName: 'ט״ו באב', category: 'national', icon: '💖', badgeClass: 'bg-rose-100 text-rose-950 border border-rose-300 font-bold shadow-2xs' };
+      }
+    }
+
     return null;
   } catch (e) {
     return null;
   }
+}
+
+/**
+ * Returns Jewish Holiday name if the date falls on a holiday or eve of holiday, otherwise null.
+ * Kept for backward compatibility.
+ */
+export function getJewishHoliday(d: Date): string | null {
+  const detail = getJewishHolidayDetail(d);
+  return detail ? detail.name : null;
 }
 
 /**
@@ -80,106 +360,117 @@ export function isShabbat(d: Date): boolean {
 
 /**
  * Get comprehensive info if the date is Shabbat, a Jewish Holiday, or both.
+ * Supports calendar visual badge highlighting and customer messaging permissions.
  */
 export function getDateShabbatOrHoliday(dateStrOrObj: string | Date): HolidayInfo {
   const d = typeof dateStrOrObj === 'string' ? new Date(dateStrOrObj + 'T00:00:00') : dateStrOrObj;
   const shabbat = isShabbat(d);
-  const holiday = getJewishHoliday(d);
+  const holidayDetail = getJewishHolidayDetail(d);
 
-  if (shabbat && holiday) {
-    if (holiday === 'יום כיפור') {
-      return {
-        isSpecial: false, // יום כיפור קדוש: איסור מוחלט על שליחת הודעות אוטומטיות!
-        label: 'שבת • יום כיפור 🕯️',
-        icon: '🕯️',
-        isShabbat: true,
-        holidayName: holiday,
-        isYomKippur: true
-      };
+  // Case 1: Both Shabbat and Holiday/Memorial/Chol HaMoed
+  if (shabbat && holidayDetail) {
+    const isYK = holidayDetail.category === 'yom_kippur';
+    const label = `שבת • ${holidayDetail.name}`;
+    const shortLabel = `שבת • ${holidayDetail.shortName || holidayDetail.name}`;
+
+    let badgeClass = holidayDetail.badgeClass;
+    if (isYK) {
+      badgeClass = 'bg-purple-950 text-amber-200 border border-purple-900 font-black shadow-xs';
+    } else if (holidayDetail.category === 'holiday') {
+      badgeClass = 'bg-amber-100 text-amber-950 border border-amber-300 font-black shadow-2xs';
+    } else if (holidayDetail.category === 'chol_hamoed') {
+      badgeClass = 'bg-sky-100 text-sky-950 border border-sky-300 font-black shadow-2xs';
     }
+
     return {
-      isSpecial: true,
-      label: `שבת • ${holiday}`,
-      icon: '🕯️',
+      isSpecial: !isYK && holidayDetail.category !== 'fast' && holidayDetail.category !== 'memorial',
+      label,
+      shortLabel,
+      icon: holidayDetail.icon,
       isShabbat: true,
-      holidayName: holiday,
-      isYomKippur: false
+      holidayName: holidayDetail.name,
+      isYomKippur: isYK,
+      category: holidayDetail.category,
+      badgeClass,
+      hasCalendarBadge: true,
+      calendarBadge: {
+        label,
+        shortLabel,
+        icon: holidayDetail.icon,
+        category: holidayDetail.category,
+        badgeClass
+      }
     };
   }
 
+  // Case 2: Shabbat Only
   if (shabbat) {
+    const label = 'שבת שלום';
+    const shortLabel = 'שבת';
+    const icon = '🕯️';
+    const badgeClass = 'bg-emerald-100 text-emerald-950 border border-emerald-300 font-black shadow-2xs';
+
     return {
       isSpecial: true,
-      label: 'שבת שלום',
-      icon: '🕯️',
+      label,
+      shortLabel,
+      icon,
       isShabbat: true,
       holidayName: null,
-      isYomKippur: false
+      isYomKippur: false,
+      category: 'shabbat',
+      badgeClass,
+      hasCalendarBadge: true,
+      calendarBadge: {
+        label,
+        shortLabel,
+        icon,
+        category: 'shabbat',
+        badgeClass
+      }
     };
   }
 
-  if (holiday) {
-    // יום כיפור: יום קדוש ביותר, אין לשלוח שום הודעות אוטומטיות ללקוחות!
-    if (holiday === 'יום כיפור') {
-      return {
-        isSpecial: false,
-        label: 'יום כיפור 🕯️',
-        icon: '🕯️',
-        isShabbat: false,
-        holidayName: holiday,
-        isYomKippur: true
-      };
-    }
+  // Case 3: Holiday / Memorial / Fast / Chol HaMoed / Eve
+  if (holidayDetail) {
+    const isYK = holidayDetail.category === 'yom_kippur';
+    const isEve = holidayDetail.category === 'eve';
+    const isMemorialOrFast = holidayDetail.category === 'memorial' || holidayDetail.category === 'fast';
 
-    if (holiday === 'ערב יום כיפור') {
-      return {
-        isSpecial: false,
-        label: 'ערב יום כיפור 🕯️',
-        icon: '🕯️',
-        isShabbat: false,
-        holidayName: holiday,
-        isYomKippur: true
-      };
-    }
-
-    // Eves of holidays (like Friday) are busy check-in days (open until 14:00).
-    // Greetings are sent on Shabbat (Saturday) and on the holiday itself!
-    if (holiday.startsWith('ערב ')) {
-      return {
-        isSpecial: false,
-        label: holiday,
-        icon: '🕯️',
-        isShabbat: false,
-        holidayName: holiday,
-        isYomKippur: false
-      };
-    }
-
-    let icon = '🍷';
-    if (holiday.includes('סוכות')) icon = '🌿';
-    else if (holiday.includes('חנוכה')) icon = '🕎';
-    else if (holiday.includes('פורים')) icon = '🎭';
-    else if (holiday.includes('פסח')) icon = '🌸';
-    else if (holiday.includes('שבועות')) icon = '🌾';
-    else if (holiday.includes('העצמאות')) icon = '🇮🇱';
+    const isSpecial = !isYK && !isEve && !isMemorialOrFast && holidayDetail.category === 'holiday';
 
     return {
-      isSpecial: true,
-      label: holiday,
-      icon,
+      isSpecial,
+      label: holidayDetail.name,
+      shortLabel: holidayDetail.shortName || holidayDetail.name,
+      icon: holidayDetail.icon,
       isShabbat: false,
-      holidayName: holiday,
-      isYomKippur: false
+      holidayName: holidayDetail.name,
+      isYomKippur: isYK,
+      category: holidayDetail.category,
+      badgeClass: holidayDetail.badgeClass,
+      hasCalendarBadge: true,
+      calendarBadge: {
+        label: holidayDetail.name,
+        shortLabel: holidayDetail.shortName || holidayDetail.name,
+        icon: holidayDetail.icon,
+        category: holidayDetail.category,
+        badgeClass: holidayDetail.badgeClass
+      }
     };
   }
 
+  // Case 4: Regular Day
   return {
     isSpecial: false,
     label: '',
+    shortLabel: '',
     icon: '',
     isShabbat: false,
     holidayName: null,
-    isYomKippur: false
+    isYomKippur: false,
+    hasCalendarBadge: false,
+    calendarBadge: null
   };
 }
 
