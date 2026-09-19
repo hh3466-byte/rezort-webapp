@@ -1760,8 +1760,11 @@ function sendShabbatOrHolidayGreetingsFromCloud(todayStr, occasionWord) {
       var firstName = (b.owner_name || "").trim().split(/\s+/)[0] || b.owner_name;
       var dogName = (b.dog_name || "").trim();
 
-      var text = "שלום " + firstName + " למרות שאין שירות לקוחות להולכים על 2 " + occasionWord + ", אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.\n" +
-                 "אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.\n" +
+      var occasionThis = occasionWord === "בחג" ? "בחג הזה" : (occasionWord === "בסופ\"ש ובחג" ? "בסופ\"ש ובחג הזה" : "בסופ\"ש הזה");
+      var text = "שלום " + firstName + " למרות שאין שירות לקוחות להולכים על 2 " + occasionWord + ".\n" +
+                 "אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות של מלכים.\n" +
+                 occasionThis + " טרחו סביבי על מלא ונתנו לי הרגשה טובה.\n" +
+                 "אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף היה לי " + occasionWord + ".\n" +
                  dogName;
 
       var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;

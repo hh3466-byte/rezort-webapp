@@ -278,15 +278,31 @@ export default function App() {
     }
   });
 
-  const todayUnsentGreetingsCount = Math.max(0, totalDogsToday - todayGreetingsSentCount);
+  // Cancelled/Skipped greetings count for today
+  const [todayGreetingsCancelledCount, setTodayGreetingsCancelledCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(`shabbat_greetings_cancelled_${todayStr}`);
+      if (!saved) return 0;
+      const map = JSON.parse(saved);
+      return todayBookings.filter(b => map[b.id]).length;
+    } catch {
+      return 0;
+    }
+  });
+
+  const todayUnsentGreetingsCount = Math.max(0, totalDogsToday - todayGreetingsSentCount - todayGreetingsCancelledCount);
 
   // Update greetings count on storage or custom event
   useEffect(() => {
     const handleUpdate = () => {
       try {
-        const saved = localStorage.getItem(`shabbat_greetings_${todayStr}`);
-        const map = saved ? JSON.parse(saved) : {};
-        setTodayGreetingsSentCount(todayBookings.filter(b => map[b.id]).length);
+        const savedSent = localStorage.getItem(`shabbat_greetings_${todayStr}`);
+        const sentMap = savedSent ? JSON.parse(savedSent) : {};
+        setTodayGreetingsSentCount(todayBookings.filter(b => sentMap[b.id]).length);
+
+        const savedCancelled = localStorage.getItem(`shabbat_greetings_cancelled_${todayStr}`);
+        const cancelledMap = savedCancelled ? JSON.parse(savedCancelled) : {};
+        setTodayGreetingsCancelledCount(todayBookings.filter(b => cancelledMap[b.id]).length);
       } catch {
         // ignore
       }

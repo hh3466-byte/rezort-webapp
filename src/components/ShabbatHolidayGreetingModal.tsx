@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, MessageCircle, Copy, Check, Calendar, Sparkles, Dog, Phone, RotateCcw, AlertCircle, Send, Zap, CheckCircle2 } from 'lucide-react';
+import { X, MessageCircle, Copy, Check, Calendar, Sparkles, Dog, Phone, RotateCcw, AlertCircle, Send, Zap, CheckCircle2, Ban } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
 import { getBookingsForDate, formatDateIL, getDayNameHebrew } from '../utils/dateUtils';
 import { cleanPhoneNumber } from '../utils/whatsappUtils';
@@ -25,10 +25,13 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
   const holidayInfo = getDateShabbatOrHoliday(dateStr);
   const dayName = getDayNameHebrew(dateStr);
   const occasionWord = getOccasionWord(dateStr);
+  const occasionThis = occasionWord === 'בחג' ? 'בחג הזה' : occasionWord === 'בסופ"ש ובחג' ? 'בסופ"ש ובחג הזה' : 'בסופ"ש הזה';
 
   // Template state
-  const defaultTemplate = `שלום (שם הבעלים) למרות שאין שירות לקוחות להולכים על 2 ${occasionWord}, אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.
-אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.
+  const defaultTemplate = `שלום (שם הבעלים) למרות שאין שירות לקוחות להולכים על 2 ${occasionWord}.
+אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות של מלכים.
+${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טובה.
+אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף היה לי ${occasionWord}.
 (שם הכלב)`;
   const [template, setTemplate] = useState<string>(defaultTemplate);
   const [isEditingTemplate, setIsEditingTemplate] = useState<boolean>(false);
@@ -38,6 +41,17 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
   const [sentMap, setSentMap] = useState<Record<string, boolean>>(() => {
     try {
       const saved = localStorage.getItem(storageKey);
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  // Cancelled/Skipped tracking stored in localStorage by date
+  const cancelStorageKey = `shabbat_greetings_cancelled_${dateStr}`;
+  const [cancelledMap, setCancelledMap] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem(cancelStorageKey);
       return saved ? JSON.parse(saved) : {};
     } catch (e) {
       return {};
@@ -54,6 +68,27 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
       // ignore storage errors
     }
   }, [sentMap, storageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(cancelStorageKey, JSON.stringify(cancelledMap));
+      window.dispatchEvent(new CustomEvent('shabbat-greetings-updated'));
+    } catch (e) {
+      // ignore storage errors
+    }
+  }, [cancelledMap, cancelStorageKey]);
+
+  const handleToggleCancel = (bookingId: string) => {
+    setCancelledMap(prev => {
+      const next = { ...prev };
+      if (next[bookingId]) {
+        delete next[bookingId];
+      } else {
+        next[bookingId] = true;
+      }
+      return next;
+    });
+  };
 
   const customerRestriction = isCustomerMessagingRestrictedNow();
 
@@ -118,9 +153,9 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
       return;
     }
     if (!settings.greenApiIdInstance || !settings.greenApiToken) return;
-    const unsentBookings = dayBookings.filter(b => !sentMap[b.id]);
+    const unsentBookings = dayBookings.filter(b => !sentMap[b.id] && !cancelledMap[b.id]);
     if (unsentBookings.length === 0) {
-      alert('כל הד״שים להיום כבר נשלחו!');
+      alert('כל הד״שים הפעילים להיום כבר נשלחו או בוטלו!');
       return;
     }
 
@@ -162,7 +197,9 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
   };
 
   const sentCount = dayBookings.filter(b => sentMap[b.id]).length;
-  const progressPercent = dayBookings.length > 0 ? Math.round((sentCount / dayBookings.length) * 100) : 0;
+  const cancelledCount = dayBookings.filter(b => cancelledMap[b.id]).length;
+  const handledCount = sentCount + cancelledCount;
+  const progressPercent = dayBookings.length > 0 ? Math.round((handledCount / dayBookings.length) * 100) : 0;
 
   // חסימה מוחלטת ביום כיפור: יום קדוש - לא שולחים שום הודעות ללקוחות!
   if (holidayInfo.isYomKippur) {
@@ -249,9 +286,16 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
           {/* Progress Bar & Bulk Action */}
           <div className="flex items-center justify-between font-bold flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-slate-700 font-extrabold flex items-center gap-1.5">
-                <span>התקדמות שליחה:</span>
-                <span className="text-emerald-700">{sentCount} מתוך {dayBookings.length} נשלחו</span>
+              <span className="text-slate-700 font-extrabold flex items-center gap-1.5 flex-wrap">
+                <span>סטטוס טיפול:</span>
+                <span className="text-emerald-700">{sentCount} נשלחו</span>
+                {cancelledCount > 0 && (
+                  <>
+                    <span>·</span>
+                    <span className="text-rose-600 font-black">{cancelledCount} בוטלו</span>
+                  </>
+                )}
+                <span className="text-slate-500">מתוך {dayBookings.length} כלבים</span>
               </span>
               <span className="text-slate-500 font-mono">({progressPercent}%)</span>
             </div>
@@ -342,6 +386,7 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
           ) : (
             dayBookings.map((b) => {
               const isSent = !!sentMap[b.id];
+              const isCancelled = !!cancelledMap[b.id];
               const cleanPhone = cleanPhoneNumber(b.ownerPhone);
               const previewText = formatShabbatHolidayGreeting(b.ownerName, b.dogName, template, dateStr);
 
@@ -349,7 +394,9 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
                 <div
                   key={b.id}
                   className={`rounded-2xl border p-3.5 sm:p-4 transition-all space-y-2.5 shadow-2xs ${
-                    isSent 
+                    isCancelled
+                      ? 'bg-rose-50/25 border-rose-200 opacity-80'
+                      : isSent 
                       ? 'bg-emerald-50/40 border-emerald-300' 
                       : 'bg-white border-slate-200 hover:border-slate-300'
                   }`}
@@ -361,14 +408,20 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
                         🐕
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-base font-black text-slate-900">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className={`text-base font-black ${isCancelled ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
                             {b.dogName}
                           </h4>
                           {b.dogBreed && (
                             <span className="text-xs text-slate-500 font-bold">({b.dogBreed})</span>
                           )}
-                          {isSent && (
+                          {isCancelled && (
+                            <span className="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                              <Ban className="w-3 h-3 text-rose-600" />
+                              <span>השליחה בוטלה (דולג)</span>
+                            </span>
+                          )}
+                          {isSent && !isCancelled && (
                             <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black px-2 py-0.2 rounded-md flex items-center gap-1">
                               <Check className="w-3 h-3 text-emerald-600" />
                               <span>נשלח בהצלחה</span>
@@ -385,6 +438,30 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
 
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
+                      {/* Cancel / Skip button */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleCancel(b.id)}
+                        className={`font-black px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95 ${
+                          isCancelled
+                            ? 'bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 shadow-rose-600/10'
+                            : 'bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-200 hover:border-rose-300'
+                        }`}
+                        title={isCancelled ? 'החזר את הלקוח לרשימת השליחה' : 'בטל שליחת הודעה ללקוח זה'}
+                      >
+                        {isCancelled ? (
+                          <>
+                            <RotateCcw className="w-3.5 h-3.5 text-rose-700" />
+                            <span>החזר לשליחה</span>
+                          </>
+                        ) : (
+                          <>
+                            <Ban className="w-3.5 h-3.5 text-rose-500" />
+                            <span>בטל שליחה</span>
+                          </>
+                        )}
+                      </button>
+
                       <button
                         type="button"
                         onClick={() => handleCopyMessage(b)}
@@ -407,20 +484,24 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
                       {hasGreenApi && (
                         <button
                           type="button"
-                          disabled={singleSendingId === b.id || isBulkSending || customerRestriction.isRestricted}
+                          disabled={isCancelled || singleSendingId === b.id || isBulkSending || customerRestriction.isRestricted}
                           onClick={() => handleSendGreenApiSingle(b)}
                           className={`font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs ${
-                            customerRestriction.isRestricted
+                            isCancelled
+                              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60'
+                              : customerRestriction.isRestricted
                               ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                               : isSent
                               ? 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-300 cursor-pointer active:scale-95'
                               : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 cursor-pointer active:scale-95'
                           }`}
-                          title={customerRestriction.isRestricted ? customerRestriction.reason : "שליחה מיידית ברקע ללא פתיחת לשונית בדפדפן"}
+                          title={isCancelled ? 'השליחה בוטלה עבור לקוח זה. לחץ על "החזר לשליחה" כדי לאפשר שליחה' : customerRestriction.isRestricted ? customerRestriction.reason : "שליחה מיידית ברקע ללא פתיחת לשונית בדפדפן"}
                         >
                           <Zap className="w-3.5 h-3.5 fill-amber-300 text-amber-300 shrink-0" />
                           <span>
-                            {customerRestriction.isRestricted
+                            {isCancelled
+                              ? 'שליחה בוטלה'
+                              : customerRestriction.isRestricted
                               ? 'שליחה נעולה'
                               : singleSendingId === b.id
                               ? 'שולח...'
@@ -433,26 +514,32 @@ export const ShabbatHolidayGreetingModal: React.FC<ShabbatHolidayGreetingModalPr
 
                       <button
                         type="button"
-                        disabled={customerRestriction.isRestricted}
+                        disabled={isCancelled || customerRestriction.isRestricted}
                         onClick={() => handleSendWhatsApp(b)}
                         className={`font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-xs ${
-                          customerRestriction.isRestricted
+                          isCancelled
+                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60'
+                            : customerRestriction.isRestricted
                             ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
                             : isSent
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95'
                             : 'bg-[#25D366] hover:bg-[#1EBE5D] text-white shadow-emerald-500/20 cursor-pointer active:scale-95'
                         }`}
-                        title={customerRestriction.isRestricted ? customerRestriction.reason : "פתח ב-WhatsApp Web"}
+                        title={isCancelled ? 'השליחה בוטלה עבור לקוח זה. לחץ על "החזר לשליחה" כדי לאפשר שליחה' : customerRestriction.isRestricted ? customerRestriction.reason : "פתח ב-WhatsApp Web"}
                       >
                         <MessageCircle className="w-4 h-4 fill-white/20 shrink-0" />
-                        <span>{customerRestriction.isRestricted ? 'נעול' : isSent ? 'שלח שוב בוואטסאפ' : 'פתח בוואטסאפ'}</span>
+                        <span>{isCancelled ? 'שליחה בוטלה' : customerRestriction.isRestricted ? 'נעול' : isSent ? 'שלח שוב בוואטסאפ' : 'פתח בוואטסאפ'}</span>
                       </button>
                     </div>
                   </div>
 
                   {/* Message Preview Quote */}
-                  <div className="bg-slate-50 rounded-xl p-2.5 border border-slate-100 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
-                    <span className="text-slate-400 font-bold block mb-0.5 text-[10px]">תצוגה מקדימה להודעה שתשלח:</span>
+                  <div className={`rounded-xl p-2.5 border text-xs leading-relaxed whitespace-pre-wrap ${
+                    isCancelled 
+                      ? 'bg-slate-100/60 border-slate-200 text-slate-500 line-through' 
+                      : 'bg-slate-50 border-slate-100 text-slate-700'
+                  }`}>
+                    <span className="text-slate-400 font-bold block mb-0.5 text-[10px] no-underline">תצוגה מקדימה להודעה שתשלח:</span>
                     {previewText}
                   </div>
                 </div>

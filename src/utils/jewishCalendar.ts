@@ -343,8 +343,10 @@ export function getFirstName(fullName: string): string {
 
 /**
  * Format the warm personal dog message as requested by Shmulik:
- * שלום (שם הבעלים) למרות שאין שירות לקוחות להולכים על 2 בסופ"ש/חג (לפי הצורך), אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.
- * אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.
+ * שלום (שם הבעלים) למרות שאין שירות לקוחות להולכים על 2 בסופ"ש.
+ * אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות של מלכים.
+ * בסופ"ש הזה טרחו סביבי על מלא ונתנו לי הרגשה טובה.
+ * אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף היה לי בסופ"ש.
  * (שם הכלב)
  */
 export function formatShabbatHolidayGreeting(
@@ -354,6 +356,7 @@ export function formatShabbatHolidayGreeting(
   dateStr?: string
 ): string {
   const occasionWord = getOccasionWord(dateStr);
+  const occasionThis = occasionWord === 'בחג' ? 'בחג הזה' : occasionWord === 'בסופ"ש ובחג' ? 'בסופ"ש ובחג הזה' : 'בסופ"ש הזה';
   const firstName = getFirstName(ownerName);
   const cleanDog = (dogName || '').trim();
 
@@ -367,7 +370,7 @@ export function formatShabbatHolidayGreeting(
       .replace(/בסופ"ש\/חג/g, occasionWord)
       .replace(/{occasion}/g, occasionWord);
   }
-  return `שלום ${firstName} למרות שאין שירות לקוחות להולכים על 2 ${occasionWord}, אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות נפלא גם היום.\nאז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף לי פה גם היום.\n${cleanDog}`;
+  return `שלום ${firstName} למרות שאין שירות לקוחות להולכים על 2 ${occasionWord}.\nאבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות של מלכים.\n${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טובה.\nאז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף היה לי ${occasionWord}.\n${cleanDog}`;
 }
 
 export interface CustomerMessagingRestrictionResult {
