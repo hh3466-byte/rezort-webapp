@@ -278,13 +278,21 @@ export default function App() {
     }
   });
 
-  // Cancelled/Skipped greetings count for today
+  // Cancelled/Skipped greetings count for today (both date-specific and permanent)
   const [todayGreetingsCancelledCount, setTodayGreetingsCancelledCount] = useState<number>(() => {
     try {
-      const saved = localStorage.getItem(`shabbat_greetings_cancelled_${todayStr}`);
-      if (!saved) return 0;
-      const map = JSON.parse(saved);
-      return todayBookings.filter(b => map[b.id]).length;
+      const savedDate = localStorage.getItem(`shabbat_greetings_cancelled_${todayStr}`);
+      const dateMap = savedDate ? JSON.parse(savedDate) : {};
+
+      const savedPerm = localStorage.getItem('shabbat_greetings_permanent_optout');
+      const permMap = savedPerm ? JSON.parse(savedPerm) : {};
+
+      const canonicalPhone = (ph?: string) => {
+        const d = (ph || '').replace(/\D/g, '');
+        return d.startsWith('972') ? '0' + d.slice(3) : d;
+      };
+
+      return todayBookings.filter(b => dateMap[b.id] || permMap[canonicalPhone(b.ownerPhone)]).length;
     } catch {
       return 0;
     }
@@ -302,7 +310,18 @@ export default function App() {
 
         const savedCancelled = localStorage.getItem(`shabbat_greetings_cancelled_${todayStr}`);
         const cancelledMap = savedCancelled ? JSON.parse(savedCancelled) : {};
-        setTodayGreetingsCancelledCount(todayBookings.filter(b => cancelledMap[b.id]).length);
+
+        const savedPerm = localStorage.getItem('shabbat_greetings_permanent_optout');
+        const permMap = savedPerm ? JSON.parse(savedPerm) : {};
+
+        const canonicalPhone = (ph?: string) => {
+          const d = (ph || '').replace(/\D/g, '');
+          return d.startsWith('972') ? '0' + d.slice(3) : d;
+        };
+
+        setTodayGreetingsCancelledCount(
+          todayBookings.filter(b => cancelledMap[b.id] || permMap[canonicalPhone(b.ownerPhone)]).length
+        );
       } catch {
         // ignore
       }

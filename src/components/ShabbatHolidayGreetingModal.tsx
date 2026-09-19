@@ -1,10 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { X, MessageCircle, Copy, Check, Calendar, Sparkles, Dog, Phone, RotateCcw, AlertCircle, Send, Zap, CheckCircle2, Ban } from 'lucide-react';
+import { X, MessageCircle, Copy, Check, Calendar, Sparkles, Dog, Phone, RotateCcw, AlertCircle, Send, Zap, CheckCircle2, Ban, ShieldAlert, Users } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
 import { getBookingsForDate, formatDateIL, getDayNameHebrew } from '../utils/dateUtils';
 import { cleanPhoneNumber } from '../utils/whatsappUtils';
 import { getDateShabbatOrHoliday, formatShabbatHolidayGreeting, getOccasionWord, isCustomerMessagingRestrictedNow } from '../utils/jewishCalendar';
 import { sendGreenApiDirectMessage } from '../services/notificationService';
+
+export const PERMANENT_OPTOUT_STORAGE_KEY = 'shabbat_greetings_permanent_optout';
+
+export const canonicalPhone = (phone?: string): string => {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('972')) return '0' + digits.slice(3);
+  return digits;
+};
+
+export interface PermanentOptOutEntry {
+  phone: string;
+  ownerName?: string;
+  dogName?: string;
+  optOutAt: string;
+}
 
 interface ShabbatHolidayGreetingModalProps {
   dateStr: string;
@@ -58,6 +74,18 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
     }
   });
 
+  // Permanent Opt-Out tracking stored in localStorage across all dates
+  const [permanentOptOutMap, setPermanentOptOutMap] = useState<Record<string, PermanentOptOutEntry>>(() => {
+    try {
+      const saved = localStorage.getItem(PERMANENT_OPTOUT_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const [activeCancelChoiceId, setActiveCancelChoiceId] = useState<string | null>(null);
+  const [showPermanentList, setShowPermanentList] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,14 +106,69 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
     }
   }, [cancelledMap, cancelStorageKey]);
 
-  const handleToggleCancel = (bookingId: string) => {
+  useEffect(() => {
+    try {
+      localStorage.setItem(PERMANENT_OPTOUT_STORAGE_KEY, JSON.stringify(permanentOptOutMap));
+      window.dispatchEvent(new CustomEvent('shabbat-greetings-updated'));
+    } catch (e) {
+      // ignore storage errors
+    }
+  }, [permanentOptOutMap]);
+
+  // Checkers
+  const isDogPermanentlyOptedOut = (b: Booking) => {
+    const p = canonicalPhone(b.ownerPhone);
+    return !!permanentOptOutMap[p];
+  };
+
+  const isDogCancelledForDate = (b: Booking) => {
+    return !!cancelledMap[b.id];
+  };
+
+  const isDogCancelledAny = (b: Booking) => {
+    return isDogPermanentlyOptedOut(b) || isDogCancelledForDate(b);
+  };
+
+  // Handlers
+  const handleCancelForToday = (bookingId: string) => {
+    setCancelledMap(prev => ({ ...prev, [bookingId]: true }));
+    setActiveCancelChoiceId(null);
+  };
+
+  const handleCancelPermanently = (b: Booking) => {
+    const phone = canonicalPhone(b.ownerPhone);
+    if (!phone) return;
+    setPermanentOptOutMap(prev => ({
+      ...prev,
+      [phone]: {
+        phone,
+        ownerName: b.ownerName,
+        dogName: b.dogName,
+        optOutAt: new Date().toISOString()
+      }
+    }));
+    setCancelledMap(prev => ({ ...prev, [b.id]: true }));
+    setActiveCancelChoiceId(null);
+  };
+
+  const handleRestoreForToday = (bookingId: string) => {
     setCancelledMap(prev => {
       const next = { ...prev };
-      if (next[bookingId]) {
-        delete next[bookingId];
-      } else {
-        next[bookingId] = true;
-      }
+      delete next[bookingId];
+      return next;
+    });
+  };
+
+  const handleRemovePermanentOptOut = (b: Booking) => {
+    const phone = canonicalPhone(b.ownerPhone);
+    setPermanentOptOutMap(prev => {
+      const next = { ...prev };
+      delete next[phone];
+      return next;
+    });
+    setCancelledMap(prev => {
+      const next = { ...prev };
+      delete next[b.id];
       return next;
     });
   };
@@ -153,7 +236,7 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
       return;
     }
     if (!settings.greenApiIdInstance || !settings.greenApiToken) return;
-    const unsentBookings = dayBookings.filter(b => !sentMap[b.id] && !cancelledMap[b.id]);
+    const unsentBookings = dayBookings.filter(b => !sentMap[b.id] && !isDogCancelledAny(b));
     if (unsentBookings.length === 0) {
       alert('כל הד״שים הפעילים להיום כבר נשלחו או בוטלו!');
       return;
@@ -197,8 +280,9 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
   };
 
   const sentCount = dayBookings.filter(b => sentMap[b.id]).length;
-  const cancelledCount = dayBookings.filter(b => cancelledMap[b.id]).length;
-  const handledCount = sentCount + cancelledCount;
+  const totalCancelledCount = dayBookings.filter(b => isDogCancelledAny(b)).length;
+  const permanentInDayCount = dayBookings.filter(b => isDogPermanentlyOptedOut(b)).length;
+  const handledCount = sentCount + totalCancelledCount;
   const progressPercent = dayBookings.length > 0 ? Math.round((handledCount / dayBookings.length) * 100) : 0;
 
   // חסימה מוחלטת ביום כיפור: יום קדוש - לא שולחים שום הודעות ללקוחות!
@@ -289,10 +373,15 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
               <span className="text-slate-700 font-extrabold flex items-center gap-1.5 flex-wrap">
                 <span>סטטוס טיפול:</span>
                 <span className="text-emerald-700">{sentCount} נשלחו</span>
-                {cancelledCount > 0 && (
+                {totalCancelledCount > 0 && (
                   <>
                     <span>·</span>
-                    <span className="text-rose-600 font-black">{cancelledCount} בוטלו</span>
+                    <span className="text-rose-600 font-black">
+                      {totalCancelledCount} בוטלו
+                      {permanentInDayCount > 0 && (
+                        <span className="text-purple-700 font-bold mr-1">({permanentInDayCount} לצמיתות)</span>
+                      )}
+                    </span>
                   </>
                 )}
                 <span className="text-slate-500">מתוך {dayBookings.length} כלבים</span>
@@ -386,7 +475,10 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
           ) : (
             dayBookings.map((b) => {
               const isSent = !!sentMap[b.id];
-              const isCancelled = !!cancelledMap[b.id];
+              const isPermBlocked = isDogPermanentlyOptedOut(b);
+              const isDateBlocked = isDogCancelledForDate(b);
+              const isCancelled = isPermBlocked || isDateBlocked;
+              const isMenuOpen = activeCancelChoiceId === b.id;
               const cleanPhone = cleanPhoneNumber(b.ownerPhone);
               const previewText = formatShabbatHolidayGreeting(b.ownerName, b.dogName, template, dateStr);
 
@@ -394,7 +486,9 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
                 <div
                   key={b.id}
                   className={`rounded-2xl border p-3.5 sm:p-4 transition-all space-y-2.5 shadow-2xs ${
-                    isCancelled
+                    isPermBlocked
+                      ? 'bg-purple-50/30 border-purple-300 opacity-85'
+                      : isDateBlocked
                       ? 'bg-rose-50/25 border-rose-200 opacity-80'
                       : isSent 
                       ? 'bg-emerald-50/40 border-emerald-300' 
@@ -415,18 +509,22 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
                           {b.dogBreed && (
                             <span className="text-xs text-slate-500 font-bold">({b.dogBreed})</span>
                           )}
-                          {isCancelled && (
+                          {isPermBlocked ? (
+                            <span className="bg-purple-100 text-purple-900 border border-purple-300 text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                              <ShieldAlert className="w-3 h-3 text-purple-700" />
+                              <span>חסום לצמיתות ⛔</span>
+                            </span>
+                          ) : isDateBlocked ? (
                             <span className="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
                               <Ban className="w-3 h-3 text-rose-600" />
-                              <span>השליחה בוטלה (דולג)</span>
+                              <span>בוטל לסופ״ש זה 📅</span>
                             </span>
-                          )}
-                          {isSent && !isCancelled && (
+                          ) : isSent ? (
                             <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 text-[10px] font-black px-2 py-0.2 rounded-md flex items-center gap-1">
                               <Check className="w-3 h-3 text-emerald-600" />
                               <span>נשלח בהצלחה</span>
                             </span>
-                          )}
+                          ) : null}
                         </div>
                         <div className="text-xs text-slate-600 font-medium flex items-center gap-2 mt-0.5">
                           <span>בעלים: <strong className="text-slate-800">{b.ownerName}</strong></span>
@@ -438,29 +536,78 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
 
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
-                      {/* Cancel / Skip button */}
-                      <button
-                        type="button"
-                        onClick={() => handleToggleCancel(b.id)}
-                        className={`font-black px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95 ${
-                          isCancelled
-                            ? 'bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 shadow-rose-600/10'
-                            : 'bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-200 hover:border-rose-300'
-                        }`}
-                        title={isCancelled ? 'החזר את הלקוח לרשימת השליחה' : 'בטל שליחת הודעה ללקוח זה'}
-                      >
-                        {isCancelled ? (
-                          <>
+                      {/* Cancel / Skip choice actions */}
+                      {isPermBlocked ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePermanentOptOut(b)}
+                          className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-300 font-black px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
+                          title="בטל חסימה קבועה והחזר את הלקוח לרשימת השליחה"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-purple-700" />
+                          <span>בטל חסימה קבועה</span>
+                        </button>
+                      ) : isDateBlocked ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleRestoreForToday(b.id)}
+                            className="bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 font-black px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95"
+                            title="החזר את הלקוח לרשימת השליחה לסופ״ש זה"
+                          >
                             <RotateCcw className="w-3.5 h-3.5 text-rose-700" />
                             <span>החזר לשליחה</span>
-                          </>
-                        ) : (
-                          <>
-                            <Ban className="w-3.5 h-3.5 text-rose-500" />
-                            <span>בטל שליחה</span>
-                          </>
-                        )}
-                      </button>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelPermanently(b)}
+                            className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-bold px-2 py-1.5 rounded-xl text-[11px] flex items-center gap-1 transition-all cursor-pointer"
+                            title="העבר לחסימה לצמיתות (לעולם לא לשלוח ללקוח זה)"
+                          >
+                            <ShieldAlert className="w-3 h-3 text-purple-700" />
+                            <span>הפוך לקבוע</span>
+                          </button>
+                        </div>
+                      ) : isMenuOpen ? (
+                        <div className="flex items-center gap-1.5 p-1 bg-rose-50 border border-rose-300 rounded-xl shadow-xs animate-in fade-in">
+                          <span className="text-[11px] font-black text-rose-900 px-1">בטל:</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelForToday(b.id)}
+                            className="bg-white hover:bg-rose-100 text-rose-800 border border-rose-200 font-bold px-2 py-1 rounded-lg text-xs flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                            title="ביטול עבור סופ״ש/חג זה בלבד"
+                          >
+                            <span>📅 רק לסופ״ש זה</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelPermanently(b)}
+                            className="bg-purple-700 hover:bg-purple-800 text-white font-black px-2 py-1 rounded-lg text-xs flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                            title="ביטול קבוע - הלקוח לא יקבל ד״ש שבת/חג לעולם"
+                          >
+                            <ShieldAlert className="w-3 h-3 shrink-0" />
+                            <span>⛔ לצמיתות</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveCancelChoiceId(null)}
+                            className="text-slate-400 hover:text-slate-700 px-1.5 py-0.5 text-xs font-bold cursor-pointer"
+                            title="סגור תפריט"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setActiveCancelChoiceId(b.id)}
+                          className="bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-200 hover:border-rose-300 font-bold px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95"
+                          title="בטל שליחת הודעה ללקוח זה (לבחירה: רק לסופ״ש זה או לצמיתות)"
+                        >
+                          <Ban className="w-3.5 h-3.5 text-rose-500" />
+                          <span>בטל שליחה</span>
+                        </button>
+                      )}
 
                       <button
                         type="button"
@@ -495,7 +642,15 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
                               ? 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-300 cursor-pointer active:scale-95'
                               : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 cursor-pointer active:scale-95'
                           }`}
-                          title={isCancelled ? 'השליחה בוטלה עבור לקוח זה. לחץ על "החזר לשליחה" כדי לאפשר שליחה' : customerRestriction.isRestricted ? customerRestriction.reason : "שליחה מיידית ברקע ללא פתיחת לשונית בדפדפן"}
+                          title={
+                            isPermBlocked
+                              ? 'הלקוח חסום לצמיתות משליחת שבת/חג. לחץ "בטל חסימה קבועה" כדי לאפשר שליחה'
+                              : isDateBlocked
+                              ? 'השליחה בוטלה לסופ״ש זה. לחץ "החזר לשליחה" כדי לאפשר שליחה'
+                              : customerRestriction.isRestricted
+                              ? customerRestriction.reason
+                              : "שליחה מיידית ברקע ללא פתיחת לשונית בדפדפן"
+                          }
                         >
                           <Zap className="w-3.5 h-3.5 fill-amber-300 text-amber-300 shrink-0" />
                           <span>
@@ -525,7 +680,15 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
                             ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95'
                             : 'bg-[#25D366] hover:bg-[#1EBE5D] text-white shadow-emerald-500/20 cursor-pointer active:scale-95'
                         }`}
-                        title={isCancelled ? 'השליחה בוטלה עבור לקוח זה. לחץ על "החזר לשליחה" כדי לאפשר שליחה' : customerRestriction.isRestricted ? customerRestriction.reason : "פתח ב-WhatsApp Web"}
+                        title={
+                          isPermBlocked
+                            ? 'הלקוח חסום לצמיתות משליחת שבת/חג. לחץ "בטל חסימה קבועה" כדי לאפשר שליחה'
+                            : isDateBlocked
+                            ? 'השליחה בוטלה לסופ״ש זה. לחץ "החזר לשליחה" כדי לאפשר שליחה'
+                            : customerRestriction.isRestricted
+                            ? customerRestriction.reason
+                            : "פתח ב-WhatsApp Web"
+                        }
                       >
                         <MessageCircle className="w-4 h-4 fill-white/20 shrink-0" />
                         <span>{isCancelled ? 'שליחה בוטלה' : customerRestriction.isRestricted ? 'נעול' : isSent ? 'שלח שוב בוואטסאפ' : 'פתח בוואטסאפ'}</span>
@@ -547,6 +710,54 @@ ${occasionThis} טרחו סביבי על מלא ונתנו לי הרגשה טו�
             })
           )}
         </div>
+
+        {/* Permanent Opt-Out Section & Collapsible Manager */}
+        {Object.keys(permanentOptOutMap).length > 0 && (
+          <div className="bg-purple-50/80 border-t border-purple-200 px-4 sm:px-5 py-2.5 text-xs flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-purple-900 font-bold">
+                <ShieldAlert className="w-4 h-4 text-purple-700 shrink-0" />
+                <span>
+                  {Object.keys(permanentOptOutMap).length} לקוחות מוגדרים כחסומים לצמיתות משליחת הודעות שבת/חג
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPermanentList(!showPermanentList)}
+                className="text-purple-700 hover:text-purple-950 font-black underline cursor-pointer text-xs"
+              >
+                {showPermanentList ? 'הסתר רשימה' : 'הצג ונהל רשימת חסומים'}
+              </button>
+            </div>
+
+            {showPermanentList && (
+              <div className="max-h-36 overflow-y-auto space-y-1.5 pt-1">
+                {Object.values(permanentOptOutMap).map((entry) => (
+                  <div key={entry.phone} className="flex items-center justify-between bg-white p-2 rounded-xl border border-purple-200 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-800">{entry.ownerName || 'לקוח'}</span>
+                      {entry.dogName && <span className="text-slate-500 font-medium">({entry.dogName})</span>}
+                      <span className="font-mono text-slate-400 text-[11px]" dir="ltr">{entry.phone}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPermanentOptOutMap(prev => {
+                          const next = { ...prev };
+                          delete next[entry.phone];
+                          return next;
+                        });
+                      }}
+                      className="text-rose-600 hover:text-rose-800 font-bold text-xs underline cursor-pointer"
+                    >
+                      בטל חסימה לצמיתות
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Modal Footer */}
         <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
