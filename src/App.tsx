@@ -1165,8 +1165,8 @@ export default function App() {
           </button>
         </div>
 
-        {/* Row 2: Unified Navigation (Right) & Utilities (Left) - Single Row */}
-        <div className="flex items-center justify-between gap-3 p-1.5 sm:p-2 bg-white/95 backdrop-blur-xs rounded-2xl border border-slate-200/90 shadow-2xs w-full overflow-x-auto no-scrollbar">
+        {/* Row 2: Unified Navigation (Right), Shabbat/Holiday Banner in the Center Gap, and Utilities (Left) */}
+        <div className="flex items-center justify-between gap-2.5 p-1.5 sm:p-2 bg-white/95 backdrop-blur-xs rounded-2xl border border-slate-200/90 shadow-2xs w-full overflow-x-auto no-scrollbar">
           
           {/* Right Side in RTL (מימין): Main Navigation Tabs */}
           <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 gap-1 shrink-0">
@@ -1213,6 +1213,97 @@ export default function App() {
             </button>
           </div>
 
+          {/* Center Gap (ברווח בין הכפתורים): Shabbat / Jewish Holiday Dog Greetings Reminder Banner */}
+          {todayHolidayInfo.isSpecial && totalDogsToday > 0 && !isGreetingBannerDismissed && (() => {
+            const rest = isCustomerMessagingRestrictedNow();
+            if (rest.isRestricted) {
+              return (
+                <div className="flex-1 min-w-[260px] mx-1 sm:mx-2 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white rounded-xl px-2.5 sm:px-3.5 py-1.5 shadow-xs border border-amber-400/60 flex items-center justify-between gap-2 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-lg shrink-0">🛡️</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-black text-xs sm:text-sm tracking-tight truncate">
+                          כלל ברזל: שקט מוחלט ללקוחות משישי 14:00 וכל השבת והחג
+                        </span>
+                        <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.2 rounded-full shrink-0">
+                          {totalDogsToday} כלבים בריזורט
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-100 font-medium truncate hidden xl:block">
+                        הודעות הד״ש והעדכונים ישלחו אוטומטית בענן 40 דקות לאחר צאת השבת/החג {rest.sendTimeStr ? `בשעה ${rest.sendTimeStr}` : ''} (גם כשהדפדפנים סגורים).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setGreetingModalDate(todayStr)}
+                      className="bg-white/95 hover:bg-white text-slate-900 font-black px-3 py-1.5 rounded-lg text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95"
+                      title="צפה בנוסח ההודעות וברשימת הכלבים"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-amber-700" />
+                      <span className="whitespace-nowrap">צפה בנוסח וברשימה</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            if (todayUnsentGreetingsCount > 0) {
+              return (
+                <div className="flex-1 min-w-[260px] mx-1 sm:mx-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white rounded-xl px-2.5 sm:px-3.5 py-1.5 shadow-xs border border-emerald-400/60 flex items-center justify-between gap-2 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-lg shrink-0">🚀</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-black text-xs sm:text-sm tracking-tight truncate">
+                          מוצאי שבת/חג – חלון המשלוח האוטומטי פעיל (40 דק׳ לאחר צאת השבת)!
+                        </span>
+                        <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.2 rounded-full shadow-2xs shrink-0">
+                          {todayUnsentGreetingsCount} להשלמה
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-emerald-100 font-medium truncate hidden xl:block">
+                        הודעות הד״ש החם נשלחות כעת אוטומטית ברקע לכל {totalDogsToday} הכלבים בריזורט.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setGreetingModalDate(todayStr)}
+                      className="bg-white hover:bg-emerald-50 text-emerald-950 font-black px-3 py-1.5 rounded-lg text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="whitespace-nowrap">צפה ברשימה ובהתקדמות</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="flex-1 mx-1 sm:mx-2 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-3 py-1.5 text-xs font-bold flex items-center justify-between shadow-2xs">
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="text-base shrink-0">🎉</span>
+                  <span className="font-black text-emerald-950 truncate">
+                    מעולה שמוליק! כל {totalDogsToday} הודעות הד״ש נשלחו בהצלחה לבעלים.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGreetingModalDate(todayStr)}
+                  className="text-emerald-700 hover:text-emerald-900 underline font-black text-xs cursor-pointer shrink-0 mr-2"
+                >
+                  פתח רשימה
+                </button>
+              </div>
+            );
+          })()}
+
           {/* Left Side in RTL (משמאל): System & Management Utilities */}
           <div className="flex items-center gap-2 shrink-0">
             {/* Reports Button */}
@@ -1251,104 +1342,6 @@ export default function App() {
           </div>
 
         </div>
-
-        {/* Shabbat / Jewish Holiday Dog Greetings Reminder Banner for Shmulik */}
-        {todayHolidayInfo.isSpecial && totalDogsToday > 0 && !isGreetingBannerDismissed && (() => {
-          const rest = isCustomerMessagingRestrictedNow();
-          if (rest.isRestricted) {
-            return (
-              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white rounded-2xl p-3 sm:p-4 shadow-md border border-amber-400/60 flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 w-full sm:w-auto">
-                    <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl shrink-0 shadow-xs ring-1 ring-white/30">
-                      🛡️
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-black text-sm sm:text-base tracking-tight">
-                          כלל ברזל: שקט מוחלט ללקוחות משישי 14:00 וכל השבת והחג
-                        </span>
-                        <span className="bg-white/20 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full">
-                          {totalDogsToday} כלבים בריזורט
-                        </span>
-                      </div>
-                      <p className="text-xs text-amber-100 font-medium mt-0.5">
-                        הודעות הד״ש והעדכונים ישלחו אוטומטית בענן 40 דקות לאחר צאת השבת/החג {rest.sendTimeStr ? `בשעה ${rest.sendTimeStr}` : ''} (גם כשהדפדפנים סגורים).
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setGreetingModalDate(todayStr)}
-                      className="w-full sm:w-auto bg-white/90 hover:bg-white text-slate-900 font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shrink-0"
-                    >
-                      <MessageCircle className="w-4 h-4 text-amber-700" />
-                      <span>צפה בנוסח וברשימה</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-
-          if (todayUnsentGreetingsCount > 0) {
-            return (
-              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white rounded-2xl p-3 sm:p-4 shadow-md border border-emerald-400/60 flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 w-full sm:w-auto">
-                    <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-2xl shrink-0 shadow-xs ring-1 ring-white/30">
-                      🚀
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-black text-sm sm:text-base tracking-tight">
-                          מוצאי שבת/חג – חלון המשלוח האוטומטי פעיל (40 דק׳ לאחר צאת השבת)!
-                        </span>
-                        <span className="bg-amber-400 text-slate-950 text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-2xs">
-                          {todayUnsentGreetingsCount} להשלמה
-                        </span>
-                      </div>
-                      <p className="text-xs text-emerald-100 font-medium mt-0.5">
-                        הודעות הד״ש החם נשלחות כעת אוטומטית ברקע לכל {totalDogsToday} הכלבים בריזורט.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setGreetingModalDate(todayStr)}
-                      className="w-full sm:w-auto bg-white hover:bg-emerald-50 text-emerald-950 font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm shadow-sm hover:shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 shrink-0"
-                    >
-                      <MessageCircle className="w-4 h-4 text-emerald-600" />
-                      <span>צפה ברשימה ובהתקדמות</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-
-          return (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-3.5 py-2.5 text-xs font-bold flex items-center justify-between shadow-2xs">
-              <div className="flex items-center gap-2">
-                <span className="text-base">🎉</span>
-                <span className="font-black text-emerald-950">
-                  מעולה שמוליק! כל {totalDogsToday} הודעות הד״ש נשלחו בהצלחה לבעלים.
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setGreetingModalDate(todayStr)}
-                className="text-emerald-700 hover:text-emerald-900 underline font-black text-xs cursor-pointer"
-              >
-                פתח רשימה
-              </button>
-            </div>
-          );
-        })()}
 
         {/* Header Metrics Section: Ultra-Compact & Space-Efficient (Hidden on mobile when in WhatsApp CRM to maximize full-screen view) */}
         <div className={activeTab === 'whatsapp' ? 'hidden sm:block' : ''}>
