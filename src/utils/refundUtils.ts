@@ -67,9 +67,14 @@ export function saveLearnedRefundReason(newReason: string, existingBookings: Boo
 
 /**
  * Retrieves all bookings that had refunds executed in a given month (YYYY-MM).
+ * Accepts either (bookings, monthKey) or (monthKey, bookings) safely.
  */
-export function getRefundsForMonth(bookings: Booking[], monthKey: string): Booking[] {
+export function getRefundsForMonth(arg1: any, arg2: any): Booking[] {
+  const bookings: Booking[] = Array.isArray(arg1) ? arg1 : Array.isArray(arg2) ? arg2 : [];
+  const monthKey: string = typeof arg1 === 'string' ? arg1 : typeof arg2 === 'string' ? arg2 : '';
+  if (!bookings || !bookings.length || !monthKey) return [];
   return bookings.filter(b => {
+    if (!b) return false;
     const d = (b as any).data || {};
     const refAmt = Number(b.refundAmount ?? d.refundAmount ?? 0);
     if (refAmt <= 0) return false;
@@ -80,9 +85,14 @@ export function getRefundsForMonth(bookings: Booking[], monthKey: string): Booki
 
 /**
  * Retrieves all bookings that had refunds executed in a given year (YYYY).
+ * Accepts either (bookings, yearKey) or (yearKey, bookings) safely.
  */
-export function getRefundsForYear(bookings: Booking[], yearKey: string): Booking[] {
+export function getRefundsForYear(arg1: any, arg2: any): Booking[] {
+  const bookings: Booking[] = Array.isArray(arg1) ? arg1 : Array.isArray(arg2) ? arg2 : [];
+  const yearKey: string = typeof arg1 === 'string' ? arg1 : typeof arg2 === 'string' ? arg2 : '';
+  if (!bookings || !bookings.length || !yearKey) return [];
   return bookings.filter(b => {
+    if (!b) return false;
     const d = (b as any).data || {};
     const refAmt = Number(b.refundAmount ?? d.refundAmount ?? 0);
     if (refAmt <= 0) return false;

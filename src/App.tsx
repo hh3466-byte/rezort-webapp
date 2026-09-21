@@ -470,7 +470,7 @@ export default function App() {
   const monthTotalRefunds = currentMonthRevenue.totalRefunds || 0; // החזרים בגין ביטולים
   const monthNetCollected = currentMonthRevenue.netCollected ?? (monthTotalCollected - monthTotalRefunds); // סה"כ נטו לאחר החזרים
   const monthRefundsList = React.useMemo(() => {
-    return getRefundsForMonth(currentMonthKey, bookings);
+    return getRefundsForMonth(bookings, currentMonthKey);
   }, [currentMonthKey, bookings]);
 
   // Dynamic labels for upcoming 10th payout dates (e.g. 10.10 and 10.11)
