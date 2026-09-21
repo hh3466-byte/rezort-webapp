@@ -18,14 +18,31 @@ export const hasActiveBookingForIntake = (r: IntakeRequest, bookings: Booking[] 
   if (!bookings || bookings.length === 0) return false;
   const rPhone = cleanPhoneNumber(r.ownerPhone);
   const rDog = normalizeHebrew(r.dogName);
+  const rStart = r.startDate;
+  const rEnd = r.endDate;
 
   return bookings.some(b => {
     if (b.stayStatus === 'cancelled') return false;
     const bPhone = cleanPhoneNumber(b.ownerPhone);
     const bDog = normalizeHebrew(b.dogName);
+    
+    // Must match the client phone
     const phoneMatch = Boolean(bPhone && rPhone && (bPhone.slice(-7) === rPhone.slice(-7)));
-    const dogMatch = Boolean(bDog && rDog && (bDog === rDog || bDog.includes(rDog) || rDog.includes(bDog)));
-    return phoneMatch || (dogMatch && r.ownerName && (b.ownerName || '').includes(r.ownerName));
+    if (!phoneMatch) return false;
+
+    // Must match dog name
+    const dogMatch = !rDog || !bDog || bDog === rDog || bDog.includes(rDog) || rDog.includes(bDog);
+    if (!dogMatch) return false;
+
+    // Crucial: Must match or overlap with the requested stay dates!
+    // Past stays (e.g. ended before the requested startDate) must never mark a new stay request as booked!
+    const bStart = b.startDate;
+    const bEnd = b.endDate;
+    if (rStart && rEnd && bStart && bEnd) {
+      return bStart <= rEnd && bEnd >= rStart;
+    }
+
+    return false;
   });
 };
 

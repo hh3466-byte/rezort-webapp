@@ -3,7 +3,33 @@ import { formatDateIL } from './dateUtils';
 
 export function cleanPhoneNumber(phone: string): string {
   if (!phone) return '';
-  return phone.replace(/\D/g, '');
+  let digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('972')) {
+    digits = '0' + digits.slice(3);
+  } else if (digits.length === 9 && digits.startsWith('5')) {
+    digits = '0' + digits;
+  }
+  return digits;
+}
+
+/**
+ * Validates Israeli mobile phone number (10 digits starting with 05)
+ */
+export function isValidIsraeliPhone(phone: string): boolean {
+  if (!phone) return false;
+  const cleaned = cleanPhoneNumber(phone);
+  return /^05\d{8}$/.test(cleaned);
+}
+
+/**
+ * Standard Israeli display format: 05X-XXXXXXX
+ */
+export function formatIsraeliPhoneDisplay(phone: string): string {
+  const cleaned = cleanPhoneNumber(phone);
+  if (cleaned.length === 10 && cleaned.startsWith('05')) {
+    return `${cleaned.slice(0, 3)}-${cleaned.slice(3)}`;
+  }
+  return phone;
 }
 
 /**
@@ -11,14 +37,14 @@ export function cleanPhoneNumber(phone: string): string {
  */
 export function formatPhoneForWhatsApp(phone: string): string {
   if (!phone) return '';
-  const digitsOnly = phone.replace(/\D/g, '');
-  if (digitsOnly.startsWith('972')) {
-    return digitsOnly;
+  const cleaned = cleanPhoneNumber(phone);
+  if (cleaned.startsWith('0')) {
+    return '972' + cleaned.slice(1);
   }
-  if (digitsOnly.startsWith('0')) {
-    return '972' + digitsOnly.slice(1);
+  if (cleaned.startsWith('972')) {
+    return cleaned;
   }
-  return digitsOnly;
+  return cleaned;
 }
 
 export function getServiceTypeHebrew(type: string): string {
@@ -68,15 +94,9 @@ export function generatePaymentReminderMessage(booking: Booking, settings: Resor
     msg += `💳 *סכום פתוח לתשלום / מקדמה:* *₪${booking.totalPrice}*\n\n`;
   }
 
-  msg += `אפשרויות תשלום נוחות:\n`;
-  if (settings.growPaymentLink) {
-    msg += `🔹 *תשלום מאובטח (כולל Bit, Apple Pay, Google Pay וכרטיסי אשראי):* ${settings.growPaymentLink}\n`;
-  } else if (settings.payboxLink) {
-    msg += `🔹 *קישור PayBox ישיר:* ${settings.payboxLink}\n`;
-  }
-  if (settings.bankDetails) {
-    msg += `🔹 *העברה בנקאית:* ${settings.bankDetails}\n`;
-  }
+  const paymentLink = settings.growPaymentLink || settings.payboxLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
+  msg += `💳 *לתשלום מאובטח (כולל Bit, Apple Pay, Google Pay וכרטיסי אשראי):*\n`;
+  msg += `👉 ${paymentLink}\n`;
 
   msg += `\nנשמח לעמוד לרשותכם לכל שאלה. נתראה בקרוב! 🐶❤️`;
 

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ResortSettings, ServiceType, IntakeRequest, RESORT_BENEFIT_OPTIONS } from '../types';
+import { ResortSettings, ServiceType, IntakeRequest, AdditionalDogIntake, RESORT_BENEFIT_OPTIONS } from '../types';
 import { addDays, getTodayStr, calculateDaysCount, getDayNameHebrew, formatDateIL } from '../utils/dateUtils';
+import { cleanPhoneNumber, isValidIsraeliPhone, formatIsraeliPhoneDisplay } from '../utils/whatsappUtils';
 import { saveIntakeRequestToDb, findVoucherByCode, verifyCustomerByPhone, PhoneVerificationResult } from '../services/dbService';
 import { sendResortEmailNotification, sendResortWhatsAppNotification, formatIntakeNotification } from '../services/notificationService';
 import { 
@@ -31,7 +32,9 @@ import {
   Search,
   MapPin,
   Navigation,
-  Loader2
+  Loader2,
+  Dog,
+  Trash2
 } from 'lucide-react';
 import { SendIntakeModal } from './SendIntakeModal';
 import { getCurrentCoordinates, reverseGeocodeCoordinates } from '../utils/geolocationUtils';
@@ -215,6 +218,45 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
 
+  // Multi-dog support: "+ הוסף עוד אורח לריזורט לכלב"
+  const [additionalDogs, setAdditionalDogs] = useState<AdditionalDogIntake[]>([]);
+
+  const handleAddAdditionalDog = () => {
+    setAdditionalDogs(prev => [
+      ...prev,
+      {
+        dogName: '',
+        dogBreed: '',
+        dogAge: '',
+        dogGender: 'male',
+        dogSize: 'medium',
+        serviceType: serviceType || 'boarding',
+        sameDatesAsPrimary: true,
+        startDate: startDate,
+        endDate: endDate,
+        isFriendlyWithDogs: 'yes',
+        isNeutered: true,
+        isVaccinated: true,
+        isHouseTrained: true,
+        isTreatedParasites: true,
+        specialNeeds: '',
+        notes: ''
+      }
+    ]);
+  };
+
+  const handleUpdateAdditionalDog = (index: number, fields: Partial<AdditionalDogIntake>) => {
+    setAdditionalDogs(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], ...fields };
+      return copy;
+    });
+  };
+
+  const handleRemoveAdditionalDog = (index: number) => {
+    setAdditionalDogs(prev => prev.filter((_, i) => i !== index));
+  };
+
 
   // Phone number verification hook (debounce 400ms)
   useEffect(() => {
@@ -379,6 +421,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       setErrorMessage('נא למלא מספר טלפון נייד (שדה חובה)');
       return false;
     }
+    if (!isValidIsraeliPhone(ownerPhone)) {
+      setErrorMessage('נא להזין מספר טלפון נייד ישראלי תקין (10 ספרות, למשל 054-1234567)');
+      return false;
+    }
     if (!dogName.trim()) {
       setErrorMessage('נא למלא את שם הכלב/ה (שדה חובה)');
       return false;
@@ -422,6 +468,28 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       setErrorMessage('יש לקרוא ולאשר את תקנון הריזורט לכלב לצורך שליחת הבקשה (שדה חובה)');
       return false;
     }
+
+    // Validate additional dogs
+    for (let i = 0; i < additionalDogs.length; i++) {
+      const ad = additionalDogs[i];
+      if (!ad.dogName.trim()) {
+        setErrorMessage(`נא למלא את שם הכלב עבור אורח נוסף #${i + 2}`);
+        return false;
+      }
+      if (!ad.dogBreed.trim()) {
+        setErrorMessage(`נא למלא את גזע הכלב עבור ${ad.dogName || `אורח נוסף #${i + 2}`}`);
+        return false;
+      }
+      if (!ad.sameDatesAsPrimary && (!ad.startDate || !ad.endDate)) {
+        setErrorMessage(`נא לבחור תאריכי הגעה ועזיבה עבור ${ad.dogName}`);
+        return false;
+      }
+      if (!ad.sameDatesAsPrimary && ad.startDate && ad.endDate && ad.startDate > ad.endDate) {
+        setErrorMessage(`תאריך עזיבה לא יכול להיות מוקדם מתאריך הגעה עבור ${ad.dogName}`);
+        return false;
+      }
+    }
+
     return true;
   };
 
@@ -436,7 +504,11 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
     setIsSubmitting(true);
     setIsQuickCallback(isCallbackOnly);
 
-    const finalEndDate = serviceType === 'training' ? startDate : endDate;
+    // Training is an intensive multi-week process (defaults to 30 days if not set)
+    const finalEndDate = serviceType === 'training' 
+      ? (endDate && endDate > startDate ? endDate : addDays(startDate, 30)) 
+      : endDate;
+    const formattedPhone = formatIsraeliPhoneDisplay(ownerPhone.trim());
     const requestId = `${isCallbackOnly ? 'call' : 'req'}-${Date.now()}`;
     const chosenBenefit = RESORT_BENEFIT_OPTIONS.find(b => b.id === selectedBenefitId);
     const newRequest: IntakeRequest = {
@@ -444,7 +516,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       createdAt: new Date().toISOString(),
       status: 'pending',
       ownerName: ownerName.trim(),
-      ownerPhone: ownerPhone.trim(),
+      ownerPhone: formattedPhone,
       ownerEmail: ownerEmail.trim() || undefined,
       ownerAddress: ownerAddress.trim(),
       ownerCoordinates: ownerCoordinates,
@@ -468,9 +540,17 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       clientOrigin: phoneCheckResult?.isKnown ? 'returning' : (clientOrigin === 'referral' ? 'referral' : 'new'),
       selectedBenefitId: isBenefitsUnlocked ? selectedBenefitId : undefined,
       voucherCode: voucherCode.trim() || undefined,
+      additionalDogs: additionalDogs.length > 0 ? additionalDogs.map(ad => ({
+        ...ad,
+        dogName: ad.dogName.trim(),
+        dogBreed: ad.dogBreed.trim(),
+        startDate: ad.sameDatesAsPrimary ? startDate : (ad.startDate || startDate),
+        endDate: ad.sameDatesAsPrimary ? finalEndDate : (ad.endDate || finalEndDate)
+      })) : undefined,
       notes: [
         isCallbackOnly ? '[בקשת שיחה חוזרת טלפונית]' : '',
         isFlexibleDates ? '[תאריכים גמישים / בירור זמינות כללי]' : '',
+        additionalDogs.length > 0 ? `[🐾 ${additionalDogs.length + 1} אורחים בטופס: ${dogName} + ${additionalDogs.map(d => `${d.dogName} (${d.dogBreed})`).join(', ')}]` : '',
         phoneCheckResult?.isKnown ? `[💎 לקוח חוזר מוכר: ${phoneCheckResult.name || ownerName} (${phoneCheckResult.totalVisits} ביקורים)]` : '[🐶 לקוח חדש]',
         clientOrigin === 'referral' ? `[🤝 חבר מביא חבר${referralFriendName.trim() ? `: הופנה ע״י ${referralFriendName.trim()}` : ''}]` : '',
         (isBenefitsUnlocked && chosenBenefit) ? `[🎁 הטבה שנבחרה: ${chosenBenefit.title} (${chosenBenefit.badge})]` : '',
@@ -501,9 +581,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       await saveIntakeRequestToDb(newRequest);
 
       // 2. Send instant email notification to shinshin1964@gmail.com
+      const allDogsNames = [dogName, ...additionalDogs.map(d => d.dogName)].filter(Boolean).join(' ו-');
       const emailSubject = isCallbackOnly
-        ? `📞 בקשת שיחה חוזרת מלקוח: ${dogName} (${ownerName} - ${ownerPhone})`
-        : `🐾 בקשת קליטה חדשה בריזורט לכלב: ${dogName} (${ownerName})`;
+        ? `📞 בקשת שיחה חוזרת מלקוח: ${allDogsNames} (${ownerName} - ${ownerPhone})`
+        : `🐾 בקשת קליטה חדשה בריזורט לכלב: ${allDogsNames} (${ownerName})`;
 
       await sendResortEmailNotification(
         emailSubject,
@@ -537,7 +618,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               תודה על משלוח שאלון בקשת הקליטה! 🐾
             </h2>
             <p className="text-sm font-bold text-slate-700">
-              פרטי הבקשה עבור {dogName} נקלטו בהצלחה בריזורט לכלב.
+              פרטי הבקשה עבור {dogName}{additionalDogs.length > 0 ? ` ו-${additionalDogs.map(d => d.dogName).join(', ')}` : ''} נקלטו בהצלחה בריזורט לכלב.
             </p>
           </div>
 
@@ -1334,7 +1415,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                     <button
                       key={chip.label}
                       type="button"
-                      onClick={() => { setStartDate(chip.date); setEndDate(chip.date); }}
+                      onClick={() => { 
+                        setStartDate(chip.date); 
+                        setEndDate(addDays(chip.date, 30)); 
+                      }}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         startDate === chip.date
                           ? 'bg-emerald-700 text-white shadow-xs'
@@ -1354,8 +1438,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                     min={today}
                     value={startDate}
                     onChange={(e) => {
-                      setStartDate(e.target.value);
-                      setEndDate(e.target.value);
+                      const val = e.target.value;
+                      setStartDate(val);
+                      setEndDate(addDays(val, 30));
                     }}
                     className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
                   />
@@ -1603,6 +1688,279 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               />
               <span className="font-semibold text-slate-700">התאריכים גמישים / עדיין לא סופיים (בירור זמינות ראשוני)</span>
             </label>
+          </div>
+
+          {/* Section 4.5: Multi-dog Guests - "הוסף עוד אורח לריזורט לכלב" */}
+          <div className="space-y-4">
+            {additionalDogs.map((ad, idx) => (
+              <div 
+                key={idx} 
+                className="bg-gradient-to-br from-amber-50/70 via-orange-50/30 to-white border-2 border-amber-300 rounded-3xl p-4 sm:p-5 shadow-sm space-y-4 animate-in fade-in zoom-in-95 duration-200"
+              >
+                {/* Header of additional dog */}
+                <div className="flex items-center justify-between pb-2 border-b border-amber-200/80">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🐕</span>
+                    <span className="text-sm sm:text-base font-black text-amber-950">
+                      אורח/ת נוסף/ת #{idx + 2} {ad.dogName ? `(${ad.dogName})` : ''}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAdditionalDog(idx)}
+                    className="text-xs font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1 rounded-xl flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>הסר אורח זה</span>
+                  </button>
+                </div>
+
+                {/* Date Choice Question: אותם תאריכים או תאריכים אחרים? */}
+                <div className="p-3 bg-white/90 rounded-2xl border border-amber-200/90 space-y-2">
+                  <label className="text-xs font-black text-slate-800 block">
+                    🗓️ מועדי השהות של {ad.dogName || 'הכלב הנוסף'}: אותם תאריכים או תאריכים אחרים? <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateAdditionalDog(idx, { sameDatesAsPrimary: true })}
+                      className={`p-2.5 rounded-xl border-2 text-right transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                        ad.sameDatesAsPrimary
+                          ? 'bg-emerald-50 border-emerald-600 text-emerald-950 font-black shadow-xs ring-1 ring-emerald-500/20'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">✅</span>
+                        <span className="text-xs">אותם תאריכים בדיוק</span>
+                      </div>
+                      <span className="text-[10px] bg-white px-2 py-0.5 rounded-md border border-slate-200 font-mono text-slate-700">
+                        {formatDateIL(startDate)} – {formatDateIL(endDate)}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateAdditionalDog(idx, { 
+                        sameDatesAsPrimary: false,
+                        startDate: ad.startDate || startDate,
+                        endDate: ad.endDate || endDate
+                      })}
+                      className={`p-2.5 rounded-xl border-2 text-right transition-all cursor-pointer flex items-center gap-2 ${
+                        !ad.sameDatesAsPrimary
+                          ? 'bg-amber-100/70 border-amber-600 text-amber-950 font-black shadow-xs ring-1 ring-amber-500/20'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold'
+                      }`}
+                    >
+                      <span className="text-base">📅</span>
+                      <span className="text-xs">תאריכים אחרים (בחר מועדים נפרדים)</span>
+                    </button>
+                  </div>
+
+                  {/* If custom dates chosen for this dog */}
+                  {!ad.sameDatesAsPrimary && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-amber-100 animate-in fade-in">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                          תאריך כניסה של {ad.dogName || 'הכלב'}:
+                        </label>
+                        <input
+                          type="date"
+                          min={today}
+                          value={ad.startDate || startDate}
+                          onChange={(e) => handleUpdateAdditionalDog(idx, { startDate: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                          תאריך איסוף / יציאה:
+                        </label>
+                        <input
+                          type="date"
+                          min={ad.startDate || startDate}
+                          value={ad.endDate || endDate}
+                          onChange={(e) => handleUpdateAdditionalDog(idx, { endDate: e.target.value })}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Details of additional dog */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      שם הכלב/ה <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={ad.dogName}
+                      onChange={(e) => handleUpdateAdditionalDog(idx, { dogName: e.target.value })}
+                      placeholder="למשל: לונה"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      גזע הכלב <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={ad.dogBreed}
+                      onChange={(e) => handleUpdateAdditionalDog(idx, { dogBreed: e.target.value })}
+                      placeholder="למשל: פודל"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      גיל הכלב
+                    </label>
+                    <input
+                      type="text"
+                      value={ad.dogAge || ''}
+                      onChange={(e) => handleUpdateAdditionalDog(idx, { dogAge: e.target.value })}
+                      placeholder="למשל: 3 שנים"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-semibold text-slate-900 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Gender and Size row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      מין <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateAdditionalDog(idx, { dogGender: 'male' })}
+                        className={`py-1.5 px-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                          ad.dogGender === 'male' ? 'bg-blue-600 text-white border-blue-600 shadow-2xs' : 'bg-white text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        זכר ♂️
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateAdditionalDog(idx, { dogGender: 'female' })}
+                        className={`py-1.5 px-2 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                          ad.dogGender === 'female' ? 'bg-pink-600 text-white border-pink-600 shadow-2xs' : 'bg-white text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        נקבה ♀️
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      גודל הכלב <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { id: 'small', label: 'קטן (עד 10)' },
+                        { id: 'medium', label: 'בינוני (10-25)' },
+                        { id: 'large', label: 'גדול (25-45)' },
+                        { id: 'giant', label: 'ענק (45+)' }
+                      ].map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => handleUpdateAdditionalDog(idx, { dogSize: s.id as any })}
+                          className={`py-1.5 px-1 rounded-xl border text-center text-xs font-bold transition-all cursor-pointer ${
+                            ad.dogSize === s.id ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs' : 'bg-white text-slate-700 border-slate-200'
+                          }`}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vetting for this dog */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">
+                      ✂️ {ad.dogGender === 'female' ? 'מעוקרת?' : 'מסורס?'}
+                    </span>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateAdditionalDog(idx, { isNeutered: true })}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                          ad.isNeutered ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        כן
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateAdditionalDog(idx, { isNeutered: false })}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                          !ad.isNeutered ? 'bg-amber-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        לא
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800">
+                      🐕 חברותי עם כלבים?
+                    </span>
+                    <div className="flex gap-1">
+                      {[
+                        { id: 'yes', label: 'כן' },
+                        { id: 'depends', label: 'תלוי' },
+                        { id: 'no', label: 'לא' },
+                      ].map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => handleUpdateAdditionalDog(idx, { isFriendlyWithDogs: f.id as any })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                            ad.isFriendlyWithDogs === f.id ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes for additional dog */}
+                <div>
+                  <input
+                    type="text"
+                    value={ad.notes || ''}
+                    onChange={(e) => handleUpdateAdditionalDog(idx, { notes: e.target.value })}
+                    placeholder={`הערות מיוחדות, מזון או תרופות עבור ${ad.dogName || 'הכלב'}`}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+            ))}
+
+            {/* The "+" Button to Add Another Dog */}
+            <button
+              type="button"
+              onClick={handleAddAdditionalDog}
+              className="w-full py-3.5 px-4 rounded-2xl border-2 border-dashed border-emerald-400 hover:border-emerald-600 bg-emerald-50/70 hover:bg-emerald-100 text-emerald-950 font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-98"
+            >
+              <Plus className="w-5 h-5 text-emerald-700 stroke-[3]" />
+              <span>הוסף עוד אורח לריזורט לכלב 🐾</span>
+            </button>
           </div>
 
           {/* Section 5: Mandatory Vetting Questions */}

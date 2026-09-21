@@ -23,9 +23,11 @@ import {
   X,
   PenTool,
   PhoneCall,
-  ChevronRight
+  ChevronRight,
+  UserCheck
 } from 'lucide-react';
 import { Booking, IntakeRequest, ResortSettings } from '../types';
+import { DesktopWhatsAppAuditModal } from './DesktopWhatsAppAuditModal';
 import { cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
 import { 
   WhatsAppChat, 
@@ -81,6 +83,56 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<'new' | 'in_chat' | 'waiting_reply' | 'all'>('in_chat');
   const hasUserSelectedFilter = useRef(false);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  
+  // Stealth Reading Mode (מצב קריאה סמויה - אי סימון הודעות כנקראות עם קוד 3466)
+  const [isStealthMode, setIsStealthMode] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('crm_stealth_mode_active') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isStealthPinModalOpen, setIsStealthPinModalOpen] = useState(false);
+  const [stealthPinInput, setStealthPinInput] = useState('');
+  const [stealthPinError, setStealthPinError] = useState(false);
+  const stealthInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenStealthPinModal = () => {
+    setIsStealthPinModalOpen(true);
+    setStealthPinInput('');
+    setStealthPinError(false);
+    setTimeout(() => stealthInputRef.current?.focus(), 150);
+  };
+
+  const handleToggleStealthMode = () => {
+    if (isStealthMode) {
+      if (confirm('האם ברצונך לכבות את מצב הקריאה הסמויה ולחזור למצב קריאה רגיל?')) {
+        setIsStealthMode(false);
+        try {
+          sessionStorage.removeItem('crm_stealth_mode_active');
+        } catch {}
+      }
+    } else {
+      handleOpenStealthPinModal();
+    }
+  };
+
+  const handleVerifyStealthPin = (pin: string) => {
+    if (pin === '3466') {
+      setIsStealthMode(true);
+      try {
+        sessionStorage.setItem('crm_stealth_mode_active', 'true');
+      } catch {}
+      setIsStealthPinModalOpen(false);
+      setStealthPinInput('');
+      setStealthPinError(false);
+    } else {
+      setStealthPinError(true);
+      setStealthPinInput('');
+      setTimeout(() => stealthInputRef.current?.focus(), 50);
+    }
+  };
   
   // Status Overrides per phone (חדשים למענה -> בהתכתבות -> ממתין לתגובה -> טופל)
   const [statusOverrides, setStatusOverrides] = useState<Record<string, 'new' | 'in_chat' | 'waiting_reply' | 'handled'>>(() => {
@@ -249,8 +301,8 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   // 2. Fetch messages when selected chat changes
   const loadChatMessages = async (chat: EnrichedWhatsAppChat) => {
     setIsLoadingMessages(true);
-    // Mark as read locally in chat list for seamless feedback
-    setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
+    // חוק ברזל: צפייה בהודעות במחשב אינה מסמנת כנקרא ואינה מאפסת unreadCount!
+    // ההודעות נשארות לשמוליק בקטגוריות "שלא נקראו / חדשות" בנייד עד למענה בפועל.
     try {
       const msgs = await fetchGreenApiChatHistory(chat.id, 50, settings);
       setMessages(msgs);
@@ -286,6 +338,14 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
         textMessage: textToSend
       };
       setMessages(prev => [...prev, newMsg]);
+      // חוק ברזל: ברגע שנשלח מענה בפועל ללקוח, השיחה עוברת לסטטוס ממתין לתגובה
+      setChats(prev => prev.map(c => c.id === selectedChat.id ? {
+        ...c,
+        lastMessageType: 'outgoing',
+        unreadCount: 0,
+        lastMessage: textToSend,
+        timestamp: Date.now()
+      } : c));
       setMessageInput('');
       setSendSuccessToast(true);
       setTimeout(() => setSendSuccessToast(false), 2500);
@@ -401,7 +461,13 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
     return (
       <div
         key={chat.id}
-        onClick={() => setSelectedChat(chat)}
+        onClick={() => {
+          setSelectedChat(chat);
+          // אם לא במצב קריאה סמויה (מצב רגיל של שמוליק): איפוס מונה וסימון כנקרא
+          if (!isStealthMode && (chat.unreadCount || 0) > 0) {
+            setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
+          }
+        }}
         className={`p-3 transition-all cursor-pointer flex items-start gap-3 select-none ${
           isSelected
             ? 'bg-emerald-50/90 border-r-4 border-r-emerald-600'
@@ -497,7 +563,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               {status === 'new' ? (
                 <>
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></span>
-                  <span>🔴 חדשה</span>
+                  <span>🔴 שלא נקרא</span>
                 </>
               ) : status === 'in_chat' ? (
                 <>
@@ -602,6 +668,46 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {/* Small Person Icon Button for Stealth Reading Mode (קוד 3466) */}
+          {!isStealthMode ? (
+            <button
+              type="button"
+              onClick={handleOpenStealthPinModal}
+              id="btn-stealth-mode-trigger"
+              className="bg-slate-100 hover:bg-purple-50 active:scale-95 text-slate-700 hover:text-purple-900 border border-slate-200 hover:border-purple-300 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              title="קריאת הודעות מבלי שיסומנו כנקראות (דורש קוד 3466)"
+            >
+              <User className="w-4 h-4 text-purple-700" />
+              <span className="hidden sm:inline">קריאה סמויה (קוד)</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleToggleStealthMode}
+              id="btn-stealth-mode-active"
+              className="bg-purple-100 hover:bg-purple-200 active:scale-95 text-purple-950 border-2 border-purple-400 font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ring-2 ring-purple-400/40"
+              title="מצב קריאה סמויה פעיל (קוד 3466)! הודעות שאתה פותח לא מסומנות כנקראות ויישארו לשמוליק. לחץ לכיבוי"
+            >
+              <UserCheck className="w-4 h-4 text-purple-700" />
+              <span className="flex items-center gap-1.5">
+                <span>קריאה סמויה (3466)</span>
+                <span className="w-2 h-2 rounded-full bg-purple-600 animate-ping" />
+              </span>
+            </button>
+          )}
+
+          {/* Desktop Only: Full WhatsApp History Audit & Problem Detector Button */}
+          <button
+            type="button"
+            onClick={() => setIsAuditModalOpen(true)}
+            id="btn-desktop-audit-whatsapp"
+            className="hidden md:inline-flex items-center gap-1.5 bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 hover:from-indigo-800 hover:to-purple-800 active:scale-95 text-white font-black px-3.5 py-1.5 rounded-xl text-xs transition-all cursor-pointer shadow-sm shadow-indigo-700/20 border border-indigo-500/40"
+            title="סריקת היסטוריית וואטסאפ מלאה, חיפוש חופשי ואיתור בעיות/תלונות/תשלומים (מחשב בלבד)"
+          >
+            <span>🔍</span>
+            <span>סריקת היסטוריה ואיתור בעיות (מחשב) 🖥️</span>
+          </button>
+
           <button
             type="button"
             onClick={loadChats}
@@ -652,10 +758,10 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               )}
             </div>
 
-            {/* Classification Filter Tabs - 4 explicit sorting buttons: שיחות חדשות, שיחות מתנהלות, ממתינים לתגובה, כל השיחות */}
+            {/* Classification Filter Tabs - 4 explicit sorting buttons: שלא נקראו/חדשות, שיחות מתנהלות, ממתינים לתגובה, כל השיחות */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-0.5">
               {[
-                { id: 'new', label: '🔴 שיחות חדשות', count: newCount, title: 'שיחות חדשות שממתינות למענה ראשוני' },
+                { id: 'new', label: '🔴 שלא נקראו / חדשות', count: newCount, title: 'שיחות והודעות נכנסות שטרם נענו – נשארות לשמוליק ב-שלא נקראו' },
                 { id: 'in_chat', label: '💬 שיחות מתנהלות', count: inChatCount, title: 'שיחות מתנהלות בהתכתבות פעילה' },
                 { id: 'waiting_reply', label: '⏳ ממתינים לתגובה', count: waitingReplyCount, title: 'שיחות שנשלחה אליהן הודעה/שאלון וממתינים לתגובת הלקוח' },
                 { id: 'all', label: '🌐 כל השיחות', count: allCount, title: 'כל השיחות שנמצאו במערכת' },
@@ -922,9 +1028,9 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                           ? 'bg-rose-600 text-white shadow-2xs'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
-                      title="סמן כשיחה חדשה למענה"
+                      title="סמן כשיחה שלא נקראה / חדשה למענה"
                     >
-                      🔴 חדשה
+                      🔴 שלא נקרא
                     </button>
                     <button
                       type="button"
@@ -985,6 +1091,26 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* Stealth Reading Mode Banner */}
+              {isStealthMode && (
+                <div className="bg-purple-100 border-b border-purple-300/90 px-3 sm:px-4 py-2 flex items-center justify-between gap-3 text-xs shrink-0 shadow-2xs">
+                  <div className="flex items-center gap-2 text-purple-950 font-bold min-w-0">
+                    <span className="text-base">🕵️</span>
+                    <span>מצב קריאה סמויה פעיל (קוד 3466): שיחה זו לא תסומן כנקראה ותישאר לשמוליק ב-״שלא נקראו״</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsStealthMode(false);
+                      try { sessionStorage.removeItem('crm_stealth_mode_active'); } catch {}
+                    }}
+                    className="text-[11px] font-bold text-purple-800 hover:text-purple-950 underline cursor-pointer shrink-0"
+                  >
+                    כיבוי ✕
+                  </button>
+                </div>
+              )}
 
               {/* Handled Notice Banner */}
               {getChatTreatmentStatus(selectedChat) === 'handled' && (
@@ -1209,47 +1335,92 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   <span>📞 אפשר לדבר עכשיו? פנוי?</span>
                 </button>
 
-                {/* 2. Send Location */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾 להגעה ל${settings.resortName}:\n📍 מיקום וניווט ב-Waze / Google Maps:\nhttps://maps.app.goo.gl/8bm2Rdt7DtHeUS5J9\n\nשעות פעילות:\n• ימים א׳–ה׳: 09:00–19:00\n• שישי וערבי חג: עד 14:00\nמחכים לכם! צוות הריזורט 🐾 (${settings.managerPhone})`;
-                    handleSendMessage(text);
-                  }}
-                  className="bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
-                >
-                  <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                  <span>📍 שלח מיקום Waze/Maps</span>
-                </button>
-
-                {/* 3. Send Official Price List */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const text = `🐾 *מחירון פנסיון לילה בריזורט לכלב:*\n• שהות של 1–6 לילות: ₪180 ללילה\n• שהות של 7–20 לילות (משבוע ומעלה): ₪150 ללילה\n• שהות של 21+ לילות (מעל 3 שבועות): ₪120 ללילה\n\n* כלבי בידוד / טיפול מיוחד: ₪230 ללילה\n* אילוף בתנאי פנסיון: ₪6,500\n* יום כיף (דייקר): ₪90 ליום\n\nנשמח לעמוד לרשותכם לכל שאלה! צוות ${settings.resortName} 🐾`;
-                    handleSendMessage(text);
-                  }}
-                  className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-700" />
-                  <span>💵 שלח מחירון רשמי</span>
-                </button>
-
-                {/* 4. Send Grow Payment Link */}
+                {/* 1. Send Grow Payment Link (Always loads to input for editing!) */}
                 <button
                   type="button"
                   onClick={() => {
                     const payUrl = settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
-                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾 בהמשך לתיאום מול הריזורט לכלב, מצורף קישור לתשלום מאובטח (Bit, Apple Pay ואשראי):\n${payUrl}\n\nלאחר ביצוע התשלום המקום משוריין רשמית ביומן!`;
-                    handleSendMessage(text);
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾 בהמשך לתיאום מול הריזורט לכלב, מצורף קישור לתשלום מאובטח (Bit, Apple Pay ואשראי):\n👉 ${payUrl}\n\nלאחר ביצוע התשלום המקום משוריין רשמית ביומן! נשמח לראותכם 🐶✨`;
+                    setMessageInput(text);
                   }}
                   className="bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען קישור לתשלום מאובטח ב-Grow לעריכה ושליחה"
                 >
                   <CreditCard className="w-3.5 h-3.5 text-purple-700" />
-                  <span>💳 שלח קישור Grow</span>
+                  <span>💳 קישור תשלום Grow</span>
                 </button>
 
-                {/* 5. Apology for Delay Response */}
+                {/* 2. Send Intake Questionnaire Link */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const intakeUrl = `${window.location.origin}/?intake=true`;
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\nלקראת האירוח בריזורט לכלב, מצורף שאלון קליטה קצרצר (כדקה למילוי) לרישום הכלב, העדפות ופרטים רפואיים:\n👉 ${intakeUrl}\n\nנשמח לעמוד לרשותכם לכל שאלה! צוות ${settings.resortName} 🐾`;
+                    setMessageInput(text);
+                  }}
+                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען קישור לשאלון קליטה לעריכה ושליחה"
+                >
+                  <FileText className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>📋 שאלון קליטה</span>
+                </button>
+
+                {/* 3. Official Price List */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = `🐾 *מחירון פנסיון לילה בריזורט לכלב:*\n• שהות של 1–6 לילות: ₪180 ללילה\n• שהות של 7–20 לילות (משבוע ומעלה): ₪150 ללילה\n• שהות של 21+ לילות (מעל 3 שבועות): ₪120 ללילה\n\n* כלבי בידוד / טיפול מיוחד: ₪230 ללילה\n* אילוף בתנאי פנסיון מלאים: ₪6,500\n* יום כיף (דייקר): ₪90 ליום\n\nנשמח לעמוד לרשותכם לכל שאלה! צוות ${settings.resortName} 🐾`;
+                    setMessageInput(text);
+                  }}
+                  className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען מחירון רשמי לעריכה ושליחה"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                  <span>💵 מחירון ועלויות</span>
+                </button>
+
+                {/* 4. Operating & Arrival/Pickup Hours */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\nזמני הגעה ואיסוף בריזורט לכלב:\n• ימים א׳–ה׳: 09:00 עד 19:00\n• ימי שישי וערבי חג: 09:00 עד 14:00 בדיוק\n• שבתות וחגים: הריזורט סגור לקבלת/שחרור קהל.\nבאיזו שעה משוערת תרצו להגיע? נערך לקראתכם! 🐕`;
+                    setMessageInput(text);
+                  }}
+                  className="bg-sky-50 hover:bg-sky-100 text-sky-950 border border-sky-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען שעות פעילות וזמני קבלה/שחרור לעריכה ושליחה"
+                >
+                  <Clock className="w-3.5 h-3.5 text-sky-700" />
+                  <span>⏰ שעות פעילות והגעה</span>
+                </button>
+
+                {/* 5. Health & Vaccination Requirements */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\nדרישות בריאות וחיסונים לכניסה לריזורט לכלב:\n1. חיסון משושה בתוקף (בשנה האחרונה)\n2. חיסון כלבת בתוקף + שבב אלקטרוני\n3. טיפול מונע נגד פרעושים וקרציות\n4. מומלץ: חיסון נגד שעלת המכלאות.\nנשמח אם תוכל/י לשלוח לנו כאן צילום של פנקס החיסונים! 📋🐕`;
+                    setMessageInput(text);
+                  }}
+                  className="bg-teal-50 hover:bg-teal-100 text-teal-950 border border-teal-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען דרישות חיסונים ופנקס וטרינרי לעריכה ושליחה"
+                >
+                  <span>💉 חיסונים ודרישות</span>
+                </button>
+
+                {/* 6. Holiday & Peak Season Advance Reservation */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const payUrl = settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\nלקראת תקופת החגים/עונת השיא הריזורט בתפוסה כמעט מלאה!\nכדי להבטיח ולשריין את הסוויטה עבור ${selectedChat.matchedDogName || 'הכלב'}, נדרש שריון מראש עם מקדמה מאובטחת:\n👉 ${payUrl}\nנשמח לשריין לכם מקום!`;
+                    setMessageInput(text);
+                  }}
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-950 border border-rose-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען הודעת שריון מקום בעונות שיא וחגים לעריכה ושליחה"
+                >
+                  <span>🏝️ שריון חגים ומקדמה</span>
+                </button>
+
+                {/* 7. Apology for Delay Response */}
                 <button
                   type="button"
                   onClick={() => {
@@ -1257,15 +1428,28 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     const nameGreeting = firstName && firstName !== selectedChat.cleanPhone ? `היי ${firstName}, ` : 'היי, ';
                     const dogMention = selectedChat.matchedDogName ? ` עבור ${selectedChat.matchedDogName}` : '';
                     const text = `${nameGreeting}סליחה שלקח לנו זמן לחזור אלייך! 🙏🐾\nהיינו ממש עסוקים עם הכלבים בריזורט, לקח לנו זמן לחזור ואנחנו ממש מתנצלים על ההמתנה.\n\nעכשיו אנחנו כאן איתך ובמלוא תשומת הלב – אפשר להתקדם! במה נוכל לעזור${dogMention}? 😊`;
-                    handleSendMessage(text);
+                    setMessageInput(text);
                   }}
-                  className="bg-rose-50 hover:bg-rose-100 text-rose-950 border border-rose-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
-                  title="שליחת הודעת התנצלות חמה ומזמינה: היינו עסוקים עם הכלבים, עכשיו אפשר להתקדם"
+                  className="bg-orange-50 hover:bg-orange-100 text-orange-950 border border-orange-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען הודעת התנצלות חמה: היינו בחצר הכלבים, עכשיו אפשר להתקדם"
                 >
                   <span>🐾 סליחה שלא חזרנו מהר</span>
                 </button>
 
-                {/* 6. Friendly Follow-up for unanswered questionnaire */}
+                {/* 8. Photos & Videos During Stay */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\n${selectedChat.matchedDogName || 'הכלב/ה'} מרגיש/ה נהדר, שמח/ה ומשחק/ת במדשאות הירוקות שלנו! 🐶❤️\nנמשיך לשלוח תמונות, סרטונים ועדכונים שוטפים בכל יום סביב 20:00 בערב. תמיד כאן בשבילכם! צוות הריזורט לכלב 🐾`;
+                    setMessageInput(text);
+                  }}
+                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען הודעת עדכון ותמונות מהשהות לעריכה ושליחה"
+                >
+                  <span>📸 תמונות וסרטונים מהשהות</span>
+                </button>
+
+                {/* 9. Friendly Follow-up for unanswered questionnaire */}
                 <button
                   type="button"
                   onClick={() => {
@@ -1273,12 +1457,12 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     setMessageInput(text);
                   }}
                   className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
-                  title="מלא בתיבת ההודעה תזכורת חמה וידידותית למילוי שאלון הקליטה"
+                  title="טען תזכורת חמה לשאלון קליטה לעריכה ושליחה"
                 >
                   <span>🔔 תזכורת חמה לשאלון</span>
                 </button>
 
-                {/* 7. Marketing Value Proposition (Resort Advantages & Professional Training) */}
+                {/* 10. Marketing Value Proposition (Resort Advantages & Professional Training) */}
                 <button
                   type="button"
                   onClick={() => {
@@ -1287,13 +1471,13 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     setMessageInput(text);
                   }}
                   className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black px-3 py-1 rounded-xl text-xs flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
-                  title="הודעה שיווקית עשירה: פירוט יתרונות הריזורט (סוויטות VIP, מדשאות, עדכונים יומיים) ותוכנית האילוף של שמוליק!"
+                  title="טען הודעה שיווקית עשירה: יתרונות הריזורט ותוכנית האילוף של שמוליק"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-200" />
                   <span>🌟 יתרונות הריזורט והאילוף</span>
                 </button>
 
-                {/* 8. Training-focused Marketing Message */}
+                {/* 11. Training-focused Marketing Message */}
                 <button
                   type="button"
                   onClick={() => {
@@ -1302,12 +1486,12 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     setMessageInput(text);
                   }}
                   className="bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
-                  title="הודעה שיווקית ממוקדת באילוף כלבים בהובלת שמוליק (משמעת, חינוך גורים, פנסיון אילוף)"
+                  title="טען הודעה שיווקית ממוקדת באילוף כלבים בהובלת שמוליק"
                 >
                   <span>🎓 שיווק אילוף</span>
                 </button>
 
-                {/* 9. Boarding-focused Marketing Message */}
+                {/* 12. Boarding-focused Marketing Message */}
                 <button
                   type="button"
                   onClick={() => {
@@ -1316,27 +1500,26 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     setMessageInput(text);
                   }}
                   className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
-                  title="הודעה שיווקית ממוקדת בפנסיון הבוטיק ותנאי ה-VIP"
+                  title="טען הודעה שיווקית ממוקדת בפנסיון הבוטיק ותנאי ה-VIP"
                 >
                   <span>🏡 שיווק פנסיון</span>
                 </button>
 
-                {/* 10. Unanswered Marketing Follow-up (Send tomorrow at same hour) */}
+                {/* 13. Send Location / Waze */}
                 <button
                   type="button"
                   onClick={() => {
-                    const intakeUrl = `${window.location.origin}/?request=true`;
-                    const text = generateUnansweredFollowUpMarketingText(selectedChat.name, selectedChat.matchedDogName, undefined, intakeUrl);
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾 להגעה ל${settings.resortName}:\n📍 מיקום וניווט ב-Waze / Google Maps:\nhttps://maps.app.goo.gl/8bm2Rdt7DtHeUS5J9\n\nשעות פעילות:\n• ימים א׳–ה׳: 09:00–19:00\n• שישי וערבי חג: עד 14:00\nמחכים לכם! צוות הריזורט 🐾 (${settings.managerPhone || '050-6336896'})`;
                     setMessageInput(text);
                   }}
-                  className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
-                  title="טען הודעת שיווק ומעקב ללקוח שלא ענה (מיועדת לשליחה למחרת באותה שעה)"
+                  className="bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען מיקום וקישור Waze לעריכה ושליחה"
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                  <span>📲 תזכורת (לא ענה - למחרת)</span>
+                  <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                  <span>📍 מיקום Waze/Maps</span>
                 </button>
 
-                {/* 11. Unanswered button - Remove from active queue until client writes again */}
+                {/* 14. Unanswered button - Remove from active queue until client writes again */}
                 <button
                   type="button"
                   onClick={() => {
@@ -1492,6 +1675,129 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>כן, הלקוח ביקש – שלח שוב</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Only WhatsApp Audit & Deep History Modal */}
+      <DesktopWhatsAppAuditModal
+        isOpen={isAuditModalOpen}
+        onClose={() => setIsAuditModalOpen(false)}
+        chats={chats}
+        settings={settings}
+        bookings={bookings}
+        intakeRequests={intakeRequests}
+        onOpenChatInCrm={(chat) => {
+          setSelectedChat(chat);
+          setIsAuditModalOpen(false);
+        }}
+      />
+
+      {/* Stealth Reading Mode PIN Modal (קוד 3466) */}
+      {isStealthPinModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-5 text-right animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-purple-100 border border-purple-300 text-purple-800 flex items-center justify-center shadow-inner text-xl">
+                  👤
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 leading-tight">
+                    קריאת הודעות סמויה
+                  </h3>
+                  <span className="text-[11px] text-purple-700 font-bold">אי סימון הודעות כנקראות 🛡️</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsStealthPinModalOpen(false);
+                  setStealthPinInput('');
+                  setStealthPinError(false);
+                }}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Question requested by user */}
+            <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 text-center">
+              <p className="text-sm font-black text-purple-950 leading-relaxed">
+                לקרוא הודעות מבלי שיסומנו כנקראות הקש קוד
+              </p>
+              <p className="text-[11px] text-purple-700 font-medium mt-1">
+                הודעות שתפתח לא יסומנו כנקראות ויישארו לשמוליק ב-״שלא נקראו״
+              </p>
+            </div>
+
+            {/* Passcode input */}
+            <div className="space-y-2">
+              <input
+                ref={stealthInputRef}
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={4}
+                value={stealthPinInput}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                  setStealthPinInput(val);
+                  if (stealthPinError) setStealthPinError(false);
+                  if (val.length === 4) {
+                    handleVerifyStealthPin(val);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleVerifyStealthPin(stealthPinInput);
+                  } else if (e.key === 'Escape') {
+                    setIsStealthPinModalOpen(false);
+                  }
+                }}
+                placeholder="••••"
+                className={`w-full bg-white text-center text-3xl tracking-[1em] font-mono font-black py-3 rounded-2xl border-2 transition-all focus:outline-none ${
+                  stealthPinError
+                    ? 'border-rose-500 bg-rose-50 text-rose-700 animate-shake'
+                    : 'border-purple-300 focus:border-purple-600 text-slate-900 shadow-inner'
+                }`}
+                autoFocus
+              />
+
+              {stealthPinError && (
+                <div className="text-center text-xs font-bold text-rose-600 flex items-center justify-center gap-1">
+                  <span>קוד שגוי. אנא נסה שוב (3466).</span>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => handleVerifyStealthPin(stealthPinInput)}
+                disabled={stealthPinInput.length === 0}
+                className="py-2.5 px-4 rounded-xl bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white font-bold text-xs shadow-md transition-all active:scale-98 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>הפעל קריאה סמויה</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsStealthPinModalOpen(false);
+                  setStealthPinInput('');
+                  setStealthPinError(false);
+                }}
+                className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-all active:scale-98 flex items-center justify-center cursor-pointer border border-slate-200"
+              >
+                <span>ביטול</span>
               </button>
             </div>
           </div>

@@ -75,11 +75,11 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-3xl lg:max-w-4xl w-full p-5 sm:p-6 text-slate-900 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl max-w-3xl lg:max-w-4xl w-full max-h-[90vh] flex flex-col text-slate-900 overflow-hidden my-auto">
         
-        {/* Header with Full Hebrew Date & Capacity */}
-        <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
+        {/* Header with Full Hebrew Date & Capacity (Fixed / Pinned) */}
+        <div className="flex items-start justify-between gap-3 p-4 sm:p-5 pb-3.5 border-b border-slate-100 shrink-0 bg-white z-10">
           <div>
             <div className="flex items-center gap-2">
               <Calendar className="w-5 h-5 text-green-600" />
@@ -131,9 +131,12 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
           </div>
         </div>
 
+        {/* Scrollable Body Content */}
+        <div className="p-4 sm:p-5 pt-3 overflow-y-auto overflow-x-hidden flex-1 space-y-4">
+
         {/* Shabbat / Holiday Greeting Button Banner */}
         {breakdown.staying.length > 0 && (
-          <div className="mt-4 p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center gap-2.5">
               <div className="w-10 h-10 rounded-xl bg-[#25D366] text-white flex items-center justify-center font-black text-xl shadow-2xs shrink-0">
                 💬
@@ -165,7 +168,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
         )}
 
         {/* 3 Sections: Arrivals, Stayers, Departures */}
-        <div className="my-5 space-y-5">
+        <div className="space-y-5">
           
           {/* 1. מגיעים היום (Arrivals) */}
           <div>
@@ -272,6 +275,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
             )}
           </div>
 
+          </div>
         </div>
 
         {/* Shabbat / Holiday Greeting Modal */}
@@ -363,11 +367,10 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   return (
     <div
       onClick={onSelect}
-      className={`p-3.5 rounded-2xl border transition-all hover:shadow-xs cursor-pointer ${paymentBorder}`}
+      className={`p-3.5 sm:p-4 rounded-2xl border transition-all hover:shadow-xs cursor-pointer ${paymentBorder}`}
     >
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        
-        {/* Dog & Owner Info */}
+      {/* Top Row: Dog Details & Payment Tag */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5 pb-2.5 border-b border-slate-200/60">
         <div className="space-y-1 flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-base shrink-0">🐾</span>
@@ -386,7 +389,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600 mt-1">
+          <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-600 mt-1">
             <span className="flex items-center gap-1 font-bold text-slate-800">
               <User className="w-3.5 h-3.5 text-indigo-500" />
               <span>בעלים: <strong className="text-slate-900">{booking.ownerName}</strong></span>
@@ -424,140 +427,143 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
           )}
 
           {booking.notes && (
-            <p className="text-[11px] text-amber-800/90 italic mt-0.5 line-clamp-1">
+            <p className="text-[11px] text-amber-800/90 italic mt-0.5 line-clamp-2">
               הערות: {booking.notes}
             </p>
           )}
         </div>
 
-        {/* Payment & Actions */}
-        <div className="flex flex-wrap items-center gap-1.5 justify-start md:justify-end shrink-0">
+        {/* Payment Tag (Top Corner) */}
+        <div className="shrink-0 self-start">
           {paymentTag}
+        </div>
+      </div>
 
-          {/* Primary Edit Button */}
+      {/* Bottom Row: Actions Bar (Full width, wraps cleanly, nothing clipped) */}
+      <div className="pt-2.5 flex flex-wrap items-center justify-end gap-1.5">
+        {/* Primary Edit Button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+          title="ערוך פרטי הזמנה, תאריכים, מחיר או דרישות מיוחדות"
+          className="bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-700 text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-indigo-200 shadow-2xs"
+        >
+          <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
+          <span>ערוך</span>
+        </button>
+
+        {/* Release Dog Button */}
+        {!isEnded && onInitiateRelease && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onSelect();
+              onInitiateRelease();
             }}
-            title="ערוך פרטי הזמנה, תאריכים, מחיר או דרישות מיוחדות"
-            className="bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-700 text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-indigo-200 shadow-2xs"
+            title="שחרר כלב הביתה (בודק חוב פתוח ומאפשר לסמן כשולם ולסגור שחרור)"
+            className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
           >
-            <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
-            <span>ערוך</span>
+            <Home className="w-3.5 h-3.5" />
+            <span>שחרר הביתה</span>
           </button>
+        )}
 
-          {/* Release Dog Button */}
-          {!isEnded && onInitiateRelease && (
+        {/* Review Request toggle for checked out dogs */}
+        {booking.stayStatus === 'checked_out' && onToggleReviewRequest && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleReviewRequest();
+            }}
+            title={booking.skipReviewRequest ? "בקשת חוות דעת מבוטלת ללקוח זה. לחץ להפעלה מחדש" : "בקשת חוות דעת תשלח מחר ב-19:00. לחץ לביטול (אם הלקוח לא הסתדר)"}
+            className={`text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer border shadow-2xs active:scale-95 shrink-0 ${
+              booking.skipReviewRequest
+                ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+            }`}
+          >
+            <span>{booking.skipReviewRequest ? '🚫 סקר בוטל' : '⭐ סקר מתוזמן'}</span>
+          </button>
+        )}
+
+        {/* Send Voucher Button */}
+        {onOpenVoucher && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenVoucher();
+            }}
+            title="הפק ושלח שובר הטבה לפעם הבאה או חבר מביא חבר"
+            className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95 shrink-0"
+          >
+            <Gift className="w-3.5 h-3.5 text-amber-600" />
+            <span>שובר</span>
+          </button>
+        )}
+
+        {/* Quick Pay Action */}
+        {remainingDebt > 0 && !isEnded && (
+          <>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onInitiateRelease();
+                onMarkPaid();
               }}
-              title="שחרר כלב הביתה (בודק חוב פתוח ומאפשר לסמן כשולם ולסגור שחרור)"
-              className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+              title="סמן כעת כשולם הכל במלואו"
+              className="bg-green-600 hover:bg-green-700 active:scale-95 text-white text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
             >
-              <Home className="w-3.5 h-3.5" />
-              <span>שחרר הביתה</span>
+              <CheckCircle className="w-3.5 h-3.5" />
+              <span>סמן כשולם</span>
             </button>
-          )}
 
-          {/* Review Request toggle for checked out dogs */}
-          {booking.stayStatus === 'checked_out' && onToggleReviewRequest && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleReviewRequest();
-              }}
-              title={booking.skipReviewRequest ? "בקשת חוות דעת מבוטלת ללקוח זה. לחץ להפעלה מחדש" : "בקשת חוות דעת תשלח מחר ב-19:00. לחץ לביטול (אם הלקוח לא הסתדר)"}
-              className={`text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer border shadow-2xs active:scale-95 shrink-0 ${
-                booking.skipReviewRequest
-                  ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                  : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
-              }`}
+              onClick={handleSendWhatsApp}
+              title="שלח תזכורת תשלום בוואטסאפ ללקוח"
+              className="bg-green-500 hover:bg-green-600 active:scale-95 text-white text-xs px-2.5 py-1.5 rounded-lg font-semibold flex items-center gap-1 transition-all cursor-pointer"
             >
-              <span>{booking.skipReviewRequest ? '🚫 סקר בוטל' : '⭐ סקר מתוזמן'}</span>
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>וואטסאפ</span>
             </button>
-          )}
 
-          {/* Send Voucher Button */}
-          {onOpenVoucher && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenVoucher();
-              }}
-              title="הפק ושלח שובר הטבה לפעם הבאה או חבר מביא חבר"
-              className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95 shrink-0"
-            >
-              <Gift className="w-3.5 h-3.5 text-amber-600" />
-              <span>שובר</span>
-            </button>
-          )}
-
-          {/* Quick Pay Action */}
-          {remainingDebt > 0 && !isEnded && (
-            <>
+            {onOpenSendPaymentLink && (
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onMarkPaid();
+                  onOpenSendPaymentLink();
                 }}
-                title="סמן כעת כשולם הכל במלואו"
-                className="bg-green-600 hover:bg-green-700 active:scale-95 text-white text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                title="שלח קישור Grow / Bit לתשלום בוואטסאפ ללא ביטול הזמנה"
+                className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-950 border border-emerald-300 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
               >
-                <CheckCircle className="w-3.5 h-3.5" />
-                <span>סמן כשולם</span>
+                <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
+                <span>קישור לתשלום 💳</span>
               </button>
+            )}
+          </>
+        )}
 
-              <button
-                type="button"
-                onClick={handleSendWhatsApp}
-                title="שלח תזכורת תשלום בוואטסאפ ללקוח"
-                className="bg-green-500 hover:bg-green-600 active:scale-95 text-white text-xs px-2.5 py-1.5 rounded-lg font-semibold flex items-center gap-1 transition-all cursor-pointer"
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                <span>וואטסאפ</span>
-              </button>
-
-              {onOpenSendPaymentLink && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenSendPaymentLink();
-                  }}
-                  title="שלח קישור Grow / Bit לתשלום בוואטסאפ ללא ביטול הזמנה"
-                  className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-950 border border-emerald-300 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
-                >
-                  <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>קישור לתשלום 💳</span>
-                </button>
-              )}
-            </>
-          )}
-
-          {/* Direct Delete Button */}
-          {onDelete && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              title="מחק הזמנה זו מהיומן ומהענן"
-              className="bg-slate-100 hover:bg-rose-50 active:scale-95 text-slate-500 hover:text-rose-600 text-xs px-2.5 py-1.5 rounded-lg font-semibold flex items-center gap-1 transition-all cursor-pointer border border-slate-200 hover:border-rose-200"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-              <span>מחק</span>
-            </button>
-          )}
-        </div>
+        {/* Direct Delete Button */}
+        {onDelete && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title="מחק הזמנה זו מהיומן ומהענן"
+            className="bg-slate-100 hover:bg-rose-50 active:scale-95 text-slate-500 hover:text-rose-600 text-xs px-2.5 py-1.5 rounded-lg font-semibold flex items-center gap-1 transition-all cursor-pointer border border-slate-200 hover:border-rose-200"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+            <span>מחק</span>
+          </button>
+        )}
       </div>
     </div>
   );

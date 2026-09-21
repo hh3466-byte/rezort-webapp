@@ -393,6 +393,8 @@ export interface MonthlyRevenueBreakdown {
   // פירוט נוסף
   directBankTransfers: number;
   totalCollected: number; // דיגיטלי + מזומן
+  totalRefunds: number; // החזרים כספיים בגין ביטולים
+  netCollected: number; // סה"כ תקבולים נטו (ברוטו פחות החזרים)
 
   digitalPaidCount: number;
   growPaidCount: number;
@@ -524,6 +526,22 @@ export function getMonthlyRevenueBreakdown(
   const digitalCleared = growClearedBankOn10th + directBankTransfers;
   const digitalPaidCount = growPaidCount + bankTransferPaidCount;
 
+  // 6. Refunds for this targetMonthKey (החזרים כספיים בגין ביטולים)
+  let totalRefunds = 0;
+  bookings.forEach(b => {
+    const d = (b as any).data || {};
+    const refAmt = Number(b.refundAmount ?? d.refundAmount ?? 0);
+    if (refAmt > 0) {
+      const refDate = (b.refundDate || d.refundDate || b.startDate || d.startDate || '').substring(0, 7);
+      if (refDate === targetMonthKey) {
+        totalRefunds += refAmt;
+      }
+    }
+  });
+
+  const totalCollected = digitalCleared + cashCollected;
+  const netCollected = totalCollected - totalRefunds;
+
   return {
     digitalCleared,
     growClearedBankOn10th,
@@ -535,7 +553,9 @@ export function getMonthlyRevenueBreakdown(
     growCleared: growClearedBankOn10th,
 
     directBankTransfers,
-    totalCollected: digitalCleared + cashCollected,
+    totalCollected,
+    totalRefunds,
+    netCollected,
 
     digitalPaidCount,
     growPaidCount,

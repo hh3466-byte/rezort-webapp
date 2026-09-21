@@ -39,7 +39,6 @@ function processResortEmails() {
 
   if (!threads || threads.length === 0) {
     Logger.log("תיבת הדואר נקייה.");
-    try { checkUpcomingDeparturesWithDebtAndAlert(); } catch (eDebt) {}
     try { checkAndTriggerMotzeiShabbatDogUpdates(); } catch (eM) {}
     return;
   }
@@ -381,9 +380,6 @@ function processResortEmails() {
   }
 
   try {
-    checkUpcomingDeparturesWithDebtAndAlert();
-  } catch (eDebt) {}
-  try {
     checkAndTriggerMotzeiShabbatDogUpdates();
   } catch (eM) {}
 
@@ -414,67 +410,11 @@ function forceCleanResortInboxNow() {
 }
 
 /**
- * בדיקת שחרורים קרובים עם חוב פתוח והתראה במייל יום לפני
+ * בדיקת שחרורים קרובים עם חוב פתוח (בוטל - מטופל בלעדית בסקירת 19:00 לשמוליק)
  */
 function checkUpcomingDeparturesWithDebtAndAlert() {
-  try {
-    var israelTz = "Asia/Jerusalem";
-    var now = new Date();
-    var tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-    var tomorrowStr = Utilities.formatDate(tomorrow, israelTz, "yyyy-MM-dd");
-
-    var myEmail = "hh3466@gmail.com";
-    var shmulikEmail = "shinshin1964@gmail.com";
-    var targetRecipients = myEmail + ", " + shmulikEmail;
-
-    var queryUrl = SUPABASE_URL + "/rest/v1/bookings?end_date=eq." + tomorrowStr + "&stay_status=neq.cancelled&stay_status=neq.checked_out&select=*";
-    var response = UrlFetchApp.fetch(queryUrl, {
-      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
-    });
-
-    if (response.getResponseCode() !== 200) return;
-
-    var bookings = JSON.parse(response.getContentText());
-    if (!bookings || bookings.length === 0) return;
-
-    var scriptProperties = PropertiesService.getScriptProperties();
-
-    for (var i = 0; i < bookings.length; i++) {
-      var b = bookings[i];
-      var totalPrice = Number(b.total_price) || 0;
-      var depositAmount = Number(b.deposit_amount) || 0;
-      if (b.data && b.data.depositAmount !== undefined) {
-        depositAmount = Math.max(depositAmount, Number(b.data.depositAmount) || 0);
-      }
-      var remainingDebt = Math.max(0, totalPrice - depositAmount);
-
-      if (remainingDebt <= 0 || b.payment_status === "fully_paid") continue;
-
-      var alertKey = "debt_alert_sent_" + b.id + "_" + b.end_date;
-      if (scriptProperties.getProperty(alertKey)) continue;
-
-      var dogName = b.dog_name || "כלב";
-      var ownerName = b.owner_name || "לקוח";
-      var ownerPhone = b.owner_phone || "";
-      var endDateFormatted = b.end_date || "";
-
-      var subject = "[תזכורת חוב] מחר שחרור כלב בריזורט - " + dogName + " (" + ownerName + ") | יתרת חוב: " + remainingDebt.toLocaleString() + " ש״ח";
-
-      var plainText = "התראת חוב פתוח יום לפני שחרור כלב\n"
-        + "כלב: " + dogName + "\n"
-        + "בעלים: " + ownerName + " (" + ownerPhone + ")\n"
-        + "מועד שחרור: " + endDateFormatted + "\n"
-        + "סה״כ לתשלום: ₪" + totalPrice + "\n"
-        + "שולם: ₪" + depositAmount + "\n"
-        + "יתרת חוב פתוחה: ₪" + remainingDebt + "\n"
-        + "נא לוודא גבייה לפני שחרור הכלב.";
-
-      GmailApp.sendEmail(targetRecipients, subject, plainText);
-      scriptProperties.setProperty(alertKey, new Date().toISOString());
-    }
-  } catch (e) {
-    Logger.log("שגיאה בהתראת שחרור עם חוב: " + e.toString());
-  }
+  // בוטל לחלוטין לפי הנחיית המנהל: נושא החובות הפתוחים מטופל דרך ההודעה של שעה 19:00 לשמוליק, אין צורך במיילים אלו יותר.
+  return;
 }
 
 function ensureTaliEmailDraftCreated() {
@@ -991,13 +931,15 @@ function isYomKippurNow(nowDate, israelTz) {
           var item = items[i];
           if (item.date === todayStr) {
             var title = item.title || "";
-            var heb = item.hebrew || "";
-            if (title === "Yom Kippur" || heb.indexOf("יום כיפור") !== -1) {
+            var isErev = (title.indexOf("Erev") !== -1 || heb.indexOf("ערב") !== -1);
+            if (!isErev && (title === "Yom Kippur" || heb === "יום כיפור")) {
               var endKippurMinutesHebcal = getYomKippurEndTimeMinutes(d);
               return timeInMinutes < endKippurMinutesHebcal;
             }
-            if ((title.indexOf("Erev Yom Kippur") !== -1 || heb.indexOf("ערב יום כיפור") !== -1) && timeInMinutes >= 14 * 60) {
-              return true;
+            if (isErev && (title.indexOf("Yom Kippur") !== -1 || heb.indexOf("יום כיפור") !== -1)) {
+              if (timeInMinutes >= 14 * 60) {
+                return true;
+              }
             }
           }
         }
@@ -1109,6 +1051,59 @@ function getYomKippurEndDate(now, israelTz) {
 function sendYomKippurFollowups() {
   try {
     var props = PropertiesService.getScriptProperties();
+    props.deleteProperty("yk_trigger_scheduled");
+
+    // 1. שליפת הודעות מותאמות מ-Supabase (כגון שוברי VIP ופיצוי אישיים ללקוחות)
+    try {
+      var sRes = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/settings?select=*&limit=1", {
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+      });
+      if (sRes.getResponseCode() === 200) {
+        var sList = JSON.parse(sRes.getContentText());
+        var sRow = (sList && sList.length > 0) ? sList[0] : {};
+        var sData = sRow.data || {};
+        var customList = sData.yomKippurCustomFollowups || [];
+        var updatedAny = false;
+
+        for (var cIdx = 0; cIdx < customList.length; cIdx++) {
+          var cItem = customList[cIdx];
+          if (cItem.status === "pending" && cItem.phone && cItem.message) {
+            var cCleanPhone = (cItem.phone || "").replace(/[^0-9]/g, "");
+            var cIntlPhone = cCleanPhone.indexOf("0") === 0 ? "972" + cCleanPhone.substring(1) : cCleanPhone;
+            var cChatId = cIntlPhone + "@c.us";
+
+            var cSendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+            var cSendRes = UrlFetchApp.fetch(cSendUrl, {
+              method: "post",
+              contentType: "application/json",
+              payload: JSON.stringify({ chatId: cChatId, message: cItem.message }),
+              muteHttpExceptions: true
+            });
+
+            if (cSendRes.getResponseCode() === 200) {
+              cItem.status = "sent";
+              cItem.sentAt = new Date().toISOString();
+              updatedAny = true;
+              Logger.log("נשלחה בהצלחה הודעת צאת כיפור מותאמת (שובר VIP) ל-" + (cItem.name || "לקוח") + " (" + cCleanPhone + ")");
+            }
+            Utilities.sleep(1200);
+          }
+        }
+
+        if (updatedAny) {
+          UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/settings?id=eq." + encodeURIComponent(sRow.id || "resort_config"), {
+            method: "patch",
+            headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+            payload: JSON.stringify({ data: sData }),
+            muteHttpExceptions: true
+          });
+        }
+      }
+    } catch (eCustom) {
+      Logger.log("שגיאה בטיפול ב-yomKippurCustomFollowups מ-Supabase: " + eCustom.toString());
+    }
+
+    // 2. טיפול בפניות שהתקבלו בוואטסאפ במהלך יום כיפור (yom_kippur_queue)
     var key = "yom_kippur_queue";
     var raw = props.getProperty(key);
     if (!raw) return;
@@ -1117,15 +1112,13 @@ function sendYomKippurFollowups() {
     try { list = JSON.parse(raw); } catch (e) { list = []; }
     if (!list || list.length === 0) return;
 
-    props.deleteProperty("yk_trigger_scheduled");
-
     for (var i = 0; i < list.length; i++) {
       var item = list[i];
       var chatId = item.chatId;
       var cleanName = (item.name || "").trim().split(" ")[0];
       var greetingName = cleanName ? (" " + cleanName) : "";
 
-      var message = "גמר חתימה טובה" + greetingName + "! 🕯️🐾\n"
+      var message = item.customMessage || ("גמר חתימה טובה" + greetingName + "! 🕯️🐾\n"
         + "תודה רבה על פנייתך לריזורט לכלב.\n"
         + "בשל קדושת יום כיפור, שירות הלקוחות שלנו שבת מפעילות ולא שלחנו מענה מיידי. אנו מקווים מכל הלב שעבר עליכם צום מועיל, ושהשנה החדשה תביא עמה ברכה, שלווה ובריאות איתנה. 🤍✨\n\n"
         + "🐶 כמובן שכל הכלבים היקרים שמתארחים אצלנו בריזורט קיבלו לאורך כל החג והצום את מלוא תשומת הלב, האהבה, הטיפול והפינוק 24/7 מסביב לשעון!\n\n"
@@ -1133,7 +1126,7 @@ function sendYomKippurFollowups() {
         + "אם פניתם לקליטה, שריון מקום או בדיקת זמינות, נשמח שתמלאו בינתיים שאלון קצר (דקה אחת בלבד) כדי שנוכל לחזור אליכם ראשונים עם כל הפרטים:\n"
         + "👉 https://rezort-webapp.vercel.app/?request=true\n\n"
         + "בברכה חמה ושנה טובה,\n"
-        + "שמוליק וצוות הריזורט לכלב 🐾🐕";
+        + "שמוליק וצוות הריזורט לכלב 🐾🐕");
 
       var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
       UrlFetchApp.fetch(sendUrl, {
@@ -1544,16 +1537,22 @@ function sendDailyDogEveningUpdates() {
 
     var props = PropertiesService.getScriptProperties();
     var sentCount = 0;
+    var sentDogsMap = {};
 
     for (var i = 0; i < activeBookings.length; i++) {
       var b = activeBookings[i];
       var todaySentKey = "daily_dog_sent_" + b.id + "_" + todayStr;
+      var cleanPhone = (b.owner_phone || "").replace(/[^0-9]/g, "");
+      var cleanDog = (b.dog_name || "").trim().toLowerCase();
+      var dogGlobalKey = "daily_dog_sent_" + cleanPhone + "_" + cleanDog + "_" + todayStr;
 
-      // מניעת כפילות: אם כבר נשלחה הודעה לכלב זה היום (בענן או מכל דפדפן), דלג
+      // מניעת כפילות מוחלטת: אם כבר נשלחה הודעה לכלב זה היום (לפי מזהה הזמנה או לפי טלפון+שם כלב)
       var bookingData = (b.data && typeof b.data === "object") ? b.data : {};
-      if (props.getProperty(todaySentKey) || bookingData.lastDailyDogUpdateSent === todayStr) {
+      if (props.getProperty(todaySentKey) || props.getProperty(dogGlobalKey) || bookingData.lastDailyDogUpdateSent === todayStr || sentDogsMap[cleanPhone + "_" + cleanDog]) {
+        Logger.log("מניעת כפילות: דילוג על כלב שכבר קיבל הודעה היום: " + b.dog_name + " (" + b.owner_name + ")");
         continue;
       }
+      sentDogsMap[cleanPhone + "_" + cleanDog] = true;
 
       var phone = (b.owner_phone || "").replace(/[^0-9]/g, "");
       if (!phone) continue;
@@ -1577,6 +1576,7 @@ function sendDailyDogEveningUpdates() {
 
       if (sendRes.getResponseCode() === 200) {
         props.setProperty(todaySentKey, "true");
+        props.setProperty(dogGlobalKey, "true");
         sentCount++;
         Logger.log("נשלח בהצלחה עדכון יומי (נוסח #" + templateData.id + ", בידוד=" + isIsolation + ") ל-" + b.dog_name + " (" + b.owner_name + ")");
 
@@ -1897,7 +1897,7 @@ function sendTomorrowOverviewToShmulikFromCloud() {
     }
 
     // טלפון יעד לשמוליק
-    var managerPhone = settingsData.whatsappNotificationPhone || settingsRow.manager_phone || settingsData.managerPhone || "0548765888";
+    var managerPhone = settingsData.whatsappNotificationPhone || "0506336896";
     var cleanMgrPhone = managerPhone.replace(/[^0-9]/g, "");
     var intlMgrPhone = cleanMgrPhone.indexOf("0") === 0 ? "972" + cleanMgrPhone.substring(1) : cleanMgrPhone;
     var mgrChatId = intlMgrPhone + "@c.us";

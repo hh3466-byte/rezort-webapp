@@ -45,7 +45,12 @@ export interface Booking {
   skipReviewRequest?: boolean;
   isFreeStay?: boolean;
   linkedDogName?: string;
+  intakeRequestId?: string;
   lastDailyDogUpdateSent?: string;
+  refundAmount?: number;
+  refundDate?: string;
+  refundNotes?: string;
+  refundReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -121,6 +126,26 @@ export interface IntakeRequest {
   isPhoneVerified?: boolean;
   isFreeStay?: boolean;
   linkedDogName?: string;
+  additionalDogs?: AdditionalDogIntake[];
+}
+
+export interface AdditionalDogIntake {
+  dogName: string;
+  dogBreed: string;
+  dogAge?: string;
+  dogGender?: 'male' | 'female';
+  dogSize?: 'small' | 'medium' | 'large' | 'giant';
+  serviceType: ServiceType;
+  sameDatesAsPrimary: boolean;
+  startDate?: string;
+  endDate?: string;
+  isFriendlyWithDogs: 'yes' | 'no' | 'depends';
+  isNeutered: boolean;
+  isVaccinated: boolean;
+  isHouseTrained?: boolean;
+  isTreatedParasites?: boolean;
+  specialNeeds?: string;
+  notes?: string;
 }
 
 export interface ResortSettings {

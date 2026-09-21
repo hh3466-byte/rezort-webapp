@@ -126,27 +126,29 @@ export const syncAllDataToSupabase = async (): Promise<{ bookingsSynced: number;
 
   try {
     // 1. Sync Settings
-    const sanitizePhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.managerPhone : ph;
-    const effectivePhone = sanitizePhone(settings.managerPhone || settings.whatsappNotificationPhone);
+    const sanitizeResortPhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.managerPhone : ph;
+    const sanitizeNotificationPhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.whatsappNotificationPhone : ph;
+    const effectiveResortPhone = sanitizeResortPhone(settings.managerPhone);
+    const effectiveNotificationPhone = sanitizeNotificationPhone(settings.whatsappNotificationPhone);
     const settingsPayload = {
       id: SETTINGS_DOC_ID,
       resort_name: settings.resortName,
       manager_name: settings.managerName,
-      manager_phone: effectivePhone,
+      manager_phone: effectiveResortPhone,
       max_capacity: settings.maxCapacity,
       default_daily_rate_boarding: settings.defaultDailyRateBoarding,
       default_daily_rate_training: settings.defaultDailyRateTraining,
       default_daily_rate_combined: settings.defaultDailyRateCombined,
       default_daily_rate_daycare: settings.defaultDailyRateDaycare,
-      bit_number: sanitizePhone(settings.bitNumber) || effectivePhone,
+      bit_number: sanitizeResortPhone(settings.bitNumber) || effectiveResortPhone,
       paybox_link: settings.payboxLink || settings.growPaymentLink,
       bank_details: settings.bankDetails,
       auto_check_vaccination: settings.autoCheckVaccination,
       data: {
         ...settings,
-        managerPhone: effectivePhone,
-        whatsappNotificationPhone: effectivePhone,
-        bitNumber: sanitizePhone(settings.bitNumber) || effectivePhone
+        managerPhone: effectiveResortPhone,
+        whatsappNotificationPhone: effectiveNotificationPhone,
+        bitNumber: sanitizeResortPhone(settings.bitNumber) || effectiveResortPhone
       },
       updated_at: new Date().toISOString()
     };
@@ -438,16 +440,18 @@ export const subscribeToSettings = (
         const validTrainingRate = (rawTraining && Number(rawTraining) >= 1000) ? Number(rawTraining) : 6500;
         const maxCap = data.max_capacity ?? data.maxCapacity ?? extraData.maxCapacity ?? defaultSettings.maxCapacity;
 
-        const sanitizePhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.managerPhone : ph;
-        const effectivePhone = sanitizePhone(data.manager_phone || extraData.whatsappNotificationPhone || extraData.managerPhone);
+        const sanitizeResortPhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.managerPhone : ph;
+        const sanitizeNotificationPhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.whatsappNotificationPhone : ph;
+        const effectiveResortPhone = sanitizeResortPhone(data.manager_phone || extraData.managerPhone);
+        const effectiveNotificationPhone = sanitizeNotificationPhone(extraData.whatsappNotificationPhone);
 
         const settingsData: ResortSettings = {
           ...defaultSettings,
           ...extraData,
           resortName: data.resort_name || data.resortName || extraData.resortName || defaultSettings.resortName,
           managerName: data.manager_name || data.managerName || extraData.managerName || defaultSettings.managerName,
-          managerPhone: effectivePhone,
-          whatsappNotificationPhone: effectivePhone,
+          managerPhone: effectiveResortPhone,
+          whatsappNotificationPhone: effectiveNotificationPhone,
           maxCapacity: Number(maxCap) || defaultSettings.maxCapacity,
           defaultDailyRateBoarding: Number(data.default_daily_rate_boarding ?? extraData.defaultDailyRateBoarding) || defaultSettings.defaultDailyRateBoarding,
           defaultDailyRateTraining: validTrainingRate,
@@ -457,7 +461,7 @@ export const subscribeToSettings = (
           bitNumber: sanitizePhone(data.bit_number || extraData.bitNumber),
           payboxLink: data.paybox_link || extraData.payboxLink || defaultSettings.payboxLink,
           growPaymentLink: extraData.growPaymentLink || data.paybox_link || extraData.payboxLink || defaultSettings.growPaymentLink,
-          bankDetails: data.bank_details || extraData.bankDetails || defaultSettings.bankDetails,
+          bankDetails: (data.bank_details?.includes('123456') || extraData.bankDetails?.includes('123456')) ? '' : (data.bank_details || extraData.bankDetails || ''),
           autoCheckVaccination: data.auto_check_vaccination ?? extraData.autoCheckVaccination ?? defaultSettings.autoCheckVaccination,
           callmebotApiKey: extraData.callmebotApiKey || '',
           greenApiIdInstance: extraData.greenApiIdInstance || '',
@@ -614,7 +618,6 @@ export const saveBookingToDb = async (booking: Booking): Promise<void> => {
       owner_name: updatedBooking.ownerName,
       owner_phone: updatedBooking.ownerPhone,
       owner_email: updatedBooking.ownerEmail || '',
-      owner_address: updatedBooking.ownerAddress || '',
       service_type: updatedBooking.serviceType,
       start_date: updatedBooking.startDate,
       end_date: updatedBooking.endDate,
@@ -634,10 +637,12 @@ export const saveBookingToDb = async (booking: Booking): Promise<void> => {
       .upsert(payload, { onConflict: 'id' });
 
     if (error) {
-      console.warn('Supabase save booking warning:', error.message);
+      console.error('Supabase save booking error:', error.message);
+      throw error;
     }
   } catch (err: any) {
-    console.warn('Supabase save error:', err?.message || err);
+    console.error('Supabase save error:', err?.message || err);
+    throw err;
   }
 
   // Also refresh customers list in Supabase
@@ -720,14 +725,14 @@ export const deleteBookingFromDb = async (bookingId: string): Promise<void> => {
 
 // Update Resort Settings in Supabase
 export const saveSettingsToDb = async (settings: ResortSettings): Promise<void> => {
-  const sanitizePhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.managerPhone : ph;
-  const phone = sanitizePhone(settings.whatsappNotificationPhone || settings.managerPhone);
+  const sanitizeResortPhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.managerPhone : ph;
+  const sanitizeNotificationPhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.whatsappNotificationPhone : ph;
 
   const sanitizedSettings: ResortSettings = {
     ...settings,
-    managerPhone: sanitizePhone(settings.managerPhone) || phone,
-    whatsappNotificationPhone: sanitizePhone(settings.whatsappNotificationPhone) || phone,
-    bitNumber: sanitizePhone(settings.bitNumber) || phone,
+    managerPhone: sanitizeResortPhone(settings.managerPhone),
+    whatsappNotificationPhone: sanitizeNotificationPhone(settings.whatsappNotificationPhone),
+    bitNumber: sanitizeResortPhone(settings.bitNumber) || sanitizeResortPhone(settings.managerPhone),
     defaultDailyRateTraining: Number(settings.defaultDailyRateTraining) || 6500,
     defaultDailyRateDayTraining: Number(settings.defaultDailyRateDayTraining) || 250,
   };
@@ -738,6 +743,22 @@ export const saveSettingsToDb = async (settings: ResortSettings): Promise<void> 
   } catch (e) {}
 
   try {
+    let existingIntakeRequests: any[] = [];
+    let existingVouchers: any[] = [];
+    try {
+      const { data: curRow } = await supabase
+        .from(SETTINGS_TABLE)
+        .select('data')
+        .eq('id', SETTINGS_DOC_ID)
+        .single();
+      if (curRow?.data?.intakeRequests && Array.isArray(curRow.data.intakeRequests)) {
+        existingIntakeRequests = curRow.data.intakeRequests;
+      }
+      if (curRow?.data?.vouchers && Array.isArray(curRow.data.vouchers)) {
+        existingVouchers = curRow.data.vouchers;
+      }
+    } catch (e) {}
+
     const payload = {
       id: SETTINGS_DOC_ID,
       resort_name: sanitizedSettings.resortName,
@@ -752,7 +773,11 @@ export const saveSettingsToDb = async (settings: ResortSettings): Promise<void> 
       paybox_link: sanitizedSettings.payboxLink || sanitizedSettings.growPaymentLink,
       bank_details: sanitizedSettings.bankDetails,
       auto_check_vaccination: sanitizedSettings.autoCheckVaccination,
-      data: sanitizedSettings,
+      data: {
+        ...sanitizedSettings,
+        intakeRequests: (sanitizedSettings as any).intakeRequests || existingIntakeRequests,
+        vouchers: (sanitizedSettings as any).vouchers || existingVouchers
+      },
       updated_at: new Date().toISOString()
     };
 
@@ -1513,7 +1538,7 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
   try {
     const { data: bkData, error: bkErr } = await supabase
       .from(BOOKINGS_TABLE)
-      .select('owner_name, owner_phone, dog_name, dog_breed, owner_address, data')
+      .select('owner_name, owner_phone, dog_name, dog_breed, data')
       .ilike('owner_phone', `%${matchSuffix}%`);
 
     if (!bkErr && bkData && Array.isArray(bkData)) {
@@ -1525,7 +1550,7 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
       if (matches.length > 0) {
         const latest = matches[matches.length - 1];
         const totalVisits = matches.length;
-        const addr = latest.owner_address || latest.data?.ownerAddress;
+        const addr = latest.data?.ownerAddress || (latest as any).owner_address;
         const coords = latest.data?.ownerCoordinates;
         return {
           isKnown: true,
@@ -1547,7 +1572,7 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
   try {
     const { data: intakeData } = await supabase
       .from('intake_requests')
-      .select('owner_name, owner_phone, dog_name, dog_breed, owner_address, data')
+      .select('owner_name, owner_phone, dog_name, dog_breed, data')
       .ilike('owner_phone', `%${matchSuffix}%`);
 
     if (intakeData && Array.isArray(intakeData)) {
@@ -1556,7 +1581,7 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
         return rDigits && (rDigits.endsWith(matchSuffix) || rDigits.includes(matchSuffix));
       });
       if (match) {
-        const addr = match.owner_address || match.data?.ownerAddress;
+        const addr = match.data?.ownerAddress || (match as any).owner_address;
         const coords = match.data?.ownerCoordinates;
         return {
           isKnown: true,

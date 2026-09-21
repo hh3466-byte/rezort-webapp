@@ -592,7 +592,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             {twoWeeksDays.map((day) => {
               const dayBookings = getBookingsForDate(activeBookings, day.dateStr);
               const isToday = day.isToday;
-              const occupiedCount = dayBookings.length;
+              const activeStayingBookings = dayBookings.filter(b => b.stayStatus !== 'checked_out');
+              const occupiedCount = activeStayingBookings.length;
               const maxCap = settings.maxCapacity;
               const freeSpots = Math.max(0, maxCap - occupiedCount);
               const isFull = occupiedCount >= maxCap;
@@ -752,24 +753,38 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-70'
                                 : 'bg-white hover:bg-emerald-50 border-slate-200 hover:border-emerald-300 text-slate-900'
                             }`}
-                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)} - לחץ לפרטים מלאים`}
+                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${b.stayStatus === 'checked_out' ? ' (שוחרר הביתה)' : ''} - לחץ לפרטים מלאים`}
                           >
                             <span className="flex items-center gap-1.5 truncate">
                               <span className="text-emerald-600 text-xs">🐾</span>
                               <span className="truncate">{b.dogName} <span className="text-slate-500 font-medium text-[11px]">({b.ownerName})</span></span>
                             </span>
-                            <span
-                              className={`w-2 h-2 rounded-full shrink-0 ${
-                                isEnded
-                                  ? 'bg-slate-300'
-                                  : isPaid
-                                  ? 'bg-emerald-500'
-                                  : isDeposit
-                                  ? 'bg-amber-400'
-                                  : 'bg-red-500'
-                              }`}
-                              title={isPaid ? 'שולם מלא' : isDeposit ? 'שולמה מקדמה' : 'חוב פתוח'}
-                            />
+                            {b.stayStatus === 'checked_out' ? (
+                              <span className="text-[10px] bg-slate-200 text-slate-600 font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shrink-0" title="שוחרר הביתה">
+                                <span>🏁</span>
+                                <span>שוחרר</span>
+                              </span>
+                            ) : (
+                              <div className="flex items-center gap-1 shrink-0">
+                                {!isEnded && !isPaid && !isDeposit && !b.isFreeStay && (b.totalPrice || 0) > 0 && (
+                                  <span className="text-[10px] bg-red-100 text-red-700 font-black px-1 rounded flex items-center" title="שריין מקום ללא מקדמה!">
+                                    0₪
+                                  </span>
+                                )}
+                                <span
+                                  className={`w-2 h-2 rounded-full shrink-0 ${
+                                    isEnded
+                                      ? 'bg-slate-300'
+                                      : isPaid
+                                      ? 'bg-emerald-500'
+                                      : isDeposit
+                                      ? 'bg-amber-400'
+                                      : 'bg-red-500'
+                                  }`}
+                                  title={isPaid ? 'שולם מלא' : isDeposit ? 'שולמה מקדמה' : (!b.isFreeStay && (b.totalPrice || 0) > 0 ? 'חוב פתוח - ₪0 מקדמה' : 'חוב פתוח')}
+                                />
+                              </div>
+                            )}
                           </div>
                         );
                       })
@@ -1263,12 +1278,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             ? 'bg-emerald-600 text-white'
                             : isDeposit
                             ? 'bg-emerald-50 text-emerald-900 border border-dashed border-emerald-500'
+                            : !booking.isFreeStay && (booking.totalPrice || 0) > 0 && booking.depositAmount === 0
+                            ? 'bg-red-600 text-white'
                             : 'bg-red-500 text-white'
                         }`}>
                           {isPaid
                             ? `שולם מלא (₪${Math.round(booking.totalPrice)})`
                             : isDeposit
                             ? `מקדמה ₪${Math.round(booking.depositAmount)} (חוב ₪${remainingDebt})`
+                            : !booking.isFreeStay && (booking.totalPrice || 0) > 0 && booking.depositAmount === 0
+                            ? `⚠️ ₪0 מקדמה (חוב ₪${remainingDebt})`
                             : `חוב ₪${remainingDebt}`}
                         </span>
                       </div>

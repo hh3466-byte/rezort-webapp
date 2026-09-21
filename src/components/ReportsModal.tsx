@@ -18,7 +18,20 @@ export const ReportsModal: React.FC<ReportsModalProps> = ({
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
 
   const totalRevenue = activeBookings.reduce((sum, b) => sum + b.totalPrice, 0);
-  const totalCollected = activeBookings.reduce((sum, b) => sum + b.depositAmount, 0);
+  const totalGrossCollected = activeBookings.reduce((sum, b) => sum + b.depositAmount, 0);
+
+  // All refunds tracking across the system
+  const allRefunds = bookings.filter(b => {
+    const d = (b as any).data || {};
+    return Number(b.refundAmount ?? d.refundAmount ?? 0) > 0;
+  });
+
+  const totalRefunds = allRefunds.reduce((sum, b) => {
+    const d = (b as any).data || {};
+    return sum + Number(b.refundAmount ?? d.refundAmount ?? 0);
+  }, 0);
+
+  const totalNetCollected = Math.max(0, totalGrossCollected - totalRefunds);
   const totalOpenDebt = activeBookings.reduce((sum, b) => sum + Math.max(0, b.totalPrice - b.depositAmount), 0);
 
   // Service breakdown
@@ -30,7 +43,7 @@ export const ReportsModal: React.FC<ReportsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs" dir="rtl">
       <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
         
         {/* Header */}
@@ -40,36 +53,94 @@ export const ReportsModal: React.FC<ReportsModalProps> = ({
               💰
             </div>
             <div>
-              <h2 className="text-xl font-black text-slate-900">דוחות כספיים ותפוסה</h2>
-              <p className="text-xs text-slate-500 font-medium">סיכום ביצועים, הכנסות וחובות של {settings.resortName}</p>
+              <h2 className="text-xl font-black text-slate-900">דוחות כספיים, תפוסה ומעקב החזרים</h2>
+              <p className="text-xs text-slate-500 font-medium">סיכום ביצועים, הכנסות נטו, החזרים וחובות של {settings.resortName}</p>
             </div>
           </div>
           
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Financial Highlights */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-5">
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center">
-            <div className="text-xs text-slate-500 font-bold mb-1">סה״כ הכנסות צפויות</div>
-            <div className="text-2xl font-black text-slate-900">₪{totalRevenue.toLocaleString()}</div>
+        {/* Financial Highlights (4 Cards: הצפוי, ברוטו, החזרים, נטו) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 my-5">
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center">
+            <div className="text-[11px] text-slate-500 font-bold mb-0.5">סה״כ צפוי</div>
+            <div className="text-lg sm:text-xl font-black text-slate-900 font-mono">₪{totalRevenue.toLocaleString()}</div>
+            <div className="text-[10px] text-slate-400">שווי הזמנות פעילות</div>
           </div>
 
-          <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-4 text-center">
-            <div className="text-xs text-emerald-800 font-bold mb-1">נגבה בפועל</div>
-            <div className="text-2xl font-black text-emerald-700">₪{totalCollected.toLocaleString()}</div>
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-center">
+            <div className="text-[11px] text-slate-600 font-bold mb-0.5">נגבה ברוטו</div>
+            <div className="text-lg sm:text-xl font-black text-slate-800 font-mono">₪{totalGrossCollected.toLocaleString()}</div>
+            <div className="text-[10px] text-slate-400">לפני ניכוי החזרים</div>
           </div>
 
-          <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 text-center">
-            <div className="text-xs text-amber-800 font-bold mb-1">יתרת חוב פתוח לגבייה</div>
-            <div className="text-2xl font-black text-amber-700">₪{totalOpenDebt.toLocaleString()}</div>
+          <div className="bg-rose-50/80 border border-rose-200 rounded-2xl p-3 text-center">
+            <div className="text-[11px] text-rose-800 font-bold mb-0.5">החזרים בביטולים</div>
+            <div className="text-lg sm:text-xl font-black text-rose-600 font-mono">-₪{totalRefunds.toLocaleString()}</div>
+            <div className="text-[10px] text-rose-600/80 font-bold">{allRefunds.length} החזרים בוצעו</div>
+          </div>
+
+          <div className="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-3 text-center">
+            <div className="text-[11px] text-emerald-800 font-bold mb-0.5">תקבולים נטו</div>
+            <div className="text-lg sm:text-xl font-black text-emerald-700 font-mono">₪{totalNetCollected.toLocaleString()}</div>
+            <div className="text-[10px] text-emerald-600 font-bold">לאחר קיזוז החזרים</div>
           </div>
         </div>
+
+        {/* Detailed Refunds Section */}
+        {allRefunds.length > 0 && (
+          <div className="my-5 p-4 bg-rose-50/60 border border-rose-200 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-rose-950 flex items-center gap-1.5">
+                <span>🔄</span>
+                <span>פירוט החזרים כספיים שבוצעו ({allRefunds.length}):</span>
+              </h3>
+              <span className="text-xs font-black text-rose-700 font-mono">
+                סה״כ החזרים: -₪{totalRefunds.toLocaleString()}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {allRefunds.map(b => {
+                const d = (b as any).data || {};
+                const amt = Number(b.refundAmount ?? d.refundAmount ?? 0);
+                const rDate = b.refundDate || d.refundDate || b.startDate || '';
+                const rReason = b.refundReason || d.refundReason || 'הזמנה בוטלה';
+
+                return (
+                  <div key={b.id} className="p-2.5 bg-white border border-rose-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-black text-xs text-slate-900">{b.ownerName}</span>
+                        <span className="bg-amber-100 text-amber-900 px-1.5 py-0.2 rounded-md text-[11px] font-bold">
+                          🐕 {b.dogName}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-400 font-mono">
+                          {formatDateIL(rDate)}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-rose-900 font-bold mt-0.5 flex items-center gap-1">
+                        <span>סיבה:</span>
+                        <span className="bg-rose-100 text-rose-900 px-2 py-0.2 rounded-md text-[10px]">{rReason}</span>
+                      </div>
+                    </div>
+
+                    <div className="text-left shrink-0">
+                      <div className="text-sm font-black text-rose-600 font-mono">-₪{amt.toLocaleString()}</div>
+                      <span className="text-[10px] text-slate-400">הוחזר ללקוח</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Breakdown by Service */}
         <div className="space-y-3">
@@ -101,10 +172,11 @@ export const ReportsModal: React.FC<ReportsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end">
+        <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center text-xs">
+          <span className="text-slate-500 font-medium">יתרת חוב פתוח לגבייה: <strong className="text-amber-700 font-mono">₪{totalOpenDebt.toLocaleString()}</strong></span>
           <button
             onClick={onClose}
-            className="px-6 py-2.5 bg-[#065f46] hover:bg-[#044e45] text-white font-bold text-sm rounded-xl transition-all"
+            className="px-6 py-2.5 bg-[#065f46] hover:bg-[#044e45] text-white font-bold text-sm rounded-xl transition-all cursor-pointer"
           >
             סגור
           </button>

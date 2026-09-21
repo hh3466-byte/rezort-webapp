@@ -52,6 +52,8 @@ import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, 
 import { formatPhoneForWhatsApp } from './utils/whatsappUtils';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
+import { MonthlyRefundsModal } from './components/MonthlyRefundsModal';
+import { getRefundsForMonth } from './utils/refundUtils';
 import { Guide } from './components/Guide';
 import { SendPaymentLinkModal } from './components/SendPaymentLinkModal';
 import { IntakeRequestsModal, calculateBoardingRate } from './components/IntakeRequestsModal';
@@ -65,9 +67,10 @@ import { VoucherModal } from './components/VoucherModal';
 import { DailyDogUpdatesModal } from './components/DailyDogUpdatesModal';
 import { TomorrowOverviewModal } from './components/TomorrowOverviewModal';
 import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
+import { MobileTodayDashboardModal } from './components/MobileTodayDashboardModal';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
 import { initDailyDogAutoSender } from './services/dailyDogAutoSender';
-import { initTomorrowOverviewScheduler } from './services/morningReportService';
+import { initTomorrowOverviewScheduler, init1830SanityScheduler } from './services/morningReportService';
 import { initOrangeFollowUpScheduler } from './services/orangeFollowUpService';
 import { fetchNewCrmChatsCount } from './services/whatsappCrmService';
 
@@ -107,6 +110,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isReportsOpen, setIsReportsOpen] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [isMonthlyRefundsModalOpen, setIsMonthlyRefundsModalOpen] = useState(false);
 
   // Incoming Grow Payments from Gmail sync
   const [pendingGrowPayments, setPendingGrowPayments] = useState<GrowIncomingPayment[]>([]);
@@ -189,8 +193,16 @@ export default function App() {
     staysCount?: number;
   } | null>(null);
 
-  // Metrics Row Collapse State
-  const [isMetricsRowCollapsed, setIsMetricsRowCollapsed] = useState(false);
+  // Metrics Row Collapse State (Default collapsed on mobile so Shmulik has immediate room for daily schedule)
+  const [isMetricsRowCollapsed, setIsMetricsRowCollapsed] = useState(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return true;
+    }
+    return false;
+  });
+
+  // Mobile Today Command Dashboard Modal State (סדר יום מהיר לשמוליק)
+  const [isMobileTodayModalOpen, setIsMobileTodayModalOpen] = useState(false);
 
   // Extreme Change Confirmation Modal State
   const [appExtremeModal, setAppExtremeModal] = useState<{
@@ -222,9 +234,10 @@ export default function App() {
       setBookings(prev => {
         // Structural comparison to avoid unnecessary React re-renders and flickering
         if (prev.length === incomingBookings.length) {
-          const prevSig = prev.map(b => `${b.id}-${b.paymentStatus}-${b.depositAmount}-${b.totalPrice}-${b.stayStatus}`).join('|');
-          const nextSig = incomingBookings.map(b => `${b.id}-${b.paymentStatus}-${b.depositAmount}-${b.totalPrice}-${b.stayStatus}`).join('|');
-          if (prevSig === nextSig) return prev;
+          const makeSig = (list: Booking[]) => list.map(b => 
+            `${b.id}_${b.dogName}_${b.ownerName}_${b.startDate}_${b.endDate}_${b.serviceType}_${b.paymentStatus}_${b.depositAmount}_${b.totalPrice}_${b.stayStatus}_${b.updatedAt}`
+          ).join('|');
+          if (makeSig(prev) === makeSig(incomingBookings)) return prev;
         }
         return incomingBookings;
       });
@@ -386,6 +399,17 @@ export default function App() {
     return cleanup;
   }, [bookings, settings, intakeRequests]);
 
+  // 18:30 Daily Sanity Audit Auto-Sender to Shmulik (Green Events, Red Lights, Integrations & 24h Checks)
+  useEffect(() => {
+    const cleanup = init1830SanityScheduler(
+      () => bookings,
+      () => settings,
+      () => intakeRequests,
+      showToast
+    );
+    return cleanup;
+  }, [bookings, settings, intakeRequests]);
+
   // 08:30 AM Orange Button (In-Progress) Marketing Follow-Up Scheduler
   useEffect(() => {
     const cleanup = initOrangeFollowUpScheduler(
@@ -432,18 +456,22 @@ export default function App() {
   // 1. monthDigitalCleared: נסלק החודש (והכוונה לכל אמצעי התשלום הדיגיטלי כולם)
   // 2. monthBankOn10th: יכנס לבנק ב-10 לחודש הקרוב (סליקת כרטיסי אשראי GROW)
   // 3. monthBankIn2Months: יכנס לבנק ב-10 בעוד חודשיים (תשלומי המשך / עסקאות בתשלומים)
-  // 4. monthCashCollected: נסלק במזומן (ללא המילה שטרות)
   const currentMonthKey = todayStr.substring(0, 7);
   const currentMonthRevenue = React.useMemo(() => {
-    return getMonthlyRevenueBreakdown(currentMonthKey, activeBookings, pendingGrowPayments);
-  }, [currentMonthKey, activeBookings, pendingGrowPayments]);
+    return getMonthlyRevenueBreakdown(currentMonthKey, bookings, pendingGrowPayments);
+  }, [currentMonthKey, bookings, pendingGrowPayments]);
 
   const monthDigitalCleared = currentMonthRevenue.digitalCleared; // 1. נסלק החודש (דיגיטלי)
   const monthBankOn10th = currentMonthRevenue.growClearedBankOn10th; // 2. יכנס לבנק ב-10 לחודש הקרוב
   const monthDirectBankTransfers = currentMonthRevenue.directBankTransfers; // הועבר ישירות לחשבון (העברות בנקאיות)
   const monthBankIn2Months = currentMonthRevenue.bankOn10thInTwoMonths; // 3. יכנס לבנק ב-10 בעוד חודשיים
   const monthCashCollected = currentMonthRevenue.cashCollected; // 4. נסלק במזומן
-  const monthTotalCollected = currentMonthRevenue.totalCollected; // סה"כ כולל
+  const monthTotalCollected = currentMonthRevenue.totalCollected; // סה"כ ברוטו
+  const monthTotalRefunds = currentMonthRevenue.totalRefunds || 0; // החזרים בגין ביטולים
+  const monthNetCollected = currentMonthRevenue.netCollected ?? (monthTotalCollected - monthTotalRefunds); // סה"כ נטו לאחר החזרים
+  const monthRefundsList = React.useMemo(() => {
+    return getRefundsForMonth(currentMonthKey, bookings);
+  }, [currentMonthKey, bookings]);
 
   // Dynamic labels for upcoming 10th payout dates (e.g. 10.10 and 10.11)
   const [curYearNum, curMonthNum] = currentMonthKey.split('-').map(Number);
@@ -822,7 +850,33 @@ export default function App() {
     });
     setBookingFormModal({ isOpen: false, initialData: null });
     showToast(`💾 ההזמנה של ${booking.dogName} נשמרה וסונכרנה בענן`);
-    await saveBookingToDb(booking);
+    try {
+      await saveBookingToDb(booking);
+    } catch (err: any) {
+      console.error('Failed to sync booking to cloud:', err);
+      showToast(`⚠️ שגיאה בשמירה בענן: ${err?.message || 'נסה שוב'}`);
+    }
+  };
+
+  // Update Booking Refund
+  const handleUpdateBookingRefund = async (bookingId: string, refundAmount: number, refundReason: string, refundDate?: string) => {
+    const match = bookings.find(b => b.id === bookingId);
+    if (!match) return;
+    const updated: Booking = {
+      ...match,
+      refundAmount,
+      refundReason,
+      refundDate: refundDate || match.refundDate || new Date().toISOString().split('T')[0],
+      updatedAt: new Date().toISOString()
+    };
+    setBookings(prev => prev.map(b => b.id === bookingId ? updated : b));
+    showToast(`💸 פרטי ההחזר הכספי של ${updated.dogName} עודכנו בהצלחה`);
+    try {
+      await saveBookingToDb(updated);
+    } catch (err: any) {
+      console.error('Failed to update refund in cloud:', err);
+      showToast(`⚠️ שגיאה בעדכון החזר בענן: ${err?.message || 'נסה שוב'}`);
+    }
   };
 
   // Delete / Cancel Booking with ExtremeChange confirmation
@@ -881,8 +935,11 @@ export default function App() {
 
   const handleConfirmReleaseWithDebt = async (booking: Booking, skipReview = false) => {
     setCheckoutDebtBooking(null);
+    const today = getTodayStr();
+    const effectiveEndDate = booking.endDate > today ? today : booking.endDate;
     const updated: Booking = {
       ...booking,
+      endDate: effectiveEndDate,
       stayStatus: 'checked_out',
       skipReviewRequest: skipReview,
       notes: skipReview
@@ -896,13 +953,20 @@ export default function App() {
     } else {
       showToast(`🏡 ${booking.dogName} שוחרר בהצלחה הביתה`);
     }
-    await saveBookingToDb(updated);
+    try {
+      await saveBookingToDb(updated);
+    } catch (err) {
+      showToast(`⚠️ שגיאה בסנכרון שחרור ${booking.dogName} לענן`);
+    }
   };
 
   const handleConfirmReleaseDirect = async (booking: Booking, skipReview = false) => {
     setCheckoutDebtBooking(null);
+    const today = getTodayStr();
+    const effectiveEndDate = booking.endDate > today ? today : booking.endDate;
     const updated: Booking = {
       ...booking,
+      endDate: effectiveEndDate,
       stayStatus: 'checked_out',
       skipReviewRequest: skipReview,
       notes: skipReview
@@ -916,13 +980,20 @@ export default function App() {
     } else {
       showToast(`🏡 ${booking.dogName} שוחרר בהצלחה הביתה`);
     }
-    await saveBookingToDb(updated);
+    try {
+      await saveBookingToDb(updated);
+    } catch (err) {
+      showToast(`⚠️ שגיאה בסנכרון שחרור ${booking.dogName} לענן`);
+    }
   };
 
   const handleMarkPaidAndRelease = async (booking: Booking, skipReview = false) => {
     setCheckoutDebtBooking(null);
+    const today = getTodayStr();
+    const effectiveEndDate = booking.endDate > today ? today : booking.endDate;
     const updated: Booking = {
       ...booking,
+      endDate: effectiveEndDate,
       depositAmount: Number(booking.totalPrice) || 0,
       paymentStatus: 'fully_paid',
       stayStatus: 'checked_out',
@@ -938,7 +1009,11 @@ export default function App() {
     } else {
       showToast(`🏡 ${booking.dogName} שוחרר בהצלחה! התשלום סומן כשולם במלואו.`);
     }
-    await saveBookingToDb(updated);
+    try {
+      await saveBookingToDb(updated);
+    } catch (err) {
+      showToast(`⚠️ שגיאה בסנכרון שחרור ${booking.dogName} לענן`);
+    }
   };
 
   const handleToggleReviewRequest = async (booking: Booking) => {
@@ -1118,7 +1193,7 @@ export default function App() {
             {newCrmChatsCount > 0 ? (
               <span className="bg-rose-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse flex items-center gap-1 font-mono">
                 <span>{newCrmChatsCount}</span>
-                <span className="font-sans text-[10px]">חדשות 🔥</span>
+                <span className="font-sans text-[10px]">שלא נקראו 🔥</span>
               </span>
             ) : (
               <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
@@ -1129,6 +1204,21 @@ export default function App() {
                 {activeTab === 'whatsapp' ? 'פתוח' : 'CRM 🟢'}
               </span>
             )}
+          </button>
+
+          {/* Desktop-Only WhatsApp History & Problem Scanner Button */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('whatsapp')}
+            id="btn-desktop-scan-whatsapp-top"
+            className="hidden lg:flex items-center gap-2 bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 hover:from-purple-100 hover:to-indigo-100 active:scale-95 border border-indigo-300 text-indigo-950 font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-2xs transition-all cursor-pointer shrink-0"
+            title="צפייה וסריקת היסטוריית וואטסאפ במחשב – חוק ברזל: ההודעות לעולם לא מסומנות כנקראו ונשארות לשמוליק ב-שלא נקראו"
+          >
+            <span className="text-base">🖥️🔍</span>
+            <span>סריקת וואטסאפ (מחשב)</span>
+            <span className="bg-indigo-200/80 text-indigo-900 text-[10px] font-extrabold px-1.5 py-0.2 rounded-md border border-indigo-300">
+              מוגן 🛡️
+            </span>
           </button>
 
           {/* Pending Grow Payments Quick Access Button (if any) */}
@@ -1421,7 +1511,12 @@ export default function App() {
                 className="cursor-pointer hover:text-emerald-700 transition-colors shrink-0 flex items-center gap-1.5"
                 title="לחץ לפתיחת פירוט ודוחות הכנסות"
               >
-                <span>💰 תקבולים החודש: <strong className="text-[#065f46]">₪{monthTotalCollected.toLocaleString('he-IL')}</strong></span>
+                <span>💰 תקבולים נטו: <strong className="text-[#065f46]">₪{monthNetCollected.toLocaleString('he-IL')}</strong></span>
+                {monthTotalRefunds > 0 && (
+                  <span className="bg-rose-50 text-rose-900 border border-rose-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title="החזרים כספיים שנוכו בגין ביטולים">
+                    🔄 החזרים: -₪{monthTotalRefunds.toLocaleString('he-IL')}
+                  </span>
+                )}
                 {monthDirectBankTransfers > 0 && (
                   <span className="bg-teal-50 text-teal-900 border border-teal-200 px-1.5 py-0.2 rounded text-[11px] font-bold" title="העברות בנקאיות ישירות שכבר הופקדו בחשבון הבנק">
                     🏛️ הועבר: ₪{monthDirectBankTransfers.toLocaleString('he-IL')}
@@ -1615,19 +1710,19 @@ export default function App() {
                 <div 
                   className="lg:col-span-7 bg-gradient-to-br from-emerald-50/45 via-teal-50/30 to-slate-50/70 border border-emerald-200/80 rounded-2xl p-3 flex flex-col justify-between gap-2.5 shadow-2xs hover:border-emerald-300 transition-all"
                 >
-                  {/* Financial Top Row: Title + Main Amount + Graphs Button */}
-                  <div className="flex items-start justify-between gap-2">
+                  {/* Financial Top Row: Title + Main Amount + Refunds Red Box + Graphs Button */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
                     <div 
                       onClick={() => setActiveHeaderMetric('revenue')}
                       role="button"
                       tabIndex={0}
-                      className="cursor-pointer group"
+                      className="cursor-pointer group shrink-0"
                       title="לחץ לצפייה בגרפים חודשיים ושנתיים ודוחות כספיים מלאים 📊"
                     >
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-black text-emerald-950 flex items-center gap-1 group-hover:text-emerald-700 transition-colors">
                           <span>💰</span>
-                          <span>תקבולים וסליקה החודש</span>
+                          <span>תקבולים וסליקה החודש (נטו)</span>
                         </span>
                         <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full border border-emerald-200">
                           🐾 {currentMonthActiveStays.length} שהויות
@@ -1636,8 +1731,74 @@ export default function App() {
                       
                       <div className="flex items-baseline gap-2 mt-0.5">
                         <div className="text-2xl sm:text-3xl font-black text-[#065f46] tracking-tight group-hover:text-emerald-800 transition-colors">
-                          ₪{monthTotalCollected.toLocaleString('he-IL')}
+                          ₪{monthNetCollected.toLocaleString('he-IL')}
                         </div>
+                        {monthTotalRefunds > 0 && (
+                          <span className="text-xs font-bold text-slate-400 line-through" title="סה״כ ברוטו לפני החזרים">
+                            ₪{monthTotalCollected.toLocaleString('he-IL')} ברוטו
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* RED BOX FROM SCREENSHOT: Monthly Financial Refunds Display Widget */}
+                    <div
+                      onClick={() => setIsMonthlyRefundsModalOpen(true)}
+                      role="button"
+                      tabIndex={0}
+                      className={`flex-1 mx-1 sm:mx-2 px-3 py-2 rounded-xl border transition-all cursor-pointer group flex items-center justify-between gap-2 shadow-2xs ${
+                        monthTotalRefunds > 0
+                          ? 'bg-rose-50/90 hover:bg-rose-100/90 border-rose-300 hover:border-rose-400 text-rose-950 ring-1 ring-rose-300/60'
+                          : 'bg-white/85 hover:bg-slate-100/80 border-slate-200 hover:border-slate-300 text-slate-700'
+                      }`}
+                      title="לחץ לצפייה בפירוט כל ההחזרים הכספיים שבוצעו החודש, ניהול סיבות ומעקב"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 border ${
+                          monthTotalRefunds > 0
+                            ? 'bg-rose-100 border-rose-300 text-rose-700'
+                            : 'bg-slate-100 border-slate-200 text-slate-500'
+                        }`}>
+                          ↩️
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-black truncate">
+                              החזרים כספיים החודש
+                            </span>
+                            <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md border ${
+                              monthTotalRefunds > 0
+                                ? 'bg-rose-200/80 text-rose-900 border-rose-300'
+                                : 'bg-slate-100 text-slate-500 border-slate-200'
+                            }`}>
+                              {monthRefundsList.length} {monthRefundsList.length === 1 ? 'החזר' : 'החזרים'}
+                            </span>
+                          </div>
+                          
+                          {/* Reason preview if there are refunds */}
+                          {monthRefundsList.length > 0 ? (
+                            <p className="text-[11px] text-rose-800/90 truncate font-medium mt-0.5">
+                              {monthRefundsList[0].dogName} ({monthRefundsList[0].ownerName}) • {monthRefundsList[0].refundReason || 'ביטול הזמנה'}
+                              {monthRefundsList.length > 1 && ` • ועוד ${monthRefundsList.length - 1}`}
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-slate-400 truncate font-medium mt-0.5">
+                              לא בוצעו החזרים כספיים החודש
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-left shrink-0">
+                        <div className={`text-base sm:text-lg font-black font-mono leading-none ${
+                          monthTotalRefunds > 0 ? 'text-rose-700' : 'text-slate-500'
+                        }`}>
+                          {monthTotalRefunds > 0 ? `-₪${monthTotalRefunds.toLocaleString('he-IL')}` : '₪0'}
+                        </div>
+                        <span className="text-[10px] font-bold text-rose-600/80 group-hover:text-rose-800 transition-colors flex items-center gap-0.5 justify-end mt-0.5">
+                          <span>ניהול</span>
+                          <span>←</span>
+                        </span>
                       </div>
                     </div>
 
@@ -1726,6 +1887,25 @@ export default function App() {
 
                   </div>
 
+                  {/* Box 5 (if refunds exist): Refunds deduction */}
+                  {monthTotalRefunds > 0 && (
+                    <div 
+                      onClick={() => setActiveHeaderMetric('revenue')}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-rose-50/90 hover:bg-rose-100/90 border border-rose-200/90 hover:border-rose-300 px-3 py-2 rounded-xl flex items-center justify-between shadow-2xs transition-all cursor-pointer group" 
+                      title="החזרים כספיים שנוכו מהתקבולים בגין ביטולי הזמנות"
+                    >
+                      <span className="font-bold text-rose-900 text-xs sm:text-[13px] flex items-center gap-1.5 group-hover:text-rose-950">
+                        <span className="text-sm">🔄</span>
+                        <span>החזרים כספיים שנוכו (ביטולים):</span>
+                      </span>
+                      <span className="font-black text-rose-950 text-xs sm:text-sm mr-2 shrink-0 font-mono">
+                        -₪{monthTotalRefunds.toLocaleString('he-IL')}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Financial Bottom: Overall Calculation & Sanity Check (Always displayed, proving everything balances to 0) */}
                   <div 
                     onClick={() => setActiveHeaderMetric('revenue')}
@@ -1765,9 +1945,34 @@ export default function App() {
 
 
         {/* Active View Container */}
-        <main className="transition-all">
+        <main className="transition-all pb-24 sm:pb-8">
           {activeTab === 'calendar' && (
-            <CalendarView
+            <>
+              {/* Mobile Fast Action Strip for Shmulik (sm:hidden) */}
+              <div className="sm:hidden mb-2.5 bg-gradient-to-r from-emerald-800 via-[#065f46] to-teal-900 text-white rounded-2xl p-2.5 shadow-xs flex items-center justify-between gap-2 select-none">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-base">☀️</span>
+                  <div className="text-xs font-bold truncate">
+                    <span>היום: </span>
+                    <span className="text-amber-300 font-black">
+                      📥 {bookings.filter(b => b.startDate === getTodayStr() && b.stayStatus !== 'cancelled').length} נכנסים
+                    </span>
+                    <span className="text-white/40 mx-1">|</span>
+                    <span className="text-rose-300 font-black">
+                      📤 {bookings.filter(b => b.endDate === getTodayStr() && b.stayStatus !== 'cancelled').length} יוצאים
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileTodayModalOpen(true)}
+                  className="bg-white/20 hover:bg-white/30 active:scale-95 text-white text-[11px] font-black px-2.5 py-1 rounded-xl shrink-0 border border-white/20 shadow-2xs transition-all cursor-pointer"
+                >
+                  סדר יום ›
+                </button>
+              </div>
+
+              <CalendarView
               bookings={bookings}
               settings={settings}
               currentYear={currentYear}
@@ -1786,6 +1991,7 @@ export default function App() {
                 });
               }}
             />
+            </>
           )}
 
           {activeTab === 'forecast' && (
@@ -1951,6 +2157,13 @@ export default function App() {
               return [...prev, newBooking];
             });
 
+            // If this booking came from an intake request, now mark the intake request as approved in DB
+            const matchedIntakeId = newBooking.intakeRequestId || (bookingWizardOpen.initialData as any)?.intakeRequestId;
+            if (matchedIntakeId) {
+              await updateIntakeRequestStatusInDb(matchedIntakeId, 'approved');
+              setIntakeRequests(prev => prev.map(r => r.id === matchedIntakeId ? { ...r, status: 'approved' } : r));
+            }
+
             // If this booking came from a Grow payment, mark the payment completed
             if (activeGrowPayment) {
               await updateGrowPaymentStatus(activeGrowPayment.id, 'completed');
@@ -2023,6 +2236,21 @@ export default function App() {
           bookings={bookings}
           settings={settings}
           onClose={() => setIsReportsOpen(false)}
+        />
+      )}
+
+      {/* Monthly Refunds Detail & Reason Management Modal */}
+      {isMonthlyRefundsModalOpen && (
+        <MonthlyRefundsModal
+          isOpen={isMonthlyRefundsModalOpen}
+          monthKey={currentMonthKey}
+          bookings={bookings}
+          onClose={() => setIsMonthlyRefundsModalOpen(false)}
+          onUpdateBookingRefund={handleUpdateBookingRefund}
+          onOpenBookingDetails={(b) => {
+            setIsMonthlyRefundsModalOpen(false);
+            setBookingFormModal({ isOpen: true, initialData: b });
+          }}
         />
       )}
 
@@ -2119,6 +2347,7 @@ export default function App() {
             setBookingWizardOpen({
               isOpen: true,
               initialData: {
+                intakeRequestId: req.id,
                 dogName: req.dogName,
                 dogBreed: req.dogBreed,
                 dogGender: req.dogGender === 'female'
@@ -2140,8 +2369,9 @@ export default function App() {
                 stayStatus: 'booked'
               }
             });
-            await updateIntakeRequestStatusInDb(req.id, 'approved');
-            setIntakeRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'approved' } : r));
+
+            // Note: We deliberately do NOT update status to 'approved' here.
+            // The intake request will be marked 'approved' only when the user finishes and saves the booking in SimpleBookingWizard (onSave).
 
             // Auto-redeem voucher if present in request notes
             const voucherMatch = (req.notes || '').match(/שובר.*?:\s*([A-Z0-9\u0590-\u05FF-]+)/i);
@@ -2264,7 +2494,7 @@ export default function App() {
       {/* Persistent Floating Alert for Pending Grow Payments (when modal is snoozed/minimized) */}
       {pendingGrowPayments.length > 0 && isGrowPaymentsMinimized && !bookingWizardOpen.isOpen && !isGrowFloatingSnoozed && (
         <div 
-          className="fixed bottom-5 left-4 right-4 sm:left-auto sm:right-6 sm:w-[430px] z-40 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 text-white p-3.5 rounded-2xl shadow-2xl border-2 border-emerald-500 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-5 duration-300 ring-4 ring-emerald-500/25"
+          className="fixed bottom-20 sm:bottom-5 left-4 right-4 sm:left-auto sm:right-6 sm:w-[430px] z-40 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 text-white p-3.5 rounded-2xl shadow-2xl border-2 border-emerald-500 flex items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-5 duration-300 ring-4 ring-emerald-500/25"
           dir="rtl"
         >
           <div className="flex items-center gap-3 min-w-0">
@@ -2315,6 +2545,104 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Mobile Today Command Dashboard Modal for Shmulik */}
+      <MobileTodayDashboardModal
+        isOpen={isMobileTodayModalOpen}
+        onClose={() => setIsMobileTodayModalOpen(false)}
+        bookings={bookings}
+        settings={settings}
+        onSelectBooking={(b) => setSelectedDateForDetails(b.startDate)}
+        onOpenDailyDogUpdates={() => setIsDailyDogUpdatesOpen(true)}
+        onOpenTomorrowOverview={() => setIsTomorrowOverviewModalOpen(true)}
+      />
+
+      {/* Mobile Bottom Navigation Bar (Fixed for thumb reach - sm:hidden) */}
+      <nav
+        id="mobile-bottom-nav"
+        className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-2xl px-3 py-1.5 flex items-center justify-around select-none"
+        dir="rtl"
+      >
+        {/* 1. Calendar */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('calendar')}
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'calendar' ? 'text-[#065f46] font-black scale-105' : 'text-slate-500 font-medium'
+          }`}
+        >
+          <span className="text-xl">📅</span>
+          <span className="text-[10px] mt-0.5">יומן</span>
+          {activeTab === 'calendar' && <span className="w-1.5 h-1.5 rounded-full bg-[#065f46] mt-0.5" />}
+        </button>
+
+        {/* 2. WhatsApp CRM */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('whatsapp')}
+          className={`relative flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'whatsapp' ? 'text-[#065f46] font-black scale-105' : 'text-slate-500 font-medium'
+          }`}
+        >
+          <span className="text-xl relative">
+            💬
+            {newCrmChatsCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-600 rounded-full ring-2 ring-white animate-pulse" />
+            )}
+          </span>
+          <span className="text-[10px] mt-0.5 flex items-center gap-0.5">
+            <span>CRM</span>
+            {newCrmChatsCount > 0 && (
+              <span className="bg-rose-600 text-white text-[9px] px-1 rounded-full font-mono font-black">
+                {newCrmChatsCount}
+              </span>
+            )}
+          </span>
+          {activeTab === 'whatsapp' && <span className="w-1.5 h-1.5 rounded-full bg-[#065f46] mt-0.5" />}
+        </button>
+
+        {/* 3. Center CTA: + New Booking */}
+        <button
+          type="button"
+          onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
+          className="-mt-5 w-12 h-12 rounded-full bg-gradient-to-tr from-[#065f46] via-emerald-700 to-teal-700 text-white shadow-lg shadow-emerald-950/30 flex items-center justify-center border-4 border-white active:scale-90 transition-transform cursor-pointer"
+          title="הזמנה חדשה"
+        >
+          <span className="text-2xl font-bold leading-none">+</span>
+        </button>
+
+        {/* 4. Intake Requests */}
+        <button
+          type="button"
+          onClick={() => setIsIntakeModalOpen(true)}
+          className="relative flex flex-col items-center justify-center py-1 px-2 rounded-xl text-slate-500 font-medium active:scale-95 transition-all cursor-pointer"
+        >
+          <span className="text-xl relative">
+            📋
+            {pendingIntakeCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full ring-2 ring-white animate-pulse" />
+            )}
+          </span>
+          <span className="text-[10px] mt-0.5 flex items-center gap-0.5">
+            <span>שאלונים</span>
+            {pendingIntakeCount > 0 && (
+              <span className="bg-amber-500 text-white text-[9px] px-1 rounded-full font-mono font-black">
+                {pendingIntakeCount}
+              </span>
+            )}
+          </span>
+        </button>
+
+        {/* 5. Today Command Center */}
+        <button
+          type="button"
+          onClick={() => setIsMobileTodayModalOpen(true)}
+          className="flex flex-col items-center justify-center py-1 px-2 rounded-xl text-slate-600 hover:text-emerald-700 font-medium active:scale-95 transition-all cursor-pointer"
+        >
+          <span className="text-xl">☀️</span>
+          <span className="text-[10px] mt-0.5 font-bold text-emerald-800">סדר יום</span>
+        </button>
+      </nav>
 
     </div>
   );

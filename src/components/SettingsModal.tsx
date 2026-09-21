@@ -41,12 +41,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [formData, setFormData] = useState<ResortSettings>(() => {
     const s = { ...settings };
-    const rawPhone = s.whatsappNotificationPhone || s.managerPhone || '';
-    const phone = rawPhone.includes('8889900') ? '054-8765888' : (rawPhone || '054-8765888');
-    s.whatsappNotificationPhone = phone;
-    s.managerPhone = phone;
-    if (s.bitNumber && s.bitNumber.includes('8889900')) {
-      s.bitNumber = phone;
+    const resortPhone = s.managerPhone || '054-8765888';
+    const notifPhone = s.whatsappNotificationPhone || '050-6336896';
+    s.managerPhone = resortPhone.includes('8889900') ? '054-8765888' : resortPhone;
+    s.whatsappNotificationPhone = notifPhone.includes('8889900') ? '050-6336896' : notifPhone;
+    if (!s.bitNumber || s.bitNumber.includes('8889900')) {
+      s.bitNumber = s.managerPhone;
     }
     if (!s.defaultDailyRateTraining || Number(s.defaultDailyRateTraining) < 1000) {
       s.defaultDailyRateTraining = 6500;
@@ -60,12 +60,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useEffect(() => {
     setFormData(prev => {
       const s = { ...prev, ...settings };
-      const rawPhone = s.whatsappNotificationPhone || s.managerPhone || '';
-      const phone = rawPhone.includes('8889900') ? '054-8765888' : (rawPhone || '054-8765888');
-      s.whatsappNotificationPhone = phone;
-      s.managerPhone = phone;
-      if (s.bitNumber && s.bitNumber.includes('8889900')) {
-        s.bitNumber = phone;
+      const resortPhone = s.managerPhone || '054-8765888';
+      const notifPhone = s.whatsappNotificationPhone || '050-6336896';
+      s.managerPhone = resortPhone.includes('8889900') ? '054-8765888' : resortPhone;
+      s.whatsappNotificationPhone = notifPhone.includes('8889900') ? '050-6336896' : notifPhone;
+      if (!s.bitNumber || s.bitNumber.includes('8889900')) {
+        s.bitNumber = s.managerPhone;
       }
       if (!s.defaultDailyRateTraining || Number(s.defaultDailyRateTraining) < 1000) {
         s.defaultDailyRateTraining = 6500;
@@ -111,13 +111,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   });
 
   const executeSave = (newSettings: ResortSettings) => {
-    const rawPhone = newSettings.whatsappNotificationPhone || newSettings.managerPhone || '';
-    const phone = rawPhone.includes('8889900') ? '054-8765888' : (rawPhone || '054-8765888');
+    const resortPhone = newSettings.managerPhone || '054-8765888';
+    const notifPhone = newSettings.whatsappNotificationPhone || '050-6336896';
     const finalSettings = {
       ...newSettings,
-      whatsappNotificationPhone: phone,
-      managerPhone: phone,
-      bitNumber: (!newSettings.bitNumber || newSettings.bitNumber === newSettings.managerPhone || newSettings.bitNumber.includes('8889900') || newSettings.bitNumber === '054-8765888') ? phone : newSettings.bitNumber
+      managerPhone: resortPhone.includes('8889900') ? '054-8765888' : resortPhone,
+      whatsappNotificationPhone: notifPhone.includes('8889900') ? '050-6336896' : notifPhone,
+      bitNumber: (!newSettings.bitNumber || newSettings.bitNumber.includes('8889900')) ? (newSettings.managerPhone || '054-8765888') : newSettings.bitNumber
     };
     onSaveSettings(finalSettings);
     setSaveSuccess(true);
@@ -383,28 +383,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </span>
                 </div>
 
-                <div>
-                  <label className="text-xs text-slate-700 font-bold block mb-1">
-                    📱 טלפון ראשי של הריזורט (לוואטסאפ, שיחות והתראות)
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.whatsappNotificationPhone !== undefined ? formData.whatsappNotificationPhone : (formData.managerPhone || '')}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFormData(prev => ({ 
-                        ...prev, 
-                        whatsappNotificationPhone: val,
-                        managerPhone: val,
-                        bitNumber: (!prev.bitNumber || prev.bitNumber === prev.managerPhone || prev.bitNumber === '054-8765888' || prev.bitNumber.includes('8889900')) ? val : prev.bitNumber
-                      }));
-                    }}
-                    placeholder="054-8765888"
-                    className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    המספר המשמש להתראות מערכת, שיחות ושליחת וואטסאפ ללקוחות.
-                  </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-700 font-bold block mb-1">
+                      📱 טלפון ציבורי של הריזורט (ללקוחות, ביט ושיחות)
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.managerPhone || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          managerPhone: val,
+                          bitNumber: (!prev.bitNumber || prev.bitNumber === prev.managerPhone || prev.bitNumber === '054-8765888' || prev.bitNumber.includes('8889900')) ? val : prev.bitNumber
+                        }));
+                      }}
+                      placeholder="054-8765888"
+                      className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-1 block">
+                      המספר הראשי של הריזורט המוצג ללקוחות, בטפסים ובביט.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-700 font-bold block mb-1">
+                      🔔 וואטסאפ אישי של שמוליק (לקבלת כל הדוחות וההתראות)
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.whatsappNotificationPhone || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          whatsappNotificationPhone: val
+                        }));
+                      }}
+                      placeholder="050-6336896"
+                      className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2.5 rounded-xl border border-emerald-300 focus:border-emerald-500 focus:outline-none font-mono font-bold text-emerald-800"
+                    />
+                    <span className="text-[10px] text-emerald-600 mt-1 block font-medium">
+                      המספר הפרטי של שמוליק שמקבל את סקירת מחר ב-19:00, התראות קליטה ודוחות.
+                    </span>
+                  </div>
                 </div>
 
                 {/* Iron Rule: Weekend & Holiday Customer Messaging Policy */}

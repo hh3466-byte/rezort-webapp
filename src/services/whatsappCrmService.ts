@@ -64,8 +64,8 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
   const { id, token } = getCredentials(settings);
   if (!id || !token) return [];
 
-  const managerPhoneClean = settings?.managerPhone ? cleanPhoneNumber(settings.managerPhone) : '0506816001';
-  const notificationPhoneClean = settings?.whatsappNotificationPhone ? cleanPhoneNumber(settings.whatsappNotificationPhone) : '0548765888';
+  const managerPhoneClean = settings?.managerPhone ? cleanPhoneNumber(settings.managerPhone) : '0548765888';
+  const notificationPhoneClean = settings?.whatsappNotificationPhone ? cleanPhoneNumber(settings.whatsappNotificationPhone) : '0506336896';
 
   try {
     // 1. Fetch last incoming & outgoing messages from the last 7 days (10080 minutes)
@@ -107,8 +107,10 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
       if (
         cleanP === managerPhoneClean || 
         cleanP === notificationPhoneClean ||
+        cleanP === '0506336896' ||
         cleanP === '0506816001' || 
         cleanP === '0548765888' ||
+        chatId.includes('506336896') ||
         chatId.includes('506816001') || 
         chatId.includes('548765888')
       ) {
@@ -123,7 +125,8 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
           id: chatId,
           name: m.senderName || nameMap[chatId] || phone,
           type: 'user',
-          unreadCount: direction === 'incoming' && !m.isRead ? 1 : 0,
+          // חוק ברזל: הודעה נכנסת שטרם נענתה נשארת תמיד ב-שלא נקראו עם מונה unreadCount >= 1!
+          unreadCount: direction === 'incoming' ? 1 : 0,
           lastMessage: msgText,
           timestamp: msgTime || Date.now(),
           lastMessageType: direction,
@@ -138,9 +141,7 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
         }
         if (direction === 'incoming') {
           existing.incomingCount = (existing.incomingCount || 0) + 1;
-          if (!m.isRead) {
-            existing.unreadCount = (existing.unreadCount || 0) + 1;
-          }
+          existing.unreadCount = (existing.unreadCount || 0) + 1;
         } else {
           existing.outgoingCount = (existing.outgoingCount || 0) + 1;
         }
@@ -154,6 +155,15 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
 
     incoming.forEach(m => processMessage(m, 'incoming'));
     outgoing.forEach(m => processMessage(m, 'outgoing'));
+
+    // חוק ברזל: אם ההודעה האחרונה בשיחה היא הודעה נכנסת מהלקוח (lastMessageType === 'incoming')
+    // השיחה טרם נענתה ונשארת תמיד עבור שמוליק בסטטוס "שלא נקראה" (unreadCount >= 1)!
+    // צפייה במחשב, ב-CRM או סימון נקרא ב-WhatsApp Web לעולם אינם מאפסים את הסטטוס הזה!
+    for (const chat of chatMap.values()) {
+      if (chat.lastMessageType === 'incoming') {
+        chat.unreadCount = Math.max(chat.unreadCount || 0, 1);
+      }
+    }
 
     // Set isOngoingDialogue for each chat:
     // מתבצעת התכתבות = יש מעל הודעה נכנסת אחת או שהתפתח דו-שיח בין שני הצדדים
@@ -776,21 +786,15 @@ export function getChatTreatmentStatus(
     }
   }
 
-  // 6. פנייה חדשה לגמרי שלא נקראה או פנייה נכנסת ראשונה ב-24 השעות האחרונות
-  if (chat.unreadCount && chat.unreadCount > 0 && chat.lastMessageType === 'incoming' && ageHours < 24) {
-    return 'new';
-  }
-  if (chat.lastMessageType === 'incoming' && incCount === 1 && outCount === 0 && ageHours < 24) {
+  // 6. חוק ברזל: פנייה נכנסת מהלקוח שטרם נענתה (lastMessageType === 'incoming') ב-48 השעות האחרונות
+  // השיחה נשארת תמיד ב-'new' (קטגוריית "שלא נקראו / חדשות") עבור שמוליק!
+  // צפייה בהודעה במחשב, סריקת היסטוריה, או סימון נקרא ב-WhatsApp Web לעולם אינם מעבירים אותה ל"נקראו" או ל"מתנהלת"!
+  // היא תעבור לקטגוריה אחרת אך ורק כאשר נשלחת תשובה יוצאת ללקוח (או כשסומנה מפורשות כטופלה).
+  if (chat.lastMessageType === 'incoming' && ageHours < 48) {
     return 'new';
   }
 
-  // 7. שיחה בהתכתבות פעילה (in_chat):
-  // מתקיימת אך ורק אם הלקוח שלח הודעה נכנסת ב-24 השעות האחרונות וטרם סגרנו אותה!
-  if (chat.lastMessageType === 'incoming' && ageHours < 24) {
-    return 'in_chat';
-  }
-
-  // 8. שלחנו שאלון או הודעה אחרונה ואנחנו ממתינים לתגובת הלקוח בתוך 24 שעות ראשונות:
+  // 7. שלחנו שאלון או הודעה אחרונה ואנחנו ממתינים לתגובת הלקוח בתוך 24 שעות ראשונות:
   if (chat.lastMessageType === 'outgoing' && ageHours < 24) {
     return 'waiting_reply';
   }

@@ -37,7 +37,7 @@ export const TomorrowOverviewModal: React.FC<TomorrowOverviewModalProps> = ({
   const tomorrowDayName = getDayNameHebrew(tomorrow);
   const tomorrowFormatted = formatDateIL(tomorrow);
 
-  const managerPhone = cleanPhoneNumber(settings?.whatsappNotificationPhone || settings?.managerPhone || '0548765888');
+  const managerPhone = cleanPhoneNumber(settings?.whatsappNotificationPhone || '0506336896');
   const reportText = formatTomorrowOverviewReport(
     settings?.managerName || 'שמוליק',
     bookings,

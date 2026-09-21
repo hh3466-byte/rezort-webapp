@@ -59,7 +59,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [trainingFilter, setTrainingFilter] = useState<'all' | 'full' | 'day'>('all');
-  const [revenueCategoryFilter, setRevenueCategoryFilter] = useState<'all' | 'digital' | 'grow_10th' | 'direct_transfer' | 'grow_in_2_months' | 'cash'>('all');
+  const [revenueCategoryFilter, setRevenueCategoryFilter] = useState<'all' | 'digital' | 'grow_10th' | 'direct_transfer' | 'grow_in_2_months' | 'cash' | 'refunds'>('all');
   const [chartMode, setChartMode] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedChartPeriod, setSelectedChartPeriod] = useState<string | null>(null);
 
@@ -87,21 +87,29 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       cashBanknotes: number;
       cashCollected: number;
       totalCollected: number;
+      totalRefunds: number;
+      netCollected: number;
       expected: number;
       debt: number;
     }> = {};
-    const yearlyMap: Record<string, { count: number; collected: number; expected: number; debt: number }> = {};
+    const yearlyMap: Record<string, { count: number; grossCollected: number; totalRefunds: number; netCollected: number; expected: number; debt: number }> = {};
 
     let totalAllTime = 0;
     let totalThisMonth = 0;
 
-    // Calculate total all time
+    // Calculate total all time gross
     activeBookings.forEach(b => {
       const col = b.paymentStatus === 'fully_paid'
         ? (Number(b.totalPrice) || 0)
         : (Number(b.depositAmount) || 0);
       totalAllTime += col;
     });
+
+    // Deduct refunds from total all time
+    bookings.forEach(b => {
+      totalAllTime -= (Number(b.refundAmount) || 0);
+    });
+    if (totalAllTime < 0) totalAllTime = 0;
 
     // Build last 12 months sequence
     const recentKeys: string[] = [];
@@ -115,7 +123,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
     // Compute actual collections per month across the 4 categories
     recentKeys.forEach(mKey => {
-      const breakdown = getMonthlyRevenueBreakdown(mKey, activeBookings);
+      const breakdown = getMonthlyRevenueBreakdown(mKey, bookings);
       let mExpected = 0;
       let mDebt = 0;
 
@@ -130,7 +138,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
       monthlyMap[mKey] = {
         count: breakdown.digitalPaidCount + breakdown.cashPaidCount,
-        collected: breakdown.digitalCleared, // 1. נסלק החודש (דיגיטלי)
+        collected: breakdown.netCollected, // נסלק נטו לאחר החזרים
         digitalCleared: breakdown.digitalCleared,
         growClearedBankOn10th: breakdown.growClearedBankOn10th,
         directBankTransfers: breakdown.directBankTransfers,
@@ -138,6 +146,8 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
         cashBanknotes: breakdown.cashCollected,
         cashCollected: breakdown.cashCollected,
         totalCollected: breakdown.totalCollected,
+        totalRefunds: breakdown.totalRefunds,
+        netCollected: breakdown.netCollected,
         expected: mExpected,
         debt: mDebt
       };
@@ -147,7 +157,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       }
     });
 
-    // Compute yearly collections
+    // Compute yearly collections from active bookings
     activeBookings.forEach(b => {
       const yKey = (b.createdAt || b.startDate || '').substring(0, 4);
       const collected = b.paymentStatus === 'fully_paid'
@@ -157,12 +167,29 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const debt = Math.max(0, expected - collected);
 
       if (yKey && yKey.length === 4) {
-        if (!yearlyMap[yKey]) yearlyMap[yKey] = { count: 0, collected: 0, expected: 0, debt: 0 };
+        if (!yearlyMap[yKey]) yearlyMap[yKey] = { count: 0, grossCollected: 0, totalRefunds: 0, netCollected: 0, expected: 0, debt: 0 };
         yearlyMap[yKey].count += 1;
-        yearlyMap[yKey].collected += collected;
+        yearlyMap[yKey].grossCollected += collected;
         yearlyMap[yKey].expected += expected;
         yearlyMap[yKey].debt += debt;
       }
+    });
+
+    // Include annual refunds from all bookings (including cancelled ones)
+    bookings.forEach(b => {
+      const refAmt = Number(b.refundAmount) || 0;
+      if (refAmt > 0) {
+        const yKey = (b.refundDate || b.startDate || b.createdAt || '').substring(0, 4);
+        if (yKey && yKey.length === 4) {
+          if (!yearlyMap[yKey]) yearlyMap[yKey] = { count: 0, grossCollected: 0, totalRefunds: 0, netCollected: 0, expected: 0, debt: 0 };
+          yearlyMap[yKey].totalRefunds += refAmt;
+        }
+      }
+    });
+
+    // Compute net collected per year
+    Object.keys(yearlyMap).forEach(y => {
+      yearlyMap[y].netCollected = Math.max(0, yearlyMap[y].grossCollected - yearlyMap[y].totalRefunds);
     });
 
     // Merge any other months that have bookings
@@ -177,14 +204,16 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const [y, m] = k.split('-');
       const mIdx = parseInt(m, 10) - 1;
       const label = `${HEBREW_MONTHS[mIdx] || m} '${y.substring(2)}`;
-      const data = monthlyMap[k] || { count: 0, collected: 0, expected: 0, debt: 0 };
+      const data = monthlyMap[k] || { count: 0, collected: 0, digitalCleared: 0, growClearedBankOn10th: 0, directBankTransfers: 0, bankOn10thInTwoMonths: 0, cashBanknotes: 0, cashCollected: 0, totalCollected: 0, totalRefunds: 0, netCollected: 0, expected: 0, debt: 0 };
       return {
         periodKey: k,
         periodLabel: label,
         bookingsCount: data.count,
-        totalCollected: data.collected,
+        totalCollected: data.netCollected ?? data.collected,
         totalExpected: data.expected,
-        openDebt: data.debt
+        openDebt: data.debt,
+        totalRefunds: data.totalRefunds || 0,
+        netCollected: data.netCollected ?? data.collected
       };
     });
 
@@ -194,14 +223,16 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
     yKeys.sort();
 
     const yearlyList: ChartPeriodItem[] = yKeys.map(y => {
-      const data = yearlyMap[y] || { count: 0, collected: 0, expected: 0, debt: 0 };
+      const data = yearlyMap[y] || { count: 0, grossCollected: 0, totalRefunds: 0, netCollected: 0, expected: 0, debt: 0 };
       return {
         periodKey: y,
         periodLabel: `שנת ${y}`,
         bookingsCount: data.count,
-        totalCollected: data.collected,
+        totalCollected: data.netCollected, // נטו בפועל לאחר החזרים
         totalExpected: data.expected,
-        openDebt: data.debt
+        openDebt: data.debt,
+        totalRefunds: data.totalRefunds,
+        netCollected: data.netCollected
       };
     });
 
@@ -212,7 +243,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       allTimeCollected: totalAllTime,
       monthlyMap
     };
-  }, [activeBookings, currentMonthKey, currentYearKey]);
+  }, [activeBookings, bookings, currentMonthKey, currentYearKey]);
 
   if (!metricType) return null;
 
@@ -274,8 +305,10 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
     }
 
     case 'revenue': {
-      const paidItems = activeBookings.filter(b => {
-        return (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid';
+      const paidItems = bookings.filter(b => {
+        const hasPayment = (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid';
+        const hasRefund = (Number(b.refundAmount) || 0) > 0;
+        return (b.stayStatus !== 'cancelled' && hasPayment) || hasRefund;
       });
       const curData = monthlyMap[currentMonthKey];
       const digitalCleared = curData?.digitalCleared || 0;
@@ -283,16 +316,20 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const directBankTransfers = curData?.directBankTransfers || 0;
       const bankOn10thInTwoMonths = curData?.bankOn10thInTwoMonths || 0;
       const cashCollected = curData?.cashCollected || 0;
+      const monthRefunds = curData?.totalRefunds || 0;
 
       title = `פירוט הכנסות וסליקה: דיגיטלי, העברות ישירות, יכנס ב-10, יכנס ב-${inTwoMonthsDateLabel}, ומזומן`;
-      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')}${directBankTransfers > 0 ? ` • ישיר לחשבון: ₪${directBankTransfers.toLocaleString('he-IL')}` : ''} • 2. ייכנס לבנק ב-${next10thDateLabel}: ₪${growClearedBankOn10th.toLocaleString('he-IL')} • 3. יכנס לבנק ב-${inTwoMonthsDateLabel}: ₪${bankOn10thInTwoMonths.toLocaleString('he-IL')} • 4. נסלק במזומן: ₪${cashCollected.toLocaleString('he-IL')}`;
+      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')}${directBankTransfers > 0 ? ` • ישיר לחשבון: ₪${directBankTransfers.toLocaleString('he-IL')}` : ''} • 2. ייכנס לבנק ב-${next10thDateLabel}: ₪${growClearedBankOn10th.toLocaleString('he-IL')} • 3. יכנס לבנק ב-${inTwoMonthsDateLabel}: ₪${bankOn10thInTwoMonths.toLocaleString('he-IL')} • 4. נסלק במזומן: ₪${cashCollected.toLocaleString('he-IL')}${monthRefunds > 0 ? ` • 🔄 החזרים: ₪${monthRefunds.toLocaleString('he-IL')}-` : ''}`;
       icon = <DollarSign className="w-5 h-5 text-emerald-700" />;
       badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
       filteredItems = paidItems;
 
-      // Filter by revenueCategoryFilter (all / digital / grow_10th / direct_transfer / grow_in_2_months / cash)
+      // Filter by revenueCategoryFilter (all / digital / grow_10th / direct_transfer / grow_in_2_months / cash / refunds)
       if (revenueCategoryFilter !== 'all') {
         filteredItems = filteredItems.filter(b => {
+          if (revenueCategoryFilter === 'refunds') {
+            return (Number(b.refundAmount) || 0) > 0;
+          }
           const notes = (b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '');
           const isGrow = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref) || b.id.includes(t.ref));
           const isBank = (b.ownerName || '').includes('רונן') || (b.ownerName || '').includes('מלמוד') || notes.includes('העברה בנקאית');
@@ -302,7 +339,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
           if (revenueCategoryFilter === 'direct_transfer') return isBank;
           if (revenueCategoryFilter === 'grow_in_2_months') return isInstallment;
           if (revenueCategoryFilter === 'digital') return isGrow || isBank;
-          if (revenueCategoryFilter === 'cash') return !isGrow && !isBank;
+          if (revenueCategoryFilter === 'cash') return !isGrow && !isBank && (Number(b.refundAmount) || 0) === 0;
           return true;
         });
       }
@@ -311,10 +348,14 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       if (selectedChartPeriod) {
         filteredItems = filteredItems.filter(b => {
           if (chartMode === 'monthly') {
-            return getBookingPaymentsInMonth(b, selectedChartPeriod) > 0;
+            const hasPayment = getBookingPaymentsInMonth(b, selectedChartPeriod) > 0;
+            const hasRefund = (Number(b.refundAmount) || 0) > 0 && (b.refundDate || b.startDate || '').startsWith(selectedChartPeriod);
+            return hasPayment || hasRefund;
           } else {
-            return (b.createdAt && b.createdAt.startsWith(selectedChartPeriod)) || 
-                   (b.startDate && b.startDate.startsWith(selectedChartPeriod));
+            const matchesYear = (b.createdAt && b.createdAt.startsWith(selectedChartPeriod)) || 
+                                (b.startDate && b.startDate.startsWith(selectedChartPeriod));
+            const matchesRefundYear = (Number(b.refundAmount) || 0) > 0 && (b.refundDate || b.startDate || '').startsWith(selectedChartPeriod);
+            return matchesYear || matchesRefundYear;
           }
         });
       }
@@ -520,6 +561,22 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   </div>
                   <div className="text-[9px] text-slate-400">דיגיטלי + מזומן</div>
                 </div>
+
+                {(monthlyMap[currentMonthKey]?.totalRefunds || 0) > 0 && (
+                  <div 
+                    onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'refunds' ? 'all' : 'refunds')}
+                    className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
+                      revenueCategoryFilter === 'refunds' ? 'bg-rose-100 border-rose-500 ring-2 ring-rose-500' : 'bg-rose-50 border-rose-200 hover:bg-rose-100/60'
+                    }`}
+                    title="לחץ לסינון: החזרים כספיים שבוצעו החודש"
+                  >
+                    <div className="text-[10px] font-bold text-rose-800">החזרים שבוצעו החודש</div>
+                    <div className="text-sm font-black text-rose-700 font-mono">
+                      -₪{(monthlyMap[currentMonthKey]?.totalRefunds || 0).toLocaleString('he-IL')}
+                    </div>
+                    <div className="text-[9px] text-rose-600 font-medium">נוכה מהכנסות הריזורט</div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -560,16 +617,26 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                             ? 'bg-emerald-50/80 ring-2 ring-emerald-500 shadow-2xs' 
                             : 'hover:bg-slate-50'
                         }`}
-                        title={`${item.periodLabel}: ₪${item.totalCollected.toLocaleString('he-IL')} מתוך ${item.bookingsCount} הזמנות. לחץ לסינון הרשימה.`}
+                        title={`${item.periodLabel}: ₪${item.totalCollected.toLocaleString('he-IL')} נטו מתוך ${item.bookingsCount} הזמנות ${(item.totalRefunds || 0) > 0 ? `(הוחזרו ₪${item.totalRefunds?.toLocaleString('he-IL')})` : ''}. לחץ לסינון הרשימה.`}
                       >
                         {/* Amount in Shekels on top of column */}
-                        <span className={`text-[10px] sm:text-[11px] font-black tracking-tight mb-1 text-center transition-all ${
-                          item.totalCollected > 0 
-                            ? isSelected || isCurrent ? 'text-emerald-800 scale-105' : 'text-slate-700'
-                            : 'text-slate-400 opacity-60'
-                        }`}>
-                          {item.totalCollected > 0 ? `₪${item.totalCollected.toLocaleString('he-IL')}` : '0 ₪'}
-                        </span>
+                        <div className="flex flex-col items-center mb-1">
+                          {(item.totalRefunds || 0) > 0 && (
+                            <span 
+                              className="text-[9px] font-black text-rose-600 bg-rose-50 border border-rose-200 px-1 rounded-full mb-0.5 whitespace-nowrap"
+                              title={`בוצעו החזרים כספיים בסך ₪${item.totalRefunds?.toLocaleString('he-IL')}`}
+                            >
+                              -₪{item.totalRefunds?.toLocaleString('he-IL')}
+                            </span>
+                          )}
+                          <span className={`text-[10px] sm:text-[11px] font-black tracking-tight text-center transition-all ${
+                            item.totalCollected > 0 
+                              ? isSelected || isCurrent ? 'text-emerald-800 scale-105' : 'text-slate-700'
+                              : 'text-slate-400 opacity-60'
+                          }`}>
+                            {item.totalCollected > 0 ? `₪${item.totalCollected.toLocaleString('he-IL')}` : '0 ₪'}
+                          </span>
+                        </div>
 
                         {/* The Bar Column */}
                         <div className="w-full max-w-[42px] bg-slate-100 rounded-t-xl overflow-hidden flex items-end justify-center h-[115px]">
@@ -721,6 +788,17 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
               >
                 💵 4. נסלק במזומן
               </button>
+              {((monthlyMap[currentMonthKey]?.totalRefunds || 0) > 0 || bookings.some(b => (Number(b.refundAmount) || 0) > 0)) && (
+                <button
+                  type="button"
+                  onClick={() => setRevenueCategoryFilter('refunds')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                    revenueCategoryFilter === 'refunds' ? 'bg-rose-600 text-white shadow-2xs' : 'text-rose-700 hover:bg-rose-50 border border-rose-200'
+                  }`}
+                >
+                  ↩️ החזרים כספיים ({bookings.filter(b => (Number(b.refundAmount) || 0) > 0).length})
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -769,7 +847,11 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                       </span>
 
                       {/* Stay Status Tag */}
-                      {isEnded ? (
+                      {b.stayStatus === 'cancelled' ? (
+                        <span className="text-xs bg-rose-100 text-rose-800 border border-rose-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                          ❌ בוטל
+                        </span>
+                      ) : isEnded ? (
                         <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-md font-semibold">
                           🏁 הסתיים ושוחרר
                         </span>
@@ -780,6 +862,14 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                       ) : (
                         <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-semibold">
                           📅 שוריין
+                        </span>
+                      )}
+
+                      {/* Refund Tag */}
+                      {(Number(b.refundAmount) || 0) > 0 && (
+                        <span className="text-xs bg-rose-50 text-rose-800 border border-rose-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                          <span>↩️ הוחזר: ₪{Number(b.refundAmount).toLocaleString('he-IL')}</span>
+                          {b.refundReason && <span className="font-medium text-[11px] text-rose-700">({b.refundReason})</span>}
                         </span>
                       )}
 
@@ -856,7 +946,17 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         <span>שולם כמקדמה:</span>
                         <span className="font-bold">₪{depositAmount.toLocaleString('he-IL')}</span>
                       </div>
-                      {remainingDebt > 0 && b.paymentStatus !== 'fully_paid' ? (
+                      {(Number(b.refundAmount) || 0) > 0 && (
+                        <div className="text-xs text-rose-700 font-bold flex items-center justify-between gap-2 border-t border-rose-200/80 pt-0.5 mt-0.5 bg-rose-50/70 px-1.5 py-0.5 rounded">
+                          <span>הוחזר ללקוח:</span>
+                          <span className="font-mono font-black">₪{Number(b.refundAmount).toLocaleString('he-IL')}</span>
+                        </div>
+                      )}
+                      {b.stayStatus === 'cancelled' ? (
+                        <div className="text-xs font-bold text-rose-600 flex items-center gap-1 border-t border-rose-200/60 pt-0.5 mt-0.5">
+                          <span>הזמנה מבוטלת</span>
+                        </div>
+                      ) : remainingDebt > 0 && b.paymentStatus !== 'fully_paid' ? (
                         <div className="text-xs font-black text-red-600 flex items-center justify-between gap-2 border-t border-red-200/60 pt-0.5 mt-0.5">
                           <span>יתרת חוב:</span>
                           <span>₪{remainingDebt.toLocaleString('he-IL')}</span>

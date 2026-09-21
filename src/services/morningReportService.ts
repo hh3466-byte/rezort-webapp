@@ -1,11 +1,12 @@
 import { Booking, ResortSettings, IntakeRequest } from '../types';
 import { getTodayStr, getDayNameHebrew, formatDateIL, addDays } from '../utils/dateUtils';
-import { cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
+import { cleanPhoneNumber, getFirstName, isValidIsraeliPhone } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from './notificationService';
 import { isYomKippurDate } from '../utils/jewishCalendar';
 import { fetchNewCrmChatsCount } from './whatsappCrmService';
 import { isIntakeRequestNew } from '../utils/intakeUtils';
 import { supabase } from '../utils/supabase';
+import { send1830SanityReportToShmulik } from './dailySanity1830Service';
 
 let overviewReportInterval: any = null;
 let isOverviewSending = false;
@@ -257,19 +258,256 @@ export function formatTomorrowOverviewReport(
     highlights.push(`💊 *תרופות ומזון מיוחד:* ${medsList}`);
   }
 
-  // Pending questionnaires
-  const pendingIntakes = intakeRequests.filter(r => isIntakeRequestNew(r, bookings));
+  // Ensure safe intake requests fallback from settings.data
+  const safeIntakes: IntakeRequest[] = (intakeRequests && intakeRequests.length > 0)
+    ? intakeRequests
+    : (Array.isArray((settings as any)?.data?.intakeRequests) ? (settings as any).data.intakeRequests : []);
+
+  const pendingIntakes = safeIntakes.filter(r => r.status === 'pending');
   if (pendingIntakes.length > 0) {
     highlights.push(`📥 *שאלונים חדשים לבדיקה:* ${pendingIntakes.length} שאלונים ממתינים`);
-  }
-
-  if (newCrmLeadsCount > 0) {
-    highlights.push(`💬 *פניות וואטסאפ שלא נענו:* ${newCrmLeadsCount} שיחות`);
   }
 
   let highlightsSection = '';
   if (highlights.length > 0) {
     highlightsSection = `\n\n⭐ *דגשים ודברים חשובים נוספים:*\n${highlights.map(h => `• ${h}`).join('\n')}`;
+  }
+
+  // Comprehensive Sanity & Anomalies Audit (18:30 Check integrated into 19:00 Report)
+  const activeUpcoming = bookings.filter(b => 
+    b.stayStatus !== 'cancelled' &&
+    b.stayStatus !== 'checked_out' &&
+    b.endDate >= todayStr
+  );
+
+  const sanityAnomalies = {
+    unpaidUpcoming: [] as Array<{ dog: string; owner: string; phone: string; dates: string; price: number }>,
+    approvedWithoutBooking: [] as Array<{ dog: string; owner: string; phone: string; dates: string }>,
+    phoneAnomalies: [] as string[],
+    unhandledIntakes: [] as Array<{ dog: string; owner: string; phone: string; dates: string }>,
+    typos: [] as string[],
+    pricingIssues: [] as string[],
+    duplicateAlerts: [] as string[],
+    capacityAlerts: [] as string[],
+    paymentConfigIssues: [] as string[]
+  };
+
+  // 1. Unpaid reservations holding capacity (0 deposit)
+  activeUpcoming.forEach(b => {
+    const price = Number(b.totalPrice) || 0;
+    const deposit = Number(b.depositAmount) || 0;
+    const isFree = b.isFreeStay;
+    if (price > 0 && deposit === 0 && !isFree) {
+      sanityAnomalies.unpaidUpcoming.push({
+        dog: b.dogName,
+        owner: b.ownerName,
+        phone: b.ownerPhone || '',
+        dates: `${formatDateIL(b.startDate)} עד ${formatDateIL(b.endDate)}`,
+        price
+      });
+    }
+  });
+
+  // 2. Approved intake requests that have NO booking in the calendar (holding status in vacuum)
+  const approvedIntakes = safeIntakes.filter(r => r.status === 'approved');
+  approvedIntakes.forEach(ai => {
+    const aiDog = (ai.dogName || '').trim().toLowerCase();
+    const aiPhone = (ai.ownerPhone || '').replace(/\D/g, '');
+    const hasMatchingBooking = bookings.some(b => {
+      const bDog = (b.dogName || '').trim().toLowerCase();
+      const bPhone = (b.ownerPhone || '').replace(/\D/g, '');
+      return (aiDog && bDog && aiDog === bDog) || (aiPhone && bPhone && aiPhone === bPhone);
+    });
+    if (!hasMatchingBooking) {
+      sanityAnomalies.approvedWithoutBooking.push({
+        dog: ai.dogName,
+        owner: ai.ownerName,
+        phone: ai.ownerPhone || '',
+        dates: `${formatDateIL(ai.startDate)} עד ${formatDateIL(ai.endDate)}`
+      });
+    }
+  });
+
+  // 3. Phone number validity & formatting checks across bookings & intakes
+  activeUpcoming.forEach(b => {
+    if (b.ownerPhone && !isValidIsraeliPhone(b.ownerPhone)) {
+      sanityAnomalies.phoneAnomalies.push(`🐶 הזמנה ל-${b.dogName} (${b.ownerName}): טלפון לא תקין "${b.ownerPhone}" (חובה 10 ספרות נייד)`);
+    }
+  });
+  safeIntakes.filter(r => r.status === 'pending' || r.status === 'approved').forEach(r => {
+    if (r.ownerPhone && !isValidIsraeliPhone(r.ownerPhone)) {
+      sanityAnomalies.phoneAnomalies.push(`📥 שאלון ${r.dogName} (${r.ownerName}): טלפון לא תקין "${r.ownerPhone}"`);
+    }
+  });
+
+  // 4. Typos & date contradictions in bookings AND intake forms
+  activeUpcoming.forEach(b => {
+    const sType = b.serviceType || '';
+    if (!b.startDate || !b.endDate) {
+      sanityAnomalies.typos.push(`🐶 ${b.dogName} (${b.ownerName}): חסר תאריך כניסה/יציאה חוקי`);
+    } else if (b.endDate < b.startDate) {
+      sanityAnomalies.typos.push(`🐶 ${b.dogName} (${b.ownerName}): תאריך יציאה (${formatDateIL(b.endDate)}) קודם לכניסה (${formatDateIL(b.startDate)})`);
+    } else if ((sType === 'training' || (sType as any) === 'day_training') && b.startDate === b.endDate) {
+      sanityAnomalies.typos.push(`🐶 ${b.dogName} (${b.ownerName}): תהליך אילוף הוגדר ליום בודד (${formatDateIL(b.startDate)})`);
+    }
+  });
+  safeIntakes.filter(r => r.status === 'pending' || r.status === 'approved').forEach(r => {
+    if (!r.startDate || !r.endDate) {
+      sanityAnomalies.typos.push(`📥 שאלון ${r.dogName} (${r.ownerName}): חסר תאריך כניסה/יציאה`);
+    } else if (r.endDate < r.startDate) {
+      sanityAnomalies.typos.push(`📥 שאלון ${r.dogName} (${r.ownerName}): תאריך יציאה (${formatDateIL(r.endDate)}) קודם לכניסה (${formatDateIL(r.startDate)})`);
+    } else if (r.serviceType === 'training' && r.startDate === r.endDate) {
+      sanityAnomalies.typos.push(`📥 שאלון ${r.dogName} (${r.ownerName}): תהליך אילוף הוגדר ליום בודד (${formatDateIL(r.startDate)})`);
+    }
+  });
+
+  // 5. Unhandled pending intake requests
+  const pendingIntakesList = safeIntakes.filter(r => r.status === 'pending');
+  pendingIntakesList.forEach(r => {
+    sanityAnomalies.unhandledIntakes.push({
+      dog: r.dogName,
+      owner: r.ownerName,
+      phone: r.ownerPhone || '',
+      dates: `${formatDateIL(r.startDate)} עד ${formatDateIL(r.endDate)}`
+    });
+  });
+
+  // 6. Payment Link Configuration Sanity (100% link based)
+  const effectiveGrowLink = settings.growPaymentLink || (settings as any).payboxPaymentLink;
+  if (!effectiveGrowLink || !effectiveGrowLink.includes('http')) {
+    sanityAnomalies.paymentConfigIssues.push('חסר קישור תשלום פעיל בהגדרות (Grow Link)! לקוחות לא יכולים לשלם.');
+  }
+
+  // 7. Pricing anomalies
+  activeUpcoming.forEach(b => {
+    const price = Number(b.totalPrice) || 0;
+    const deposit = Number(b.depositAmount) || 0;
+    if (price <= 0 && !b.isFreeStay) {
+      sanityAnomalies.pricingIssues.push(`🐶 ${b.dogName} (${b.ownerName}): סך הכל לתשלום ₪0 (לא סומן אירוח חינם)`);
+    }
+    if (deposit > price && price > 0) {
+      sanityAnomalies.pricingIssues.push(`🐶 ${b.dogName} (${b.ownerName}): מקדמה (₪${deposit}) גדולה מסך ההזמנה (₪${price})`);
+    }
+  });
+
+  // 8. Advanced Duplicate Detection (Same owner OR Cross-Owner/Partner Ghost Bookings like Boss)
+  for (let i = 0; i < activeUpcoming.length; i++) {
+    for (let j = i + 1; j < activeUpcoming.length; j++) {
+      const b1 = activeUpcoming[i];
+      const b2 = activeUpcoming[j];
+      const dog1 = (b1.dogName || '').trim().toLowerCase();
+      const dog2 = (b2.dogName || '').trim().toLowerCase();
+      if (!dog1 || !dog2 || dog1 !== dog2) continue;
+
+      const hasOverlap = (b1.startDate <= b2.endDate && b1.endDate >= b2.startDate);
+      if (!hasOverlap) continue;
+
+      const phone1 = (b1.ownerPhone || '').replace(/\D/g, '');
+      const phone2 = (b2.ownerPhone || '').replace(/\D/g, '');
+
+      if (phone1 && phone1 === phone2) {
+        sanityAnomalies.duplicateAlerts.push(`👥 כפילות זהה ביומן: הכלב "${b1.dogName}" (${b1.ownerName}) מופיע פעמיים בתאריכים חופפים (${formatDateIL(b1.startDate)}-${formatDateIL(b1.endDate)})`);
+        continue;
+      }
+
+      const dep1 = Number(b1.depositAmount) || 0;
+      const dep2 = Number(b2.depositAmount) || 0;
+      const isSingleDay1 = b1.startDate === b1.endDate;
+      const isSingleDay2 = b2.startDate === b2.endDate;
+      const isSuspiciousGhost = (dep1 === 0 && isSingleDay1) || (dep2 === 0 && isSingleDay2) || (b1.startDate === b2.startDate);
+
+      if (isSuspiciousGhost) {
+        sanityAnomalies.duplicateAlerts.push(`🚨 *חשד לכפילות שותפים/רשומת רפאים:* הכלב "${b1.dogName}" רשום באותו תאריך תחת 2 בעלים שונים!\n      - רשומה 1: ${b1.ownerName} (📞 ${b1.ownerPhone}) | ${formatDateIL(b1.startDate)}-${formatDateIL(b1.endDate)} | מקדמה: ₪${dep1}\n      - רשומה 2: ${b2.ownerName} (📞 ${b2.ownerPhone}) | ${formatDateIL(b2.startDate)}-${formatDateIL(b2.endDate)} | מקדמה: ₪${dep2}`);
+      } else {
+        sanityAnomalies.duplicateAlerts.push(`💡 שימו לב: 2 כלבים שונים בשם "${b1.dogName}" שוהים במקביל (${b1.ownerName} מול ${b2.ownerName})`);
+      }
+    }
+  }
+
+  // 9. Overbooking capacity in next 7 days
+  for (let d = 0; d < 7; d++) {
+    const curDate = new Date(todayStr + 'T00:00:00');
+    curDate.setDate(curDate.getDate() + d);
+    const y = curDate.getFullYear();
+    const m = String(curDate.getMonth() + 1).padStart(2, '0');
+    const day = String(curDate.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${day}`;
+
+    const overnights = activeUpcoming.filter(b => b.startDate <= dateStr && b.endDate > dateStr);
+    if (overnights.length > maxCapacity) {
+      sanityAnomalies.capacityAlerts.push(`📅 ${formatDateIL(dateStr)}: ${overnights.length} כלבים ללינה (חריגה מ-${maxCapacity})`);
+    }
+  }
+
+  let sanityAuditSection = '';
+  const hasSanityIssues = 
+    sanityAnomalies.unpaidUpcoming.length > 0 ||
+    sanityAnomalies.approvedWithoutBooking.length > 0 ||
+    sanityAnomalies.phoneAnomalies.length > 0 ||
+    sanityAnomalies.unhandledIntakes.length > 0 ||
+    sanityAnomalies.duplicateAlerts.length > 0 ||
+    sanityAnomalies.typos.length > 0 ||
+    sanityAnomalies.pricingIssues.length > 0 ||
+    sanityAnomalies.capacityAlerts.length > 0 ||
+    sanityAnomalies.paymentConfigIssues.length > 0;
+
+  if (!hasSanityIssues) {
+    sanityAuditSection = `\n\n🛡️ *בדיקת שפיות וחריגות יומן (18:30):* ✅ כל הנתונים תקינים! אין כפילויות, אין שריונים ללא מקדמה, וכל הטלפונים והתאריכים מאומתים.`;
+  } else {
+    const sParts = [`\n\n🛡️ *ממצאי בדיקת שפיות, תקלות תקשורת וחריגות ביומן (הופק ב-18:30):*`];
+    
+    if (sanityAnomalies.unpaidUpcoming.length > 0) {
+      sParts.push(`🚨 *שיריוני מקום ביומן ללא מקדמה (${sanityAnomalies.unpaidUpcoming.length} כלבים שומרים מקום בלי לשלם!):*`);
+      sanityAnomalies.unpaidUpcoming.forEach(u => {
+        sParts.push(`   • 🔴 *${u.dog}* (${u.owner} - ${u.phone}) | ${u.dates} | ₪0 מקדמה (חוב: ₪${u.price.toLocaleString()})`);
+      });
+    }
+
+    if (sanityAnomalies.approvedWithoutBooking.length > 0) {
+      sParts.push(`⚠️ *שאלוני קליטה שסומנו מאושרים אך ללא שריון ביומן (${sanityAnomalies.approvedWithoutBooking.length} שאלונים תלויים):*`);
+      sanityAnomalies.approvedWithoutBooking.forEach(a => {
+        sParts.push(`   • 🟠 *${a.dog}* (${a.owner} - ${a.phone}) | ${a.dates} | הבקשה סומנה מאושרת אך אין הזמנה ביומן ולא נגבתה מקדמה!`);
+      });
+    }
+
+    if (sanityAnomalies.unhandledIntakes.length > 0) {
+      sParts.push(`📥 *שאלוני קליטה חדשים הממתינים לטיפול ולשליחת לינק (${sanityAnomalies.unhandledIntakes.length}):*`);
+      sanityAnomalies.unhandledIntakes.forEach(i => {
+        sParts.push(`   • ⏳ *${i.dog}* (${i.owner} - ${i.phone}) | ${i.dates}`);
+      });
+    }
+
+    if (sanityAnomalies.phoneAnomalies.length > 0) {
+      sParts.push(`📞 *תקלות מספרי טלפון (קצר/חסר/שגוי - לא ניתן לשלוח הודעות):*`);
+      sanityAnomalies.phoneAnomalies.forEach(p => sParts.push(`   • ${p}`));
+    }
+
+    if (sanityAnomalies.duplicateAlerts.length > 0) {
+      sParts.push(`👥 *כפילויות ביומן / חשד לשותפים:*`);
+      sanityAnomalies.duplicateAlerts.forEach(d => sParts.push(`   • ${d}`));
+    }
+
+    if (sanityAnomalies.typos.length > 0) {
+      sParts.push(`⚠️ *חשד לטעויות תאריכים:*`);
+      sanityAnomalies.typos.forEach(t => sParts.push(`   • ${t}`));
+    }
+
+    if (sanityAnomalies.pricingIssues.length > 0) {
+      sParts.push(`💰 *אי-התאמות במחירים:*`);
+      sanityAnomalies.pricingIssues.forEach(p => sParts.push(`   • ${p}`));
+    }
+
+    if (sanityAnomalies.capacityAlerts.length > 0) {
+      sParts.push(`📈 *ימים בעומס תפוסה (מעל ${maxCapacity} מקומות):*`);
+      sanityAnomalies.capacityAlerts.forEach(c => sParts.push(`   • ${c}`));
+    }
+
+    if (sanityAnomalies.paymentConfigIssues.length > 0) {
+      sParts.push(`🔗 *הגדרות קישורי תשלום:*`);
+      sanityAnomalies.paymentConfigIssues.forEach(c => sParts.push(`   • ${c}`));
+    }
+
+    sanityAuditSection = sParts.join('\n');
   }
 
   const occupancyStatus = endOfDayDogs.length >= maxCapacity
@@ -309,7 +547,7 @@ ${trainingOvernightLine}
 
 📈 *סיכום תפוסת לינה מחר:*
 • *${endOfDayDogs.length} מתוך ${maxCapacity} מקומות* (${occupancyPercent}% תפוסה)
-${occupancyStatus}${highlightsSection}
+${occupancyStatus}${highlightsSection}${sanityAuditSection}
 
 שיהיה יום מוצלח, פורה ושקט! ❤️🐶🐾`;
 }
@@ -397,7 +635,7 @@ export async function checkIfOverviewAlreadySentToday(
   try {
     const greenId = settings?.greenApiIdInstance;
     const greenToken = settings?.greenApiToken;
-    const managerPhone = cleanPhoneNumber(settings?.whatsappNotificationPhone || settings?.managerPhone || '0548765888');
+    const managerPhone = cleanPhoneNumber(settings?.whatsappNotificationPhone || '0506336896');
     const intlPhone = managerPhone.startsWith('0') ? '972' + managerPhone.substring(1) : managerPhone;
     const chatId = intlPhone + '@c.us';
 
@@ -483,7 +721,7 @@ export async function sendTomorrowOverviewToShmulik(
     newCrmLeadsCount = await fetchNewCrmChatsCount(settings, bookings, intakeRequests);
   } catch {}
 
-  const managerPhone = cleanPhoneNumber(settings?.whatsappNotificationPhone || settings?.managerPhone || '0548765888');
+  const managerPhone = cleanPhoneNumber(settings?.whatsappNotificationPhone || '0506336896');
   const reportText = formatTomorrowOverviewReport(
     settings?.managerName || 'שמוליק',
     bookings,
@@ -588,6 +826,101 @@ export function initTomorrowOverviewScheduler(
     if (overviewReportInterval) {
       clearInterval(overviewReportInterval);
       overviewReportInterval = null;
+    }
+  };
+}
+
+let sanity1830Interval: any = null;
+let isSanity1830Sending = false;
+
+/**
+ * Checks eligibility for the 18:30 Sanity Report
+ * Per ironclad rule: runs every day at 18:30 (even on Friday eve and Motzei Shabbat/holiday)
+ */
+export function is1830SanityEligibleNow(): { eligible: boolean; reason?: string } {
+  const now = new Date();
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false
+  });
+
+  const parts = dtf.formatToParts(now);
+  let hour = 0;
+  let minute = 0;
+  for (const p of parts) {
+    if (p.type === 'hour') hour = parseInt(p.value, 10);
+    if (p.type === 'minute') minute = parseInt(p.value, 10);
+  }
+
+  // Window starts at 18:30
+  if (hour < 18 || (hour === 18 && minute < 30)) {
+    return {
+      eligible: false,
+      reason: `מוקדם מדי (השעה הנוכחית: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}, דוח בדיקת שפיות מתוזמן ל-18:30)`
+    };
+  }
+
+  return { eligible: true };
+}
+
+/**
+ * Initializes the background 18:30 Sanity Audit Scheduler in the web app
+ */
+export function init1830SanityScheduler(
+  getBookings: () => Booking[],
+  getSettings: () => ResortSettings,
+  getIntakeRequests: () => IntakeRequest[],
+  showToast?: (msg: string) => void
+): () => void {
+  if (sanity1830Interval) {
+    clearInterval(sanity1830Interval);
+  }
+
+  const checkAndRun = async () => {
+    if (isSanity1830Sending) return;
+
+    const today = getTodayStr();
+    const storageKey = `shmulik_1830_sanity_${today}`;
+    if (typeof window !== 'undefined' && window.localStorage && localStorage.getItem(storageKey)) return;
+
+    const eligibility = is1830SanityEligibleNow();
+    if (!eligibility.eligible) return;
+
+    isSanity1830Sending = true;
+    try {
+      const res = await send1830SanityReportToShmulik(
+        getBookings(),
+        getSettings(),
+        getIntakeRequests()
+      );
+
+      if (res.success) {
+        showToast?.('🛡️ דוח בדיקת שפיות יומית (18:30) נשלח בהצלחה לוואטסאפ של שמוליק! 🐾');
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification('🛡️ בדיקת שפיות יומית – הריזורט לכלב', {
+              body: 'השעה 18:30! דוח בדיקת שפיות, אירועים ירוקים ואורות אדומים נשלח לשמוליק בוואטסאפ.',
+              icon: '/favicon.ico'
+            });
+          } catch {}
+        }
+      }
+    } catch (e) {
+      console.warn('18:30 Sanity scheduler error:', e);
+    } finally {
+      isSanity1830Sending = false;
+    }
+  };
+
+  checkAndRun();
+  sanity1830Interval = setInterval(checkAndRun, 30000);
+
+  return () => {
+    if (sanity1830Interval) {
+      clearInterval(sanity1830Interval);
+      sanity1830Interval = null;
     }
   };
 }

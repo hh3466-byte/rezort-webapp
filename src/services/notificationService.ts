@@ -20,6 +20,12 @@ export function formatIntakeNotification(request: IntakeRequest): string {
     ? `📅 *תאריך כניסה מבוקש לאילוף:* החל מ-${formatDateIL(request.startDate)} (משך יסוכם בשיחה)`
     : `📅 *תאריכים:* מ-${formatDateIL(request.startDate)} עד ${formatDateIL(request.endDate)}`;
 
+  const additionalDogsText = request.additionalDogs && request.additionalDogs.length > 0
+    ? '\n🐾 *כלבים נוספים באותה בקשה:*\n' + request.additionalDogs.map((d, i) => 
+        `  ${i + 2}. *${d.dogName}* (${d.dogBreed}) | ${d.sameDatesAsPrimary ? 'אותם תאריכים' : `${formatDateIL(d.startDate || '')} - ${formatDateIL(d.endDate || '')}`}`
+      ).join('\n') + '\n'
+    : '';
+
   return `🐾 *בקשת קליטה חדשה בריזורט לכלב!*
 --------------------------------
 👤 *בעלים:* ${request.ownerName}
@@ -33,7 +39,7 @@ ${datesLine}
 💉 *חיסונים בתוקף:* ${vaccinatedLabel}
 🚽 *מחונך לצרכים:* ${houseTrainedLabel}
 🛡️ *טיפול נגד קרציות ופשפשים:* ${parasitesLabel}
-${request.specialNeeds ? `🩺 *צרכים מיוחדים:* ${request.specialNeeds}\n` : ''}${request.notes ? `📝 *הערות:* ${request.notes}\n` : ''}--------------------------------
+${additionalDogsText}${request.specialNeeds ? `🩺 *צרכים מיוחדים:* ${request.specialNeeds}\n` : ''}${request.notes ? `📝 *הערות:* ${request.notes}\n` : ''}--------------------------------
 💡 *לטיפול, חיוג ללקוח ומשלוח קישור לתשלום:* פתח את מסך "בקשות קליטה" ביומן הריזורט.`;
 }
 
@@ -147,7 +153,7 @@ export async function sendResortWhatsAppNotification(
   message: string,
   settings: ResortSettings
 ): Promise<{ success: boolean; directUrl: string }> {
-  const phone = cleanPhoneNumber(settings.whatsappNotificationPhone || settings.managerPhone || '0548765888');
+  const phone = cleanPhoneNumber(settings.whatsappNotificationPhone || '0506336896');
   
   // Format Israeli international phone (05... -> 9725...)
   const intlPhone = phone.startsWith('0') ? '972' + phone.substring(1) : phone;
@@ -222,6 +228,9 @@ export async function sendResortEmailNotification(
       'חיסונים בתוקף': request.isVaccinated ? 'כן' : 'לא בטוח',
       'מחונך לצרכים': request.isHouseTrained !== false ? 'כן' : 'לא',
       'מטופל נגד קרציות ופשפשים': request.isTreatedParasites !== false ? 'כן' : 'לא',
+      'כלבים נוספים בטופס': request.additionalDogs && request.additionalDogs.length > 0 
+        ? request.additionalDogs.map((d, i) => `${i + 2}. ${d.dogName} (${d.dogBreed || 'מעורב'}) - ${d.sameDatesAsPrimary ? 'אותם תאריכים' : `${d.startDate} עד ${d.endDate}`}`).join(' | ') 
+        : 'אין',
       'צרכים מיוחדים/תרופות': request.specialNeeds || 'אין',
       'הודעה / טקסט חופשי': customMessage || request.notes || 'אין',
       'חיוג מהיר ללקוח': `tel:${request.ownerPhone}`

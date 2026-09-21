@@ -147,6 +147,8 @@ export interface ChartPeriodItem {
   totalCollected: number;
   totalExpected: number;
   openDebt: number;
+  totalRefunds?: number;
+  netCollected?: number;
 }
 
 /**
@@ -162,20 +164,26 @@ export function exportRevenueChartsToExcel(
   const chartHeaders = [
     'תקופה',
     'כמות הזמנות',
-    'הכנסות בפועל (₪)',
+    'הכנסות בפועל ברוטו (₪)',
+    'החזרים כספיים (₪)',
+    'הכנסות נטו בפועל (₪)',
     'סה״כ שווי הזמנות (₪)',
     'יתרת חוב פתוחה (₪)',
     'אחוז גבייה בפועל'
   ];
 
   const chartRows = chartData.map(item => {
+    const refunds = item.totalRefunds || 0;
+    const net = item.netCollected ?? (item.totalCollected - refunds);
     const rate = item.totalExpected > 0
-      ? Math.round((item.totalCollected / item.totalExpected) * 100)
+      ? Math.round((net / item.totalExpected) * 100)
       : 100;
     return [
       `"${item.periodLabel}"`,
       item.bookingsCount,
       item.totalCollected,
+      refunds,
+      net,
       item.totalExpected,
       item.openDebt,
       `"${rate}%"`
@@ -183,15 +191,19 @@ export function exportRevenueChartsToExcel(
   });
 
   const sumCollected = chartData.reduce((s, i) => s + i.totalCollected, 0);
+  const sumRefunds = chartData.reduce((s, i) => s + (i.totalRefunds || 0), 0);
+  const sumNet = chartData.reduce((s, i) => s + (i.netCollected ?? (i.totalCollected - (i.totalRefunds || 0))), 0);
   const sumExpected = chartData.reduce((s, i) => s + i.totalExpected, 0);
   const sumDebt = chartData.reduce((s, i) => s + i.openDebt, 0);
   const sumBookings = chartData.reduce((s, i) => s + i.bookingsCount, 0);
-  const overallRate = sumExpected > 0 ? Math.round((sumCollected / sumExpected) * 100) : 100;
+  const overallRate = sumExpected > 0 ? Math.round((sumNet / sumExpected) * 100) : 100;
 
   const chartSummaryRow = [
     '"סה״כ כולל"',
     sumBookings,
     sumCollected,
+    sumRefunds,
+    sumNet,
     sumExpected,
     sumDebt,
     `"${overallRate}%"`
@@ -208,6 +220,8 @@ export function exportRevenueChartsToExcel(
     'תאריך סיום',
     'מחיר כולל (₪)',
     'נגבה בפועל (₪)',
+    'החזר כספי (₪)',
+    'סיבת החזר',
     'חוב לתשלום (₪)',
     'סטטוס תשלום',
     'סטטוס שהות',
@@ -217,6 +231,8 @@ export function exportRevenueChartsToExcel(
   const detailRows = bookings.map(b => {
     const collected = b.paymentStatus === 'fully_paid' ? (Number(b.totalPrice) || 0) : (Number(b.depositAmount) || 0);
     const debt = Math.max(0, (Number(b.totalPrice) || 0) - collected);
+    const refundAmt = Number(b.refundAmount) || 0;
+    const refundReasonStr = b.refundReason || '';
     return [
       `"${b.id}"`,
       `"${b.dogName}"`,
@@ -228,9 +244,11 @@ export function exportRevenueChartsToExcel(
       `"${formatDateIL(b.endDate)}"`,
       Number(b.totalPrice) || 0,
       collected,
+      refundAmt,
+      `"${refundReasonStr.replace(/"/g, '""')}"`,
       debt,
       `"${b.paymentStatus === 'fully_paid' ? 'שולם במלואו' : debt > 0 ? 'חוב פתוח' : 'מקדמה'}"`,
-      `"${b.stayStatus === 'checked_out' ? 'שוחרר' : b.stayStatus === 'checked_in' ? 'שוהה בריזורט' : 'מוזמן'}"`,
+      `"${b.stayStatus === 'checked_out' ? 'שוחרר' : b.stayStatus === 'checked_in' ? 'שוהה בריזורט' : b.stayStatus === 'cancelled' ? 'בוטל' : 'מוזמן'}"`,
       `"${(b.notes || '').replace(/"/g, '""')}"`
     ];
   });

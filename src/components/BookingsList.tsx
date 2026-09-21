@@ -346,8 +346,8 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                           <ArrowDownLeft className="w-3 h-3" /> שוהה כעת
                         </span>
                       ) : b.stayStatus === 'cancelled' ? (
-                        <span className="text-xs bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-md">
-                          בוטל
+                        <span className="text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-md font-bold">
+                          ❌ בוטל {b.refundAmount && b.refundAmount > 0 ? `(הוחזר ₪${b.refundAmount})` : ''}
                         </span>
                       ) : (
                         <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-semibold">

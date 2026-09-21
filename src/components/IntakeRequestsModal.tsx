@@ -315,6 +315,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [customPaymentLink, setCustomPaymentLink] = useState<string>('');
   const [isSendingPayment, setIsSendingPayment] = useState<boolean>(false);
   const [paymentSendError, setPaymentSendError] = useState<string | null>(null);
+  const [quickSendingId, setQuickSendingId] = useState<string | null>(null);
   const [rejectPromptRequest, setRejectPromptRequest] = useState<IntakeRequest | null>(null);
   const [rejectMessageText, setRejectMessageText] = useState<string>('');
   const [isProcessingReject, setIsProcessingReject] = useState<boolean>(false);
@@ -455,6 +456,67 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     setPaymentAmount(String(effectiveAmount));
     setCustomPaymentLink(settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg');
     setPaymentSendError(null);
+  };
+
+  const handleQuickSendPayment = async (req: IntakeRequest) => {
+    setQuickSendingId(req.id);
+    try {
+      const daysCount = Math.max(1, calculateDaysCount(req.startDate, req.endDate));
+      let calculatedDefault = 0;
+      if (req.serviceType === 'training') {
+        calculatedDefault = Number(settings?.defaultDailyRateTraining) || 6500;
+      } else if (req.serviceType === 'daycare') {
+        calculatedDefault = daysCount * (Number(settings?.defaultDailyRateDaycare) || 90);
+      } else {
+        calculatedDefault = calculateBoardingRate(
+          daysCount, 
+          Number(settings?.defaultDailyRateBoarding) || 180,
+          {
+            isFriendlyWithDogs: req.isFriendlyWithDogs,
+            dogGender: req.dogGender,
+            isNeutered: req.isNeutered,
+            isolationRate: Number(settings?.defaultDailyRateIsolation) || 230
+          }
+        ).totalPrice;
+      }
+      const numAmount = customPrices[req.id] ?? (req.depositRequested && req.depositRequested > 0 ? req.depositRequested : calculatedDefault);
+      
+      let linkToUse = (settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg').trim();
+      if (linkToUse.startsWith('//')) linkToUse = 'https:' + linkToUse;
+      else if (!linkToUse.startsWith('http://') && !linkToUse.startsWith('https://')) linkToUse = 'https://' + linkToUse;
+
+      const updated: IntakeRequest = {
+        ...req,
+        depositRequested: numAmount,
+        status: 'payment_requested'
+      };
+
+      const cleanPhone = cleanPhoneNumber(req.ownerPhone);
+      const msg = formatClientPaymentLinkMessage(updated, settings, numAmount, linkToUse);
+
+      // Send directly via Green-API
+      const greenRes = await sendGreenApiDirectMessage(cleanPhone, msg, settings.greenApiIdInstance, settings.greenApiToken);
+      if (!greenRes || !greenRes.success) {
+        alert(`השליחה האוטומטית המהירה נכשלה (${greenRes?.error || 'שגיאת חיבור'}). נפתח כעת חלון השליחה הידני.`);
+        handleOpenPaymentPrompt(req);
+        return;
+      }
+
+      // Save status
+      if (onSaveRequest) {
+        await onSaveRequest(updated);
+      } else {
+        await onUpdateStatus(req.id, 'payment_requested');
+      }
+
+      setFollowUpSentAlert(prev => ({ ...prev, [req.id]: true }));
+      setTimeout(() => setFollowUpSentAlert(prev => ({ ...prev, [req.id]: false })), 4000);
+    } catch (err: any) {
+      console.warn('Quick send error:', err);
+      alert(`שגיאה בשליחה מהירה: ${err?.message || err}`);
+    } finally {
+      setQuickSendingId(null);
+    }
   };
 
   const sortedRequests = [...filteredRequests].sort((a, b) => {
@@ -1050,6 +1112,23 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                               </a>
                             </span>
                           )}
+
+                          {/* Additional Dogs in same intake */}
+                          {req.additionalDogs && req.additionalDogs.length > 0 && (
+                            <div className="w-full bg-amber-50/90 border border-amber-300 rounded-xl p-2.5 text-xs text-amber-950 font-bold flex flex-col gap-1 mt-0.5">
+                              <div className="flex items-center gap-1.5 font-black text-amber-900">
+                                <Dog className="w-4 h-4 text-amber-700 shrink-0" />
+                                <span>🐾 כלבים נוספים באותה בקשת קליטה ({req.additionalDogs.length}):</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                                {req.additionalDogs.map((ad, adIdx) => (
+                                  <span key={adIdx} className="bg-white border border-amber-200 px-2 py-0.5 rounded-lg shadow-2xs font-semibold">
+                                    <strong className="text-slate-900">{ad.dogName}</strong> ({ad.dogBreed || 'מעורב'}{ad.dogAge ? `, ${ad.dogAge}` : ''}) · {ad.sameDatesAsPrimary ? 'אותם תאריכים' : `${formatDateIL(ad.startDate || '')}–${formatDateIL(ad.endDate || '')}`}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {/* שורה שלישית: לחץ לוואטסאפ איתו + שלח קישור לתשלום */}
@@ -1064,6 +1143,18 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                             <MessageCircle className="w-4 h-4 fill-white/20 shrink-0" />
                             <span>לחץ לוואטסאפ איתו</span>
                           </a>
+
+                          {/* כפתור שליחה מהירה של קישור לתשלום - שליחה ישירה ב-1 קליק ללא פתיחת חלון */}
+                          <button
+                            type="button"
+                            disabled={quickSendingId === req.id}
+                            onClick={() => handleQuickSendPayment(req)}
+                            className="inline-flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-sm transition-all shadow-xs cursor-pointer hover:shadow-md disabled:opacity-50"
+                            title="שליחה מהירה של קישור התשלום המאובטח (Grow) ישירות לוואטסאפ של הלקוח במידה וכל הפרטים ברורים"
+                          >
+                            <Sparkles className="w-4 h-4 text-emerald-200 shrink-0" />
+                            <span>{quickSendingId === req.id ? 'שולח קישור...' : '⚡ שליחה מהירה'}</span>
+                          </button>
 
                           {/* כפתור שליחת קישור לתשלום - ממוקם בראש הכרטיס לגישה מהירה ומיידית */}
                           <button

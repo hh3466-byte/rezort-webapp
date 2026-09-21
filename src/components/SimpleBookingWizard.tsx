@@ -48,7 +48,13 @@ import {
   getDayNameHebrew, 
   getBookingsForDate 
 } from '../utils/dateUtils';
-import { generateWhatsAppLink, getBookingConfirmationMessage } from '../utils/whatsappUtils';
+import { 
+  generateWhatsAppLink, 
+  getBookingConfirmationMessage,
+  cleanPhoneNumber,
+  isValidIsraeliPhone,
+  formatIsraeliPhoneDisplay
+} from '../utils/whatsappUtils';
 import { parseVoiceOrWhatsAppText } from '../services/agentService';
 
 interface SimpleBookingWizardProps {
@@ -544,10 +550,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
     const newBooking: Booking = {
       id: initialData?.id || `b-${Date.now()}`,
+      intakeRequestId: initialData?.intakeRequestId || (initialData as any)?.intakeRequestId,
       dogName: dogName.trim() || 'כלב',
       dogBreed: dogBreed.trim() || 'מעורב',
       ownerName: ownerName.trim() || 'לקוח',
-      ownerPhone: ownerPhone.trim() || '050-0000000',
+      ownerPhone: formatIsraeliPhoneDisplay(ownerPhone) || ownerPhone.trim() || '050-0000000',
       ownerEmail: ownerEmail.trim(),
       serviceType,
       startDate,
@@ -901,13 +908,28 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Phone */}
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 block">מספר טלפון *</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 block">מספר טלפון *</label>
+                      {ownerPhone.trim() && !isValidIsraeliPhone(ownerPhone) && (
+                        <span className="text-[10px] text-rose-600 font-bold">⚠️ נדרש נייד ישראלי תקין</span>
+                      )}
+                    </div>
                     <input
                       type="tel"
                       value={ownerPhone}
                       onChange={(e) => setOwnerPhone(e.target.value)}
+                      onBlur={() => {
+                        if (ownerPhone.trim()) {
+                          const formatted = formatIsraeliPhoneDisplay(ownerPhone);
+                          if (formatted) setOwnerPhone(formatted);
+                        }
+                      }}
                       placeholder="050-0000000"
-                      className="w-full bg-white text-sm font-semibold text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none"
+                      className={`w-full bg-white text-sm font-semibold text-slate-900 px-3.5 py-2.5 rounded-xl border focus:outline-none ${
+                        ownerPhone.trim() && !isValidIsraeliPhone(ownerPhone)
+                          ? 'border-rose-400 focus:border-rose-600'
+                          : 'border-slate-200 focus:border-indigo-600'
+                      }`}
                       dir="ltr"
                     />
                   </div>
@@ -1245,13 +1267,17 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       </button>
                       <div className="flex items-center gap-1 bg-white px-3 py-1.5 rounded-xl border border-amber-300 shadow-2xs">
                         <input
-                          type="number"
-                          min="1"
-                          max="365"
+                          type="text"
+                          inputMode="numeric"
                           value={daysCount}
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => {
-                            const val = Math.max(1, parseInt(e.target.value, 10) || 1);
-                            setEndDate(addDays(startDate, val));
+                            const raw = e.target.value.replace(/\D/g, '');
+                            if (!raw) return;
+                            const val = parseInt(raw, 10);
+                            if (!isNaN(val) && val >= 1 && val <= 365) {
+                              setEndDate(addDays(startDate, val));
+                            }
                           }}
                           className="w-12 text-center font-black text-base text-amber-950 focus:outline-none"
                         />
@@ -1614,6 +1640,17 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       {paymentType === 'full' ? '✓ שולם במלואו (יתרה: ₪0)' : paymentType === 'deposit' ? `יתרה: ₪${Math.max(0, totalPrice - depositAmount)}` : 'ייגבה במלואו בצ\'ק-אין'}
                     </span>
                   </div>
+
+                  {/* Warning if 0 deposit is holding capacity */}
+                  {depositAmount === 0 && !isFreeStay && totalPrice > 0 && (
+                    <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-xl flex items-start gap-2 text-xs text-amber-950 mt-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">תשומת לב: הזמנה זו תשוריין ביומן ללא מקדמה (חוב: ₪{totalPrice.toLocaleString()})</span>
+                        <span className="text-[11px] text-amber-800">בדיקת השפיות והדוח היומי יתריעו על שריון ללא מקדמה עד להסדרת תשלום מאובטח בלינק.</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2559,6 +2596,16 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     ₪{Math.max(0, totalPrice - depositAmount)} {totalPrice - depositAmount === 0 ? '(שולם במלואו ✓)' : ''}
                   </span>
                 </div>
+
+                {depositAmount === 0 && !isFreeStay && totalPrice > 0 && (
+                  <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-xl flex items-start gap-2 text-xs text-amber-950 mt-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">תשומת לב: הזמנה זו תשוריין ביומן ללא מקדמה (חוב: ₪{totalPrice.toLocaleString()})</span>
+                      <span className="text-[11px] text-amber-800">בדיקת השפיות והדוח היומי יתריעו על שריון ללא מקדמה עד להסדרת תשלום מאובטח בלינק.</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Step 4 Action Buttons */}

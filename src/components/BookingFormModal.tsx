@@ -21,6 +21,7 @@ import {
 import { Booking, ResortSettings, ServiceType, PaymentStatus, StayStatus, PaymentMethod } from '../types';
 import { calculateDaysCount, checkRangeOccupancy, getTodayStr, addDays, formatDateIL } from '../utils/dateUtils';
 import { parseVoiceOrWhatsAppText } from '../services/agentService';
+import { getLearnedRefundReasons, saveLearnedRefundReason } from '../utils/refundUtils';
 
 interface BookingFormModalProps {
   initialData?: Partial<Booking> | null;
@@ -73,6 +74,31 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   );
   const [placementNotes, setPlacementNotes] = useState(initialData?.placementNotes || '');
   const [showDebtCheckoutConfirm, setShowDebtCheckoutConfirm] = useState(false);
+
+  // Cancellation refund tracking
+  const [refundAmount, setRefundAmount] = useState<number | undefined>(initialData?.refundAmount);
+  const [refundDate, setRefundDate] = useState<string>(initialData?.refundDate || getTodayStr());
+  const [refundNotes, setRefundNotes] = useState<string>(initialData?.refundNotes || 'בוצע ביטול והחזר כספי');
+  const [refundReason, setRefundReason] = useState<string>(initialData?.refundReason || 'הזמנה בוטלה יותר משבוע לפני הקליטה');
+  const [customRefundReason, setCustomRefundReason] = useState<string>(() => {
+    if (initialData?.refundReason && !['הזמנה בוטלה יותר משבוע לפני הקליטה', 'בעיה רפואית של הכלב', 'כלב ברח', 'בעיה רפואית של הבעלים'].includes(initialData.refundReason)) {
+      return initialData.refundReason;
+    }
+    return '';
+  });
+  const [isOtherReasonSelected, setIsOtherReasonSelected] = useState<boolean>(() => {
+    if (initialData?.refundReason && !['הזמנה בוטלה יותר משבוע לפני הקליטה', 'בעיה רפואית של הכלב', 'כלב ברח', 'בעיה רפואית של הבעלים'].includes(initialData.refundReason)) {
+      return true;
+    }
+    return false;
+  });
+  const learnedReasons = getLearnedRefundReasons(existingBookings);
+  const [showRefundPrompt, setShowRefundPrompt] = useState<boolean>(false);
+  const [refundWillExecute, setRefundWillExecute] = useState<boolean>(Boolean(initialData?.refundAmount && initialData.refundAmount > 0));
+  const [tempRefundAmount, setTempRefundAmount] = useState<string>(() => {
+    if (initialData?.refundAmount !== undefined) return String(initialData.refundAmount);
+    return String(initialData?.depositAmount || 0);
+  });
 
   // Free stay / Second dog payment consolidation state
   const [isFreeStay, setIsFreeStay] = useState<boolean>(() => {
@@ -273,6 +299,14 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       return;
     }
 
+    const paidSoFar = Number(depositAmount) || 0;
+    if (stayStatus === 'cancelled' && paidSoFar > 0 && !showRefundPrompt && refundAmount === undefined && !initialData?.refundAmount) {
+      setTempRefundAmount(String(paidSoFar));
+      setRefundWillExecute(true);
+      setShowRefundPrompt(true);
+      return;
+    }
+
     doSave();
   };
 
@@ -284,6 +318,28 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
         finalPaymentStatus = 'fully_paid';
       } else if (finalDeposit > 0) {
         finalPaymentStatus = 'deposit_paid';
+      }
+    }
+
+    let finalRefundAmount = refundAmount;
+    let finalRefundDate = refundDate;
+    let finalRefundNotes = refundNotes;
+    let finalRefundReason: string | undefined = refundReason;
+
+    if (stayStatus === 'cancelled') {
+      if (refundWillExecute) {
+        finalRefundAmount = Number(tempRefundAmount) || 0;
+        finalRefundDate = refundDate || getTodayStr();
+        finalRefundNotes = refundNotes || 'בוצע ביטול והחזר כספי';
+        if (isOtherReasonSelected && customRefundReason.trim()) {
+          finalRefundReason = customRefundReason.trim();
+          saveLearnedRefundReason(finalRefundReason, existingBookings);
+        } else {
+          finalRefundReason = refundReason || 'הזמנה בוטלה יותר משבוע לפני הקליטה';
+        }
+      } else {
+        finalRefundAmount = 0;
+        finalRefundReason = undefined;
       }
     }
 
@@ -318,6 +374,10 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       isFreeStay,
       linkedDogName: isFreeStay && freeStayReason === 'second_dog' ? linkedMainDogName.trim() : undefined,
       placementNotes: placementNotes.trim() || undefined,
+      refundAmount: finalRefundAmount,
+      refundDate: finalRefundDate,
+      refundNotes: finalRefundNotes,
+      refundReason: finalRefundReason,
       notes: skipReviewRequest
         ? (formattedNotes.includes('[ללא_סקר]') ? formattedNotes : `${formattedNotes} [ללא_סקר]`.trim())
         : formattedNotes.replace(/\[ללא_סקר\]/g, '').trim(),
@@ -332,6 +392,11 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
 
   const remainingDebt = Math.max(0, totalPrice - depositAmount);
   const daysCount = calculateDaysCount(startDate, endDate);
+  const [trainingDaysInput, setTrainingDaysInput] = useState<string>(() => String(daysCount));
+
+  useEffect(() => {
+    setTrainingDaysInput(String(daysCount));
+  }, [daysCount]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in">
@@ -675,6 +740,121 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                   <option value="checked_out">🏁 הסתיים ושוחרר</option>
                   <option value="cancelled">❌ מבוטל</option>
                 </select>
+
+                {/* Cancellation & Refund Control in status section */}
+                {stayStatus === 'cancelled' && (depositAmount > 0 || Number(tempRefundAmount) > 0) && (
+                  <div className="mt-2.5 p-3 bg-rose-50 border border-rose-300 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                      <span className="text-xs font-black text-rose-900 flex items-center gap-1">
+                        <span>🔄</span>
+                        <span>האם תבצע החזר כספי?</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setRefundWillExecute(true)}
+                          className={`px-2.5 py-0.5 rounded-lg text-xs font-black cursor-pointer transition-all ${
+                            refundWillExecute ? 'bg-rose-600 text-white shadow-2xs' : 'bg-white text-rose-800 border border-rose-200'
+                          }`}
+                        >
+                          כן, יבוצע החזר
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setRefundWillExecute(false)}
+                          className={`px-2.5 py-0.5 rounded-lg text-xs font-bold cursor-pointer transition-all ${
+                            !refundWillExecute ? 'bg-slate-700 text-white shadow-2xs' : 'bg-white text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          ללא החזר
+                        </button>
+                      </div>
+                    </div>
+
+                    {refundWillExecute && (
+                      <div className="space-y-2 pt-1.5 border-t border-rose-200">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-black text-rose-950 block mb-0.5">
+                              סכום שיוחזר (₪):
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={tempRefundAmount}
+                              onChange={(e) => setTempRefundAmount(e.target.value)}
+                              className="w-full bg-white border border-rose-300 rounded-lg px-2 py-1 text-xs font-black text-rose-950 font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black text-rose-950 block mb-0.5">
+                              תאריך החזר:
+                            </label>
+                            <input
+                              type="date"
+                              value={refundDate}
+                              onChange={(e) => setRefundDate(e.target.value)}
+                              className="w-full bg-white border border-rose-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-900"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Quick Refund Reason Selection */}
+                        <div>
+                          <label className="text-[10px] font-black text-rose-950 block mb-1">
+                            סיבת ההחזר (בחר סיבה מהירה או הקלד אחר):
+                          </label>
+                          <div className="flex flex-wrap gap-1">
+                            {learnedReasons.map((r) => (
+                              <button
+                                key={r}
+                                type="button"
+                                onClick={() => {
+                                  setRefundReason(r);
+                                  setIsOtherReasonSelected(false);
+                                }}
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-md cursor-pointer transition-all ${
+                                  !isOtherReasonSelected && refundReason === r
+                                    ? 'bg-rose-600 text-white shadow-2xs'
+                                    : 'bg-white text-rose-950 border border-rose-200 hover:bg-rose-100/70'
+                                }`}
+                              >
+                                {r}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsOtherReasonSelected(true);
+                                setRefundReason('אחר');
+                              }}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md cursor-pointer transition-all ${
+                                isOtherReasonSelected
+                                  ? 'bg-rose-600 text-white shadow-2xs'
+                                  : 'bg-white text-rose-950 border border-rose-200 hover:bg-rose-100/70'
+                              }`}
+                            >
+                              אחר...
+                            </button>
+                          </div>
+
+                          {isOtherReasonSelected && (
+                            <div className="mt-1.5">
+                              <input
+                                type="text"
+                                value={customRefundReason}
+                                onChange={(e) => setCustomRefundReason(e.target.value)}
+                                placeholder="פרט סיבה אחרת (תתווסף לכפתורים המהירים להבא)..."
+                                className="w-full bg-white border border-rose-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+                                autoFocus
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Skip Review Request toggle */}
@@ -747,29 +927,72 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (daysCount > 1) setEndDate(addDays(startDate, daysCount - 2));
+                      const newDays = Math.max(1, daysCount - 5);
+                      setEndDate(addDays(startDate, newDays));
+                    }}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 font-black text-amber-900 flex items-center justify-center cursor-pointer text-xs"
+                    title="הפחת 5 ימים"
+                  >
+                    -5
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newDays = Math.max(1, daysCount - 1);
+                      if (newDays === 1) setEndDate(startDate);
+                      else setEndDate(addDays(startDate, newDays));
                     }}
                     className="w-8 h-8 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 font-black text-amber-900 flex items-center justify-center cursor-pointer text-sm"
+                    title="הפחת יום 1"
                   >
                     -
                   </button>
                   <input
-                    type="number"
-                    min="1"
-                    max="365"
-                    value={daysCount}
+                    type="text"
+                    inputMode="numeric"
+                    value={trainingDaysInput}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => {
-                      const val = Math.max(1, parseInt(e.target.value, 10) || 1);
-                      setEndDate(addDays(startDate, val - 1));
+                      const raw = e.target.value.replace(/\D/g, '');
+                      setTrainingDaysInput(raw);
+                      const parsed = parseInt(raw, 10);
+                      if (!isNaN(parsed) && parsed >= 1 && parsed <= 365) {
+                        setEndDate(addDays(startDate, parsed));
+                      }
                     }}
-                    className="w-16 bg-white border border-amber-300 rounded-lg py-1.5 text-center font-black text-amber-950 text-sm focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    onBlur={() => {
+                      const parsed = parseInt(trainingDaysInput, 10);
+                      if (isNaN(parsed) || parsed < 1) {
+                        setTrainingDaysInput(String(daysCount));
+                      } else {
+                        const clamped = Math.min(365, Math.max(1, parsed));
+                        setTrainingDaysInput(String(clamped));
+                        setEndDate(addDays(startDate, clamped));
+                      }
+                    }}
+                    className="w-16 bg-white border border-amber-300 rounded-lg py-1.5 text-center font-black text-amber-950 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
                   />
                   <button
                     type="button"
-                    onClick={() => setEndDate(addDays(startDate, daysCount))}
+                    onClick={() => {
+                      const newDays = daysCount + 1;
+                      setEndDate(addDays(startDate, newDays));
+                    }}
                     className="w-8 h-8 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 font-black text-amber-900 flex items-center justify-center cursor-pointer text-sm"
+                    title="הוסף יום 1"
                   >
                     +
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newDays = daysCount + 5;
+                      setEndDate(addDays(startDate, newDays));
+                    }}
+                    className="w-8 h-8 rounded-lg bg-white hover:bg-amber-100 border border-amber-300 font-black text-amber-900 flex items-center justify-center cursor-pointer text-xs"
+                    title="הוסף 5 ימים"
+                  >
+                    +5
                   </button>
                   <span className="text-xs font-bold text-amber-900 mr-1">ימים</span>
                 </div>
@@ -783,7 +1006,9 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (daysCount > 1) setEndDate(addDays(startDate, daysCount - 2));
+                    const newDays = Math.max(1, daysCount - 1);
+                    if (newDays === 1) setEndDate(startDate);
+                    else setEndDate(addDays(startDate, newDays));
                   }}
                   className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-black flex items-center justify-center cursor-pointer transition-colors"
                   title="הפחת יום"
@@ -795,7 +1020,10 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                 </span>
                 <button
                   type="button"
-                  onClick={() => setEndDate(addDays(startDate, daysCount))}
+                  onClick={() => {
+                    const newDays = daysCount + 1;
+                    setEndDate(addDays(startDate, newDays));
+                  }}
                   className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-black flex items-center justify-center cursor-pointer transition-colors"
                   title="הוסף יום"
                 >
@@ -810,12 +1038,19 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                   { label: '3 ימים', days: 3 },
                   { label: 'שבוע (7)', days: 7 },
                   { label: 'שבועיים (14)', days: 14 },
-                  { label: 'חודש (30)', days: 30 }
+                  { label: 'חודש (30)', days: 30 },
+                  { label: '45 יום', days: 45 }
                 ].map(p => (
                   <button
                     key={p.days}
                     type="button"
-                    onClick={() => setEndDate(addDays(startDate, p.days - 1))}
+                    onClick={() => {
+                      if (p.days === 1) {
+                        setEndDate(startDate);
+                      } else {
+                        setEndDate(addDays(startDate, p.days));
+                      }
+                    }}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                       daysCount === p.days
                         ? 'bg-emerald-600 text-white shadow-2xs'
@@ -1262,6 +1497,161 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                 >
                   חזור לעריכה
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Refund Confirmation Modal Dialog when cancelling order with payments */}
+          {showRefundPrompt && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in" dir="rtl">
+              <div className="bg-white border-2 border-rose-400 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+                <div className="flex items-center gap-2.5 text-rose-800 font-black text-lg border-b border-rose-100 pb-3">
+                  <span className="text-2xl">🔄</span>
+                  <span>ביטול הזמנה: האם תבצע החזר כספי?</span>
+                </div>
+
+                <div className="text-sm text-slate-700 space-y-2">
+                  <p className="font-bold">
+                    עבור הזמנה זו שולם סכום של <strong className="text-emerald-700 font-mono text-base">₪{depositAmount}</strong>.
+                  </p>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    כדי שקוביית ההכנסות תתעדכן במדויק בנטו, יש לציין האם יבוצע החזר כספי ללקוח ומה הסכום שיוחזר.
+                  </p>
+                </div>
+
+                {/* Choice Buttons */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setRefundWillExecute(true)}
+                    className={`p-3 rounded-2xl border-2 text-center transition-all cursor-pointer font-black text-sm ${
+                      refundWillExecute
+                        ? 'bg-rose-50 border-rose-500 text-rose-900 shadow-xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="text-lg mb-0.5">🟢</div>
+                    <div>כן, יבוצע החזר כספי</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRefundWillExecute(false)}
+                    className={`p-3 rounded-2xl border-2 text-center transition-all cursor-pointer font-black text-sm ${
+                      !refundWillExecute
+                        ? 'bg-slate-800 border-slate-900 text-white shadow-xs'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="text-lg mb-0.5">⚪</div>
+                    <div>לא, ללא החזר</div>
+                  </button>
+                </div>
+
+                {refundWillExecute && (
+                  <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-3.5 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-xs font-black text-rose-950 block mb-1">
+                          סכום שיוחזר ללקוח (₪):
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={tempRefundAmount}
+                          onChange={(e) => setTempRefundAmount(e.target.value)}
+                          className="w-full bg-white border border-rose-300 rounded-xl px-3 py-2 text-sm font-black font-mono text-rose-950 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+                          placeholder="288"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-black text-rose-950 block mb-1">
+                          תאריך ביצוע ההחזר:
+                        </label>
+                        <input
+                          type="date"
+                          value={refundDate}
+                          onChange={(e) => setRefundDate(e.target.value)}
+                          className="w-full bg-white border border-rose-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Reason Selection in Prompt Modal */}
+                    <div>
+                      <label className="text-xs font-black text-rose-950 block mb-1.5">
+                        סיבת ביצוע ההחזר (בחר סיבה מהירה או הקלד אחר):
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {learnedReasons.map((r) => (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => {
+                              setRefundReason(r);
+                              setIsOtherReasonSelected(false);
+                            }}
+                            className={`text-xs font-bold px-2.5 py-1 rounded-xl cursor-pointer transition-all ${
+                              !isOtherReasonSelected && refundReason === r
+                                ? 'bg-rose-600 text-white shadow-2xs'
+                                : 'bg-white text-rose-950 border border-rose-200 hover:bg-rose-100/70'
+                            }`}
+                          >
+                            {r}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsOtherReasonSelected(true);
+                            setRefundReason('אחר');
+                          }}
+                          className={`text-xs font-bold px-2.5 py-1 rounded-xl cursor-pointer transition-all ${
+                            isOtherReasonSelected
+                              ? 'bg-rose-600 text-white shadow-2xs'
+                              : 'bg-white text-rose-950 border border-rose-200 hover:bg-rose-100/70'
+                          }`}
+                        >
+                          אחר...
+                        </button>
+                      </div>
+
+                      {isOtherReasonSelected && (
+                        <div className="mt-2">
+                          <input
+                            type="text"
+                            value={customRefundReason}
+                            onChange={(e) => setCustomRefundReason(e.target.value)}
+                            placeholder="פרט סיבה אחרת (תתווסף לכפתורים המהירים להבא)..."
+                            className="w-full bg-white border border-rose-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500/20 shadow-2xs"
+                            autoFocus
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Confirmation buttons */}
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowRefundPrompt(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                  >
+                    חזור לעריכה
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowRefundPrompt(false);
+                      doSave();
+                    }}
+                    className="px-5 py-2 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-700 text-white shadow-xs cursor-pointer active:scale-95"
+                  >
+                    אשר ושמור ביטול
+                  </button>
+                </div>
               </div>
             </div>
           )}
