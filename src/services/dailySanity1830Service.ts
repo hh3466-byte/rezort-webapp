@@ -1,5 +1,5 @@
 import { Booking, ResortSettings, IntakeRequest } from '../types';
-import { getTodayStr, formatDateIL, addDays } from '../utils/dateUtils';
+import { getTodayStr, formatDateIL, addDays, VERIFIED_GROW_LEDGER } from '../utils/dateUtils';
 import { cleanPhoneNumber, isValidIsraeliPhone, getFirstName } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from './notificationService';
 import { supabase } from '../utils/supabase';
@@ -149,7 +149,20 @@ export function run1830SanityAudit(
     if (c.lastMessageType === 'outgoing' && (text.includes('grow.link') || text.includes('pay.grow'))) {
       const matchingBooking = activeBookings.find(b => cleanPhoneNumber(b.ownerPhone || '') === phone);
       const deposit = matchingBooking ? Number(matchingBooking.depositAmount) || 0 : 0;
-      if (deposit === 0) {
+      const isFree = matchingBooking?.isFreeStay;
+
+      // Cross-reference verified Grow ledger transactions (by name or phone)
+      const isPaidInLedger = VERIFIED_GROW_LEDGER.some(t => {
+        const tName = (t.customerName || '').trim().toLowerCase();
+        const cName = (name || '').trim().toLowerCase();
+        return (cName && (tName.includes(cName) || cName.includes(tName)));
+      });
+
+      // Also check intake questionnaires
+      const matchingIntake = intakeRequests.find(r => cleanPhoneNumber(r.ownerPhone || '') === phone);
+      const intakePaid = matchingIntake && ((matchingIntake as any).depositPaid || (matchingIntake as any).paymentStatus === 'paid');
+
+      if (!isFree && deposit === 0 && !isPaidInLedger && !intakePaid) {
         redLights.unpaidLinks.push(`💳 *${name}* (📞 ${phone}): קישור תשלום נשלח בוואטסאפ וטרם נקלטה מקדמה.`);
       }
     }
