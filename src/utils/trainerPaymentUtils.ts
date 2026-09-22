@@ -467,14 +467,131 @@ export function detectTrainerPaymentAnomalies(
         type: 'delayed_payment',
         severity: 'warning',
         title: `האילוף של ${dog.dogName} הסתיים, אך נותרה יתרה להילה של ₪${HILA_TRAINER_INFO.totalPerDog - totalPaid}!`,
-        description: `הכלב סומן כמסיים אילוף, אך שולמו רק ₪${totalPaid} מתוך ₪1,500.`,
-        dogName: dog.dogName,
-        bookingId: dog.id,
-        amount: HILA_TRAINER_INFO.totalPerDog - totalPaid,
+        description: `כלב זה השלים את תקופת האילוף (או סומן כהסתיים), אך שולמו למאלפת הילה רק ₪${totalPaid} מתוך ₪1,500. נותרה יתרה פתוחה להילה בסך ₪${HILA_TRAINER_INFO.totalPerDog - totalPaid}.`,
         suggestedAction: 'הסדר את תשלום 3/3 מול הילה לסגירת החשבון',
       });
     }
   }
 
   return anomalies;
+}
+
+/**
+ * Automatically fetches and parses incoming receipts from Hila's WhatsApp chat (052-690-8943)
+ */
+export async function syncTrainerReceiptsFromWhatsAppChat(
+  settings: any,
+  allBookings: Booking[]
+): Promise<{ newReceiptsCount: number; receipts: TrainerReceipt[] }> {
+  const greenId = settings?.greenApiIdInstance?.trim();
+  const greenToken = settings?.greenApiToken?.trim();
+  if (!greenId || !greenToken) {
+    return { newReceiptsCount: 0, receipts: getTrainerReceipts() };
+  }
+
+  const hilaChatId = '972526908943@c.us';
+
+  try {
+    const res = await fetch(`https://api.green-api.com/waInstance${greenId}/getChatHistory/${greenToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId: hilaChatId, count: 50 })
+    });
+
+    if (!res.ok) {
+      return { newReceiptsCount: 0, receipts: getTrainerReceipts() };
+    }
+
+    const messages = await res.json();
+    if (!Array.isArray(messages)) {
+      return { newReceiptsCount: 0, receipts: getTrainerReceipts() };
+    }
+
+    const currentReceipts = getTrainerReceipts();
+    const existingIds = new Set(currentReceipts.map(r => r.id));
+    const existingReceiptNumbers = new Set(currentReceipts.map(r => r.receiptNumber).filter(Boolean));
+
+    let newCount = 0;
+    const trainingBookings = allBookings.filter(b => 
+      b.serviceType === 'training' || 
+      b.serviceType === 'day_training' || 
+      (b.notes || '').includes('אילוף')
+    );
+
+    for (const msg of messages) {
+      if (msg.type !== 'incoming') continue;
+
+      const text = (msg.textMessage || msg.extendedTextMessage?.text || msg.caption || '').trim();
+      const timestamp = msg.timestamp ? new Date(msg.timestamp * 1000).toISOString() : new Date().toISOString();
+      const dateStr = timestamp.substring(0, 10);
+      const msgId = msg.idMessage || `hila-${msg.timestamp}`;
+
+      // Check if message mentions receipt, payment, dogs or numbers
+      const isLikelyReceipt = text.includes('קבלה') || 
+                             text.includes('תשלום') || 
+                             text.includes('1/3') || 
+                             text.includes('2/3') || 
+                             text.includes('3/3') || 
+                             msg.typeMessage === 'imageMessage' ||
+                             msg.typeMessage === 'documentMessage';
+
+      if (!isLikelyReceipt && text.length < 5) continue;
+
+      const parsed = parseTrainerReceiptText(text, trainingBookings);
+      const receiptNumber = parsed.detectedReceiptNumber || (msg.idMessage ? msg.idMessage.slice(-5) : '');
+
+      if (receiptNumber && existingReceiptNumbers.has(receiptNumber)) {
+        continue;
+      }
+      if (existingIds.has(msgId)) {
+        continue;
+      }
+
+      // If we detected dog allocations or an amount or image
+      if (parsed.allocations.length > 0 || parsed.detectedTotal > 0 || msg.typeMessage === 'imageMessage') {
+        const newReceipt: TrainerReceipt = {
+          id: msgId,
+          receiptNumber: receiptNumber || `קבלה-${dateStr}`,
+          receiptDate: dateStr,
+          totalAmount: parsed.detectedTotal || (parsed.allocations.length * 500) || 500,
+          paymentMethod: 'ביט',
+          rawLineText: text || 'תמונה/מסמך קבלה מהוואטסאפ של הילה',
+          receiptImageUrl: msg.downloadUrl || msg.fileUrl || '',
+          allocations: parsed.allocations.length > 0 ? parsed.allocations.map(a => ({
+            bookingId: a.booking?.id || '',
+            dogName: a.dogName,
+            stage: a.stage,
+            amount: a.amount
+          })) : [
+            {
+              bookingId: '',
+              dogName: 'כלב באילוף',
+              stage: '1/3',
+              amount: parsed.detectedTotal || 500
+            }
+          ],
+          isPaidActually: false,
+          managerQuerySent: true,
+          managerQuerySentAt: timestamp,
+          status: 'pending_payment',
+          createdAt: timestamp,
+          updatedAt: timestamp
+        };
+
+        currentReceipts.unshift(newReceipt);
+        existingIds.add(msgId);
+        if (receiptNumber) existingReceiptNumbers.add(receiptNumber);
+        newCount++;
+      }
+    }
+
+    if (newCount > 0) {
+      saveTrainerReceipts(currentReceipts);
+    }
+
+    return { newReceiptsCount: newCount, receipts: currentReceipts };
+  } catch (err) {
+    console.warn('syncTrainerReceiptsFromWhatsAppChat error:', err);
+    return { newReceiptsCount: 0, receipts: getTrainerReceipts() };
+  }
 }

@@ -35,12 +35,13 @@ import {
   getBookingTrainerStages, 
   formatManagerReceiptQuery,
   detectTrainerPaymentAnomalies,
+  syncTrainerReceiptsFromWhatsAppChat,
   TrainerAnomaly,
   HILA_TRAINER_INFO 
 } from '../utils/trainerPaymentUtils';
 import { TrainerReceiptIntakeModal } from './TrainerReceiptIntakeModal';
 
-export type HeaderMetricType = 'occupancy' | 'boarding' | 'training' | 'debt' | 'revenue' | 'hila_trainer';
+export type HeaderMetricType = 'occupancy' | 'boarding' | 'training' | 'debt' | 'revenue';
 
 interface HeaderMetricModalProps {
   metricType: HeaderMetricType | null;
@@ -89,6 +90,36 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   const [selectedReceiptForEdit, setSelectedReceiptForEdit] = useState<TrainerReceipt | undefined>(undefined);
   const [trainerReceipts, setTrainerReceipts] = useState<TrainerReceipt[]>(() => getTrainerReceipts());
   const [trainerActionFeedback, setTrainerActionFeedback] = useState<string | null>(null);
+  const [isSyncingHilaChat, setIsSyncingHilaChat] = useState(false);
+
+  const handleSyncHilaReceipts = useCallback(async (isSilent = false) => {
+    if (isSyncingHilaChat) return;
+    setIsSyncingHilaChat(true);
+    try {
+      const res = await syncTrainerReceiptsFromWhatsAppChat(settings, bookings);
+      setTrainerReceipts(res.receipts);
+      if (!isSilent) {
+        if (res.newReceiptsCount > 0) {
+          setTrainerActionFeedback(`🎉 נמשכו בהצלחה ${res.newReceiptsCount} קבלות חדשות מהוואטסאפ של הילה!`);
+        } else {
+          setTrainerActionFeedback(`✓ שיחת הוואטסאפ של הילה סונכרנה (לא נמצאו קבלות חדשות שטרם נקלטו).`);
+        }
+      }
+    } catch (e) {
+      if (!isSilent) {
+        setTrainerActionFeedback(`⚠️ שגיאה במשיכת קבלות מוואטסאפ הילה.`);
+      }
+    } finally {
+      setIsSyncingHilaChat(false);
+    }
+  }, [settings, bookings, isSyncingHilaChat]);
+
+  // Auto-sync from Hila's WhatsApp chat whenever training modal is opened
+  useEffect(() => {
+    if (metricType === 'training') {
+      handleSyncHilaReceipts(true);
+    }
+  }, [metricType]);
 
   const todayStr = getTodayStr();
   const currentMonthKey = todayStr.substring(0, 7); // e.g. 2026-09
@@ -631,18 +662,31 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                 </button>
               </div>
 
-              {/* Action Button: Ingest / Enter Receipt from Hila */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedReceiptForEdit(undefined);
-                  setIsTrainerReceiptModalOpen(true);
-                }}
-                className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-              >
-                <span>➕</span>
-                <span>קליטת קבלה מהילה</span>
-              </button>
+              {/* Action Buttons: WhatsApp Sync & Ingest Receipt */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSyncHilaReceipts(false)}
+                  disabled={isSyncingHilaChat}
+                  className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-900 border border-emerald-300 font-black text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                  title="משיכת קבלות והודעות שנשלחו מהילה (052-690-8943) לוואטסאפ של הריזורט"
+                >
+                  <span className={isSyncingHilaChat ? 'animate-spin' : ''}>🔄</span>
+                  <span>{isSyncingHilaChat ? 'מושך קבלות מהוואטסאפ...' : 'משוך קבלות מוואטסאפ הילה'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedReceiptForEdit(undefined);
+                    setIsTrainerReceiptModalOpen(true);
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                >
+                  <span>➕</span>
+                  <span>קליטת קבלה ידנית</span>
+                </button>
+              </div>
             </div>
 
             {trainerActionFeedback && (
