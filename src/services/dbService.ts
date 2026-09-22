@@ -2,6 +2,7 @@ import { supabase } from '../utils/supabase';
 import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus, DigitalVoucher, VoucherStatus } from '../types';
 import { initialBookings, defaultSettings } from '../data/initialData';
 import { extractCustomers } from '../utils/storage';
+import { sanitizePhone } from '../utils/whatsappUtils';
 
 const BOOKINGS_TABLE = 'bookings';
 const SETTINGS_TABLE = 'settings';

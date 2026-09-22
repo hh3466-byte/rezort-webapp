@@ -321,6 +321,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
 }) => {
   const todayStr = getTodayStr();
   const isEnded = booking.stayStatus === 'checked_out' || (booking.endDate < todayStr);
+  const isEndingToday = booking.endDate === todayStr;
   const remainingDebt = Math.max(0, Math.round(booking.totalPrice - booking.depositAmount));
   const roundedTotal = Math.round(booking.totalPrice || 0);
   const roundedDeposit = Math.round(booking.depositAmount || 0);

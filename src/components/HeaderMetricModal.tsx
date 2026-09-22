@@ -8,6 +8,7 @@ import {
   Calendar, 
   CreditCard, 
   CheckCircle, 
+  Check,
   Edit3, 
   MessageSquare, 
   Sparkles, 
@@ -75,7 +76,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   onUpdateBooking,
   onUpdateBookings,
 }) => {
-  const metricType = initialMetricType === 'hila_trainer' ? 'training' : initialMetricType;
+  const metricType = (initialMetricType as any) === 'hila_trainer' ? 'training' : initialMetricType;
   const [searchQuery, setSearchQuery] = useState('');
   const [trainingFilter, setTrainingFilter] = useState<'all' | 'full' | 'day'>('all');
   const [revenueCategoryFilter, setRevenueCategoryFilter] = useState<'all' | 'digital' | 'grow_10th' | 'direct_transfer' | 'grow_in_2_months' | 'cash' | 'refunds'>('all');
@@ -84,7 +85,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
   // Trainer Hila View States (Default to trainer_payments if opened via hila_trainer)
   const [trainingViewTab, setTrainingViewTab] = useState<'active' | 'completed' | 'trainer_payments'>(
-    initialMetricType === 'hila_trainer' ? 'trainer_payments' : 'active'
+    (initialMetricType as any) === 'hila_trainer' ? 'trainer_payments' : 'active'
   );
   const [isTrainerReceiptModalOpen, setIsTrainerReceiptModalOpen] = useState(false);
   const [selectedReceiptForEdit, setSelectedReceiptForEdit] = useState<TrainerReceipt | undefined>(undefined);
@@ -1080,7 +1081,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xl font-black">{HILA_TRAINER_INFO.name} ({HILA_TRAINER_INFO.businessName})</span>
                     <span className="text-xs bg-indigo-500/40 text-indigo-100 px-2 py-0.5 rounded-full border border-indigo-400/40 font-bold">
-                      {HILA_TRAINER_INFO.status} • ע.פ {HILA_TRAINER_INFO.licensedBusinessId}
+                      ע.מ {HILA_TRAINER_INFO.dealerNumber}
                     </span>
                     <span className="text-xs bg-emerald-500/30 text-emerald-200 px-2 py-0.5 rounded-full border border-emerald-400/40 font-bold font-mono" dir="ltr">
                       📞 {HILA_TRAINER_INFO.phone}
@@ -1114,50 +1115,53 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                     <span>🚨 מרכז התראות ואי-התאמות בתשלומי הילה ({trainerAnomalies.length})</span>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    {trainerAnomalies.map((anom, idx) => (
-                      <div 
-                        key={idx}
-                        className={`p-3 rounded-2xl border flex flex-col justify-between gap-2 text-xs ${
-                          anom.severity === 'high' 
-                            ? 'bg-rose-100/80 border-rose-300 text-rose-950' 
-                            : 'bg-amber-50 border-amber-300 text-amber-950'
-                        }`}
-                      >
-                        <div>
-                          <div className="font-black flex items-center gap-1.5">
-                            <span>{anom.severity === 'high' ? '🛑' : '⚠️'}</span>
-                            <span>{anom.dogName || (anom.receipt ? `קבלה ${anom.receipt.receiptNumber}` : 'התראה')}</span>
+                    {trainerAnomalies.map((anom, idx) => {
+                      const relatedRcpt = anom.receiptNumber ? trainerReceipts.find(r => r.receiptNumber === anom.receiptNumber) : undefined;
+                      return (
+                        <div 
+                          key={idx}
+                          className={`p-3 rounded-2xl border flex flex-col justify-between gap-2 text-xs ${
+                            anom.severity === 'error' 
+                              ? 'bg-rose-100/80 border-rose-300 text-rose-950' 
+                              : 'bg-amber-50 border-amber-300 text-amber-950'
+                          }`}
+                        >
+                          <div>
+                            <div className="font-black flex items-center gap-1.5">
+                              <span>{anom.severity === 'error' ? '🛑' : '⚠️'}</span>
+                              <span>{anom.dogName || (anom.receiptNumber ? `קבלה ${anom.receiptNumber}` : anom.title)}</span>
+                            </div>
+                            <p className="font-medium mt-1 text-slate-800">{anom.description || anom.title}</p>
                           </div>
-                          <p className="font-medium mt-1 text-slate-800">{anom.message}</p>
-                        </div>
 
-                        <div className="flex items-center gap-2 pt-1 border-t border-rose-200/60 justify-end">
-                          {anom.receipt && !anom.receipt.isPaidActually && (
-                            <button
-                              type="button"
-                              onClick={() => handleMarkReceiptAsPaid(anom.receipt!.id)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs"
-                            >
-                              <Check className="w-3 h-3" />
-                              <span>סמן כשולם בביט</span>
-                            </button>
-                          )}
-                          {anom.receipt && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const q = formatManagerReceiptQuery(anom.receipt!);
-                                openWhatsAppMessage('0543200007', q);
-                              }}
-                              className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs"
-                            >
-                              <MessageSquare className="w-3 h-3" />
-                              <span>שאילתא למנהל (054-3200007)</span>
-                            </button>
-                          )}
+                          <div className="flex items-center gap-2 pt-1 border-t border-rose-200/60 justify-end">
+                            {relatedRcpt && !relatedRcpt.isPaidActually && (
+                              <button
+                                type="button"
+                                onClick={() => handleMarkReceiptAsPaid(relatedRcpt.id)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>סמן כשולם בביט</span>
+                              </button>
+                            )}
+                            {relatedRcpt && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const q = formatManagerReceiptQuery(relatedRcpt);
+                                  openWhatsAppMessage('0543200007', q);
+                                }}
+                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs"
+                              >
+                                <MessageSquare className="w-3 h-3" />
+                                <span>שאילתא למנהל (054-3200007)</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1343,13 +1347,13 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {allTrainingBookings.map(b => {
-                        const stages = getBookingTrainerStages(b, trainerReceipts);
+                        const stages = getBookingTrainerStages(b);
                         const s1 = stages.find(s => s.stage === '1/3');
                         const s2 = stages.find(s => s.stage === '2/3');
                         const s3 = stages.find(s => s.stage === '3/3');
-                        const paidTotal = stages.filter(s => s.status === 'paid').reduce((sum, s) => sum + s.amount, 0);
+                        const paidTotal = stages.filter(s => s.isPaidActually).reduce((sum, s) => sum + s.amount, 0);
                         const remaining = Math.max(0, 1500 - paidTotal);
-                        const isCompleted = b.isTrainingCompleted || (s1?.status === 'paid' && s2?.status === 'paid' && s3?.status === 'paid');
+                        const isCompleted = b.isTrainingCompleted || (s1?.isPaidActually && s2?.isPaidActually && s3?.isPaidActually);
 
                         return (
                           <tr key={b.id} className="hover:bg-slate-50/70 transition-colors">
@@ -1367,37 +1371,37 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
                             <td className="p-2.5 text-center">
                               <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
-                                s1?.status === 'paid' 
+                                s1?.isPaidActually
                                   ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                                  : s1?.status === 'pending_payment'
+                                  : s1?.receiptNumber
                                   ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                   : 'bg-slate-100 text-slate-400'
                               }`}>
-                                {s1?.status === 'paid' ? '✓ שולם (500 ₪)' : s1?.status === 'pending_payment' ? '⏳ ממתין לביט' : 'טרם'}
+                                {s1?.isPaidActually ? '✓ שולם (500 ₪)' : s1?.receiptNumber ? '⏳ ממתין לביט' : 'טרם'}
                               </span>
                             </td>
 
                             <td className="p-2.5 text-center">
                               <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
-                                s2?.status === 'paid' 
+                                s2?.isPaidActually
                                   ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                                  : s2?.status === 'pending_payment'
+                                  : s2?.receiptNumber
                                   ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                   : 'bg-slate-100 text-slate-400'
                               }`}>
-                                {s2?.status === 'paid' ? '✓ שולם (500 ₪)' : s2?.status === 'pending_payment' ? '⏳ ממתין לביט' : 'טרם'}
+                                {s2?.isPaidActually ? '✓ שולם (500 ₪)' : s2?.receiptNumber ? '⏳ ממתין לביט' : 'טרם'}
                               </span>
                             </td>
 
                             <td className="p-2.5 text-center">
                               <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
-                                s3?.status === 'paid' 
+                                s3?.isPaidActually
                                   ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                                  : s3?.status === 'pending_payment'
+                                  : s3?.receiptNumber
                                   ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                   : 'bg-slate-100 text-slate-400'
                               }`}>
-                                {s3?.status === 'paid' ? '✓ שולם (500 ₪)' : s3?.status === 'pending_payment' ? '⏳ ממתין לביט' : 'טרם'}
+                                {s3?.isPaidActually ? '✓ שולם (500 ₪)' : s3?.receiptNumber ? '⏳ ממתין לביט' : 'טרם'}
                               </span>
                             </td>
 
@@ -1450,7 +1454,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
               // Trainer Hila Stages for this dog
               const isTrainingDog = b.serviceType === 'training' || b.serviceType === 'day_training' || (b.notes || '').includes('אילוף');
-              const trainerStages = isTrainingDog ? getBookingTrainerStages(b, trainerReceipts) : [];
+              const trainerStages = isTrainingDog ? getBookingTrainerStages(b) : [];
               const s1 = trainerStages.find(s => s.stage === '1/3');
               const s2 = trainerStages.find(s => s.stage === '2/3');
               const s3 = trainerStages.find(s => s.stage === '3/3');
@@ -1541,36 +1545,36 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         </span>
 
                         <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
-                          s1?.status === 'paid' 
+                          s1?.isPaidActually
                             ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            : s1?.status === 'pending_payment'
+                            : s1?.receiptNumber
                             ? 'bg-amber-100 text-amber-900 border border-amber-300'
                             : 'bg-slate-100 text-slate-500 border border-slate-200'
                         }`}>
                           <span>1/3 (500 ₪)</span>
-                          {s1?.status === 'paid' ? '✓' : s1?.status === 'pending_payment' ? '⏳' : '○'}
+                          {s1?.isPaidActually ? '✓' : s1?.receiptNumber ? '⏳' : '○'}
                         </span>
 
                         <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
-                          s2?.status === 'paid' 
+                          s2?.isPaidActually
                             ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            : s2?.status === 'pending_payment'
+                            : s2?.receiptNumber
                             ? 'bg-amber-100 text-amber-900 border border-amber-300'
                             : 'bg-slate-100 text-slate-500 border border-slate-200'
                         }`}>
                           <span>2/3 (500 ₪)</span>
-                          {s2?.status === 'paid' ? '✓' : s2?.status === 'pending_payment' ? '⏳' : '○'}
+                          {s2?.isPaidActually ? '✓' : s2?.receiptNumber ? '⏳' : '○'}
                         </span>
 
                         <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
-                          s3?.status === 'paid' 
+                          s3?.isPaidActually
                             ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            : s3?.status === 'pending_payment'
+                            : s3?.receiptNumber
                             ? 'bg-amber-100 text-amber-900 border border-amber-300'
                             : 'bg-slate-100 text-slate-500 border border-slate-200'
                         }`}>
                           <span>3/3 (500 ₪)</span>
-                          {s3?.status === 'paid' ? '✓' : s3?.status === 'pending_payment' ? '⏳' : '○'}
+                          {s3?.isPaidActually ? '✓' : s3?.receiptNumber ? '⏳' : '○'}
                         </span>
 
                         {!b.isTrainingCompleted && (

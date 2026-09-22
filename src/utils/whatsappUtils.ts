@@ -32,6 +32,9 @@ export function formatIsraeliPhoneDisplay(phone: string): string {
   return phone;
 }
 
+export const formatPhoneFormatted = formatIsraeliPhoneDisplay;
+export const sanitizePhone = cleanPhoneNumber;
+
 /**
  * Format Israeli phone number for WhatsApp international URL (e.g., 0541234567 -> 972541234567)
  */

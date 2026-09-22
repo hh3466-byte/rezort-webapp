@@ -3,7 +3,7 @@ import { getTodayStr, formatDateIL, addDays } from '../utils/dateUtils';
 import { cleanPhoneNumber, isValidIsraeliPhone, getFirstName } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from './notificationService';
 import { supabase } from '../utils/supabase';
-import { EnrichedWhatsAppChat, fetchGreenApiChats } from './whatsappCrmService';
+import { EnrichedWhatsAppChat, fetchGreenApiChats, enrichChatWithSystemData } from './whatsappCrmService';
 
 export const SHMULIK_PRIVATE_PHONE = '0506336896';
 export const SHMULIK_CHAT_ID = '972506336896@c.us';
@@ -79,7 +79,7 @@ export function run1830SanityAudit(
 
   // Recent chats active in last 24h
   const recentChats = chats.filter(c => {
-    const lastMsgTime = c.lastMessage?.timestamp || 0;
+    const lastMsgTime = c.timestamp ? (c.timestamp < 1e12 ? c.timestamp * 1000 : c.timestamp) : 0;
     return lastMsgTime >= past24HoursMs;
   });
 
@@ -113,7 +113,7 @@ export function run1830SanityAudit(
 
     // Check WhatsApp match if available
     if (matchingChat && matchingChat.lastMessage) {
-      const msgText = matchingChat.lastMessage.textMessage || '';
+      const msgText = matchingChat.lastMessage || '';
       // Check if client asked for different dates in recent text
       if (msgText.includes('לבטל') || msgText.includes('ביטול') || msgText.includes('לא נוכל')) {
         redLights.calendarDiscrepancies.push(`⚠️ ${b.dogName} (${b.ownerName}): בוואטסאפ הלקוח ציין ביטול/שינוי, אך ביומן ההזמנה עדיין פעילה!`);
@@ -130,23 +130,23 @@ export function run1830SanityAudit(
 
   // 3. Scan all active WhatsApp conversations for communication problems
   recentChats.forEach(c => {
-    const lastMsg = c.lastMessage;
-    if (!lastMsg) return;
+    const text = (c.lastMessage || '').trim();
+    if (!text && !c.lastMessageType) return;
 
     const phone = c.cleanPhone;
     const name = c.name || 'לקוח';
-    const text = lastMsg.textMessage || '';
 
     // Unanswered incoming message from client
-    if (lastMsg.type === 'incoming') {
-      const elapsedHours = Math.round((nowMs - lastMsg.timestamp) / (1000 * 60 * 60));
+    if (c.lastMessageType === 'incoming') {
+      const msgTime = c.timestamp ? (c.timestamp < 1e12 ? c.timestamp * 1000 : c.timestamp) : nowMs;
+      const elapsedHours = Math.round((nowMs - msgTime) / (1000 * 60 * 60));
       // Truncate message quote to 60 chars
       const quote = text.length > 60 ? text.slice(0, 60) + '...' : text;
       redLights.unansweredChats.push(`💬 *${name}* (📞 ${phone}) כתב/ה לפני ${elapsedHours} שעות: "${quote}" (ממתין למענה!)`);
     }
 
     // Payment link sent in outgoing message but not settled
-    if (lastMsg.type === 'outgoing' && (text.includes('grow.link') || text.includes('pay.grow'))) {
+    if (c.lastMessageType === 'outgoing' && (text.includes('grow.link') || text.includes('pay.grow'))) {
       const matchingBooking = activeBookings.find(b => cleanPhoneNumber(b.ownerPhone || '') === phone);
       const deposit = matchingBooking ? Number(matchingBooking.depositAmount) || 0 : 0;
       if (deposit === 0) {
@@ -157,7 +157,7 @@ export function run1830SanityAudit(
     // Check for customer complaints or problem keywords
     const problemKeywords = ['טעות', 'שגוי', 'תקלה', 'בעיה', 'הבטחתם', 'מאוכזב', 'למה'];
     const foundProblem = problemKeywords.find(k => text.includes(k));
-    if (foundProblem && lastMsg.type === 'incoming') {
+    if (foundProblem && c.lastMessageType === 'incoming') {
       redLights.customerIssues.push(`⚠️ *${name}* (📞 ${phone}): אותרה מילת בעיה ("${foundProblem}") בהודעה: "${text.slice(0, 70)}"`);
     }
   });
@@ -322,7 +322,8 @@ export async function send1830SanityReportToShmulik(
   // Fetch recent chats from Green-API to cross-reference
   let chats: EnrichedWhatsAppChat[] = [];
   try {
-    chats = await fetchGreenApiChats(80, settings);
+    const rawChats = await fetchGreenApiChats(settings);
+    chats = rawChats.map(c => enrichChatWithSystemData(c, bookings, intakeRequests));
   } catch (err) {
     console.warn('Could not fetch chats for 18:30 audit:', err);
   }

@@ -17,8 +17,8 @@ import {
   ArrowRight,
   Clock
 } from 'lucide-react';
-import { EnrichedWhatsAppChat, fetchGreenApiChatHistory } from '../services/whatsappCrmService';
-import { Booking, IntakeRequest, ResortSettings, WhatsAppMessage } from '../types';
+import { EnrichedWhatsAppChat, fetchGreenApiChatHistory, WhatsAppMessage } from '../services/whatsappCrmService';
+import { Booking, IntakeRequest, ResortSettings } from '../types';
 
 interface DesktopWhatsAppAuditModalProps {
   isOpen: boolean;
@@ -110,9 +110,9 @@ export const DesktopWhatsAppAuditModal: React.FC<DesktopWhatsAppAuditModalProps>
           setChatMessages([
             {
               idMessage: 'last-msg',
-              type: selectedChat.lastMessage.type === 'incoming' ? 'incoming' : 'outgoing',
-              timestamp: selectedChat.lastMessage.timestamp,
-              textMessage: selectedChat.lastMessage.textMessage || ''
+              type: selectedChat.lastMessageType === 'incoming' ? 'incoming' : 'outgoing',
+              timestamp: selectedChat.timestamp ? (selectedChat.timestamp < 1e12 ? selectedChat.timestamp * 1000 : selectedChat.timestamp) : Date.now(),
+              textMessage: selectedChat.lastMessage || ''
             }
           ]);
         }
@@ -151,7 +151,7 @@ export const DesktopWhatsAppAuditModal: React.FC<DesktopWhatsAppAuditModalProps>
       const nameMatch = chat.name?.toLowerCase().includes(query) || false;
       const phoneMatch = chat.cleanPhone?.includes(query) || chat.id.includes(query);
       const dogMatch = chat.matchedDogName?.toLowerCase().includes(query) || false;
-      const lastMsgText = chat.lastMessage?.textMessage?.toLowerCase() || '';
+      const lastMsgText = (chat.lastMessage || '').toLowerCase();
       const textMatch = lastMsgText.includes(query);
 
       const matchesSearch = !query || nameMatch || phoneMatch || dogMatch || textMatch;
@@ -321,9 +321,8 @@ export const DesktopWhatsAppAuditModal: React.FC<DesktopWhatsAppAuditModalProps>
               ) : (
                 filteredChats.map(chat => {
                   const isSelected = selectedChat?.id === chat.id;
-                  const lastMsg = chat.lastMessage;
-                  const timeStr = lastMsg?.timestamp
-                    ? new Date(lastMsg.timestamp).toLocaleDateString('he-IL', {
+                  const timeStr = chat.timestamp
+                    ? new Date(chat.timestamp < 1e12 ? chat.timestamp * 1000 : chat.timestamp).toLocaleDateString('he-IL', {
                         day: '2-digit',
                         month: '2-digit',
                         hour: '2-digit',
@@ -367,9 +366,9 @@ export const DesktopWhatsAppAuditModal: React.FC<DesktopWhatsAppAuditModalProps>
                         )}
                       </div>
 
-                      {lastMsg?.textMessage && (
+                      {chat.lastMessage && (
                         <p className="text-xs text-slate-300 line-clamp-2 bg-slate-950/40 p-1.5 rounded-lg border border-slate-800/60 font-sans">
-                          {highlightMatches(lastMsg.textMessage, searchTerm)}
+                          {highlightMatches(chat.lastMessage, searchTerm)}
                         </p>
                       )}
                     </div>

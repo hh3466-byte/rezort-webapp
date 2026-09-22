@@ -117,6 +117,9 @@ export function formatTomorrowOverviewReport(
   const endOfDayBoarding = endOfDayDogs.filter(b => !isTrainingBooking(b));
   const endOfDayTraining = endOfDayDogs.filter(b => isTrainingBooking(b));
 
+  const boardingOvernightLine = `   • פנסיון: ${endOfDayBoarding.length} כלבים${endOfDayBoarding.length > 0 ? ` (${endOfDayBoarding.map(b => b.dogName).join(', ')})` : ''}`;
+  const trainingOvernightLine = `   • אילוף: ${endOfDayTraining.length} כלבים${endOfDayTraining.length > 0 ? ` (${endOfDayTraining.map(b => b.dogName).join(', ')})` : ''}`;
+
   const formatDogItem = (b: Booking, index: number, isIncoming: boolean) => {
     const dogName = b.dogName || 'כלב';
     const ownerName = b.ownerName || 'בעלים';

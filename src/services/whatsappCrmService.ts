@@ -1,5 +1,5 @@
 import { Booking, IntakeRequest, ResortSettings } from '../types';
-import { cleanPhoneNumber } from '../utils/whatsappUtils';
+import { cleanPhoneNumber, formatPhoneFormatted } from '../utils/whatsappUtils';
 import { isShabbatOrHolidayRestricted } from '../utils/jewishCalendar';
 
 export interface WhatsAppChat {

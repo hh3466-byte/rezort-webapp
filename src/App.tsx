@@ -2237,12 +2237,17 @@ export default function App() {
         <MonthlyRefundsModal
           isOpen={isMonthlyRefundsModalOpen}
           monthKey={currentMonthKey}
-          bookings={bookings}
+          refundBookings={bookings.filter(b => (Number(b.refundAmount) || 0) > 0)}
+          monthGrossCollected={0}
+          monthNetCollected={0}
           onClose={() => setIsMonthlyRefundsModalOpen(false)}
-          onUpdateBookingRefund={handleUpdateBookingRefund}
-          onOpenBookingDetails={(b) => {
-            setIsMonthlyRefundsModalOpen(false);
-            setBookingFormModal({ isOpen: true, initialData: b });
+          onUpdateBookingRefund={(bookingId, updatedData) => {
+            handleUpdateBookingRefund(
+              bookingId,
+              Number(updatedData.refundAmount) || 0,
+              updatedData.refundReason || '',
+              updatedData.refundDate
+            );
           }}
         />
       )}
