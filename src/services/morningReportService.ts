@@ -666,8 +666,13 @@ export function init1830SanityScheduler(
     if (isSanity1830Sending) return;
 
     const today = getTodayStr();
-    const storageKey = `shmulik_1830_sanity_${today}`;
-    if (typeof window !== 'undefined' && window.localStorage && localStorage.getItem(storageKey)) return;
+    const adminKey = `admin_1830_sanity_${today}`;
+    const shmulikKey = `shmulik_1830_sanity_${today}`;
+    if (typeof window !== 'undefined' && window.localStorage && (localStorage.getItem(adminKey) || localStorage.getItem(shmulikKey))) return;
+
+    const curSettings = getSettings();
+    const rawData = (curSettings as any)?.data || curSettings || {};
+    if (rawData.last1830SanitySentDate === today) return;
 
     const eligibility = is1830SanityEligibleNow();
     if (!eligibility.eligible) return;
@@ -676,7 +681,7 @@ export function init1830SanityScheduler(
     try {
       const res = await send1830SanityReportToShmulik(
         getBookings(),
-        getSettings(),
+        curSettings,
         getIntakeRequests()
       );
 

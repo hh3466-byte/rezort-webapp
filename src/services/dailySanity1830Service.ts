@@ -305,6 +305,107 @@ export function run1830SanityAudit(
 }
 
 /**
+ * 4-Layer Zero Duplicate Guarantee for 18:30 Sanity Report:
+ * Checks across LocalStorage, in-memory settings, Supabase cloud database, and live Green-API audit
+ */
+export async function checkIf1830SanityAlreadySentToday(
+  today: string = getTodayStr(),
+  settings?: ResortSettings
+): Promise<{ alreadySent: boolean; reason?: string }> {
+  const adminKey = `admin_1830_sanity_${today}`;
+  const shmulikKey = `shmulik_1830_sanity_${today}`;
+
+  // Layer 1: LocalStorage check
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const localVal = localStorage.getItem(adminKey) || localStorage.getItem(shmulikKey);
+    if (localVal) {
+      return { alreadySent: true, reason: `מתועד מקומית בדפדפן (נשלח ב-${localVal})` };
+    }
+  }
+
+  // Layer 2: Settings in-memory
+  const rawData = (settings as any)?.data || settings || {};
+  if (rawData.last1830SanitySentDate === today) {
+    return { alreadySent: true, reason: 'מתועד בענן ב-Supabase Settings' };
+  }
+
+  // Layer 3: Query Supabase directly to ensure no other device sent it
+  try {
+    const { data: rows } = await supabase
+      .from('settings')
+      .select('data')
+      .limit(1);
+
+    const remoteData = rows?.[0]?.data || {};
+    if (remoteData.last1830SanitySentDate === today) {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem(adminKey, remoteData.last1830SanitySentTimestamp || new Date().toISOString());
+        localStorage.setItem(shmulikKey, remoteData.last1830SanitySentTimestamp || new Date().toISOString());
+      }
+      return { alreadySent: true, reason: 'הדוח כבר נשלח היום ממכשיר אחר (אומת ישירות מול Supabase)' };
+    }
+  } catch (e) {
+    console.warn('Could not query Supabase settings for 18:30 sanity deduplication:', e);
+  }
+
+  // Layer 4: Live Green-API Audit Check: Verify physically if a sanity report was already sent to Manager's phone today
+  try {
+    const greenId = settings?.greenApiIdInstance;
+    const greenToken = settings?.greenApiToken;
+    const chatId = '972543200007@c.us';
+
+    if (greenId && greenToken) {
+      const auditRes = await fetch(`https://api.green-api.com/waInstance${greenId}/getChatHistory/${greenToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, count: 12 })
+      });
+      if (auditRes.ok) {
+        const hist = await auditRes.json();
+        if (Array.isArray(hist)) {
+          const todayDateObj = new Date();
+          const startOfTodayMs = new Date(todayDateObj.getFullYear(), todayDateObj.getMonth(), todayDateObj.getDate()).getTime();
+
+          const foundSentToday = hist.find((m: any) => {
+            if (m.type !== 'outgoing') return false;
+            const msgTimeMs = (m.timestamp || 0) * 1000;
+            if (msgTimeMs < startOfTodayMs) return false;
+            const text = m.textMessage || m.extendedTextMessage?.text || '';
+            return text.includes('דוח בדיקת שפיות יומית');
+          });
+
+          if (foundSentToday) {
+            if (typeof window !== 'undefined' && window.localStorage) {
+              localStorage.setItem(adminKey, new Date().toISOString());
+              localStorage.setItem(shmulikKey, new Date().toISOString());
+            }
+            try {
+              const { data: currentRows } = await supabase.from('settings').select('*').limit(1);
+              if (currentRows && currentRows[0]) {
+                const curData = currentRows[0].data || {};
+                await supabase.from('settings').update({
+                  data: {
+                    ...curData,
+                    last1830SanitySentDate: today,
+                    last1830SanitySentTimestamp: new Date().toISOString()
+                  }
+                }).eq('id', currentRows[0].id || 'resort_config');
+              }
+            } catch {}
+
+            return { alreadySent: true, reason: 'הדוח כבר קיים בהיסטוריית ההודעות שנשלחו למנהל היום ב-Green-API' };
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Green-API sanity audit check error:', e);
+  }
+
+  return { alreadySent: false };
+}
+
+/**
  * Sends the 18:30 Sanity Report strictly to Manager/Admin (054-3200007)
  */
 export async function send1830SanityReportToAdmin(
@@ -314,7 +415,15 @@ export async function send1830SanityReportToAdmin(
   options?: { force?: boolean }
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   const today = getTodayStr();
-  const storageKey = `admin_1830_sanity_${today}`;
+  const adminKey = `admin_1830_sanity_${today}`;
+  const shmulikKey = `shmulik_1830_sanity_${today}`;
+
+  if (!options?.force) {
+    const dupCheck = await checkIf1830SanityAlreadySentToday(today, settings);
+    if (dupCheck.alreadySent) {
+      return { success: false, error: `דוח בדיקת שפיות יומית כבר נשלח היום: ${dupCheck.reason}` };
+    }
+  }
 
   // Target phone: Strictly to Manager / Admin (054-3200007)
   const adminTargetPhone = '0543200007';
@@ -341,7 +450,8 @@ export async function send1830SanityReportToAdmin(
 
   if (res.success) {
     if (typeof window !== 'undefined' && window.localStorage) {
-      localStorage.setItem(storageKey, new Date().toISOString());
+      localStorage.setItem(adminKey, new Date().toISOString());
+      localStorage.setItem(shmulikKey, new Date().toISOString());
     }
 
     // Save record to Supabase

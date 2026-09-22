@@ -303,6 +303,7 @@ export const VERIFIED_GROW_LEDGER: VerifiedGrowTransaction[] = [
   { ref: '4906013152', amount: 200, date: '2026-09-20', month: '2026-09', customerName: 'שליו ביטון', dogName: 'שליו' },
   { ref: '175543879', amount: 440, date: '2026-09-21', month: '2026-09', customerName: 'קארין להב', dogName: 'שון' },
   { ref: '175551443', amount: 2220, date: '2026-09-22', month: '2026-09', customerName: 'בוריס ברנר', dogName: 'מייק' },
+  { ref: '4909041312', amount: 200, date: '2026-09-22', month: '2026-09', customerName: 'אייל ברקוביץ׳', dogName: 'לולה וברנדי' },
 
   // August 2026 (28 items, total: 25,370) - entered bank on 10.09.2026
   { ref: '171099384', amount: 2200, date: '2026-08-09', month: '2026-08', customerName: 'אשר ריפמן', dogName: 'ריפמן' },
