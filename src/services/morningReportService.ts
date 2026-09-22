@@ -295,7 +295,9 @@ export function formatTomorrowOverviewReport(
 
   let extraActionSections = '';
   if (actionBlocks.length > 0) {
-    extraActionSections = '\n\n' + actionBlocks.join('\n\n');
+    extraActionSections = '\n\n🚨 *אורות אדומים:*\n' + actionBlocks.join('\n\n');
+  } else {
+    extraActionSections = '\n\n🚨 *אורות אדומים:* אין אורות אדומים ✅';
   }
 
   return `📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾
@@ -679,11 +681,11 @@ export function init1830SanityScheduler(
       );
 
       if (res.success) {
-        showToast?.('🛡️ דוח בדיקת שפיות יומית (18:30) נשלח בהצלחה לוואטסאפ של שמוליק! 🐾');
+        showToast?.('🛡️ דוח בדיקת שפיות יומית (18:30) נשלח בהצלחה לוואטסאפ של המנהל! 🐾');
         if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
           try {
             new Notification('🛡️ בדיקת שפיות יומית – הריזורט לכלב', {
-              body: 'השעה 18:30! דוח בדיקת שפיות, אירועים ירוקים ואורות אדומים נשלח לשמוליק בוואטסאפ.',
+              body: 'השעה 18:30! דוח בדיקת שפיות, אירועים ירוקים ואורות אדומים נשלח למנהל בוואטסאפ.',
               icon: '/favicon.ico'
             });
           } catch {}

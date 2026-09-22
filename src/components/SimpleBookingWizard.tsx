@@ -362,6 +362,18 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     if (req.startDate) setStartDate(req.startDate);
     if (req.endDate) setEndDate(req.endDate);
     if (req.isVaccinated !== undefined) setVaccinationValid(req.isVaccinated);
+    if (req.additionalDogs && req.additionalDogs.length > 0) {
+      const ad = req.additionalDogs[0];
+      setSecondDog({
+        hasSecondDog: true,
+        name: ad.dogName || '',
+        breed: ad.dogBreed || '',
+        gender: ad.dogGender === 'female'
+          ? (ad.isNeutered ? 'female_spayed' : 'female_intact')
+          : (ad.isNeutered ? 'male_neutered' : 'male_intact'),
+        consolidatePayment: true
+      });
+    }
     const combinedNotes = [
       req.specialNeeds ? `צרכים מיוחדים: ${req.specialNeeds}` : '',
       req.notes ? `הערות משאלון בקשת הקליטה: ${req.notes}` : ''
@@ -446,6 +458,20 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     if (initialData.linkedDogName) {
       setLinkedMainDogName(initialData.linkedDogName);
       setFreeStayReason('second_dog');
+    }
+    if ((initialData as any).secondDog) {
+      setSecondDog((initialData as any).secondDog);
+    } else if ((initialData as any).additionalDogs && (initialData as any).additionalDogs.length > 0) {
+      const ad = (initialData as any).additionalDogs[0];
+      setSecondDog({
+        hasSecondDog: true,
+        name: ad.dogName || '',
+        breed: ad.dogBreed || '',
+        gender: ad.dogGender === 'female'
+          ? (ad.isNeutered ? 'female_spayed' : 'female_intact')
+          : (ad.isNeutered ? 'male_neutered' : 'male_intact'),
+        consolidatePayment: true
+      });
     }
   }, [initialData, settings]);
 
@@ -890,6 +916,24 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
           {/* ======================================================== */}
           {currentStep === 1 && (
             <div className="space-y-5 animate-in fade-in">
+
+              {/* Multi-dog Alert Banner in Wizard */}
+              {secondDog.hasSecondDog && secondDog.name && (
+                <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white p-3 sm:p-3.5 rounded-2xl font-black text-xs shadow-sm flex items-center justify-between gap-2.5 border-2 border-amber-300 animate-pulse">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🐾🐾</span>
+                    <div>
+                      <div className="text-sm font-black">הזמנה זו כוללת 2 כלבים בתיק לקוח אחד!</div>
+                      <div className="text-[11px] text-amber-100 font-medium mt-0.5">
+                        כלב 1: <strong>{dogName || 'כלב ראשי'}</strong> | כלב 2: <strong>{secondDog.name}</strong> ({secondDog.breed || 'מעורב'})
+                      </div>
+                    </div>
+                  </div>
+                  <span className="bg-white text-orange-950 font-black px-2.5 py-1 rounded-xl text-[10px] shadow-2xs shrink-0">
+                    2 שריונים במקביל
+                  </span>
+                </div>
+              )}
 
               {/* Top: Customer & Dog Details Card */}
               <div className="bg-slate-50 border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-3.5">

@@ -81,9 +81,64 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   const metricType = (initialMetricType as any) === 'hila_trainer' ? 'training' : initialMetricType;
   const [searchQuery, setSearchQuery] = useState('');
   const [trainingFilter, setTrainingFilter] = useState<'all' | 'full' | 'day'>('all');
-  const [revenueCategoryFilter, setRevenueCategoryFilter] = useState<'all' | 'digital' | 'grow_10th' | 'direct_transfer' | 'grow_in_2_months' | 'cash' | 'refunds'>('all');
+  const [revenueViewTab, setRevenueViewTab] = useState<'cash' | 'digital' | 'grow_10th' | 'direct_transfer' | 'grow_in_2_months' | 'refunds' | 'all' | 'graphs'>('cash');
   const [chartMode, setChartMode] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedChartPeriod, setSelectedChartPeriod] = useState<string | null>(null);
+
+  // Robust payment channel classifiers for revenue view
+  const isGrowPayment = useCallback((b: Booking): boolean => {
+    const notes = ((b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '')).toLowerCase();
+    const id = b.id || '';
+    const isLedger = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref.toLowerCase()) || id.includes(t.ref));
+    const isGrowMethod = b.paymentMethod === 'credit' || b.paymentMethod === 'grow';
+    const hasGrowKeyword = notes.includes('grow') || notes.includes('אשראי') || notes.includes('סליקה') || notes.includes('gpay');
+    const isBank = notes.includes('העברה בנקאית') || (b.ownerName || '').includes('רונן מלמוד');
+    return (isLedger || isGrowMethod || hasGrowKeyword) && !isBank;
+  }, []);
+
+  const isDirectBankTransfer = useCallback((b: Booking): boolean => {
+    const notes = ((b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '')).toLowerCase();
+    const owner = (b.ownerName || '').toLowerCase();
+    const isLedger = VERIFIED_DIRECT_TRANSFERS.some(t => owner.includes(t.customerName.toLowerCase()) || (b.id || '').includes(t.ref));
+    const isBankMethod = b.paymentMethod === 'bank_transfer';
+    const hasBankKeyword = notes.includes('העברה בנקאית') || notes.includes('ישיר לחשבון') || (owner.includes('רונן') && owner.includes('מלמוד'));
+    return isLedger || isBankMethod || hasBankKeyword;
+  }, []);
+
+  const isInstallmentPayment = useCallback((b: Booking): boolean => {
+    const notes = ((b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '')).toLowerCase();
+    const owner = (b.ownerName || '').toLowerCase();
+    const dog = (b.dogName || '').toLowerCase();
+    const isKnown = KNOWN_FUTURE_INSTALLMENTS.some(inst => owner.includes(inst.customerName.toLowerCase()) || dog.includes(inst.dogName.toLowerCase()));
+    const hasInstallmentKeyword = notes.includes('מתוך') || notes.includes('תשלום ראשון') || (owner.includes('דורין') && owner.includes('לוקס'));
+    return isKnown || hasInstallmentKeyword;
+  }, []);
+
+  const isRefundBooking = useCallback((b: Booking): boolean => {
+    return (Number(b.refundAmount) || 0) > 0;
+  }, []);
+
+  const isDigitalPayment = useCallback((b: Booking): boolean => {
+    return isGrowPayment(b) || isDirectBankTransfer(b) || isInstallmentPayment(b);
+  }, [isGrowPayment, isDirectBankTransfer, isInstallmentPayment]);
+
+  const isCashPayment = useCallback((b: Booking): boolean => {
+    if (isRefundBooking(b) && (Number(b.depositAmount) || 0) === 0 && b.paymentStatus !== 'fully_paid') {
+      return false;
+    }
+    if (isGrowPayment(b)) return false;
+    if (isDirectBankTransfer(b)) return false;
+    if (isInstallmentPayment(b)) return false;
+
+    const dog = (b.dogName || '').toLowerCase();
+    if (dog.includes("ג'וי") || dog.includes("גו'י")) return false;
+
+    const hasPaid = (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid';
+    if (!hasPaid) return false;
+
+    const notes = ((b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '')).toLowerCase();
+    return b.paymentMethod === 'cash' || notes.includes('מזומן') || notes.includes('שטרות') || b.paymentMethod === 'bit' || !b.paymentMethod;
+  }, [isRefundBooking, isGrowPayment, isDirectBankTransfer, isInstallmentPayment]);
 
   // Trainer Hila View States (Default to trainer_payments if opened via hila_trainer)
   const [trainingViewTab, setTrainingViewTab] = useState<'active' | 'completed' | 'trainer_payments'>(
@@ -405,13 +460,16 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   let filteredItems: Booking[] = [];
 
   switch (metricType) {
-    case 'occupancy':
+    case 'occupancy': {
+      const stayingToday = todayBookings.filter(b => b.stayStatus !== 'checked_out');
+      const checkedOutToday = todayBookings.filter(b => b.stayStatus === 'checked_out');
       title = 'תפוסה כוללת להיום';
-      subtitle = `${todayBookings.length} כלבים שוהים בריזורט היום (מתוך ${settings.maxCapacity} מקומות מקסימום)`;
+      subtitle = `${stayingToday.length} כלבים שוהים כעת בריזורט מתוך ${settings.maxCapacity} מקומות מקסימום${checkedOutToday.length > 0 ? ` (${checkedOutToday.length} השתחרר/ו היום)` : ''}`;
       icon = <Dog className="w-5 h-5 text-emerald-600" />;
       badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
       filteredItems = todayBookings;
       break;
+    }
 
     case 'boarding':
       title = 'כלבי פנסיון ושהות יומית';
@@ -469,11 +527,6 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
     }
 
     case 'revenue': {
-      const paidItems = bookings.filter(b => {
-        const hasPayment = (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid';
-        const hasRefund = (Number(b.refundAmount) || 0) > 0;
-        return (b.stayStatus !== 'cancelled' && hasPayment) || hasRefund;
-      });
       const curData = monthlyMap[currentMonthKey];
       const digitalCleared = curData?.digitalCleared || 0;
       const growClearedBankOn10th = curData?.growClearedBankOn10th || 0;
@@ -481,47 +534,80 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       const bankOn10thInTwoMonths = curData?.bankOn10thInTwoMonths || 0;
       const cashCollected = curData?.cashCollected || 0;
       const monthRefunds = curData?.totalRefunds || 0;
+      const totalCol = curData?.totalCollected || 0;
+      const netCol = curData?.netCollected || 0;
 
-      title = `פירוט הכנסות וסליקה: דיגיטלי, העברות ישירות, יכנס ב-10, יכנס ב-${inTwoMonthsDateLabel}, ומזומן`;
-      subtitle = `1. נסלק דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')}${directBankTransfers > 0 ? ` • ישיר לחשבון: ₪${directBankTransfers.toLocaleString('he-IL')}` : ''} • 2. ייכנס לבנק ב-${next10thDateLabel}: ₪${growClearedBankOn10th.toLocaleString('he-IL')} • 3. יכנס לבנק ב-${inTwoMonthsDateLabel}: ₪${bankOn10thInTwoMonths.toLocaleString('he-IL')} • 4. נסלק במזומן: ₪${cashCollected.toLocaleString('he-IL')}${monthRefunds > 0 ? ` • 🔄 החזרים: ₪${monthRefunds.toLocaleString('he-IL')}-` : ''}`;
-      icon = <DollarSign className="w-5 h-5 text-emerald-700" />;
-      badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
-      filteredItems = paidItems;
+      // Base candidate bookings: any booking with payment or refund
+      const paidItems = bookings.filter(b => {
+        const hasPayment = (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid';
+        const hasRefund = (Number(b.refundAmount) || 0) > 0;
+        return (b.stayStatus !== 'cancelled' && hasPayment) || hasRefund;
+      });
 
-      // Filter by revenueCategoryFilter (all / digital / grow_10th / direct_transfer / grow_in_2_months / cash / refunds)
-      if (revenueCategoryFilter !== 'all') {
-        filteredItems = filteredItems.filter(b => {
-          if (revenueCategoryFilter === 'refunds') {
-            return (Number(b.refundAmount) || 0) > 0;
-          }
-          const notes = (b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '');
-          const isGrow = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref) || b.id.includes(t.ref));
-          const isBank = (b.ownerName || '').includes('רונן') || (b.ownerName || '').includes('מלמוד') || notes.includes('העברה בנקאית');
-          const isInstallment = notes.includes('מתוך') || notes.includes('תשלום ראשון') || (b.ownerName || '').includes('דורין') || (b.ownerName || '').includes('לוקס');
+      if (revenueViewTab === 'graphs') {
+        title = '📊 גרפים, דוחות וניתוח הכנסות';
+        subtitle = `השוואה חודשית ושנתית • סה״כ נטו החודש: ₪${netCol.toLocaleString('he-IL')} • דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')} • מזומן: ₪${cashCollected.toLocaleString('he-IL')}`;
+        icon = <BarChart3 className="w-5 h-5 text-emerald-700" />;
+        badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
 
-          if (revenueCategoryFilter === 'grow_10th') return isGrow;
-          if (revenueCategoryFilter === 'direct_transfer') return isBank;
-          if (revenueCategoryFilter === 'grow_in_2_months') return isInstallment;
-          if (revenueCategoryFilter === 'digital') return isGrow || isBank;
-          if (revenueCategoryFilter === 'cash') return !isGrow && !isBank && (Number(b.refundAmount) || 0) === 0;
-          return true;
-        });
-      }
-
-      // Filter by chart column click if selected
-      if (selectedChartPeriod) {
-        filteredItems = filteredItems.filter(b => {
-          if (chartMode === 'monthly') {
-            const hasPayment = getBookingPaymentsInMonth(b, selectedChartPeriod) > 0;
-            const hasRefund = (Number(b.refundAmount) || 0) > 0 && (b.refundDate || b.startDate || '').startsWith(selectedChartPeriod);
-            return hasPayment || hasRefund;
-          } else {
-            const matchesYear = (b.createdAt && b.createdAt.startsWith(selectedChartPeriod)) || 
-                                (b.startDate && b.startDate.startsWith(selectedChartPeriod));
-            const matchesRefundYear = (Number(b.refundAmount) || 0) > 0 && (b.refundDate || b.startDate || '').startsWith(selectedChartPeriod);
-            return matchesYear || matchesRefundYear;
-          }
-        });
+        if (selectedChartPeriod) {
+          filteredItems = paidItems.filter(b => {
+            if (chartMode === 'monthly') {
+              const hasPayment = getBookingPaymentsInMonth(b, selectedChartPeriod) > 0;
+              const hasRefund = (Number(b.refundAmount) || 0) > 0 && (b.refundDate || b.startDate || '').startsWith(selectedChartPeriod);
+              return hasPayment || hasRefund;
+            } else {
+              const matchesYear = (b.createdAt && b.createdAt.startsWith(selectedChartPeriod)) || 
+                                  (b.startDate && b.startDate.startsWith(selectedChartPeriod));
+              const matchesRefundYear = (Number(b.refundAmount) || 0) > 0 && (b.refundDate || b.startDate || '').startsWith(selectedChartPeriod);
+              return matchesYear || matchesRefundYear;
+            }
+          });
+        } else {
+          filteredItems = [];
+        }
+      } else if (revenueViewTab === 'cash') {
+        title = '💵 נסלק במזומן (שטרות ישירים)';
+        subtitle = `סה״כ נסלק במזומן החודש: ₪${cashCollected.toLocaleString('he-IL')} • מציג רק כלבים ששולמו במזומן בלבד`;
+        icon = <DollarSign className="w-5 h-5 text-amber-700" />;
+        badgeColor = 'bg-amber-50 text-amber-900 border-amber-300';
+        filteredItems = paidItems.filter(b => isCashPayment(b));
+      } else if (revenueViewTab === 'digital') {
+        title = '📱 סליקה דיגיטלית (Grow / ביט / העברות)';
+        subtitle = `סה״כ סליקה דיגיטלית החודש: ₪${digitalCleared.toLocaleString('he-IL')} • כלל התשלומים שעברו דרך הלינק המאובטח או הבנק`;
+        icon = <CreditCard className="w-5 h-5 text-emerald-700" />;
+        badgeColor = 'bg-emerald-50 text-emerald-900 border-emerald-300';
+        filteredItems = paidItems.filter(b => isDigitalPayment(b));
+      } else if (revenueViewTab === 'grow_10th') {
+        title = `🏦 יכנס לבנק ב-${next10thDateLabel} (סליקת אשראי GROW)`;
+        subtitle = `סה״כ עסקאות אשראי Grow שיופקדו לחשבון הבנק ב-10 לחודש: ₪${growClearedBankOn10th.toLocaleString('he-IL')}`;
+        icon = <Building2 className="w-5 h-5 text-sky-700" />;
+        badgeColor = 'bg-sky-50 text-sky-900 border-sky-300';
+        filteredItems = paidItems.filter(b => isGrowPayment(b));
+      } else if (revenueViewTab === 'direct_transfer') {
+        title = '🏛️ הועבר ישירות לחשבון (העברות בנקאיות)';
+        subtitle = `סה״כ כספים שכבר הופקדו ישירות לחשבון הבנק: ₪${directBankTransfers.toLocaleString('he-IL')}`;
+        icon = <Building2 className="w-5 h-5 text-teal-700" />;
+        badgeColor = 'bg-teal-50 text-teal-900 border-teal-300';
+        filteredItems = paidItems.filter(b => isDirectBankTransfer(b));
+      } else if (revenueViewTab === 'grow_in_2_months') {
+        title = `🗓️ יכנס לבנק ב-${inTwoMonthsDateLabel} (תשלומי המשך מובטחים)`;
+        subtitle = `סה״כ עסקאות תשלומים שייכנסו בעוד חודשיים: ₪${bankOn10thInTwoMonths.toLocaleString('he-IL')}`;
+        icon = <Calendar className="w-5 h-5 text-indigo-700" />;
+        badgeColor = 'bg-indigo-50 text-indigo-900 border-indigo-300';
+        filteredItems = paidItems.filter(b => isInstallmentPayment(b));
+      } else if (revenueViewTab === 'refunds') {
+        title = '↩️ החזרים כספיים שבוצעו ונוכו מההכנסות';
+        subtitle = `סה״כ החזרים שבוצעו החודש ללקוחות: -₪${monthRefunds.toLocaleString('he-IL')}`;
+        icon = <AlertCircle className="w-5 h-5 text-rose-700" />;
+        badgeColor = 'bg-rose-50 text-rose-900 border-rose-300';
+        filteredItems = paidItems.filter(b => isRefundBooking(b));
+      } else {
+        title = '📋 כלל התקבולים וההכנסות החודש';
+        subtitle = `סה״כ תקבולים: ₪${totalCol.toLocaleString('he-IL')} (דיגיטלי: ₪${digitalCleared.toLocaleString('he-IL')} + מזומן: ₪${cashCollected.toLocaleString('he-IL')})`;
+        icon = <Sparkles className="w-5 h-5 text-slate-700" />;
+        badgeColor = 'bg-slate-100 text-slate-900 border-slate-300';
+        filteredItems = paidItems;
       }
       break;
     }
@@ -699,377 +785,695 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
           </div>
         )}
 
-        {/* REVENUE ANALYTICS & COLUMN CHARTS (Displayed when metricType === 'revenue') */}
+        {/* REVENUE TABS (Displayed when metricType === 'revenue') */}
         {metricType === 'revenue' && (
-          <div className="p-4 bg-slate-50/60 border-b border-slate-200/70 space-y-3">
-            
-            {/* Controls: Mode Toggle & Summary Stats */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-1 bg-white p-1 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="p-3 sm:p-4 bg-emerald-50/60 border-b border-emerald-200/80 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-1.5 bg-white p-1 rounded-2xl border border-emerald-200 shadow-2xs">
+                
+                {/* 1. Cash Tab (Default - First!) */}
                 <button
                   type="button"
                   onClick={() => {
-                    setChartMode('monthly');
+                    setRevenueViewTab('cash');
                     setSelectedChartPeriod(null);
                   }}
-                  className={`px-3 py-1.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
-                    chartMode === 'monthly'
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                  className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                    revenueViewTab === 'cash'
+                      ? 'bg-amber-600 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-amber-900 hover:bg-amber-50'
                   }`}
                 >
-                  <BarChart3 className="w-3.5 h-3.5" />
-                  <span>לפי חודשים (12 אחרונים)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChartMode('yearly');
-                    setSelectedChartPeriod(null);
-                  }}
-                  className={`px-3 py-1.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
-                    chartMode === 'yearly'
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  <span>השוואה שנתית</span>
-                </button>
-              </div>
-
-              {/* Summary KPIs: 3 Categories + Total */}
-              <div className="flex flex-wrap items-center gap-2">
-                <div 
-                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'digital' ? 'all' : 'digital')}
-                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
-                    revenueCategoryFilter === 'digital' ? 'bg-emerald-100 border-emerald-500 ring-2 ring-emerald-500' : 'bg-white border-emerald-200/90 hover:bg-emerald-50/50'
-                  }`}
-                  title="לחץ לסינון: 1. כל אמצעי התשלום הדיגיטלי כולם"
-                >
-                  <div className="text-[10px] font-bold text-emerald-800">1. נסלק החודש (דיגיטלי)</div>
-                  <div className="text-sm font-black text-emerald-700">
-                    ₪{(monthlyMap[currentMonthKey]?.digitalCleared || 0).toLocaleString('he-IL')}
-                  </div>
-                  <div className="text-[9px] text-slate-400">כלל התשלומים הדיגיטליים</div>
-                </div>
-
-                {(monthlyMap[currentMonthKey]?.directBankTransfers || 0) > 0 && (
-                  <div 
-                    onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'direct_transfer' ? 'all' : 'direct_transfer')}
-                    className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
-                      revenueCategoryFilter === 'direct_transfer' ? 'bg-teal-100 border-teal-500 ring-2 ring-teal-500' : 'bg-teal-50 border-teal-200 hover:bg-teal-100/60'
-                    }`}
-                    title="לחץ לסינון: העברות בנקאיות ישירות שהופקדו ישירות לחשבון הבנק"
-                  >
-                    <div className="text-[10px] font-bold text-teal-800">הועבר ישירות לחשבון</div>
-                    <div className="text-sm font-black text-teal-900">
-                      ₪{(monthlyMap[currentMonthKey]?.directBankTransfers || 0).toLocaleString('he-IL')}
-                    </div>
-                    <div className="text-[9px] text-teal-700 font-medium">כבר בחשבון הבנק</div>
-                  </div>
-                )}
-
-                <div 
-                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'grow_10th' ? 'all' : 'grow_10th')}
-                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
-                    revenueCategoryFilter === 'grow_10th' ? 'bg-sky-100 border-sky-500 ring-2 ring-sky-500' : 'bg-sky-50 border-sky-200 hover:bg-sky-100/60'
-                  }`}
-                  title="לחץ לסינון: 2. סליקת כרטיסי אשראי GROW (ייכנס לבנק ב-10 לחודש הקרוב)"
-                >
-                  <div className="text-[10px] font-bold text-sky-800">2. יכנס לבנק ב-{next10thDateLabel}</div>
-                  <div className="text-sm font-black text-sky-900">
-                    ₪{(monthlyMap[currentMonthKey]?.growClearedBankOn10th || 0).toLocaleString('he-IL')}
-                  </div>
-                  <div className="text-[9px] text-sky-600 font-medium">סליקת כרטיסי אשראי GROW</div>
-                </div>
-
-                <div 
-                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'grow_in_2_months' ? 'all' : 'grow_in_2_months')}
-                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
-                    revenueCategoryFilter === 'grow_in_2_months' ? 'bg-indigo-100 border-indigo-500 ring-2 ring-indigo-500' : 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100/60'
-                  }`}
-                  title="לחץ לסינון: 3. עסקאות בתשלומים שיכנסו לבנק ב-10 בעוד חודשיים"
-                >
-                  <div className="text-[10px] font-bold text-indigo-900">3. יכנס לבנק ב-{inTwoMonthsDateLabel}</div>
-                  <div className="text-sm font-black text-indigo-950">
-                    ₪{(monthlyMap[currentMonthKey]?.bankOn10thInTwoMonths || 0).toLocaleString('he-IL')}
-                  </div>
-                  <div className="text-[9px] text-indigo-700 font-medium">תשלומי המשך מובטחים</div>
-                </div>
-
-                <div 
-                  onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'cash' ? 'all' : 'cash')}
-                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
-                    revenueCategoryFilter === 'cash' ? 'bg-amber-100 border-amber-500 ring-2 ring-amber-500' : 'bg-amber-50 border-amber-200 hover:bg-amber-100/60'
-                  }`}
-                  title="לחץ לסינון: 4. נסלק במזומן"
-                >
-                  <div className="text-[10px] font-bold text-amber-800">4. נסלק במזומן</div>
-                  <div className="text-sm font-black text-amber-900">
+                  <span>💵 נסלק במזומן</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    revenueViewTab === 'cash' ? 'bg-amber-800 text-amber-100' : 'bg-amber-100 text-amber-900'
+                  }`}>
                     ₪{(monthlyMap[currentMonthKey]?.cashCollected || 0).toLocaleString('he-IL')}
-                  </div>
-                  <div className="text-[9px] text-amber-700 font-medium">תשלום מזומן ישיר</div>
-                </div>
+                  </span>
+                </button>
 
-                <div 
-                  onClick={() => setRevenueCategoryFilter('all')}
-                  className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
-                    revenueCategoryFilter === 'all' ? 'bg-slate-100 border-slate-300' : 'bg-white border-slate-200 hover:bg-slate-50'
+                {/* 2. Digital Clearing Tab */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRevenueViewTab('digital');
+                    setSelectedChartPeriod(null);
+                  }}
+                  className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                    revenueViewTab === 'digital'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-emerald-900 hover:bg-emerald-50'
                   }`}
-                  title="לחץ להצגת סה״כ כלל ההכנסות"
                 >
-                  <div className="text-[10px] font-bold text-slate-500">סה״כ כולל החודש</div>
-                  <div className="text-sm font-black text-slate-900">
-                    ₪{(monthlyMap[currentMonthKey]?.totalCollected || 0).toLocaleString('he-IL')}
-                  </div>
-                  <div className="text-[9px] text-slate-400">דיגיטלי + מזומן</div>
-                </div>
+                  <span>📱 סליקה דיגיטלית (Grow / ביט)</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    revenueViewTab === 'digital' ? 'bg-emerald-800 text-emerald-100' : 'bg-emerald-100 text-emerald-900'
+                  }`}>
+                    ₪{(monthlyMap[currentMonthKey]?.digitalCleared || 0).toLocaleString('he-IL')}
+                  </span>
+                </button>
 
-                {(monthlyMap[currentMonthKey]?.totalRefunds || 0) > 0 && (
-                  <div 
-                    onClick={() => setRevenueCategoryFilter(revenueCategoryFilter === 'refunds' ? 'all' : 'refunds')}
-                    className={`border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all ${
-                      revenueCategoryFilter === 'refunds' ? 'bg-rose-100 border-rose-500 ring-2 ring-rose-500' : 'bg-rose-50 border-rose-200 hover:bg-rose-100/60'
-                    }`}
-                    title="לחץ לסינון: החזרים כספיים שבוצעו החודש"
-                  >
-                    <div className="text-[10px] font-bold text-rose-800">החזרים שבוצעו החודש</div>
-                    <div className="text-sm font-black text-rose-700 font-mono">
-                      -₪{(monthlyMap[currentMonthKey]?.totalRefunds || 0).toLocaleString('he-IL')}
-                    </div>
-                    <div className="text-[9px] text-rose-600 font-medium">נוכה מהכנסות הריזורט</div>
-                  </div>
-                )}
-              </div>
-            </div>
+                {/* 3. Grow 10th Tab */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRevenueViewTab('grow_10th');
+                    setSelectedChartPeriod(null);
+                  }}
+                  className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                    revenueViewTab === 'grow_10th'
+                      ? 'bg-sky-600 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-sky-900 hover:bg-sky-50'
+                  }`}
+                >
+                  <span>🏦 יכנס ב-{next10thDateLabel} (Grow)</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    revenueViewTab === 'grow_10th' ? 'bg-sky-800 text-sky-100' : 'bg-sky-100 text-sky-900'
+                  }`}>
+                    ₪{(monthlyMap[currentMonthKey]?.growClearedBankOn10th || 0).toLocaleString('he-IL')}
+                  </span>
+                </button>
 
-            {/* Column / Bar Chart */}
-            <div className="bg-white border border-slate-200/90 rounded-2xl p-3 sm:p-4 shadow-2xs">
-              <div className="flex items-center justify-between text-xs text-slate-400 font-semibold mb-2">
-                <span>📊 גרף עמודות הכנסות בפועל (סכומים בשקלים כתובים מעל כל עמודה):</span>
-                {selectedChartPeriod && (
+                {/* 4. Direct Bank Transfer Tab */}
+                {(monthlyMap[currentMonthKey]?.directBankTransfers || 0) > 0 && (
                   <button
                     type="button"
-                    onClick={() => setSelectedChartPeriod(null)}
-                    className="text-xs text-emerald-700 hover:text-emerald-900 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 cursor-pointer flex items-center gap-1"
+                    onClick={() => {
+                      setRevenueViewTab('direct_transfer');
+                      setSelectedChartPeriod(null);
+                    }}
+                    className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                      revenueViewTab === 'direct_transfer'
+                        ? 'bg-teal-600 text-white shadow-2xs'
+                        : 'text-slate-700 hover:text-teal-900 hover:bg-teal-50'
+                    }`}
                   >
-                    <span>הסר סינון תקופה</span>
-                    <span>✕</span>
+                    <span>🏛️ ישיר לחשבון</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                      revenueViewTab === 'direct_transfer' ? 'bg-teal-800 text-teal-100' : 'bg-teal-100 text-teal-900'
+                    }`}>
+                      ₪{(monthlyMap[currentMonthKey]?.directBankTransfers || 0).toLocaleString('he-IL')}
+                    </span>
                   </button>
                 )}
-              </div>
 
-              {/* Horizontal Scrollable Chart Area */}
-              <div className="overflow-x-auto pb-1 pt-4">
-                <div className="flex items-end justify-between gap-2 sm:gap-3 min-w-[580px] h-[175px] px-2">
-                  {activeChartData.map((item) => {
-                    const heightPercent = maxCollectedInChart > 0 
-                      ? Math.max(10, Math.round((item.totalCollected / maxCollectedInChart) * 100))
-                      : 10;
-                    const isSelected = selectedChartPeriod === item.periodKey;
-                    const isCurrent = item.periodKey === currentMonthKey || item.periodKey === currentYearKey;
+                {/* 5. Future Installments Tab */}
+                {(monthlyMap[currentMonthKey]?.bankOn10thInTwoMonths || 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRevenueViewTab('grow_in_2_months');
+                      setSelectedChartPeriod(null);
+                    }}
+                    className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                      revenueViewTab === 'grow_in_2_months'
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'text-slate-700 hover:text-indigo-900 hover:bg-indigo-50'
+                    }`}
+                  >
+                    <span>🗓️ יכנס ב-{inTwoMonthsDateLabel}</span>
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                      revenueViewTab === 'grow_in_2_months' ? 'bg-indigo-800 text-indigo-100' : 'bg-indigo-100 text-indigo-900'
+                    }`}>
+                      ₪{(monthlyMap[currentMonthKey]?.bankOn10thInTwoMonths || 0).toLocaleString('he-IL')}
+                    </span>
+                  </button>
+                )}
 
-                    return (
-                      <div
-                        key={item.periodKey}
-                        onClick={() => {
-                          setSelectedChartPeriod(isSelected ? null : item.periodKey);
-                        }}
-                        className={`flex-1 flex flex-col items-center justify-end h-full group cursor-pointer transition-all p-1 rounded-xl ${
-                          isSelected 
-                            ? 'bg-emerald-50/80 ring-2 ring-emerald-500 shadow-2xs' 
-                            : 'hover:bg-slate-50'
-                        }`}
-                        title={`${item.periodLabel}: ₪${item.totalCollected.toLocaleString('he-IL')} נטו מתוך ${item.bookingsCount} הזמנות ${(item.totalRefunds || 0) > 0 ? `(הוחזרו ₪${item.totalRefunds?.toLocaleString('he-IL')})` : ''}. לחץ לסינון הרשימה.`}
-                      >
-                        {/* Amount in Shekels on top of column */}
-                        <div className="flex flex-col items-center mb-1">
-                          {(item.totalRefunds || 0) > 0 && (
-                            <span 
-                              className="text-[9px] font-black text-rose-600 bg-rose-50 border border-rose-200 px-1 rounded-full mb-0.5 whitespace-nowrap"
-                              title={`בוצעו החזרים כספיים בסך ₪${item.totalRefunds?.toLocaleString('he-IL')}`}
-                            >
-                              -₪{item.totalRefunds?.toLocaleString('he-IL')}
-                            </span>
-                          )}
-                          <span className={`text-[10px] sm:text-[11px] font-black tracking-tight text-center transition-all ${
-                            item.totalCollected > 0 
-                              ? isSelected || isCurrent ? 'text-emerald-800 scale-105' : 'text-slate-700'
-                              : 'text-slate-400 opacity-60'
-                          }`}>
-                            {item.totalCollected > 0 ? `₪${item.totalCollected.toLocaleString('he-IL')}` : '0 ₪'}
-                          </span>
-                        </div>
+                {/* 6. Refunds Tab */}
+                {((monthlyMap[currentMonthKey]?.totalRefunds || 0) > 0 || bookings.some(b => (Number(b.refundAmount) || 0) > 0)) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRevenueViewTab('refunds');
+                      setSelectedChartPeriod(null);
+                    }}
+                    className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                      revenueViewTab === 'refunds'
+                        ? 'bg-rose-600 text-white shadow-2xs'
+                        : 'text-rose-700 hover:bg-rose-50 hover:text-rose-900'
+                    }`}
+                  >
+                    <span>↩️ החזרים כספיים</span>
+                    {(monthlyMap[currentMonthKey]?.totalRefunds || 0) > 0 && (
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                        revenueViewTab === 'refunds' ? 'bg-rose-900 text-rose-100' : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        -₪{(monthlyMap[currentMonthKey]?.totalRefunds || 0).toLocaleString('he-IL')}
+                      </span>
+                    )}
+                  </button>
+                )}
 
-                        {/* The Bar Column */}
-                        <div className="w-full max-w-[42px] bg-slate-100 rounded-t-xl overflow-hidden flex items-end justify-center h-[115px]">
-                          <div
-                            style={{ height: `${heightPercent}%` }}
-                            className={`w-full rounded-t-lg transition-all duration-300 ${
-                              item.totalCollected === 0
-                                ? 'bg-slate-200'
-                                : isSelected
-                                ? 'bg-gradient-to-t from-emerald-700 to-teal-500 shadow-sm'
-                                : isCurrent
-                                ? 'bg-gradient-to-t from-emerald-600 to-emerald-400'
-                                : 'bg-gradient-to-t from-emerald-500/90 to-teal-400/90 group-hover:from-emerald-600 group-hover:to-teal-500'
-                            }`}
-                          />
-                        </div>
+                {/* 7. All Monthly Payments Tab */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRevenueViewTab('all');
+                    setSelectedChartPeriod(null);
+                  }}
+                  className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                    revenueViewTab === 'all'
+                      ? 'bg-slate-800 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <span>📋 כל התקבולים החודש</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    revenueViewTab === 'all' ? 'bg-slate-950 text-slate-100' : 'bg-slate-200 text-slate-800'
+                  }`}>
+                    ₪{(monthlyMap[currentMonthKey]?.totalCollected || 0).toLocaleString('he-IL')}
+                  </span>
+                </button>
 
-                        {/* Label beneath the bar */}
-                        <span className={`text-[11px] font-bold mt-1.5 whitespace-nowrap text-center ${
-                          isSelected ? 'text-emerald-900 font-black' : isCurrent ? 'text-emerald-800' : 'text-slate-600'
-                        }`}>
-                          {item.periodLabel}
-                        </span>
+                {/* 8. Graphs & Analytics Tab (Separated at the end) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRevenueViewTab('graphs');
+                    setSelectedChartPeriod(null);
+                  }}
+                  className={`px-3.5 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 border ${
+                    revenueViewTab === 'graphs'
+                      ? 'bg-emerald-700 text-white border-emerald-800 shadow-2xs'
+                      : 'bg-emerald-50/80 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  <span>📊 גרפים והשוואות</span>
+                </button>
 
-                        {/* Booking Count beneath */}
-                        <span className="text-[9px] text-slate-400 font-medium">
-                          {item.bookingsCount} {item.bookingsCount === 1 ? 'הזמנה' : 'הזמנות'}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Toolbar: Search and Filters */}
-        <div className="p-3 sm:p-4 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
-          <div className="relative flex-1 min-w-[220px]">
-            <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="חיפוש לפי שם כלב, בעלים, טלפון, הערות..."
-              className="w-full pl-3 pr-9 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-900"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
-              >
-                ✕
-              </button>
+        {/* Toolbar: Search and Filters (Displayed for standard metrics or when not in graphs view) */}
+        {(metricType !== 'revenue' || revenueViewTab !== 'graphs') && (
+          <div className="p-3 sm:p-4 bg-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-2.5">
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="חיפוש לפי שם כלב, בעלים, טלפון, הערות..."
+                className="w-full pl-3 pr-9 py-2 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-900"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Sub-filter for Training metric */}
+            {metricType === 'training' && (
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTrainingFilter('all')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                    trainingFilter === 'all' ? 'bg-white text-purple-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  הכל
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTrainingFilter('full')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                    trainingFilter === 'full' ? 'bg-purple-50 text-purple-800 border border-purple-200' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  תהליך מלא
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTrainingFilter('day')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                    trainingFilter === 'day' ? 'bg-purple-50 text-purple-800 border border-purple-200' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  ביומיות
+                </button>
+              </div>
             )}
           </div>
+        )}
 
-          {/* Sub-filter for Training metric */}
-          {metricType === 'training' && (
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-              <button
-                type="button"
-                onClick={() => setTrainingFilter('all')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                  trainingFilter === 'all' ? 'bg-white text-purple-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                הכל
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrainingFilter('full')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                  trainingFilter === 'full' ? 'bg-purple-50 text-purple-800 border border-purple-200' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                תהליך מלא
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrainingFilter('day')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                  trainingFilter === 'day' ? 'bg-purple-50 text-purple-800 border border-purple-200' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                ביומיות
-              </button>
-            </div>
-          )}
-
-          {/* Sub-filter for Revenue metric: 4 Categories */}
-          {metricType === 'revenue' && (
-            <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-              <button
-                type="button"
-                onClick={() => setRevenueCategoryFilter('all')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                  revenueCategoryFilter === 'all' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                הכל ({activeBookings.filter(b => (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid').length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setRevenueCategoryFilter('digital')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                  revenueCategoryFilter === 'digital' ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                📱 1. נסלק החודש (דיגיטלי)
-              </button>
-              {(monthlyMap[currentMonthKey]?.directBankTransfers || 0) > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setRevenueCategoryFilter('direct_transfer')}
-                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                    revenueCategoryFilter === 'direct_transfer' ? 'bg-teal-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  🏛️ הועבר ישירות לחשבון
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setRevenueCategoryFilter('grow_10th')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                  revenueCategoryFilter === 'grow_10th' ? 'bg-sky-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                🏦 2. יכנס לבנק ב-{next10thDateLabel} (GROW)
-              </button>
-              <button
-                type="button"
-                onClick={() => setRevenueCategoryFilter('grow_in_2_months')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                  revenueCategoryFilter === 'grow_in_2_months' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                🗓️ 3. יכנס לבנק ב-{inTwoMonthsDateLabel}
-              </button>
-              <button
-                type="button"
-                onClick={() => setRevenueCategoryFilter('cash')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                  revenueCategoryFilter === 'cash' ? 'bg-amber-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                💵 4. נסלק במזומן
-              </button>
-              {((monthlyMap[currentMonthKey]?.totalRefunds || 0) > 0 || bookings.some(b => (Number(b.refundAmount) || 0) > 0)) && (
-                <button
-                  type="button"
-                  onClick={() => setRevenueCategoryFilter('refunds')}
-                  className={`px-2.5 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
-                    revenueCategoryFilter === 'refunds' ? 'bg-rose-600 text-white shadow-2xs' : 'text-rose-700 hover:bg-rose-50 border border-rose-200'
-                  }`}
-                >
-                  ↩️ החזרים כספיים ({bookings.filter(b => (Number(b.refundAmount) || 0) > 0).length})
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Bookings List / Trainer Payments View */}
+        {/* Main Content Area */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4">
+
+          {/* REVENUE: 1. GRAPHS & ANALYTICS TAB VIEW */}
+          {metricType === 'revenue' && revenueViewTab === 'graphs' && (
+            <div className="space-y-4">
+              
+              {/* Controls: Mode Toggle & Summary Stats */}
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50/80 p-3 sm:p-4 rounded-2xl border border-slate-200/80">
+                <div className="flex items-center gap-1 bg-white p-1 rounded-2xl border border-slate-200 shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChartMode('monthly');
+                      setSelectedChartPeriod(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                      chartMode === 'monthly'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    <span>לפי חודשים (12 אחרונים)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChartMode('yearly');
+                      setSelectedChartPeriod(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl font-extrabold text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                      chartMode === 'yearly'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    <span>השוואה שנתית</span>
+                  </button>
+                </div>
+
+                {/* Summary KPI Cards - Clickable to open specific payment tab */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div 
+                    onClick={() => setRevenueViewTab('digital')}
+                    className="border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all bg-white border-emerald-200/90 hover:bg-emerald-50/70 hover:border-emerald-400 active:scale-95"
+                    title="לחץ למעבר לרשימת כל התשלומים הדיגיטליים"
+                  >
+                    <div className="text-[10px] font-bold text-emerald-800">1. נסלק החודש (דיגיטלי) ↗</div>
+                    <div className="text-sm font-black text-emerald-700">
+                      ₪{(monthlyMap[currentMonthKey]?.digitalCleared || 0).toLocaleString('he-IL')}
+                    </div>
+                    <div className="text-[9px] text-slate-400">כלל התשלומים הדיגיטליים</div>
+                  </div>
+
+                  {(monthlyMap[currentMonthKey]?.directBankTransfers || 0) > 0 && (
+                    <div 
+                      onClick={() => setRevenueViewTab('direct_transfer')}
+                      className="border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all bg-teal-50 border-teal-200 hover:bg-teal-100/70 hover:border-teal-400 active:scale-95"
+                      title="לחץ למעבר לרשימת ההעברות הבנקאיות הישירות"
+                    >
+                      <div className="text-[10px] font-bold text-teal-800">הועבר ישירות לחשבון ↗</div>
+                      <div className="text-sm font-black text-teal-900">
+                        ₪{(monthlyMap[currentMonthKey]?.directBankTransfers || 0).toLocaleString('he-IL')}
+                      </div>
+                      <div className="text-[9px] text-teal-700 font-medium">כבר בחשבון הבנק</div>
+                    </div>
+                  )}
+
+                  <div 
+                    onClick={() => setRevenueViewTab('grow_10th')}
+                    className="border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all bg-sky-50 border-sky-200 hover:bg-sky-100/70 hover:border-sky-400 active:scale-95"
+                    title="לחץ למעבר לרשימת עסקאות Grow ב-10 לחודש"
+                  >
+                    <div className="text-[10px] font-bold text-sky-800">2. יכנס לבנק ב-{next10thDateLabel} ↗</div>
+                    <div className="text-sm font-black text-sky-900">
+                      ₪{(monthlyMap[currentMonthKey]?.growClearedBankOn10th || 0).toLocaleString('he-IL')}
+                    </div>
+                    <div className="text-[9px] text-sky-600 font-medium">סליקת כרטיסי אשראי GROW</div>
+                  </div>
+
+                  {(monthlyMap[currentMonthKey]?.bankOn10thInTwoMonths || 0) > 0 && (
+                    <div 
+                      onClick={() => setRevenueViewTab('grow_in_2_months')}
+                      className="border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all bg-indigo-50 border-indigo-200 hover:bg-indigo-100/70 hover:border-indigo-400 active:scale-95"
+                      title="לחץ למעבר לרשימת עסקאות התשלומים בעוד חודשיים"
+                    >
+                      <div className="text-[10px] font-bold text-indigo-900">3. יכנס ב-{inTwoMonthsDateLabel} ↗</div>
+                      <div className="text-sm font-black text-indigo-950">
+                        ₪{(monthlyMap[currentMonthKey]?.bankOn10thInTwoMonths || 0).toLocaleString('he-IL')}
+                      </div>
+                      <div className="text-[9px] text-indigo-700 font-medium">תשלומי המשך מובטחים</div>
+                    </div>
+                  )}
+
+                  <div 
+                    onClick={() => setRevenueViewTab('cash')}
+                    className="border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all bg-amber-50 border-amber-200 hover:bg-amber-100/70 hover:border-amber-400 active:scale-95"
+                    title="לחץ למעבר לרשימת התשלומים במזומן בלבד"
+                  >
+                    <div className="text-[10px] font-bold text-amber-800">4. נסלק במזומן ↗</div>
+                    <div className="text-sm font-black text-amber-900">
+                      ₪{(monthlyMap[currentMonthKey]?.cashCollected || 0).toLocaleString('he-IL')}
+                    </div>
+                    <div className="text-[9px] text-amber-700 font-medium">תשלום מזומן ישיר</div>
+                  </div>
+
+                  <div 
+                    onClick={() => setRevenueViewTab('all')}
+                    className="border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all bg-white border-slate-200 hover:bg-slate-100 active:scale-95"
+                    title="לחץ להצגת סה״כ כלל התקבולים"
+                  >
+                    <div className="text-[10px] font-bold text-slate-500">סה״כ כולל החודש ↗</div>
+                    <div className="text-sm font-black text-slate-900">
+                      ₪{(monthlyMap[currentMonthKey]?.totalCollected || 0).toLocaleString('he-IL')}
+                    </div>
+                    <div className="text-[9px] text-slate-400">דיגיטלי + מזומן</div>
+                  </div>
+
+                  {(monthlyMap[currentMonthKey]?.totalRefunds || 0) > 0 && (
+                    <div 
+                      onClick={() => setRevenueViewTab('refunds')}
+                      className="border px-3 py-1.5 rounded-xl text-right shadow-2xs cursor-pointer transition-all bg-rose-50 border-rose-200 hover:bg-rose-100/70 hover:border-rose-400 active:scale-95"
+                      title="לחץ למעבר לרשימת ההחזרים הכספיים"
+                    >
+                      <div className="text-[10px] font-bold text-rose-800">החזרים שבוצעו ↗</div>
+                      <div className="text-sm font-black text-rose-700 font-mono">
+                        -₪{(monthlyMap[currentMonthKey]?.totalRefunds || 0).toLocaleString('he-IL')}
+                      </div>
+                      <div className="text-[9px] text-rose-600 font-medium">נוכה מההכנסות</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Column / Bar Chart */}
+              <div className="bg-white border border-slate-200/90 rounded-2xl p-3 sm:p-4 shadow-2xs">
+                <div className="flex items-center justify-between text-xs text-slate-400 font-semibold mb-2">
+                  <span>📊 גרף עמודות הכנסות בפועל (סכומים בשקלים כתובים מעל כל עמודה • לחץ על עמודה לסינון):</span>
+                  {selectedChartPeriod && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedChartPeriod(null)}
+                      className="text-xs text-emerald-700 hover:text-emerald-900 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200 cursor-pointer flex items-center gap-1"
+                    >
+                      <span>הסר סינון תקופה</span>
+                      <span>✕</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Horizontal Scrollable Chart Area */}
+                <div className="overflow-x-auto pb-1 pt-4">
+                  <div className="flex items-end justify-between gap-2 sm:gap-3 min-w-[580px] h-[175px] px-2">
+                    {activeChartData.map((item) => {
+                      const heightPercent = maxCollectedInChart > 0 
+                        ? Math.max(10, Math.round((item.totalCollected / maxCollectedInChart) * 100))
+                        : 10;
+                      const isSelected = selectedChartPeriod === item.periodKey;
+                      const isCurrent = item.periodKey === currentMonthKey || item.periodKey === currentYearKey;
+
+                      return (
+                        <div
+                          key={item.periodKey}
+                          onClick={() => {
+                            setSelectedChartPeriod(isSelected ? null : item.periodKey);
+                          }}
+                          className={`flex-1 flex flex-col items-center justify-end h-full group cursor-pointer transition-all p-1 rounded-xl ${
+                            isSelected 
+                              ? 'bg-emerald-50/80 ring-2 ring-emerald-500 shadow-2xs' 
+                              : 'hover:bg-slate-50'
+                          }`}
+                          title={`${item.periodLabel}: ₪${item.totalCollected.toLocaleString('he-IL')} נטו מתוך ${item.bookingsCount} הזמנות ${(item.totalRefunds || 0) > 0 ? `(הוחזרו ₪${item.totalRefunds?.toLocaleString('he-IL')})` : ''}. לחץ לסינון הרשימה למטה.`}
+                        >
+                          {/* Amount in Shekels on top of column */}
+                          <div className="flex flex-col items-center mb-1">
+                            {(item.totalRefunds || 0) > 0 && (
+                              <span 
+                                className="text-[9px] font-black text-rose-600 bg-rose-50 border border-rose-200 px-1 rounded-full mb-0.5 whitespace-nowrap"
+                                title={`בוצעו החזרים כספיים בסך ₪${item.totalRefunds?.toLocaleString('he-IL')}`}
+                              >
+                                -₪{item.totalRefunds?.toLocaleString('he-IL')}
+                              </span>
+                            )}
+                            <span className={`text-[10px] sm:text-[11px] font-black tracking-tight text-center transition-all ${
+                              item.totalCollected > 0 
+                                ? isSelected || isCurrent ? 'text-emerald-800 scale-105' : 'text-slate-700'
+                                : 'text-slate-400 opacity-60'
+                            }`}>
+                              {item.totalCollected > 0 ? `₪${item.totalCollected.toLocaleString('he-IL')}` : '0 ₪'}
+                            </span>
+                          </div>
+
+                          {/* The Bar Column */}
+                          <div className="w-full max-w-[42px] bg-slate-100 rounded-t-xl overflow-hidden flex items-end justify-center h-[115px]">
+                            <div
+                              style={{ height: `${heightPercent}%` }}
+                              className={`w-full rounded-t-lg transition-all duration-300 ${
+                                item.totalCollected === 0
+                                  ? 'bg-slate-200'
+                                  : isSelected
+                                  ? 'bg-gradient-to-t from-emerald-700 to-teal-500 shadow-sm'
+                                  : isCurrent
+                                  ? 'bg-gradient-to-t from-emerald-600 to-emerald-400'
+                                  : 'bg-gradient-to-t from-emerald-500/90 to-teal-400/90 group-hover:from-emerald-600 group-hover:to-teal-500'
+                              }`}
+                            />
+                          </div>
+
+                          {/* Label beneath the bar */}
+                          <span className={`text-[11px] font-bold mt-1.5 whitespace-nowrap text-center ${
+                            isSelected ? 'text-emerald-900 font-black' : isCurrent ? 'text-emerald-800' : 'text-slate-600'
+                          }`}>
+                            {item.periodLabel}
+                          </span>
+
+                          {/* Booking Count beneath */}
+                          <span className="text-[9px] text-slate-400 font-medium">
+                            {item.bookingsCount} {item.bookingsCount === 1 ? 'הזמנה' : 'הזמנות'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Chart Period Drilldown Or Tip Banner */}
+              {selectedChartPeriod ? (
+                <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <h4 className="font-black text-sm text-slate-900 flex items-center gap-2">
+                      <span>📋 פירוט תקבולים עבור {selectedChartPeriod}</span>
+                      <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                        {filteredItems.length} הזמנות
+                      </span>
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedChartPeriod(null)}
+                      className="text-xs text-emerald-700 hover:text-emerald-900 font-bold bg-emerald-100/70 px-2.5 py-1 rounded-lg border border-emerald-200 cursor-pointer flex items-center gap-1"
+                    >
+                      <span>✕ הסר סינון</span>
+                    </button>
+                  </div>
+
+                  {/* Search inside drilldown */}
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="חיפוש בהזמנות התקופה הנבחרת..."
+                      className="w-full pl-3 pr-9 py-2 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl text-emerald-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                  <div className="space-y-0.5">
+                    <div className="text-xs font-black flex items-center gap-1.5">
+                      <span>💡 ניווט מהיר בתקבולים:</span>
+                    </div>
+                    <p className="text-xs text-emerald-800 font-medium">
+                      לחץ על עמודת חודש בגרף כדי לראות את פירוט ההזמנות של אותו חודש, או עבור ללשוניות למעלה (<strong>💵 נסלק במזומן</strong>, <strong>📱 סליקה דיגיטלית</strong>) לצפייה ממוקדת בכלבים ששולמו בכל אמצעי תשלום.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRevenueViewTab('cash')}
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-2xs cursor-pointer shrink-0 transition-all active:scale-95 flex items-center gap-1"
+                  >
+                    <span>💵 עבור לרשימת המזומן</span>
+                  </button>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* REVENUE: 2. PAYMENT METHODS HERO BANNERS (When NOT on graphs tab) */}
+          {metricType === 'revenue' && revenueViewTab !== 'graphs' && (
+            <div>
+              {revenueViewTab === 'cash' && (
+                <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">💵</span>
+                      <h4 className="font-black text-base sm:text-lg">תשלומים שנסלקו במזומן (שטרות ישירים)</h4>
+                      <span className="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full font-mono">
+                        {filteredItems.length} כלבים
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-100 font-medium mt-0.5">
+                      רשימת הכלבים שעבורם שולם במזומן ישירות לשמוליק בריזורט (אינו עובר דרך סליקת כרטיסי אשראי GROW או הבנק).
+                    </p>
+                  </div>
+                  <div className="text-right sm:text-left bg-black/15 px-3.5 py-2 rounded-xl border border-white/20 shrink-0">
+                    <div className="text-[11px] text-amber-100 font-bold">סה״כ מזומן החודש:</div>
+                    <div className="text-xl font-black font-mono">
+                      ₪{(monthlyMap[currentMonthKey]?.cashCollected || 0).toLocaleString('he-IL')}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {revenueViewTab === 'digital' && (
+                <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">📱</span>
+                      <h4 className="font-black text-base sm:text-lg">סליקה דיגיטלית (Grow / ביט / לינק תשלום / העברות)</h4>
+                      <span className="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full font-mono">
+                        {filteredItems.length} פריטים
+                      </span>
+                    </div>
+                    <p className="text-xs text-emerald-100 font-medium mt-0.5">
+                      כלל התשלומים והמקדמות שנסלקו דרך קישור התשלום המאובטח של Grow והעברות ישירות לחשבון.
+                    </p>
+                  </div>
+                  <div className="text-right sm:text-left bg-black/15 px-3.5 py-2 rounded-xl border border-white/20 shrink-0">
+                    <div className="text-[11px] text-emerald-100 font-bold">סה״כ דיגיטלי החודש:</div>
+                    <div className="text-xl font-black font-mono">
+                      ₪{(monthlyMap[currentMonthKey]?.digitalCleared || 0).toLocaleString('he-IL')}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {revenueViewTab === 'grow_10th' && (
+                <div className="bg-gradient-to-r from-sky-600 to-blue-700 text-white p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🏦</span>
+                      <h4 className="font-black text-base sm:text-lg">סליקת כרטיסי אשראי GROW שתיכנס לבנק ב-10 לחודש ({next10thDateLabel})</h4>
+                      <span className="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full font-mono">
+                        {filteredItems.length} עסקאות
+                      </span>
+                    </div>
+                    <p className="text-xs text-sky-100 font-medium mt-0.5">
+                      סליקת אשראי Grow מחודש {currentMonthKey} שתוזרם אוטומטית לחשבון הבנק ב-10 לחודש הקרוב.
+                    </p>
+                  </div>
+                  <div className="text-right sm:text-left bg-black/15 px-3.5 py-2 rounded-xl border border-white/20 shrink-0">
+                    <div className="text-[11px] text-sky-100 font-bold">יופקד ב-{next10thDateLabel}:</div>
+                    <div className="text-xl font-black font-mono">
+                      ₪{(monthlyMap[currentMonthKey]?.growClearedBankOn10th || 0).toLocaleString('he-IL')}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {revenueViewTab === 'direct_transfer' && (
+                <div className="bg-gradient-to-r from-teal-600 to-teal-800 text-white p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🏛️</span>
+                      <h4 className="font-black text-base sm:text-lg">העברות בנקאיות ישירות (כבר בחשבון הבנק)</h4>
+                      <span className="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full font-mono">
+                        {filteredItems.length} עסקאות
+                      </span>
+                    </div>
+                    <p className="text-xs text-teal-100 font-medium mt-0.5">
+                      כספים שהועברו ישירות לחשבון הבנק (כגון קבלות מילואים רונן מלמוד / העברות בנקאיות).
+                    </p>
+                  </div>
+                  <div className="text-right sm:text-left bg-black/15 px-3.5 py-2 rounded-xl border border-white/20 shrink-0">
+                    <div className="text-[11px] text-teal-100 font-bold">כבר בחשבון הבנק:</div>
+                    <div className="text-xl font-black font-mono">
+                      ₪{(monthlyMap[currentMonthKey]?.directBankTransfers || 0).toLocaleString('he-IL')}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {revenueViewTab === 'grow_in_2_months' && (
+                <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 text-white p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🗓️</span>
+                      <h4 className="font-black text-base sm:text-lg">תשלומי המשך מובטחים שייכנסו לבנק ב-10 בעוד חודשיים ({inTwoMonthsDateLabel})</h4>
+                      <span className="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full font-mono">
+                        {filteredItems.length} עסקאות
+                      </span>
+                    </div>
+                    <p className="text-xs text-indigo-100 font-medium mt-0.5">
+                      עסקאות שבוצעו בפריסת תשלומים (כגון דורין לוקס / מגן) שתשלומיהן יופקדו בחודשים הבאים.
+                    </p>
+                  </div>
+                  <div className="text-right sm:text-left bg-black/15 px-3.5 py-2 rounded-xl border border-white/20 shrink-0">
+                    <div className="text-[11px] text-indigo-100 font-bold">יופקד ב-{inTwoMonthsDateLabel}:</div>
+                    <div className="text-xl font-black font-mono">
+                      ₪{(monthlyMap[currentMonthKey]?.bankOn10thInTwoMonths || 0).toLocaleString('he-IL')}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {revenueViewTab === 'refunds' && (
+                <div className="bg-gradient-to-r from-rose-600 to-rose-700 text-white p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">↩️</span>
+                      <h4 className="font-black text-base sm:text-lg">החזרים כספיים שבוצעו ללקוחות</h4>
+                      <span className="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full font-mono">
+                        {filteredItems.length} החזרים
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-100 font-medium mt-0.5">
+                      החזרים כספיים שבוצעו בגין ביטולים או שינויי שהות ונוכו מסך ההכנסות.
+                    </p>
+                  </div>
+                  <div className="text-right sm:text-left bg-black/15 px-3.5 py-2 rounded-xl border border-white/20 shrink-0">
+                    <div className="text-[11px] text-rose-100 font-bold">סה״כ נוכה:</div>
+                    <div className="text-xl font-black font-mono">
+                      -₪{(monthlyMap[currentMonthKey]?.totalRefunds || 0).toLocaleString('he-IL')}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {revenueViewTab === 'all' && (
+                <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white p-4 rounded-2xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">📋</span>
+                      <h4 className="font-black text-base sm:text-lg">כלל התקבולים וההכנסות החודש (דיגיטלי + מזומן)</h4>
+                      <span className="bg-white/20 text-white text-xs font-black px-2 py-0.5 rounded-full font-mono">
+                        {filteredItems.length} הזמנות
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 font-medium mt-0.5">
+                      ריכוז כלל התשלומים ששולמו החודש בכל אמצעי התשלום.
+                    </p>
+                  </div>
+                  <div className="text-right sm:text-left bg-black/15 px-3.5 py-2 rounded-xl border border-white/20 shrink-0">
+                    <div className="text-[11px] text-slate-300 font-bold">סה״כ תקבולים:</div>
+                    <div className="text-xl font-black font-mono text-emerald-400">
+                      ₪{(monthlyMap[currentMonthKey]?.totalCollected || 0).toLocaleString('he-IL')}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           
           {/* TRAINER HILA PAYMENTS VIEW */}
           {metricType === 'training' && trainingViewTab === 'trainer_payments' ? (

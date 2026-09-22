@@ -268,14 +268,15 @@ export default function App() {
   const todayStr = getTodayStr();
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
   const todayBookings = getBookingsForDate(activeBookings, todayStr);
+  const todayStayingBookings = todayBookings.filter(b => b.stayStatus !== 'checked_out');
 
-  const totalDogsToday = todayBookings.length;
-  const boardingToday = todayBookings.filter(b => b.serviceType === 'boarding' || b.serviceType === 'daycare').length;
-  const fullTrainingToday = todayBookings.filter(b => b.serviceType === 'training').length;
-  const dayTrainingToday = todayBookings.filter(b => b.serviceType === 'day_training').length;
+  const totalDogsToday = todayStayingBookings.length;
+  const boardingToday = todayStayingBookings.filter(b => b.serviceType === 'boarding' || b.serviceType === 'daycare').length;
+  const fullTrainingToday = todayStayingBookings.filter(b => b.serviceType === 'training').length;
+  const dayTrainingToday = todayStayingBookings.filter(b => b.serviceType === 'day_training').length;
   const trainingToday = fullTrainingToday + dayTrainingToday;
   const freeSlots = Math.max(0, settings.maxCapacity - totalDogsToday);
-  const activeTonightCount = activeBookings.filter(b => b.startDate <= todayStr && b.endDate > todayStr).length;
+  const activeTonightCount = activeBookings.filter(b => b.startDate <= todayStr && b.endDate > todayStr && b.stayStatus !== 'checked_out').length;
 
   // Holiday and Shabbat detection for today
   const todayHolidayInfo = getDateShabbatOrHoliday(todayStr);
@@ -1629,28 +1630,33 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Pod 2: פנסיון ומשפחתון */}
+                    {/* Pod 2: חוב פתוח (Placed ABOVE Boarding and Colored in Red) */}
                     <div 
-                      onClick={() => setActiveHeaderMetric('boarding')}
+                      onClick={() => setActiveHeaderMetric('debt')}
                       role="button"
                       tabIndex={0}
-                      className="bg-white hover:bg-sky-50/60 border border-slate-200/90 hover:border-sky-300 rounded-xl p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
-                      title="לחץ לעיון ועריכת כלבי הפנסיון והדייקר היום"
+                      className="bg-red-50/60 hover:bg-red-100/70 border border-red-200 hover:border-red-400 rounded-xl p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
+                      title="לחץ לעיון ועריכת ההזמנות עם יתרת חוב פתוח"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-sky-800 transition-colors">
-                          פנסיון
+                        <span className="text-[11px] font-black text-red-900 group-hover:text-red-950 transition-colors flex items-center gap-1">
+                          <span>💳</span>
+                          <span>חוב פתוח</span>
                         </span>
-                        <span className="text-[9px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.2 rounded-full border border-sky-200">
-                          🏨 לינה
+                        <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full border ${
+                          openDebtTotal === 0
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : 'bg-red-100 text-red-800 border-red-300'
+                        }`}>
+                          {openDebtTotal === 0 ? '🟢 נקי' : `🔴 ${unpaidCount}`}
                         </span>
                       </div>
-                      <div className="text-lg sm:text-xl font-black text-slate-900 my-0.5 text-right">
-                        {boardingToday} <span className="text-[11px] font-semibold text-slate-400">כלבים</span>
+                      <div className="text-lg sm:text-xl font-black text-red-600 my-0.5 text-right font-mono">
+                        ₪{openDebtTotal.toLocaleString('he-IL')}
                       </div>
-                      <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100">
-                        <span className="truncate">{boardingToday === 0 ? 'אין לינה' : `${boardingToday} בפנסיון`}</span>
-                        <span className="text-[10px] text-sky-700 font-bold opacity-80 group-hover:opacity-100">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-red-700 pt-1 border-t border-red-100">
+                        <span className="truncate">{openDebtTotal === 0 ? 'הכול שולם 🥳' : `${unpaidCount} עם יתרה`}</span>
+                        <span className="text-[10px] text-red-700 font-black opacity-90 group-hover:opacity-100">
                           עיון 🔍
                         </span>
                       </div>
@@ -1687,32 +1693,28 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Pod 4: חוב פתוח */}
+                    {/* Pod 4: פנסיון ומשפחתון (Placed BELOW Open Debt) */}
                     <div 
-                      onClick={() => setActiveHeaderMetric('debt')}
+                      onClick={() => setActiveHeaderMetric('boarding')}
                       role="button"
                       tabIndex={0}
-                      className="bg-white hover:bg-red-50/60 border border-slate-200/90 hover:border-red-300 rounded-xl p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
-                      title="לחץ לעיון ועריכת ההזמנות עם יתרת חוב פתוח"
+                      className="bg-white hover:bg-sky-50/60 border border-slate-200/90 hover:border-sky-300 rounded-xl p-2.5 flex flex-col justify-between transition-all cursor-pointer active:scale-[0.99] group shadow-2xs"
+                      title="לחץ לעיון ועריכת כלבי הפנסיון והדייקר היום"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-red-800 transition-colors">
-                          חוב פתוח
+                        <span className="text-[11px] font-bold text-slate-600 group-hover:text-sky-800 transition-colors">
+                          פנסיון
                         </span>
-                        <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
-                          openDebtTotal === 0
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            : 'bg-red-50 text-red-700 border-red-200'
-                        }`}>
-                          {openDebtTotal === 0 ? '🟢 נקי' : `🔴 ${unpaidCount}`}
+                        <span className="text-[9px] font-bold text-sky-700 bg-sky-50 px-1.5 py-0.2 rounded-full border border-sky-200">
+                          🏨 לינה
                         </span>
                       </div>
-                      <div className="text-lg sm:text-xl font-black text-[#0f766e] my-0.5 text-right">
-                        ₪{openDebtTotal.toLocaleString('he-IL')}
+                      <div className="text-lg sm:text-xl font-black text-slate-900 my-0.5 text-right">
+                        {boardingToday} <span className="text-[11px] font-semibold text-slate-400">כלבים</span>
                       </div>
                       <div className="flex items-center justify-between text-[10px] font-medium text-slate-500 pt-1 border-t border-slate-100">
-                        <span className="truncate">{openDebtTotal === 0 ? 'הכול שולם 🥳' : `${unpaidCount} עם יתרה`}</span>
-                        <span className="text-[10px] text-red-600 font-bold opacity-80 group-hover:opacity-100">
+                        <span className="truncate">{boardingToday === 0 ? 'אין לינה' : `${boardingToday} בפנסיון`}</span>
+                        <span className="text-[10px] text-sky-700 font-bold opacity-80 group-hover:opacity-100">
                           עיון 🔍
                         </span>
                       </div>
@@ -2344,7 +2346,17 @@ export default function App() {
               ? (daysCount * (Number(settings?.defaultDailyRateDaycare) || 90))
               : boardingRateInfo.totalPrice;
             const finalPrice = isFree ? 0 : (req.depositRequested && req.depositRequested > 0 ? req.depositRequested : calculatedDefault);
-            const dailyRateVal = isFree ? 0 : (req.serviceType === 'boarding' ? boardingRateInfo.dailyRate : undefined);
+            const secondDogData = req.additionalDogs && req.additionalDogs.length > 0
+              ? {
+                  hasSecondDog: true,
+                  name: req.additionalDogs[0].dogName || '',
+                  breed: req.additionalDogs[0].dogBreed || '',
+                  gender: req.additionalDogs[0].dogGender === 'female'
+                    ? (req.additionalDogs[0].isNeutered ? 'female_spayed' : 'female_intact')
+                    : (req.additionalDogs[0].isNeutered ? 'male_neutered' : 'male_intact'),
+                  consolidatePayment: true
+                }
+              : undefined;
 
             setBookingWizardOpen({
               isOpen: true,
@@ -2368,8 +2380,10 @@ export default function App() {
                 depositAmount: 0,
                 paymentStatus: isFree ? 'fully_paid' : 'unpaid',
                 isFreeStay: isFree,
-                stayStatus: 'booked'
-              }
+                stayStatus: 'booked',
+                secondDog: secondDogData,
+                additionalDogs: req.additionalDogs
+              } as any
             });
 
             // Note: We deliberately do NOT update status to 'approved' here.

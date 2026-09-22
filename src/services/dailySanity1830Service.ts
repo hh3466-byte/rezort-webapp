@@ -239,9 +239,9 @@ export function run1830SanityAudit(
   parts.push('');
 
   // Red Lights Section
-  parts.push(`🚨 *אורות אדומים (${totalRed} נושאים לטיפול מיידי):*`);
+  parts.push(`🚨 *אורות אדומים:*`);
   if (totalRed === 0) {
-    parts.push(`✅ אין אורות אדומים! כל הנתונים, השיחות, השריונים והמקדמות תקינים לחלוטין. 🎉`);
+    parts.push(`אין אורות אדומים ✅`);
   } else {
     if (redLights.unansweredChats.length > 0) {
       parts.push(`\n💬 *שיחות לקוחות הממתינות למענה:*`);
@@ -289,7 +289,7 @@ export function run1830SanityAudit(
     }
   }
 
-  parts.push(`\n📱 *דוח זה הופק ונשלח ישירות למספרו האישי של שמוליק (${SHMULIK_PRIVATE_PHONE}) כהוראת ברזל.*`);
+  parts.push(`\n📱 *דוח זה הופק ונשלח ישירות למנהל (054-3200007) לבקרה וניהול.*`);
 
   return {
     isGreenApiHealthy,
@@ -305,19 +305,19 @@ export function run1830SanityAudit(
 }
 
 /**
- * Sends the 18:30 Sanity Report directly to Shmulik's private phone (0506336896)
+ * Sends the 18:30 Sanity Report strictly to Manager/Admin (054-3200007)
  */
-export async function send1830SanityReportToShmulik(
+export async function send1830SanityReportToAdmin(
   bookings: Booking[],
   settings: ResortSettings,
   intakeRequests: IntakeRequest[],
   options?: { force?: boolean }
 ): Promise<{ success: boolean; message?: string; error?: string }> {
   const today = getTodayStr();
-  const storageKey = `shmulik_1830_sanity_${today}`;
+  const storageKey = `admin_1830_sanity_${today}`;
 
-  // Dedicated phone target: Shmulik's personal number 050-6336896
-  const targetPhone = cleanPhoneNumber(settings.whatsappNotificationPhone || SHMULIK_PRIVATE_PHONE);
+  // Target phone: Strictly to Manager / Admin (054-3200007)
+  const adminTargetPhone = '0543200007';
 
   // Fetch recent chats from Green-API to cross-reference
   let chats: EnrichedWhatsAppChat[] = [];
@@ -330,9 +330,9 @@ export async function send1830SanityReportToShmulik(
 
   const auditResult = run1830SanityAudit(bookings, settings, intakeRequests, chats, today);
 
-  // Send message - note: skipHolidayCheck is true because this is an internal operational report directly to Shmulik
+  // Send message ONLY to Manager (054-3200007) - skipHolidayCheck is true for internal management audit
   const res = await sendGreenApiDirectMessage(
-    targetPhone,
+    adminTargetPhone,
     auditResult.formattedReport,
     settings?.greenApiIdInstance,
     settings?.greenApiToken,
@@ -371,12 +371,15 @@ export async function send1830SanityReportToShmulik(
 
     return {
       success: true,
-      message: `דוח בדיקת שפיות יומית (18:30) נשלח בהצלחה לוואטסאפ של שמוליק (${targetPhone})!`
+      message: `דוח בדיקת שפיות יומית (18:30) נשלח בהצלחה לוואטסאפ של המנהל (${adminTargetPhone})!`
     };
   } else {
     return {
       success: false,
-      error: res.error || 'שגיאה בשליחת דוח 18:30 לשמוליק'
+      error: res.error || 'שגיאה בשליחת דוח 18:30 למנהל'
     };
   }
 }
+
+// Backwards-compatibility alias
+export const send1830SanityReportToShmulik = send1830SanityReportToAdmin;

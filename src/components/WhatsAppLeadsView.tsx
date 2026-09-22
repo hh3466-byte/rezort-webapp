@@ -610,6 +610,11 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
             )}
 
             <div className="flex items-center gap-1">
+              {chat.matchedIntake && chat.matchedIntake.additionalDogs && chat.matchedIntake.additionalDogs.length > 0 && (
+                <span className="text-[10px] font-black text-orange-950 bg-orange-100/90 px-1.5 py-0.5 rounded-md border border-orange-300 animate-pulse">
+                  🐾 {1 + chat.matchedIntake.additionalDogs.length} כלבים בטופס
+                </span>
+              )}
               {chat.classification === 'intake_submitted' && (
                 <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded-md border border-amber-200">
                   📋 שאלון

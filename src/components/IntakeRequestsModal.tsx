@@ -1042,11 +1042,31 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       : 'border-slate-200 bg-white shadow-xs opacity-95'
                   }`}
                 >
+                  {/* Top Multi-Dog High-Visibility Alert Banner */}
+                  {req.additionalDogs && req.additionalDogs.length > 0 && (
+                    <div className="mb-3.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white p-3 sm:p-3.5 rounded-2xl font-black text-sm shadow-md border-2 border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-pulse">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-2xl sm:text-3xl">🐾🐾</span>
+                        <div>
+                          <div className="text-sm sm:text-base font-black tracking-wide text-white drop-shadow-xs">
+                            ⚠️ שים לב שמוליק: הלקוח רשם {1 + req.additionalDogs.length} כלבים בטופס אחד!
+                          </div>
+                          <div className="text-xs text-amber-100 font-bold mt-0.5">
+                            כלב 1: <span className="text-white underline font-black">{req.dogName}</span> ({req.dogBreed || 'מעורב'}) · כלב 2: <span className="text-white underline font-black">{req.additionalDogs.map(d => `${d.dogName} (${d.dogBreed || 'מעורב'})`).join(', ')}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="bg-white text-orange-900 text-xs font-black px-3.5 py-1.5 rounded-xl border border-orange-200 shadow-sm flex items-center gap-1.5 self-start sm:self-auto shrink-0">
+                        <span>🐕+🐕 כפל אירוח</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Card Top: Dog & Owner Header */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                     <div className="flex items-start gap-3.5">
                       <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center justify-center font-black text-2xl shadow-xs shrink-0 mt-1">
-                        🐕
+                        {req.additionalDogs && req.additionalDogs.length > 0 ? '🐾' : '🐕'}
                       </div>
                       
                       {/* 4 Lines - Arranged one below the other, BIG and clear */}
@@ -1057,8 +1077,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                             <span>{req.dogName}</span>
                             {req.additionalDogs && req.additionalDogs.length > 0 && (
                               <>
-                                <span className="text-emerald-700 font-black">+</span>
-                                <span className="text-emerald-950 font-black">
+                                <span className="text-orange-600 font-black">+</span>
+                                <span className="text-orange-950 font-black bg-orange-100/80 px-2 py-0.5 rounded-lg border border-orange-300">
                                   {req.additionalDogs.map(d => d.dogName).join(' + ')}
                                 </span>
                               </>
@@ -1068,8 +1088,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                             ({req.dogBreed || 'מעורב'}{req.dogAge ? `, ${req.dogAge}` : ''})
                           </span>
                           {req.additionalDogs && req.additionalDogs.length > 0 && (
-                            <span className="bg-purple-100 text-purple-950 border border-purple-300 text-[11px] font-black px-2 py-0.5 rounded-lg shadow-2xs">
-                              🐾 {1 + req.additionalDogs.length} כלבים בטופס
+                            <span className="bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[11px] font-black px-2.5 py-0.5 rounded-lg shadow-xs border border-orange-300 animate-pulse">
+                              🐾🐾 {1 + req.additionalDogs.length} כלבים בטופס!
                             </span>
                           )}
                           
@@ -1126,18 +1146,41 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                             </span>
                           )}
 
-                          {/* Additional Dogs in same intake */}
+                          {/* Additional Dogs Breakdown in same intake */}
                           {req.additionalDogs && req.additionalDogs.length > 0 && (
-                            <div className="w-full bg-amber-50/90 border border-amber-300 rounded-xl p-2.5 text-xs text-amber-950 font-bold flex flex-col gap-1 mt-0.5">
-                              <div className="flex items-center gap-1.5 font-black text-amber-900">
-                                <Dog className="w-4 h-4 text-amber-700 shrink-0" />
-                                <span>🐾 כלבים נוספים באותה בקשת קליטה ({req.additionalDogs.length}):</span>
+                            <div className="w-full bg-gradient-to-br from-amber-50 via-orange-50 to-amber-50 border-2 border-orange-300 rounded-2xl p-3 text-xs text-amber-950 font-bold flex flex-col gap-2 mt-1 shadow-xs">
+                              <div className="flex items-center justify-between border-b border-orange-200/80 pb-1.5">
+                                <div className="flex items-center gap-1.5 font-black text-orange-950 text-sm">
+                                  <Dog className="w-4 h-4 text-orange-600 shrink-0" />
+                                  <span>🐾 פירוט 2 הכלבים בבקשה זו:</span>
+                                </div>
+                                <span className="bg-orange-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md shadow-2xs">
+                                  {1 + req.additionalDogs.length} כלבים
+                                </span>
                               </div>
-                              <div className="flex flex-wrap gap-1.5 pt-0.5">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div className="bg-white/90 border border-orange-200 rounded-xl p-2.5 flex flex-col gap-1 shadow-2xs">
+                                  <div className="flex items-center justify-between text-xs font-black text-slate-900">
+                                    <span>🐶 1. {req.dogName}</span>
+                                    <span className="text-[10px] text-slate-500 font-normal">כלב ראשי</span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-600 font-medium">
+                                    גזע: {req.dogBreed || 'מעורב'} {req.dogAge ? `| גיל: ${req.dogAge}` : ''} | {req.dogGender === 'female' ? 'נקבה' : 'זכר'} {req.isNeutered ? '(מסורס/מעוקרת)' : '(לא מסורס)'}
+                                  </div>
+                                </div>
                                 {req.additionalDogs.map((ad, adIdx) => (
-                                  <span key={adIdx} className="bg-white border border-amber-200 px-2 py-0.5 rounded-lg shadow-2xs font-semibold">
-                                    <strong className="text-slate-900">{ad.dogName}</strong> ({ad.dogBreed || 'מעורב'}{ad.dogAge ? `, ${ad.dogAge}` : ''}) · {ad.sameDatesAsPrimary ? 'אותם תאריכים' : `${formatDateIL(ad.startDate || '')}–${formatDateIL(ad.endDate || '')}`}
-                                  </span>
+                                  <div key={adIdx} className="bg-white/90 border border-orange-200 rounded-xl p-2.5 flex flex-col gap-1 shadow-2xs">
+                                    <div className="flex items-center justify-between text-xs font-black text-slate-900">
+                                      <span>🐕 2. {ad.dogName}</span>
+                                      <span className="text-[10px] text-orange-700 font-bold">כלב נוסף</span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-600 font-medium">
+                                      גזע: {ad.dogBreed || 'מעורב'} {ad.dogAge ? `| גיל: ${ad.dogAge}` : ''} | {ad.dogGender === 'female' ? 'נקבה' : 'זכר'} {ad.isNeutered ? '(מסורס/מעוקרת)' : '(לא מסורס)'}
+                                    </div>
+                                    <div className="text-[10px] text-orange-800 font-bold">
+                                      תאריכים: {ad.sameDatesAsPrimary ? 'אותם תאריכים כמו הכלב הראשי' : `${formatDateIL(ad.startDate || '')} עד ${formatDateIL(ad.endDate || '')}`}
+                                    </div>
+                                  </div>
                                 ))}
                               </div>
                             </div>
@@ -1634,7 +1677,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         title="לאחר קבלת תשלום / אישור סופי: קלוט להזמנה פעילה ביומן הראשי"
                       >
                         <CheckCircle className="w-3.5 h-3.5" />
-                        <span>קלוט ליומן הראשי 🟢</span>
+                        <span>{req.additionalDogs && req.additionalDogs.length > 0 ? `קלוט ${1 + req.additionalDogs.length} כלבים ליומן 🟢` : 'קלוט ליומן הראשי 🟢'}</span>
                       </button>
 
                       {/* Reject / Dismiss OR Restore & Permanent Deletion */}
