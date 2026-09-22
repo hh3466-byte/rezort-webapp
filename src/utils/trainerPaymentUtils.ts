@@ -144,35 +144,41 @@ export function getTrainerReceipts(): TrainerReceipt[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      // Ensure receipt 20056 is marked paid and receipt 20057 exists
-      let has20057 = false;
-      const cleaned = parsed.map(r => {
-        if (r.id === 'receipt-20057' || r.receiptNumber === '20057') {
-          has20057 = true;
-          return {
-            ...r,
-            rawLineText: r.rawLineText || 'אילוף לונה (לא של שלומי) תשלום 1/3',
-            receiptImageUrl: r.receiptImageUrl || 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/428e6e1b-116f-4d95-b4bc-1aa59a83f549.jpg',
-            allocations: r.allocations?.length ? r.allocations : [{
-              bookingId: 'b-1789541492653',
-              dogName: 'לונה',
-              stage: '1/3',
-              amount: 500
-            }]
-          };
-        }
-        if (r.id === 'receipt-20056' || r.receiptNumber === '20056') {
-          return {
-            ...r,
-            isPaidActually: true,
-            status: 'paid' as const,
-            paidDate: r.paidDate || '2026-09-14'
-          };
-        }
-        return r;
-      });
+      // Purge any bogus receipts generated from message IDs (e.g. 7D5D6, C4AF3, F6409, etc.)
+      const cleaned = parsed
+        .filter(r => {
+          const num = String(r.receiptNumber || '');
+          // Keep only official numeric receipts (20056, 20057, etc.) and discard random hex message IDs
+          return num === '20056' || num === '20057' || (/^\d{4,6}$/.test(num) && !/^[A-F0-9]{5,}$/i.test(num));
+        })
+        .map(r => {
+          if (r.id === 'receipt-20057' || r.receiptNumber === '20057') {
+            return {
+              ...r,
+              isPaidActually: true,
+              paid: true,
+              status: 'paid' as const,
+              paidDate: r.paidDate || '2026-09-22',
+              bitConfirmationNumber: r.bitConfirmationNumber || '1378-7978-59402',
+              bitConfirmationImageUrl: r.bitConfirmationImageUrl || 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/7e42957a-b831-4b50-863b-41c675346cda.jpg',
+              rawLineText: r.rawLineText || 'אילוף לונה (לא של שלומי) תשלום 1/3',
+              receiptImageUrl: r.receiptImageUrl || 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/428e6e1b-116f-4d95-b4bc-1aa59a83f549.jpg',
+            };
+          }
+          if (r.id === 'receipt-20056' || r.receiptNumber === '20056') {
+            return {
+              ...r,
+              isPaidActually: true,
+              paid: true,
+              status: 'paid' as const,
+              paidDate: r.paidDate || '2026-09-14'
+            };
+          }
+          return r;
+        });
 
-      if (!has20057) {
+      // Ensure both 20056 and 20057 exist in the list
+      if (!cleaned.some(r => r.receiptNumber === '20057')) {
         cleaned.unshift(INITIAL_TRAINER_RECEIPTS[0]);
       }
       return cleaned;
@@ -589,8 +595,7 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
 
       if (!isLikelyReceipt && text.length < 5) continue;
 
-      let parsed = parseTrainerReceiptText(text, trainingBookings);
-      let receiptNumber = parsed.detectedReceiptNumber || (msg.idMessage ? msg.idMessage.slice(-5) : '');
+      let receiptNumber = parsed.detectedReceiptNumber;
       let dogName = parsed.allocations[0]?.dogName || '';
       let detectedTotal = parsed.detectedTotal || (parsed.allocations.length * 500) || 500;
       let stage: TrainerStageType = parsed.allocations[0]?.stage || '1/3';
@@ -605,6 +610,11 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
         rawLineText = 'אילוף לונה (לא של שלומי) תשלום 1/3';
       }
 
+      // Only process messages with a valid official receipt number (e.g. 20056, 20057, 20058)
+      if (!receiptNumber || !/^\d{4,6}$/.test(receiptNumber)) {
+        continue;
+      }
+
       if (receiptNumber && existingReceiptNumbers.has(receiptNumber)) {
         continue;
       }
@@ -612,46 +622,39 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
         continue;
       }
 
-      // If we detected dog allocations or an amount or image
-      if (parsed.allocations.length > 0 || parsed.detectedTotal > 0 || msg.typeMessage === 'imageMessage') {
-        const matchedBooking = dogName ? trainingBookings.find(b => normalizeDogName(b.dogName) === normalizeDogName(dogName)) : undefined;
+      const isReceiptAlreadySettled = receiptNumber === '20056' || receiptNumber === '20057';
+      const matchedBooking = dogName ? trainingBookings.find(b => normalizeDogName(b.dogName) === normalizeDogName(dogName)) : undefined;
 
-        const newReceipt: TrainerReceipt = {
-          id: msgId,
-          receiptNumber: receiptNumber || `קבלה-${dateStr}`,
-          receiptDate: dateStr,
-          totalAmount: detectedTotal,
-          paymentMethod: 'ביט',
-          rawLineText: rawLineText || 'תמונה/מסמך קבלה מהוואטסאפ של הילה',
-          receiptImageUrl: imgUrl,
-          allocations: dogName ? [
-            {
-              bookingId: matchedBooking?.id || '',
-              dogName: dogName,
-              stage: stage,
-              amount: detectedTotal
-            }
-          ] : [
-            {
-              bookingId: '',
-              dogName: 'כלב באילוף',
-              stage: '1/3',
-              amount: detectedTotal
-            }
-          ],
-          isPaidActually: false,
-          managerQuerySent: true,
-          managerQuerySentAt: timestamp,
-          status: 'pending_payment',
-          createdAt: timestamp,
-          updatedAt: timestamp
-        };
+      const newReceipt: TrainerReceipt = {
+        id: msgId,
+        receiptNumber: receiptNumber,
+        receiptDate: dateStr,
+        totalAmount: detectedTotal,
+        paymentMethod: 'ביט',
+        rawLineText: rawLineText || `קבלה ${receiptNumber}`,
+        receiptImageUrl: imgUrl,
+        allocations: dogName ? [
+          {
+            bookingId: matchedBooking?.id || '',
+            dogName: dogName,
+            stage: stage,
+            amount: detectedTotal
+          }
+        ] : [],
+        isPaidActually: isReceiptAlreadySettled,
+        paid: isReceiptAlreadySettled,
+        paidDate: isReceiptAlreadySettled ? dateStr : undefined,
+        managerQuerySent: true,
+        managerQuerySentAt: timestamp,
+        status: isReceiptAlreadySettled ? 'paid' : 'pending_payment',
+        createdAt: timestamp,
+        updatedAt: timestamp
+      };
 
-        currentReceipts.unshift(newReceipt);
-        existingIds.add(msgId);
-        if (receiptNumber) existingReceiptNumbers.add(receiptNumber);
-        newCount++;
-      }
+      currentReceipts.unshift(newReceipt);
+      existingIds.add(msgId);
+      existingReceiptNumbers.add(receiptNumber);
+      newCount++;
     }
 
     if (newCount > 0) {

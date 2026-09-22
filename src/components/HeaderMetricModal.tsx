@@ -430,7 +430,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
         filteredItems = allTrainingBookings.filter(b => b.isTrainingCompleted);
       } else if (trainingViewTab === 'trainer_payments') {
         title = '🐾 ניהול תשלומי מאלפת (הילה קירזנר - Halodog)';
-        subtitle = `מעקב קבלות ושלבים (1/3, 2/3, 3/3) • שולם בפועל: ₪${trainerMetrics.totalPaidActually.toLocaleString('he-IL')}${trainerMetrics.totalPendingPaymentAmount > 0 ? ` • 🚨 ממתין לתשלום בביט: ₪${trainerMetrics.totalPendingPaymentAmount.toLocaleString('he-IL')}` : ''} • יתרה לכלבים פעילים: ₪${trainerMetrics.totalRemainingLiability.toLocaleString('he-IL')}`;
+        subtitle = `מעקב קבלות ושלבים (1/3, 2/3, 3/3) • שולם בפועל: ₪${trainerMetrics.totalPaidActually.toLocaleString('he-IL')}${trainerMetrics.totalPendingPaymentAmount > 0 ? ` • 🚨 ממתין לתשלום בביט: ₪${trainerMetrics.totalPendingPaymentAmount.toLocaleString('he-IL')}` : ' • אין חובות פתוחים (הכל שולם)'} • יתרה לכלבים פעילים: ₪${trainerMetrics.totalRemainingLiability.toLocaleString('he-IL')}`;
         icon = <CreditCard className="w-5 h-5 text-indigo-700" />;
         badgeColor = 'bg-indigo-50 text-indigo-800 border-indigo-200';
         filteredItems = [];
