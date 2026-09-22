@@ -833,3 +833,41 @@ export async function fetchNewCrmChatsCount(
   }
 }
 
+/**
+ * Fetches the list of unanswered customer chats for the daily report
+ */
+export interface UnansweredChatSummary {
+  name: string;
+  phone: string;
+  text?: string;
+  timestamp?: number;
+}
+
+export async function fetchUnansweredChatsSummary(
+  settings: ResortSettings
+): Promise<UnansweredChatSummary[]> {
+  try {
+    const raw = await fetchGreenApiChats(settings);
+    return raw
+      .filter(c => c.lastMessageType === 'incoming')
+      .map(c => {
+        const phone = extractPhoneFromChatId(c.id);
+        const name = c.name && !c.name.includes('@') ? c.name : 'לקוח';
+        const text = (c.lastMessage || '').trim();
+        const shortText = text.length > 35 ? text.slice(0, 35) + '...' : text;
+        return {
+          name,
+          phone: formatPhoneFormatted(phone),
+          text: shortText,
+          timestamp: c.timestamp
+        };
+      })
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  } catch (err) {
+    console.warn('Error fetching unanswered chats summary:', err);
+    return [];
+  }
+}
+
+
+

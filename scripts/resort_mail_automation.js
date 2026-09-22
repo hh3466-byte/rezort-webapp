@@ -2012,86 +2012,231 @@ function sendTomorrowOverviewToShmulikFromCloud() {
     var occupancyPercent = maxCapacity > 0 ? Math.round((endOfDayDogs.length / maxCapacity) * 100) : 0;
     var growLink = settingsData.growPaymentLink || "https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg";
 
+    var formatPhoneFormatted = function(phone) {
+      if (!phone) return "";
+      var clean = phone.replace(/[^0-9]/g, "");
+      if (clean.length === 10 && clean.indexOf("05") === 0) {
+        return clean.slice(0, 3) + "-" + clean.slice(3);
+      }
+      return phone;
+    };
+
     var formatDogAppScript = function(bk, idx, isIncoming) {
       var dog = bk.dog_name || "כלב";
-      var breed = bk.dog_breed ? " (" + bk.dog_breed + ")" : "";
       var owner = bk.owner_name || "בעלים";
-      var phone = bk.owner_phone || "";
-      var sType = bk.service_type || "boarding";
-
-      var sLabel = "פנסיון 🏨";
-      if (sType === "training") sLabel = isIncoming ? "תהליך אילוף 🎓" : "משתחרר מתהליך אילוף 🎓";
-      else if (sType === "day_training") sLabel = isIncoming ? "אילוף יומי (ללא לינה) 🎓" : "משתחרר מאילוף יומי 🎓";
-      else if (sType === "daycare") sLabel = isIncoming ? "יום כיף (ללא לינה) 🎾" : "משתחרר מיום כיף 🎾";
-      else sLabel = isIncoming ? "פנסיון 🏨" : "משתחרר מפנסיון 🏨";
-
+      var phone = formatPhoneFormatted(bk.owner_phone || "");
       var total = Number(bk.total_price) || 0;
       var deposit = Number(bk.deposit_amount) || 0;
       var debt = Math.max(0, total - deposit);
       var isPaid = bk.payment_status === "fully_paid" || debt <= 0;
 
-      var pLine = isPaid
-        ? "💰 שולם: ₪" + (deposit || total).toLocaleString() + " | יתרה: ₪0 (✅ שולם במלואו)"
-        : "💰 שולם: ₪" + deposit.toLocaleString() + " | *נשאר לתשלום: ₪" + debt.toLocaleString() + "* ⚠️";
-
+      var pBadge = "";
       var linkText = "";
-      if (!isPaid && debt > 0 && phone) {
-        var cPhone = phone.replace(/[^0-9]/g, "");
+
+      if (bk.is_free_stay) {
+        pBadge = "🟢 אירוח חינם";
+      } else if (isPaid) {
+        pBadge = "🟢 שולם במלואו";
+      } else if (deposit > 0 && debt > 0) {
+        pBadge = "🟡 שולמה מקדמה ₪" + deposit.toLocaleString() + " (נותר ₪" + debt.toLocaleString() + ")";
+        var cPhone = (bk.owner_phone || "").replace(/[^0-9]/g, "");
         var iPhone = cPhone.indexOf("0") === 0 ? "972" + cPhone.substring(1) : cPhone;
         var fName = (owner.split(" ")[0] || "לקוח");
-        var isFemale = (bk.dog_gender && bk.dog_gender.indexOf("female") !== -1);
-
-        var demandMsg = "";
-        if (isIncoming) {
-          demandMsg = "היי " + fName + "! 🐾\nמתרגשים ומחכים מחר לתחילת השהות של " + dog + " בריזורט לכלב! 🐶❤️\n\nלקראת ההגעה מחר, נשמח להסדרת יתרת התשלום בסך ₪" + debt.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nמחכים לכם בשמחה,\nשמוליק וצוות הריזורט לכלב 🐾✨";
-        } else {
-          var fVerb = isFemale ? "מסיימת" : "מסיים";
-          var eVerb = isFemale ? "נהנתה" : "נהנה";
-          var mVerb = isFemale ? "מתגעגעת" : "מתגעגע";
-          demandMsg = "היי " + fName + "! 🐾\nרצינו לעדכן שמחר " + dog + " " + fVerb + " את השהות בריזורט לכלב! 🐕🥰 " + eVerb + " מכל רגע ו" + mVerb + " אליכם מאוד.\n\nלקראת האיסוף והשחרור מחר, נשמח להסדרת יתרת התשלום בסך ₪" + debt.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nתודה רבה ונתראה מחר,\nשמוליק וצוות הריזורט לכלב 🐾✨";
-        }
-
-        linkText = "\n   📲 *דרישת תשלום בוואטסאפ (לעריכה ושליחה):*\n   https://wa.me/" + iPhone + "?text=" + encodeURIComponent(demandMsg);
+        var demandMsg = isIncoming
+          ? "היי " + fName + "! 🐾\nמתרגשים ומחכים מחר לתחילת השהות של " + dog + " בריזורט לכלב! 🐶❤️\n\nלקראת ההגעה מחר, נשמח להסדרת יתרת התשלום בסך ₪" + debt.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nמחכים לכם בשמחה,\nשמוליק וצוות הריזורט לכלב 🐾✨"
+          : "היי " + fName + "! 🐾\nרצינו לעדכן שמחר " + dog + " מסיים/ת את השהות בריזורט לכלב! 🐕🥰 נהנה/תה מכל רגע ומתגעגע/ת אליכם מאוד.\n\nלקראת האיסוף והשחרור מחר, נשמח להסדרת יתרת התשלום בסך ₪" + debt.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nתודה רבה ונתראה מחר,\nשמוליק וצוות הריזורט לכלב 🐾✨";
+        linkText = "\n   📲 תזכורת תשלום בוואטסאפ: https://wa.me/" + iPhone + "?text=" + encodeURIComponent(demandMsg);
+      } else if (total > 0 && deposit === 0) {
+        pBadge = "🔴 לא שולם (חוב: ₪" + total.toLocaleString() + ")";
+        var cPhone = (bk.owner_phone || "").replace(/[^0-9]/g, "");
+        var iPhone = cPhone.indexOf("0") === 0 ? "972" + cPhone.substring(1) : cPhone;
+        var fName = (owner.split(" ")[0] || "לקוח");
+        var demandMsg = isIncoming
+          ? "היי " + fName + "! 🐾\nמתרגשים ומחכים מחר לתחילת השהות של " + dog + " בריזורט לכלב! 🐶❤️\n\nלקראת ההגעה מחר, נשמח להסדרת יתרת התשלום בסך ₪" + total.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nמחכים לכם בשמחה,\nשמוליק וצוות הריזורט לכלב 🐾✨"
+          : "היי " + fName + "! 🐾\nרצינו לעדכן שמחר " + dog + " מסיים/ת את השהות בריזורט לכלב! 🐕🥰 נהנה/תה מכל רגע ומתגעגע/ת אליכם מאוד.\n\nלקראת האיסוף והשחרור מחר, נשמח להסדרת יתרת התשלום בסך ₪" + total.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nתודה רבה ונתראה מחר,\nשמוליק וצוות הריזורט לכלב 🐾✨";
+        linkText = "\n   📲 תזכורת תשלום בוואטסאפ: https://wa.me/" + iPhone + "?text=" + encodeURIComponent(demandMsg);
       }
 
       var meds = bk.medications || bk.special_diet || "";
-      var mLine = meds ? "\n   🩺 *דגשים:* " + meds : "";
+      var mLine = meds ? "\n   💊 דגש: " + meds : "";
 
-      return (idx + 1) + ". 🐶 *" + dog + "*" + breed + " | 🏷️ " + sLabel + "\n   👤 בעלים: " + owner + " (📞 " + phone + ")\n   " + pLine + linkText + mLine;
+      return (idx + 1) + ". 🐕 " + dog + " (" + owner + " - 📞 " + phone + ") " + pBadge + linkText + mLine;
     };
 
-    var inSec = incomingDogs.length === 0 ? "• אין כניסות מתוכננות למחר." : incomingDogs.map(function(d, i) { return formatDogAppScript(d, i, true); }).join("\n\n");
-    var outSec = departingDogs.length === 0 ? "• אין שחרורים מתוכננים למחר." : departingDogs.map(function(d, i) { return formatDogAppScript(d, i, false); }).join("\n\n");
+    var isTrainingBooking = function(bk) {
+      var s = bk.service_type || "";
+      return s === "training" || s === "day_training" || s === "combined";
+    };
 
-    var occText = endOfDayDogs.length >= maxCapacity
-      ? "• 🔥 *תפוסה מלאה בריזורט!*"
-      : "• נותרו עוד *" + (maxCapacity - endOfDayDogs.length) + "* מקומות פנויים ללינה מחר.";
+    var endOfDayBoarding = endOfDayDogs.filter(function(bk) { return !isTrainingBooking(bk); });
+    var endOfDayTraining = endOfDayDogs.filter(function(bk) { return isTrainingBooking(bk); });
 
-    var fullMsg = "📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾\n"
-      + "📅 יום " + tomDayName + ", " + tomFormatted + " | הפקה: 19:00\n\n"
-      + "🟢 *סה״כ כלבים שנכנסים מחר: " + incomingDogs.length + "*\n"
-      + inSec + "\n\n"
-      + "🔴 *סה״כ כלבים שמשתחררים מחר: " + departingDogs.length + "*\n"
-      + outSec + "\n\n"
-      + "━━━━━━━━━━━━━━━━━━━━━━━━\n"
-      + "🐕 *כמה כלבים יהיו לי מחר בסוף היום: " + endOfDayDogs.length + " כלבים ללינה*\n"
-      + "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-      + "📊 *סיכום תפוסה מחר:*\n"
-      + "• *" + endOfDayDogs.length + " מתוך " + maxCapacity + " מקומות* (" + occupancyPercent + "% תפוסה)\n"
-      + occText + "\n\n"
-      + "שיהיה יום מוצלח, פורה ושקט! ❤️🐶🐾";
+    var boardingOvernightNames = endOfDayBoarding.map(function(bk) { return bk.dog_name || ""; }).filter(Boolean);
+    var trainingOvernightNames = endOfDayTraining.map(function(bk) { return bk.dog_name || ""; }).filter(Boolean);
 
-    var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
-    var sendRes = UrlFetchApp.fetch(sendUrl, {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify({ chatId: mgrChatId, message: fullMsg }),
-      muteHttpExceptions: true
+    var boardingOvernightLine = endOfDayBoarding.length > 0
+      ? "• 🏨 פנסיון (" + endOfDayBoarding.length + "): " + boardingOvernightNames.join(", ")
+      : "• 🏨 פנסיון: 0 כלבים";
+
+    var trainingOvernightLine = endOfDayTraining.length > 0
+      ? "• 🎓 אילוף (" + endOfDayTraining.length + "): " + trainingOvernightNames.join(", ")
+      : "• 🎓 אילוף: 0 כלבים";
+
+    var inSec = incomingDogs.length === 0 ? "• אין כניסות מתוכננות למחר" : incomingDogs.map(function(d, i) { return formatDogAppScript(d, i, true); }).join("\n\n");
+    var outSec = departingDogs.length === 0 ? "• אין שחרורים מתוכננים למחר" : departingDogs.map(function(d, i) { return formatDogAppScript(d, i, false); }).join("\n\n");
+
+    // שליפת שאלוני קליטה מסופאבייס
+    var safeIntakes = [];
+    try {
+      var intakeRes = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/intake_requests?select=*", {
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+      });
+      safeIntakes = JSON.parse(intakeRes.getContentText()) || [];
+    } catch (eIntakes) {}
+
+    var approvedIntakesWithoutBooking = safeIntakes.filter(function(ai) {
+      if (ai.status !== "approved") return false;
+      var aiDog = (ai.dogName || ai.dog_name || "").trim().toLowerCase();
+      var aiPhone = (ai.ownerPhone || ai.owner_phone || "").replace(/[^0-9]/g, "");
+      return !allBookings.some(function(b) {
+        var bDog = (b.dog_name || b.dogName || "").trim().toLowerCase();
+        var bPhone = (b.owner_phone || b.ownerPhone || "").replace(/[^0-9]/g, "");
+        var bStart = b.start_date || b.startDate;
+        var bEnd = b.end_date || b.endDate;
+        var sameDog = bDog === aiDog;
+        var samePhone = (aiPhone && bPhone && aiPhone === bPhone);
+        var sameDates = (ai.startDate && bStart === ai.startDate && ai.endDate && bEnd === ai.endDate);
+        return (sameDog && samePhone) || (sameDog && sameDates);
+      });
     });
 
-    if (sendRes.getResponseCode() === 200) {
+    var pendingIntakes = safeIntakes.filter(function(r) { return r.status === "pending"; });
+
+    var phoneAndDateIssues = [];
+    allBookings.forEach(function(b) {
+      var phone = (b.owner_phone || b.ownerPhone || "").replace(/[^0-9]/g, "");
+      var dog = b.dog_name || b.dogName || "כלב";
+      var owner = b.owner_name || b.ownerName || "בעלים";
+      var start = b.start_date || b.startDate;
+      var end = b.end_date || b.endDate;
+
+      if (phone && !/^05\d{8}$/.test(phone)) {
+        phoneAndDateIssues.push("🐶 " + dog + " (" + owner + "): טלפון לא תקין \"" + (b.owner_phone || "") + "\"");
+      }
+      if (start && end && end < start) {
+        phoneAndDateIssues.push("🐶 " + dog + " (" + owner + "): תאריך יציאה לפני כניסה");
+      }
+    });
+
+    // שליפת הודעות וואטסאפ ללא מענה
+    var unansweredChats = [];
+    try {
+      var chatsUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/getChats/" + GREEN_API_TOKEN;
+      var chatsRes = UrlFetchApp.fetch(chatsUrl, { muteHttpExceptions: true });
+      if (chatsRes.getResponseCode() === 200) {
+        var rawChats = JSON.parse(chatsRes.getContentText()) || [];
+        for (var cIdx = 0; cIdx < rawChats.length; cIdx++) {
+          var ch = rawChats[cIdx];
+          if (!ch || !ch.id || ch.id.indexOf("@g.us") !== -1 || ch.id.indexOf("@broadcast") !== -1) continue;
+          var cClean = ch.id.replace(/[^0-9]/g, "");
+          if (cClean.indexOf("0506336896") !== -1 || cClean.indexOf("0543200007") !== -1 || cClean.indexOf("972506336896") !== -1 || cClean.indexOf("972543200007") !== -1) continue;
+          var lMsg = ch.lastMessage;
+          if (lMsg && lMsg.type === "incoming") {
+            var rawN = ch.name || "";
+            var cName = rawN && rawN.indexOf("@") === -1 ? rawN : "לקוח";
+            var cPhone = formatPhoneFormatted(cClean);
+            var mTxt = (lMsg.textMessage || (lMsg.extendedTextMessage && lMsg.extendedTextMessage.text) || "").trim();
+            var shortTxt = mTxt.length > 35 ? mTxt.slice(0, 35) + "..." : mTxt;
+            unansweredChats.push({ name: cName, phone: cPhone, text: shortTxt });
+          }
+        }
+      }
+    } catch (eChats) {}
+
+    var actionBlocks = [];
+
+    if (unansweredChats.length > 0) {
+      var uList = unansweredChats.map(function(uc, idx) {
+        var txtPart = uc.text ? ' ("' + uc.text + '")' : '';
+        return (idx + 1) + ". 👤 " + uc.name + " (📞 " + uc.phone + ") שלח הודעה ולא ענית" + txtPart;
+      }).join("\n");
+      actionBlocks.push("💬 *הודעות וואטסאפ ללא מענה (" + unansweredChats.length + "):*\n" + uList);
+    }
+
+    if (approvedIntakesWithoutBooking.length > 0) {
+      var aList = approvedIntakesWithoutBooking.map(function(ai, idx) {
+        var dog = ai.dogName || ai.dog_name || "כלב";
+        var owner = ai.ownerName || ai.owner_name || "בעלים";
+        var rawPhone = ai.ownerPhone || ai.owner_phone || "";
+        var phone = formatPhoneFormatted(rawPhone);
+        var sDate = ai.startDate || ai.start_date || "";
+        var eDate = ai.endDate || ai.end_date || "";
+        return (idx + 1) + ". 🐕 " + dog + " (" + owner + " - 📞 " + phone + ") | " + sDate + " עד " + eDate;
+      }).join("\n");
+      actionBlocks.push("⚠️ *שאלונים שאושרו אך טרם שוריינו ביומן (" + approvedIntakesWithoutBooking.length + "):*\n" + aList);
+    }
+
+    if (pendingIntakes.length > 0) {
+      var pList = pendingIntakes.map(function(pi, idx) {
+        var dog = pi.dogName || pi.dog_name || "כלב";
+        var owner = pi.ownerName || pi.owner_name || "בעלים";
+        var rawPhone = pi.ownerPhone || pi.owner_phone || "";
+        var phone = formatPhoneFormatted(rawPhone);
+        var sDate = pi.startDate || pi.start_date || "";
+        var eDate = pi.endDate || pi.end_date || "";
+        return (idx + 1) + ". 🐕 " + dog + " (" + owner + " - 📞 " + phone + ") | " + sDate + " עד " + eDate;
+      }).join("\n");
+      actionBlocks.push("📥 *שאלוני קליטה שממתינים לטיפול (" + pendingIntakes.length + "):*\n" + pList);
+    }
+
+    if (phoneAndDateIssues.length > 0) {
+      actionBlocks.push("📞 *תקלות טלפונים ותאריכים:*\n• " + phoneAndDateIssues.join("\n• "));
+    }
+
+    var extraActionSections = "";
+    if (actionBlocks.length > 0) {
+      extraActionSections = "\n\n" + actionBlocks.join("\n\n");
+    }
+
+    var fullMsg = "📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾\n"
+      + "📅 יום " + tomDayName + ", " + tomFormatted + "\n\n"
+      + "🟢 *כניסות מחר (" + incomingDogs.length + "):*\n"
+      + inSec + "\n\n"
+      + "🔴 *שחרורים מחר (" + departingDogs.length + "):*\n"
+      + outSec + "\n\n"
+      + "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+      + "🐕 *בסוף היום: " + endOfDayDogs.length + " כלבים ללינה*\n"
+      + boardingOvernightLine + "\n"
+      + trainingOvernightLine + "\n"
+      + "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+      + "📊 *תפוסת לינה:* " + endOfDayDogs.length + "/" + maxCapacity + " מקומות (" + occupancyPercent + "%)"
+      + extraActionSections + "\n\n"
+      + "שיהיה יום מוצלח ושקט! ❤️🐶🐾";
+
+    var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+    var targetChatIds = [mgrChatId, "972543200007@c.us"];
+    var sentSuccessfully = false;
+
+    for (var rc = 0; rc < targetChatIds.length; rc++) {
+      try {
+        var sendRes = UrlFetchApp.fetch(sendUrl, {
+          method: "post",
+          contentType: "application/json",
+          payload: JSON.stringify({ chatId: targetChatIds[rc], message: fullMsg }),
+          muteHttpExceptions: true
+        });
+        if (sendRes.getResponseCode() === 200) {
+          sentSuccessfully = true;
+          Logger.log("סקירת מחר נשלחה בהצלחה ל-" + targetChatIds[rc] + " 🐶✨");
+        }
+      } catch (eSend) {
+        Logger.log("Error sending to " + targetChatIds[rc] + ": " + eSend.toString());
+      }
+    }
+
+    if (sentSuccessfully) {
       props.setProperty(sentKey, "true");
-      Logger.log("סקירת מחר לשמוליק נשלחה בהצלחה ב-19:00 ישירות מהענן! 🐶✨");
+      Logger.log("סקירת מחר לשמוליק והעתק מנהל נשלחו בהצלחה ב-19:00 ישירות מהענן! 🐶✨");
 
       // סנכרון ל-Supabase Cloud Lock
       try {
