@@ -72,6 +72,7 @@ import { playNotificationChime, testSystemNotification } from './utils/soundUtil
 import { initDailyDogAutoSender } from './services/dailyDogAutoSender';
 import { initTomorrowOverviewScheduler, init1830SanityScheduler } from './services/morningReportService';
 import { initOrangeFollowUpScheduler } from './services/orangeFollowUpService';
+import { initAutoReviewScheduler } from './services/reviewService';
 import { fetchNewCrmChatsCount } from './services/whatsappCrmService';
 
 export default function App() {
@@ -420,6 +421,16 @@ export default function App() {
     );
     return cleanup;
   }, [bookings, settings, intakeRequests]);
+
+  // Automatic Day-After-Departure VIP Voucher & Review Request Scheduler (Sent 1 day after departure)
+  useEffect(() => {
+    const cleanup = initAutoReviewScheduler(
+      () => bookings,
+      () => settings,
+      showToast
+    );
+    return cleanup;
+  }, [bookings, settings]);
 
   // Periodic check for new CRM chats & unread inquiries for the top button badge
   useEffect(() => {

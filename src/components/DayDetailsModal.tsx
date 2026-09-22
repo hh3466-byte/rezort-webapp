@@ -471,22 +471,24 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
           </button>
         )}
 
-        {/* Review Request toggle for checked out dogs */}
-        {booking.stayStatus === 'checked_out' && onToggleReviewRequest && (
+        {/* Review & VIP Voucher Auto-Send toggle for departing/checked out dogs */}
+        {(booking.stayStatus === 'checked_out' || isEnded || isEndingToday) && onToggleReviewRequest && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onToggleReviewRequest();
             }}
-            title={booking.skipReviewRequest ? "בקשת חוות דעת מבוטלת ללקוח זה. לחץ להפעלה מחדש" : "בקשת חוות דעת תשלח מחר ב-19:00. לחץ לביטול (אם הלקוח לא הסתדר)"}
+            title={booking.skipReviewRequest 
+              ? "שליחת שובר VIP וסקר מבוטלת ללקוח זה. לחץ להפעלה מחדש" 
+              : "שובר VIP וסקר יישלחו אוטומטית מחר. לחץ לביטול (אם לא הלך טוב עם הלקוח)"}
             className={`text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer border shadow-2xs active:scale-95 shrink-0 ${
               booking.skipReviewRequest
                 ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
                 : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
             }`}
           >
-            <span>{booking.skipReviewRequest ? '🚫 סקר בוטל' : '⭐ סקר מתוזמן'}</span>
+            <span>{booking.skipReviewRequest ? '🚫 שובר בוטל' : '⭐ שובר מתוזמן למחר'}</span>
           </button>
         )}
 

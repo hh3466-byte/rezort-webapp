@@ -424,6 +424,12 @@ function processResortEmails() {
     checkAndTriggerMotzeiShabbatDogUpdates();
   } catch (eM) {}
 
+  try {
+    sendDayAfterDepartureReviewRequests();
+  } catch (eRev) {
+    Logger.log("sendDayAfterDepartureReviewRequests error: " + eRev.toString());
+  }
+
   Logger.log("=== סיום ריצה: " + growCount + " תשלומי Grow נקלטו, " + morningDeletedCount + " חשבוניות מורנינג נמחקו, " + yanivDeletedCount + " מיילי יניב נמחקו ===");
 }
 
@@ -792,7 +798,12 @@ function sendDayAfterDepartureReviewRequests() {
       return;
     }
 
-    // שולפים שחרורים מ-4 הימים האחרונים שטרם קיבלו בקשה (כדי לתפוס שחרורים מסופ\"ש או חג ביום ראשון הראשון שאחריהם)
+    // וידוא שעות שליחה מורשות: בין 10:00 ל-19:30 בימי חול
+    if (hour < 10 || hour >= 20) {
+      return;
+    }
+
+    // שולפים שחרורים מ-4 הימים האחרונים שטרם קיבלו בקשה (כדי לתפוס שחרורים מסופ"ש או חג ביום ראשון הראשון שאחריהם)
     var fourDaysAgo = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000);
     var fourDaysAgoStr = Utilities.formatDate(fourDaysAgo, israelTz, "yyyy-MM-dd");
     var yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -816,6 +827,11 @@ function sendDayAfterDepartureReviewRequests() {
       var b = departures[i];
       var bookingKey = "review_request_sent_" + b.id;
       if (scriptProperties.getProperty(bookingKey)) continue;
+
+      if (b.notes && (b.notes.indexOf("סקר_נשלח") !== -1 || b.notes.indexOf("[סקר_נשלח]") !== -1)) {
+        scriptProperties.setProperty(bookingKey, "already_sent");
+        continue;
+      }
 
       // בדיקה האם בוטלה שליחת בקשת חוות דעת (למשל: בעל הכלב לא הסתדר איתנו)
       var bkData = {};
@@ -874,6 +890,15 @@ function sendDayAfterDepartureReviewRequests() {
 
       if (sendRes.getResponseCode() === 200) {
         scriptProperties.setProperty(bookingKey, new Date().toISOString());
+        Logger.log("✓ בקשת חוות דעת ושובר VIP נשלחו אוטומטית ל-" + ownerName + " עבור " + dogName);
+        try {
+          var updatedNotes = (b.notes || "").indexOf("[סקר_נשלח]") !== -1 ? b.notes : ((b.notes || "") + " [סקר_נשלח]").trim();
+          UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings?id=eq." + encodeURIComponent(b.id), {
+            method: "patch",
+            headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+            payload: JSON.stringify({ notes: updatedNotes, updated_at: new Date().toISOString() })
+          });
+        } catch (eDbNotes) {}
       }
       Utilities.sleep(1500);
     }
