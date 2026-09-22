@@ -1671,6 +1671,30 @@ function sendDailyDogEveningUpdates() {
     }
 
     Logger.log("הסתיים משלוח עדכונים יומיים: נשלחו " + sentCount + " הודעות מתוך " + activeBookings.length + " כלבים.");
+
+    // דיווח אוטומטי למנהל (054-3200007) על תוצאות השליחה היומית
+    try {
+      var failedCount = activeBookings.length - sentCount;
+      var managerChatId = "972543200007@c.us";
+      var managerMsg = "";
+
+      if (failedCount <= 0 || sentCount === activeBookings.length) {
+        managerMsg = "נשלחו הודעות יומיות ל " + sentCount + " כולם קיבלו ההודעה.";
+      } else {
+        managerMsg = "נשלחו הודעות יומיות ל " + sentCount + ". נכשלו " + failedCount + " ולא נשלחה אליהם הודעה";
+      }
+
+      var mgrSendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+      UrlFetchApp.fetch(mgrSendUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ chatId: managerChatId, message: managerMsg }),
+        muteHttpExceptions: true
+      });
+      Logger.log("נשלח דיווח מנהל בהצלחה: " + managerMsg);
+    } catch (eMgr) {
+      Logger.log("שגיאה במשלוח דיווח למנהל: " + eMgr.toString());
+    }
   } catch (err) {
     Logger.log("sendDailyDogEveningUpdates error: " + err.toString());
   }
