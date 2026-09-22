@@ -879,8 +879,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
           {/* Status Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
             {[
-              { id: 'new', label: '🔴 בקשות חדשות', count: newCount, isHot: newCount > 0 },
-              { id: 'in_progress', label: '🟡 בתהליך טיפול', count: inTreatmentCount, isHot: false },
+              { id: 'new', label: '🔴 שאלונים לבדיקה', count: newCount, isHot: newCount > 0 },
+              { id: 'in_progress', label: '🟡 שאלונים בתהליך', count: inTreatmentCount, isHot: false },
               { id: 'payment_requested', label: '💳 נשלח קישור לתשלום', count: paymentRequestedCount, isHot: false },
               { id: 'approved', label: '🟢 נקלטו ביומן', count: approvedCount, isHot: false },
               { id: 'archived_48h', label: '⌛ לא ענו / מעל 24 שעות', count: unansweredCount, isHot: false },
