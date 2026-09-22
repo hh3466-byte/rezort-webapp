@@ -37,6 +37,7 @@ import {
   formatManagerReceiptQuery,
   detectTrainerPaymentAnomalies,
   syncTrainerReceiptsFromWhatsAppChat,
+  isRealTrainingBooking,
   TrainerAnomaly,
   HILA_TRAINER_INFO 
 } from '../utils/trainerPaymentUtils';
@@ -92,6 +93,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   const [trainerReceipts, setTrainerReceipts] = useState<TrainerReceipt[]>(() => getTrainerReceipts());
   const [trainerActionFeedback, setTrainerActionFeedback] = useState<string | null>(null);
   const [isSyncingHilaChat, setIsSyncingHilaChat] = useState(false);
+  const [receiptImagePreview, setReceiptImagePreview] = useState<{ url: string; title: string } | null>(null);
 
   const handleSyncHilaReceipts = useCallback(async (isSilent = false) => {
     if (isSyncingHilaChat) return;
@@ -135,11 +137,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   }, [bookings]);
 
   const allTrainingBookings = useMemo(() => {
-    return bookings.filter(b => 
-      b.serviceType === 'training' || 
-      b.serviceType === 'day_training' || 
-      (b.notes || '').includes('אילוף')
-    );
+    return bookings.filter(isRealTrainingBooking);
   }, [bookings]);
 
   const trainerMetrics = useMemo(() => {
@@ -1071,25 +1069,24 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
         {/* Bookings List / Trainer Payments View */}
         <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4">
           
-          {/* TRAINER HILA PAYMENTS DASHBOARD VIEW */}
+          {/* TRAINER HILA PAYMENTS VIEW */}
           {metricType === 'training' && trainingViewTab === 'trainer_payments' ? (
             <div className="space-y-4">
               
-              {/* Trainer Profile Card */}
-              <div className="bg-gradient-to-l from-indigo-900 via-indigo-800 to-purple-900 text-white p-4 sm:p-5 rounded-3xl shadow-md border border-indigo-700/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1.5">
+              {/* Clean Trainer Header */}
+              <div className="bg-slate-900 text-white p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xl font-black">{HILA_TRAINER_INFO.name} ({HILA_TRAINER_INFO.businessName})</span>
-                    <span className="text-xs bg-indigo-500/40 text-indigo-100 px-2 py-0.5 rounded-full border border-indigo-400/40 font-bold">
+                    <span className="text-lg font-black">{HILA_TRAINER_INFO.name} ({HILA_TRAINER_INFO.businessName})</span>
+                    <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700 font-bold">
                       ע.מ {HILA_TRAINER_INFO.dealerNumber}
                     </span>
-                    <span className="text-xs bg-emerald-500/30 text-emerald-200 px-2 py-0.5 rounded-full border border-emerald-400/40 font-bold font-mono" dir="ltr">
+                    <span className="text-xs bg-emerald-950/80 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-800/80 font-bold font-mono" dir="ltr">
                       📞 {HILA_TRAINER_INFO.phone}
                     </span>
                   </div>
-                  <p className="text-xs sm:text-sm text-indigo-100/90 font-medium max-w-2xl">
-                    תעריף קבוע: <strong>₪1,500 לכלב</strong> ב-3 פעימות שוות (1/3: 500 ₪, 2/3: 500 ₪, 3/3: 500 ₪ וסיום אילוף).
-                    הילה שולחת קבלה בוואטסאפ של הריזורט (לפעמים מראש מתוך אמון) • המערכת שואלת את המנהל ב-054-3200007 ומתייקת.
+                  <p className="text-xs text-slate-300 font-medium">
+                    תעריף קבוע: <strong>₪1,500 לכלב</strong> (3 פעימות של ₪500: תחילת אילוף, אמצע, וסיום).
                   </p>
                 </div>
 
@@ -1100,143 +1097,67 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                       setSelectedReceiptForEdit(undefined);
                       setIsTrainerReceiptModalOpen(true);
                     }}
-                    className="bg-white hover:bg-indigo-50 active:scale-95 text-indigo-950 font-black text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                    className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
                   >
                     <span>➕ קליטת קבלה</span>
                   </button>
                 </div>
               </div>
 
-              {/* ANOMALY ALERT CENTER (If any anomalies detected) */}
-              {trainerAnomalies.length > 0 && (
-                <div className="bg-rose-50/90 border-2 border-rose-300 rounded-3xl p-4 sm:p-5 shadow-xs space-y-3 animate-in fade-in">
-                  <div className="flex items-center gap-2 text-rose-900 font-black text-sm sm:text-base">
-                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-                    <span>🚨 מרכז התראות ואי-התאמות בתשלומי הילה ({trainerAnomalies.length})</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    {trainerAnomalies.map((anom, idx) => {
-                      const relatedRcpt = anom.receiptNumber ? trainerReceipts.find(r => r.receiptNumber === anom.receiptNumber) : undefined;
-                      return (
-                        <div 
-                          key={idx}
-                          className={`p-3 rounded-2xl border flex flex-col justify-between gap-2 text-xs ${
-                            anom.severity === 'error' 
-                              ? 'bg-rose-100/80 border-rose-300 text-rose-950' 
-                              : 'bg-amber-50 border-amber-300 text-amber-950'
-                          }`}
-                        >
-                          <div>
-                            <div className="font-black flex items-center gap-1.5">
-                              <span>{anom.severity === 'error' ? '🛑' : '⚠️'}</span>
-                              <span>{anom.dogName || (anom.receiptNumber ? `קבלה ${anom.receiptNumber}` : anom.title)}</span>
-                            </div>
-                            <p className="font-medium mt-1 text-slate-800">{anom.description || anom.title}</p>
-                          </div>
-
-                          <div className="flex items-center gap-2 pt-1 border-t border-rose-200/60 justify-end">
-                            {relatedRcpt && !relatedRcpt.isPaidActually && (
-                              <button
-                                type="button"
-                                onClick={() => handleMarkReceiptAsPaid(relatedRcpt.id)}
-                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs"
-                              >
-                                <Check className="w-3 h-3" />
-                                <span>סמן כשולם בביט</span>
-                              </button>
-                            )}
-                            {relatedRcpt && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const q = formatManagerReceiptQuery(relatedRcpt);
-                                  openWhatsAppMessage('0543200007', q);
-                                }}
-                                className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs"
-                              >
-                                <MessageSquare className="w-3 h-3" />
-                                <span>שאילתא למנהל (054-3200007)</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Financial KPI Summary Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/* Simple Financial Summary */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-2xs text-right">
-                  <div className="text-[11px] font-bold text-slate-500">💳 שולם בפועל בביט</div>
-                  <div className="text-base sm:text-lg font-black text-emerald-800 font-mono mt-0.5">
+                  <div className="text-xs font-bold text-slate-500">💳 שולם בפועל להילה (ביט)</div>
+                  <div className="text-lg sm:text-xl font-black text-emerald-800 font-mono mt-0.5">
                     ₪{trainerMetrics.totalPaidActually.toLocaleString('he-IL')}
                   </div>
-                  <div className="text-[10px] text-slate-400">הועבר להילה</div>
+                  <div className="text-[11px] text-slate-400">חשבונות שנסגרו</div>
                 </div>
 
                 <div className={`border p-3.5 rounded-2xl shadow-2xs text-right ${
                   trainerMetrics.totalPendingPaymentAmount > 0 
-                    ? 'bg-rose-50 border-rose-300 ring-2 ring-rose-400/40' 
+                    ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-400/40' 
                     : 'bg-white border-slate-200'
                 }`}>
-                  <div className="text-[11px] font-bold text-rose-800">⏳ ממתין לתשלום בביט</div>
-                  <div className="text-base sm:text-lg font-black text-rose-900 font-mono mt-0.5">
+                  <div className="text-xs font-bold text-amber-900">⏳ ממתין לתשלום בביט</div>
+                  <div className="text-lg sm:text-xl font-black text-amber-950 font-mono mt-0.5">
                     ₪{trainerMetrics.totalPendingPaymentAmount.toLocaleString('he-IL')}
                   </div>
-                  <div className="text-[10px] text-rose-700 font-medium">קבלות שנשלחו מראש</div>
-                </div>
-
-                <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-2xs text-right">
-                  <div className="text-[11px] font-bold text-slate-500">🎯 יתרת התחייבות פעילה</div>
-                  <div className="text-base sm:text-lg font-black text-indigo-900 font-mono mt-0.5">
-                    ₪{trainerMetrics.totalRemainingLiability.toLocaleString('he-IL')}
+                  <div className="text-[11px] text-amber-800 font-medium">
+                    {trainerMetrics.totalPendingPaymentAmount > 0 ? 'קבלות שנקלטו וממתינות להעברה' : 'הכל משולם, אין חובות'}
                   </div>
-                  <div className="text-[10px] text-slate-400">עבור {trainerMetrics.activeTrainingDogsCount} כלבים פעילים</div>
                 </div>
 
                 <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-2xs text-right">
-                  <div className="text-[11px] font-bold text-slate-500">📄 סה״כ קבלות שנקלטו</div>
-                  <div className="text-base sm:text-lg font-black text-slate-900 font-mono mt-0.5">
+                  <div className="text-xs font-bold text-slate-500">📑 קבלות שנקלטו מהילה</div>
+                  <div className="text-lg sm:text-xl font-black text-indigo-950 font-mono mt-0.5">
                     {trainerReceipts.length}
                   </div>
-                  <div className="text-[10px] text-slate-400">קבלות מאלפת</div>
+                  <div className="text-[11px] text-slate-400">קבלות במערכת</div>
                 </div>
               </div>
 
-              {/* Ingested Receipts List */}
-              <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 shadow-2xs space-y-3">
+              {/* Receipts List */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-black text-sm sm:text-base text-slate-900 flex items-center gap-2">
-                    <span>📑 קבלות שנקלטו מהילה</span>
+                  <h4 className="font-black text-sm text-slate-900 flex items-center gap-2">
+                    <span>📑 פירוט קבלות של הילה</span>
                     <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-bold">
                       {trainerReceipts.length}
                     </span>
                   </h4>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedReceiptForEdit(undefined);
-                      setIsTrainerReceiptModalOpen(true);
-                    }}
-                    className="text-xs text-indigo-700 hover:text-indigo-900 font-black bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-xl cursor-pointer"
-                  >
-                    + קליטת קבלה
-                  </button>
                 </div>
 
                 {trainerReceipts.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    <p className="text-xs font-bold">עדיין לא נקלטו קבלות של הילה במערכת</p>
-                    <p className="text-[11px] text-slate-400 mt-1">לחץ על ״קליטת קבלה מהילה״ כדי להזין קבלה ראשונה</p>
+                  <div className="text-center py-6 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-xs">
+                    אין כרגע קבלות רשומות במערכת
                   </div>
                 ) : (
-                  <div className="space-y-2.5">
+                  <div className="space-y-2">
                     {trainerReceipts.map(rcpt => (
                       <div 
                         key={rcpt.id}
-                        className="bg-slate-50/80 hover:bg-slate-50 border border-slate-200 rounded-2xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-all"
+                        className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-2.5 transition-all"
                       >
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -1244,49 +1165,67 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                               קבלה מס׳ {rcpt.receiptNumber}
                             </span>
                             <span className="text-xs text-slate-500 font-mono">
-                              תאריך: {rcpt.receiptDate}
+                              {rcpt.receiptDate}
                             </span>
                             <span className="text-xs bg-indigo-50 text-indigo-900 border border-indigo-200 px-2 py-0.5 rounded-md font-black font-mono">
                               ₪{rcpt.totalAmount.toLocaleString('he-IL')} ({rcpt.paymentMethod})
                             </span>
                             
                             {rcpt.isPaidActually ? (
-                              <span className="text-[11px] bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-md font-black flex items-center gap-1">
-                                <Check className="w-3 h-3 text-emerald-700" />
-                                <span>שולם בביט ({rcpt.paidDate || 'מאושר'})</span>
+                              <span className="text-xs bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                                <Check className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>שולם בביט</span>
+                                {rcpt.bitConfirmationNumber && (
+                                  <span className="text-[10px] text-emerald-800 font-mono font-normal">
+                                    (אישור {rcpt.bitConfirmationNumber})
+                                  </span>
+                                )}
                               </span>
                             ) : (
-                              <span className="text-[11px] bg-rose-100 text-rose-900 border border-rose-300 px-2 py-0.5 rounded-md font-black flex items-center gap-1 animate-pulse">
-                                <span>🚨 נשלחה קבלה מראש (ממתין לתשלום בביט)</span>
+                              <span className="text-xs bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                                <span>⏳ ממתין לתשלום בביט</span>
                               </span>
                             )}
                           </div>
 
                           {rcpt.rawLineText && (
                             <p className="text-xs text-slate-600 font-medium">
-                              פירוט בקבלה: <span className="font-bold text-slate-800">{rcpt.rawLineText}</span>
+                              פירוט: <span className="font-bold text-slate-800">{rcpt.rawLineText}</span>
                             </p>
-                          )}
-
-                          {rcpt.allocations && rcpt.allocations.length > 0 && (
-                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                              <span className="text-[11px] text-slate-400 font-bold">שיוך לכלבים:</span>
-                              {rcpt.allocations.map((a, i) => (
-                                <span key={i} className="text-[11px] bg-purple-50 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-md font-bold">
-                                  🐾 {a.dogName} • תשלום {a.stage} (₪{a.amount})
-                                </span>
-                              ))}
-                            </div>
                           )}
                         </div>
 
                         {/* Actions */}
-                        <div className="flex items-center gap-1.5 shrink-0 justify-end pt-2 md:pt-0 border-t md:border-t-0 border-slate-200">
+                        <div className="flex items-center gap-2 shrink-0 justify-end pt-1 md:pt-0">
+                          {rcpt.receiptImageUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setReceiptImagePreview({ url: rcpt.receiptImageUrl!, title: `קבלה ${rcpt.receiptNumber} - ${rcpt.rawLineText || 'הילה קירזנר'}` })}
+                              className="bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                              title="צפה בתמונת הקבלה המקורית"
+                            >
+                              <span>👁️</span>
+                              <span>צפה בקבלה</span>
+                            </button>
+                          )}
+
+                          {rcpt.bitConfirmationImageUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setReceiptImagePreview({ url: rcpt.bitConfirmationImageUrl!, title: `אישור ביט - קבלה ${rcpt.receiptNumber} (${rcpt.bitConfirmationNumber || 'אישור תשלום'})` })}
+                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                              title="צפה בצילום מסך אישור הביט"
+                            >
+                              <span>📱</span>
+                              <span>אישור ביט</span>
+                            </button>
+                          )}
+
                           {!rcpt.isPaidActually && (
                             <button
                               type="button"
                               onClick={() => handleMarkReceiptAsPaid(rcpt.id)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-2xs cursor-pointer flex items-center gap-1"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-2xs cursor-pointer flex items-center gap-1"
                               title="סמן כי התשלום בביט בוצע בפועל"
                             >
                               <Check className="w-3.5 h-3.5" />
@@ -1297,23 +1236,10 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              const q = formatManagerReceiptQuery(rcpt);
-                              openWhatsAppMessage('0543200007', q);
-                            }}
-                            className="bg-green-50 hover:bg-green-100 text-green-800 border border-green-300 font-bold text-xs px-2.5 py-1.5 rounded-xl cursor-pointer flex items-center gap-1"
-                            title="שלח שאילתא לוואטסאפ של המנהל 054-3200007"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5 text-green-700" />
-                            <span>שאילתא למנהל</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
                               setSelectedReceiptForEdit(rcpt);
                               setIsTrainerReceiptModalOpen(true);
                             }}
-                            className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs px-2.5 py-1.5 rounded-xl cursor-pointer flex items-center gap-1"
+                            className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs px-2.5 py-1.5 rounded-lg cursor-pointer flex items-center gap-1"
                             title="ערוך קבלה"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
@@ -1327,21 +1253,21 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
               </div>
 
               {/* Training Dogs Payment Matrix */}
-              <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 shadow-2xs space-y-3">
-                <h4 className="font-black text-sm sm:text-base text-slate-900 flex items-center gap-2">
-                  <span>🐕 מצב תשלומים לפי כלבים באילוף (₪1,500 ב-3 פעימות)</span>
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3">
+                <h4 className="font-black text-sm text-slate-900 flex items-center gap-2">
+                  <span>🐕 מעקב 3 פעימות תשלום לכלבי אילוף (₪1,500 לכלב)</span>
                 </h4>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-right text-xs">
                     <thead>
-                      <tr className="border-b border-slate-200 text-slate-500 font-bold bg-slate-50/80">
+                      <tr className="border-b border-slate-200 text-slate-500 font-bold bg-slate-50">
                         <th className="p-2.5 rounded-tr-xl">שם הכלב והבעלים</th>
                         <th className="p-2.5 text-center">פעימה 1/3 (₪500)</th>
                         <th className="p-2.5 text-center">פעימה 2/3 (₪500)</th>
                         <th className="p-2.5 text-center">פעימה 3/3 (₪500)</th>
                         <th className="p-2.5 text-center">שולם להילה</th>
-                        <th className="p-2.5 text-center">יתרה לתשלום</th>
+                        <th className="p-2.5 text-center">יתרה להילה</th>
                         <th className="p-2.5 text-center rounded-tl-xl">פעולות</th>
                       </tr>
                     </thead>
@@ -1363,45 +1289,45 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                                 <span className="text-slate-500 font-normal">({b.ownerName})</span>
                                 {isCompleted && (
                                   <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded font-black">
-                                    🏁 הסתיים
+                                    🏁 הושלם
                                   </span>
                                 )}
                               </div>
                             </td>
 
                             <td className="p-2.5 text-center">
-                              <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] inline-flex items-center gap-1 ${
                                 s1?.isPaidActually
                                   ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                   : s1?.receiptNumber
                                   ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                   : 'bg-slate-100 text-slate-400'
                               }`}>
-                                {s1?.isPaidActually ? '✓ שולם (500 ₪)' : s1?.receiptNumber ? '⏳ ממתין לביט' : 'טרם'}
+                                {s1?.isPaidActually ? `✓ שולם (קבלה ${s1.receiptNumber || '20056'})` : s1?.receiptNumber ? `⏳ קבלה ${s1.receiptNumber}` : 'טרם הגיע'}
                               </span>
                             </td>
 
                             <td className="p-2.5 text-center">
-                              <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] inline-flex items-center gap-1 ${
                                 s2?.isPaidActually
                                   ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                   : s2?.receiptNumber
                                   ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                   : 'bg-slate-100 text-slate-400'
                               }`}>
-                                {s2?.isPaidActually ? '✓ שולם (500 ₪)' : s2?.receiptNumber ? '⏳ ממתין לביט' : 'טרם'}
+                                {s2?.isPaidActually ? `✓ שולם (קבלה ${s2.receiptNumber || '20056'})` : s2?.receiptNumber ? `⏳ קבלה ${s2.receiptNumber}` : 'טרם הגיע'}
                               </span>
                             </td>
 
                             <td className="p-2.5 text-center">
-                              <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] inline-flex items-center gap-1 ${
                                 s3?.isPaidActually
                                   ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                                   : s3?.receiptNumber
                                   ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                   : 'bg-slate-100 text-slate-400'
                               }`}>
-                                {s3?.isPaidActually ? '✓ שולם (500 ₪)' : s3?.receiptNumber ? '⏳ ממתין לביט' : 'טרם'}
+                                {s3?.isPaidActually ? '✓ שולם (סיום)' : s3?.receiptNumber ? `⏳ קבלה ${s3.receiptNumber}` : 'טרם הגיע'}
                               </span>
                             </td>
 
@@ -1409,7 +1335,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                               ₪{paidTotal.toLocaleString('he-IL')}
                             </td>
 
-                            <td className="p-2.5 text-center font-black font-mono text-indigo-900">
+                            <td className="p-2.5 text-center font-black font-mono text-slate-700">
                               ₪{remaining.toLocaleString('he-IL')}
                             </td>
 
@@ -1419,9 +1345,9 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                                   type="button"
                                   onClick={() => handleGraduateDog(b.id)}
                                   className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-2 py-1 rounded-lg text-[10px] shadow-2xs cursor-pointer"
-                                  title="סמן כי תהליך האילוף הושלם והעבר ללשונית הסתיים האילוף"
+                                  title="סמן כי תהליך האילוף הושלם"
                                 >
-                                  🎓 הסתיים האילוף
+                                  🎓 סמן כהסתיים
                                 </button>
                               ) : (
                                 <span className="text-[10px] text-emerald-700 font-bold">✓ הושלם</span>
@@ -1436,6 +1362,156 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
               </div>
 
             </div>
+          ) : metricType === 'training' ? (
+            /* CLEAN TRAINING CARDS VIEW (For Active & Completed tabs) */
+            filteredItems.length === 0 ? (
+              <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                <Dog className="w-12 h-12 mx-auto text-slate-300 mb-2" />
+                <p className="font-bold text-slate-700 text-sm">לא נמצאו כלבי אילוף להצגה</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredItems.map(b => {
+                  const daysCount = calculateDaysCount(b.startDate, b.endDate);
+                  const stages = getBookingTrainerStages(b);
+                  const s1 = stages.find(s => s.stage === '1/3');
+                  const s2 = stages.find(s => s.stage === '2/3');
+                  const s3 = stages.find(s => s.stage === '3/3');
+                  const paidTotal = stages.filter(s => s.isPaidActually).reduce((sum, s) => sum + s.amount, 0);
+
+                  return (
+                    <div
+                      key={b.id}
+                      className="bg-white border border-slate-200 hover:border-purple-300 rounded-2xl p-4 shadow-xs transition-all flex flex-col md:flex-row md:items-center justify-between gap-3"
+                    >
+                      {/* Left: Dog & Owner Details */}
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-black text-base sm:text-lg text-slate-900">
+                            🐾 {b.dogName}
+                          </span>
+                          <span className="text-xs sm:text-sm font-bold text-slate-600">
+                            ({b.ownerName})
+                          </span>
+                          <span className="text-xs bg-purple-50 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-md font-semibold">
+                            {getServiceTypeHebrew(b.serviceType)} ({daysCount} ימים)
+                          </span>
+                          {b.isTrainingCompleted && (
+                            <span className="text-xs bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-md font-black flex items-center gap-1">
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
+                              <span>🏁 הסתיים האילוף</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Dates & Phone */}
+                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                          <span className="flex items-center gap-1 font-mono text-slate-800 font-semibold" dir="ltr">
+                            <Phone className="w-3.5 h-3.5 text-green-600" />
+                            {b.ownerPhone}
+                          </span>
+                          <span className="flex items-center gap-1 text-slate-800 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
+                            <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                            <span>{formatDateIL(b.startDate)} עד {formatDateIL(b.endDate)}</span>
+                          </span>
+                        </div>
+
+                        {/* 3 Payment Stages Pills */}
+                        <div className="pt-1 flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-slate-700">תשלומי הילה (₪1,500):</span>
+
+                          {/* Stage 1/3 */}
+                          <div className={`text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 ${
+                            s1?.isPaidActually
+                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                              : s1?.receiptNumber
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : 'bg-slate-100 text-slate-400 border border-slate-200'
+                          }`}>
+                            <span>1/3: {s1?.isPaidActually ? `שולם (קבלה ${s1.receiptNumber || '20056'})` : s1?.receiptNumber ? `קבלה ${s1.receiptNumber} (ממתין)` : 'טרם'}</span>
+                            {s1?.receiptImageUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setReceiptImagePreview({ url: s1.receiptImageUrl!, title: `קבלה ${s1.receiptNumber} - ${b.dogName}` })}
+                                className="text-[11px] underline text-indigo-700 hover:text-indigo-900 mr-0.5 cursor-pointer"
+                              >
+                                👁️
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Stage 2/3 */}
+                          <div className={`text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 ${
+                            s2?.isPaidActually
+                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                              : s2?.receiptNumber
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : 'bg-slate-100 text-slate-400 border border-slate-200'
+                          }`}>
+                            <span>2/3: {s2?.isPaidActually ? `שולם (קבלה ${s2.receiptNumber || '20056'})` : s2?.receiptNumber ? `קבלה ${s2.receiptNumber} (ממתין)` : 'טרם'}</span>
+                            {s2?.receiptImageUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setReceiptImagePreview({ url: s2.receiptImageUrl!, title: `קבלה ${s2.receiptNumber} - ${b.dogName}` })}
+                                className="text-[11px] underline text-indigo-700 hover:text-indigo-900 mr-0.5 cursor-pointer"
+                              >
+                                👁️
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Stage 3/3 */}
+                          <div className={`text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 ${
+                            s3?.isPaidActually
+                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                              : s3?.receiptNumber
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : 'bg-slate-100 text-slate-400 border border-slate-200'
+                          }`}>
+                            <span>3/3: {s3?.isPaidActually ? 'שולם (סיום)' : s3?.receiptNumber ? `קבלה ${s3.receiptNumber} (ממתין)` : 'טרם'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Summary & Action */}
+                      <div className="flex flex-col sm:flex-row md:flex-col items-end justify-between gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                        <div className="text-right bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                          <div className="text-xs text-slate-500 font-medium">שולם להילה:</div>
+                          <div className="text-sm font-black font-mono text-emerald-800">
+                            ₪{paidTotal.toLocaleString('he-IL')} <span className="text-xs text-slate-400 font-normal">/ ₪1,500</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {b.ownerPhone && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleSendWhatsApp(b, e)}
+                              className="bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 text-xs font-semibold px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
+                              title="שלח וואטסאפ לבעלים"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5 text-green-600" />
+                              <span>וואטסאפ</span>
+                            </button>
+                          )}
+
+                          {!b.isTrainingCompleted && (
+                            <button
+                              type="button"
+                              onClick={() => handleGraduateDog(b.id)}
+                              className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-2xs cursor-pointer transition-all active:scale-95"
+                              title="סמן כי תהליך האילוף הושלם והעבר ללשונית הסתיים האילוף"
+                            >
+                              🎓 הסתיים האילוף
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
           ) : filteredItems.length === 0 ? (
             <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
               <Dog className="w-12 h-12 mx-auto text-slate-300 mb-2" />
@@ -1451,13 +1527,6 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
               const remainingDebt = Math.max(0, totalPrice - depositAmount);
               const daysCount = calculateDaysCount(b.startDate, b.endDate);
               const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
-
-              // Trainer Hila Stages for this dog
-              const isTrainingDog = b.serviceType === 'training' || b.serviceType === 'day_training' || (b.notes || '').includes('אילוף');
-              const trainerStages = isTrainingDog ? getBookingTrainerStages(b) : [];
-              const s1 = trainerStages.find(s => s.stage === '1/3');
-              const s2 = trainerStages.find(s => s.stage === '2/3');
-              const s3 = trainerStages.find(s => s.stage === '3/3');
 
               return (
                 <div
@@ -1510,14 +1579,6 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                           {b.refundReason && <span className="font-medium text-[11px] text-rose-700">({b.refundReason})</span>}
                         </span>
                       )}
-
-                      {/* Training Completed Badge */}
-                      {b.isTrainingCompleted && (
-                        <span className="text-xs bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-md font-black flex items-center gap-1">
-                          <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>🏁 הסתיים האילוף</span>
-                        </span>
-                      )}
                     </div>
 
                     {/* Metadata: Owner, Phone, Dates */}
@@ -1536,59 +1597,6 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         <span className="text-slate-400 font-semibold">({daysCount} ימים)</span>
                       </span>
                     </div>
-
-                    {/* TRAINER HILA STAGES PILLS ON CARD */}
-                    {isTrainingDog && (
-                      <div className="pt-1.5 flex items-center gap-1.5 flex-wrap">
-                        <span className="text-[11px] font-bold text-purple-950 bg-purple-100/70 border border-purple-200 px-2 py-0.5 rounded-md">
-                          🐾 תשלומי הילה (₪1,500):
-                        </span>
-
-                        <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
-                          s1?.isPaidActually
-                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            : s1?.receiptNumber
-                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                            : 'bg-slate-100 text-slate-500 border border-slate-200'
-                        }`}>
-                          <span>1/3 (500 ₪)</span>
-                          {s1?.isPaidActually ? '✓' : s1?.receiptNumber ? '⏳' : '○'}
-                        </span>
-
-                        <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
-                          s2?.isPaidActually
-                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            : s2?.receiptNumber
-                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                            : 'bg-slate-100 text-slate-500 border border-slate-200'
-                        }`}>
-                          <span>2/3 (500 ₪)</span>
-                          {s2?.isPaidActually ? '✓' : s2?.receiptNumber ? '⏳' : '○'}
-                        </span>
-
-                        <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
-                          s3?.isPaidActually
-                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            : s3?.receiptNumber
-                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                            : 'bg-slate-100 text-slate-500 border border-slate-200'
-                        }`}>
-                          <span>3/3 (500 ₪)</span>
-                          {s3?.isPaidActually ? '✓' : s3?.receiptNumber ? '⏳' : '○'}
-                        </span>
-
-                        {!b.isTrainingCompleted && (
-                          <button
-                            type="button"
-                            onClick={() => handleGraduateDog(b.id)}
-                            className="text-[10px] bg-purple-700 hover:bg-purple-800 text-white font-bold px-2 py-0.5 rounded-md cursor-pointer transition-all active:scale-95 mr-1"
-                            title="סמן כעת כי תהליך האילוף הושלם והעבר ללשונית הסתיים האילוף"
-                          >
-                            🎓 העבר ל-הסתיים האילוף
-                          </button>
-                        )}
-                      </div>
-                    )}
 
                     {b.notes && (
                       <p className="text-xs text-amber-800/90 italic bg-amber-50/60 px-2 py-1 rounded-lg border border-amber-200/60 max-w-xl">
@@ -1740,6 +1748,51 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
           greenApiId={settings?.greenApiIdInstance}
           greenApiToken={settings?.greenApiToken}
         />
+      )}
+
+      {/* Receipt Image Preview Lightbox Modal */}
+      {receiptImagePreview && (
+        <div 
+          className="fixed inset-0 z-60 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 animate-in fade-in"
+          onClick={() => setReceiptImagePreview(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+              <h4 className="font-black text-sm text-slate-900 flex items-center gap-2">
+                <span>📄 {receiptImagePreview.title}</span>
+              </h4>
+              <div className="flex items-center gap-2">
+                <a
+                  href={receiptImagePreview.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1 shadow-2xs"
+                >
+                  <span>⬇️ הורד מסמך</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setReceiptImagePreview(null)}
+                  className="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex items-center justify-center bg-slate-100 min-h-[300px]">
+              <img
+                src={receiptImagePreview.url}
+                alt={receiptImagePreview.title}
+                className="max-h-[70vh] w-auto rounded-xl shadow-md object-contain border border-slate-300"
+              />
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

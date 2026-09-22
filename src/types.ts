@@ -325,6 +325,8 @@ export interface TrainerReceipt {
   isPaidActually: boolean; // האם הועבר בפועל בביט/בנק
   paidDate?: string;
   paymentConfirmationUrl?: string; // צילום אישור ביט/העברה
+  bitConfirmationImageUrl?: string; // תמונת אישור ביט
+  bitConfirmationNumber?: string; // מספר אישור ב-bit
   paymentConfirmationNotes?: string;
   managerQuerySent: boolean; // האם נשלחה שאלה לוואטסאפ של 0543200007
   managerQuerySentAt?: string;

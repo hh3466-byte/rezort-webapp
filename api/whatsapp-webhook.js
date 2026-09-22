@@ -137,9 +137,9 @@ export default async function handler(req, res) {
   const phoneSuffix = cleanPhone.slice(-7); // Last 7 digits
   const senderName = senderData.senderName || senderData.senderContactName || '';
 
-  // 3. Special handling for Hila the Trainer (0526908943) and Manager (0543200007)
+  // 3. Special handling for Hila the Trainer (0526908943) and Managers (0506336896 / 0543200007)
   const isHila = cleanPhone.includes('526908943');
-  const isManager = cleanPhone.includes('543200007');
+  const isManager = cleanPhone.includes('543200007') || cleanPhone.includes('506336896');
 
   if (isHila) {
     const msgData = payload.messageData || {};
@@ -150,29 +150,33 @@ export default async function handler(req, res) {
 
     console.log('--- Incoming message from Hila the Trainer ---', { text, fileUrl });
 
-    // Send immediate query to Manager (054-3200007)
-    const managerChatId = '972543200007@c.us';
+    // Send immediate query to Shmulik (050-6336896) and Manager (054-3200007)
+    const alertRecipients = ['972506336896@c.us', '972543200007@c.us'];
     let alertMsg = `🐾 *התקבלה קבלה/הודעה מהילה המאלפת (Halodog)*\n`;
     if (text) alertMsg += `\n📄 *פרטי הודעה/קבלה:* "${text}"`;
     if (fileUrl) alertMsg += `\n📷 *צורפה תמונת קבלה לתיוק*`;
-    alertMsg += `\n\n❓ *האם שולם בפועל וכמה?*\nנא להשיב כאן (לדוגמה: "שולם 1000 בביט") או להעביר אישור תשלום ביט כדי שאתייק אותו בריזורט ואסגור את החשבון.`;
+    alertMsg += `\n\n❓ *האם שולם בפועל וכמה?*\nנא לשתף כאן אישור תשלום ביט / צילום מסך או לרשום "שולם 1000 בביט" כדי שאתייק אותו במערכת ואסגור את החשבון.`;
 
-    await sendWhatsAppMessage(managerChatId, alertMsg);
+    for (const rec of alertRecipients) {
+      await sendWhatsAppMessage(rec, alertMsg);
+    }
 
     // Save pending receipt to Supabase settings
     try {
-      const sRes = await fetch(`${SUPABASE_URL}/rest/v1/resort_settings?id=eq.default&select=data`, {
+      const sRes = await fetch(`${SUPABASE_URL}/rest/v1/settings?id=eq.default&select=data`, {
         headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
       });
       if (sRes.ok) {
         const sData = await sRes.json();
         const curData = sData?.[0]?.data || {};
         const curReceipts = Array.isArray(curData.trainerReceipts) ? curData.trainerReceipts : [];
+        const detectedNum = (text.match(/(?:קבלה|מס'|מספר)\s*[:#]?\s*(\d+)/i) || [])[1] || `הילה-${Date.now().toString().slice(-4)}`;
+        const detectedAmount = (text.match(/(?:₪|סך|סכום|שולם)?\s*(\d{3,4})/i) || [])[1];
         const newReceipt = {
           id: `rcpt-${Date.now()}`,
-          receiptNumber: (text.match(/(?:קבלה|מס'|מספר)\s*[:#]?\s*(\d+)/i) || [])[1] || 'חדשה',
+          receiptNumber: detectedNum,
           receiptDate: new Date().toISOString().substring(0, 10),
-          totalAmount: 1000,
+          totalAmount: detectedAmount ? Number(detectedAmount) : 1000,
           paymentMethod: 'ביט',
           rawLineText: text || 'תמונת קבלה מוואטסאפ',
           receiptImageUrl: fileUrl,
@@ -185,7 +189,7 @@ export default async function handler(req, res) {
           updatedAt: new Date().toISOString()
         };
         curReceipts.unshift(newReceipt);
-        await fetch(`${SUPABASE_URL}/rest/v1/resort_settings?id=eq.default`, {
+        await fetch(`${SUPABASE_URL}/rest/v1/settings?id=eq.default`, {
           method: 'PATCH',
           headers: {
             apikey: SUPABASE_KEY,
@@ -209,49 +213,101 @@ export default async function handler(req, res) {
                   msgData.fileMessageData?.caption || '').trim();
     const fileUrl = msgData.fileMessageData?.downloadUrl || '';
 
-    console.log('--- Incoming message from Manager (0543200007) ---', { text, fileUrl });
+    console.log('--- Incoming message from Manager ---', { senderPhone: cleanPhone, text, fileUrl });
 
-    const isPaymentConfirm = text.includes('שולם') || text.includes('ביט') || text.includes('העברתי') || fileUrl.length > 0;
+    const isPaymentConfirm = text.includes('שולם') || 
+                             text.includes('ביט') || 
+                             text.includes('bit') || 
+                             text.includes('העברתי') || 
+                             text.includes('אישור') || 
+                             text.includes('קבלה') || 
+                             text.includes('הילה') || 
+                             fileUrl.length > 0;
+
     if (isPaymentConfirm) {
-      // Update latest pending receipt in Supabase settings
+      // Parse amount from text if present
+      const amountMatch = text.match(/(?:₪|שולם|סך|הועבר|סכום)?\s*(\d{3,5})/);
+      const parsedAmount = amountMatch ? Number(amountMatch[1]) : 500;
+      const todayIso = new Date().toISOString().substring(0, 10);
+
+      // Detect dog name mentioned (Joy, Theo, Luna, Boss, etc.)
+      let matchedDogName = '';
+      if (text.includes('גוי') || text.includes("ג'וי") || text.includes('ג׳וי')) matchedDogName = "ג'וי";
+      else if (text.includes('תיאו') || text.includes('תיאן')) matchedDogName = 'תיאו';
+      else if (text.includes('לונה')) matchedDogName = 'לונה';
+      else if (text.includes('בוס')) matchedDogName = 'בוס';
+
       try {
-        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/resort_settings?id=eq.default&select=data`, {
+        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/settings?id=eq.default&select=data`, {
           headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
         });
         if (sRes.ok) {
           const sData = await sRes.json();
           const curData = sData?.[0]?.data || {};
           const curReceipts = Array.isArray(curData.trainerReceipts) ? curData.trainerReceipts : [];
-          let updated = false;
+          
+          let updatedExisting = false;
           for (const r of curReceipts) {
             if (!r.isPaidActually) {
               r.isPaidActually = true;
-              r.paidDate = new Date().toISOString().substring(0, 10);
-              r.paymentConfirmationNotes = text || 'אושר ע"י מנהל בוואטסאפ';
+              r.paidDate = todayIso;
+              r.paymentConfirmationNotes = text || 'אישור תשלום ביט נקלט מוואטסאפ';
               if (fileUrl) r.paymentConfirmationUrl = fileUrl;
               r.status = 'paid';
               r.updatedAt = new Date().toISOString();
-              updated = true;
+              updatedExisting = true;
               break;
             }
           }
-          if (updated) {
-            await fetch(`${SUPABASE_URL}/rest/v1/resort_settings?id=eq.default`, {
-              method: 'PATCH',
-              headers: {
-                apikey: SUPABASE_KEY,
-                Authorization: `Bearer ${SUPABASE_KEY}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ data: { ...curData, trainerReceipts: curReceipts } })
-            });
+
+          if (!updatedExisting) {
+            // Add new confirmed paid receipt
+            const newPaidReceipt = {
+              id: `bit-${Date.now()}`,
+              receiptNumber: `BIT-${todayIso.replace(/-/g, '')}-${Date.now().toString().slice(-4)}`,
+              receiptDate: todayIso,
+              totalAmount: parsedAmount,
+              paymentMethod: 'ביט',
+              rawLineText: text || 'אישור תשלום ביט',
+              receiptImageUrl: fileUrl,
+              allocations: matchedDogName ? [{
+                bookingId: '',
+                dogName: matchedDogName,
+                stage: '1/3',
+                amount: parsedAmount
+              }] : [],
+              isPaidActually: true,
+              paidDate: todayIso,
+              paymentConfirmationNotes: text || 'אישור תשלום ביט נקלט מוואטסאפ',
+              paymentConfirmationUrl: fileUrl,
+              status: 'paid',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+            curReceipts.unshift(newPaidReceipt);
           }
+
+          await fetch(`${SUPABASE_URL}/rest/v1/settings?id=eq.default`, {
+            method: 'PATCH',
+            headers: {
+              apikey: SUPABASE_KEY,
+              Authorization: `Bearer ${SUPABASE_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ data: { ...curData, trainerReceipts: curReceipts } })
+          });
         }
       } catch (dbErr) {
         console.warn('Error updating manager confirmation:', dbErr);
       }
 
-      await sendWhatsAppMessage(chatId, `✅ *אישור התשלום תויק בהצלחה בריזורט!*\nהקבלה של הילה עודכנה כשולמה בביט והחשבון סגור.`);
+      let confirmMsg = `✅ *אישור התשלום בביט נקלט ותויק בהצלחה בריזורט!* 🐾\n`;
+      if (matchedDogName) confirmMsg += `🐶 *שיוך כלב:* ${matchedDogName}\n`;
+      if (parsedAmount) confirmMsg += `💰 *סכום שנקלט:* ₪${parsedAmount.toLocaleString('he-IL')}\n`;
+      if (fileUrl) confirmMsg += `📷 *תמונת/מסמך האישור נשמרה במערכת*\n`;
+      confirmMsg += `\nסטטוס התשלומים מול הילה מעודכן והחשבון סגור!`;
+
+      await sendWhatsAppMessage(chatId, confirmMsg);
       return res.status(200).json({ ok: true, handled: 'manager_payment_filed' });
     }
   }
