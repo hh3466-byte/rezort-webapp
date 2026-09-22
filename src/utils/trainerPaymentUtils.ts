@@ -232,6 +232,8 @@ export function parseHilaReceiptText(
   };
 }
 
+export const parseTrainerReceiptText = parseHilaReceiptText;
+
 /**
  * Formats the WhatsApp question to be sent directly to the Manager (054-3200007)
  */
