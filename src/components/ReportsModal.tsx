@@ -8,12 +8,14 @@ interface ReportsModalProps {
   bookings: Booking[];
   settings: ResortSettings;
   onClose: () => void;
+  onOpenHilaTrainer?: () => void;
 }
 
 export const ReportsModal: React.FC<ReportsModalProps> = ({
   bookings,
   settings,
   onClose,
+  onOpenHilaTrainer,
 }) => {
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
 
@@ -170,6 +172,29 @@ export const ReportsModal: React.FC<ReportsModalProps> = ({
             })}
           </div>
         </div>
+
+        {/* Trainer Settlement Section */}
+        {onOpenHilaTrainer && (
+          <div className="my-4 p-4 bg-indigo-50/80 border border-indigo-200 rounded-2xl flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl">🐾</span>
+              <div>
+                <div className="text-sm font-black text-indigo-950">התחשבנות מאלפת (הילה קירזנר - Halodog)</div>
+                <div className="text-xs text-indigo-700">מעקב קבלות, שלבי תשלום (1/3, 2/3, 3/3) ותשלומים בביט</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenHilaTrainer();
+              }}
+              className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-xs shrink-0"
+            >
+              פתח דוח מאלפת
+            </button>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center text-xs">

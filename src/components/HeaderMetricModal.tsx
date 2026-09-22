@@ -40,7 +40,7 @@ import {
 } from '../utils/trainerPaymentUtils';
 import { TrainerReceiptIntakeModal } from './TrainerReceiptIntakeModal';
 
-export type HeaderMetricType = 'occupancy' | 'boarding' | 'training' | 'debt' | 'revenue';
+export type HeaderMetricType = 'occupancy' | 'boarding' | 'training' | 'debt' | 'revenue' | 'hila_trainer';
 
 interface HeaderMetricModalProps {
   metricType: HeaderMetricType | null;
@@ -62,7 +62,7 @@ const HEBREW_MONTHS = [
 ];
 
 export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
-  metricType,
+  metricType: initialMetricType,
   onClose,
   bookings,
   settings,
@@ -74,14 +74,17 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   onUpdateBooking,
   onUpdateBookings,
 }) => {
+  const metricType = initialMetricType === 'hila_trainer' ? 'training' : initialMetricType;
   const [searchQuery, setSearchQuery] = useState('');
   const [trainingFilter, setTrainingFilter] = useState<'all' | 'full' | 'day'>('all');
   const [revenueCategoryFilter, setRevenueCategoryFilter] = useState<'all' | 'digital' | 'grow_10th' | 'direct_transfer' | 'grow_in_2_months' | 'cash' | 'refunds'>('all');
   const [chartMode, setChartMode] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedChartPeriod, setSelectedChartPeriod] = useState<string | null>(null);
 
-  // Trainer Hila View States
-  const [trainingViewTab, setTrainingViewTab] = useState<'active' | 'completed' | 'trainer_payments'>('active');
+  // Trainer Hila View States (Default to trainer_payments if opened via hila_trainer)
+  const [trainingViewTab, setTrainingViewTab] = useState<'active' | 'completed' | 'trainer_payments'>(
+    initialMetricType === 'hila_trainer' ? 'trainer_payments' : 'active'
+  );
   const [isTrainerReceiptModalOpen, setIsTrainerReceiptModalOpen] = useState(false);
   const [selectedReceiptForEdit, setSelectedReceiptForEdit] = useState<TrainerReceipt | undefined>(undefined);
   const [trainerReceipts, setTrainerReceipts] = useState<TrainerReceipt[]>(() => getTrainerReceipts());

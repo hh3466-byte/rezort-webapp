@@ -1232,6 +1232,18 @@ export default function App() {
             </span>
           </button>
 
+          {/* Hila Trainer (Halodog) Direct Quick Access Button */}
+          <button
+            type="button"
+            onClick={() => setActiveHeaderMetric('hila_trainer')}
+            id="btn-hila-trainer-top"
+            className="font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-2xs shrink-0 bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 hover:from-purple-100 hover:to-indigo-100 active:scale-95 border border-purple-200 hover:border-purple-300 text-purple-950"
+            title="ניהול תשלומי מאלפת (הילה קירזנר - Halodog) – קליטת קבלות, מעקב ביט ושלבי תשלום 1/3, 2/3, 3/3"
+          >
+            <span className="text-base">🐾</span>
+            <span>תשלומי הילה (מאלפת)</span>
+          </button>
+
           {/* Pending Grow Payments Quick Access Button (if any) */}
           {pendingGrowPayments.length > 0 && (
             <button
@@ -2229,6 +2241,7 @@ export default function App() {
           bookings={bookings}
           settings={settings}
           onClose={() => setIsReportsOpen(false)}
+          onOpenHilaTrainer={() => setActiveHeaderMetric('hila_trainer')}
         />
       )}
 
