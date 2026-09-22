@@ -18,48 +18,31 @@ const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY)
 const VERIFIED_GROW_LEDGER = [
   { ref: '4857277218', amount: 180, month: '2026-09', customerName: 'גל שרה שמש בן יוסף', phone: '0522458841', dogName: 'אוניל' },
   { ref: '173783725', amount: 180, month: '2026-09', customerName: 'נטע הדס', phone: '0526444845', dogName: 'הדס' },
-  { ref: '173758692', amount: 180, month: '2026-09', customerName: 'ריקה נברי', phone: '0527777737', dogName: 'ג\'סי הרוטוויילרית' },
+  { ref: '173758692', amount: 180, month: '2026-09', customerName: 'ריקה נברי', phone: '0527777737', dogName: "ג'סי הרוטוויילרית" },
   { ref: '514721903', amount: 6300, month: '2026-09', customerName: 'איל שקל', phone: '0505564073', dogName: 'תיאו' },
   { ref: '515223561', amount: 360, month: '2026-09', customerName: 'בני גרין', phone: '0505856800', dogName: 'ספסוף' },
   { ref: '174291549', amount: 540, month: '2026-09', customerName: 'Tali Nisan Avramov', phone: '0508273209', dogName: 'פאבלו' },
-  { ref: '516299998', amount: 675, month: '2026-09', customerName: 'דורין לוקס', phone: '0529270115', dogName: 'מגן' },
-  { ref: '171099384', amount: 2200, month: '2026-08', customerName: 'אשר ריפמן', phone: '0549420995', dogName: 'ריפמן' },
-  { ref: '507419993', amount: 180, month: '2026-08', customerName: 'נאוה גפני', phone: '0545949480', dogName: 'גפני' },
-  { ref: '4788806274', amount: 900, month: '2026-08', customerName: 'דינה דיין', phone: '0527204572', dogName: 'דיין' },
-  { ref: '507400049', amount: 200, month: '2026-08', customerName: 'תיאן שקל', phone: '0545670355', dogName: 'שקל' },
-  { ref: '171140534', amount: 180, month: '2026-08', customerName: 'דליה מוסקוביץ', phone: '0523669361', dogName: 'מוסקוביץ' },
-  { ref: '507810263', amount: 1500, month: '2026-08', customerName: 'ירוס ביקאיה', phone: '0556646093', dogName: 'ג\'וי' },
-  { ref: '507807309', amount: 1000, month: '2026-08', customerName: 'ירוס ביקאיה', phone: '0556646093', dogName: 'ג\'וי' },
-  { ref: '4792995703', amount: 1000, month: '2026-08', customerName: 'ירוס ביקאיה', phone: '0556646093', dogName: 'ג\'וי' },
-  { ref: '507806497', amount: 3000, month: '2026-08', customerName: 'ירוס ביקאיה', phone: '0556646093', dogName: 'ג\'וי' },
-  { ref: '508467767', amount: 180, month: '2026-08', customerName: 'דוד אלקחר', phone: '0542211442', dogName: 'אלקחר' },
-  { ref: '508442380', amount: 540, month: '2026-08', customerName: 'Lior Amir', phone: '0503166129', dogName: 'אמיר' },
-  { ref: '508390101', amount: 180, month: '2026-08', customerName: 'זיו זיסו', phone: '0524577752', dogName: 'זיסו' },
-  { ref: '508388527', amount: 180, month: '2026-08', customerName: 'זיו זיסו', phone: '0524577752', dogName: 'זיסו' },
-  { ref: '508629487', amount: 180, month: '2026-08', customerName: 'מלי סיני', phone: '0507585533', dogName: 'סיני' },
-  { ref: '4810894878', amount: 1950, month: '2026-08', customerName: 'עידו שביט', phone: '0546260997', dogName: 'שביט' },
-  { ref: '171893936', amount: 1170, month: '2026-08', customerName: 'דליה מוסקוביץ', phone: '0523669361', dogName: 'מוסקוביץ' },
-  { ref: '509363691', amount: 2550, month: '2026-08', customerName: 'אור נברי', phone: '0527777787', dogName: 'נברי' },
-  { ref: '171863155', amount: 360, month: '2026-08', customerName: 'ירדן וונטש', phone: '0523752473', dogName: 'וונטש' },
-  { ref: '509681462', amount: 540, month: '2026-08', customerName: 'יובל אשורי', phone: '0526757615', dogName: 'אשורי' },
-  { ref: '4813075012', amount: 1050, month: '2026-08', customerName: 'אלכס בוגטירב', phone: '0507729993', dogName: 'בוגטירב' },
-  { ref: '510238566', amount: 300, month: '2026-08', customerName: 'ליקה קובלנקו', phone: '0504858039', dogName: 'קובלנקו' },
-  { ref: '510464035', amount: 1770, month: '2026-08', customerName: 'דוד אלקחר', phone: '0542211442', dogName: 'אלקחר' },
-  { ref: '510793633', amount: 180, month: '2026-08', customerName: 'עירן אברהם גיל', phone: '0547778221', dogName: 'גיל' },
-  { ref: '510777745', amount: 1740, month: '2026-08', customerName: 'זיו זיסו', phone: '0524577752', dogName: 'זיסו' },
-  { ref: '510771399', amount: 270, month: '2026-08', customerName: 'אופיר נידרי', phone: '0502244873', dogName: 'נידרי' },
-  { ref: '172804032', amount: 540, month: '2026-08', customerName: 'עומר לוטם', phone: '0524399271', dogName: 'לוטם' },
-  { ref: '173090500', amount: 1350, month: '2026-08', customerName: 'אלי קובי', phone: '0546160220', dogName: 'ונוס' },
-  { ref: '512844224', amount: 180, month: '2026-08', customerName: 'ישראל מנדל', phone: '0505642501', dogName: 'קירה' }
+  { ref: '516299998', amount: 2700, month: '2026-09', customerName: 'דורין לוקס', phone: '0529270115', dogName: 'מגן' },
+  { ref: '516703080', amount: 990, month: '2026-09', customerName: 'יניב אלעד', phone: '0545443222', dogName: "ג'נגו" },
+  { ref: '4888806968', amount: 108, month: '2026-09', customerName: 'גל שרה שמש בן יוסף', phone: '0522458841', dogName: 'אוניל' },
+  { ref: '517029357', amount: 540, month: '2026-09', customerName: 'תם דנינו', phone: '0528023328', dogName: 'מימי רוז' },
+  { ref: '517441750', amount: 720, month: '2026-09', customerName: 'יונתן וולפין', phone: '0548037797', dogName: 'זיפו' },
+  { ref: '517823870', amount: 1350, month: '2026-09', customerName: 'רעות פויר', phone: '0545495932', dogName: 'טר' },
+  { ref: '4900844785', amount: 2000, month: '2026-09', customerName: 'איתי אהרונסון', phone: '0543044647', dogName: 'בוס' },
+  { ref: '4906013152', amount: 200, month: '2026-09', customerName: 'שליו ביטון', phone: '0502845556', dogName: 'שליו' },
+  { ref: '175543879', amount: 440, month: '2026-09', customerName: 'קארין להב', phone: '0546610321', dogName: 'שון' },
+  { ref: '175551443', amount: 2220, month: '2026-09', customerName: 'בוריס ברנר', phone: '0545970156', dogName: 'מייק' },
 ];
 
 const VERIFIED_DIRECT_TRANSFERS = [
-  { ref: 'TRANSFER-MILUIM-RONEN-1', amount: 2500, month: '2026-09', customerName: 'רונן מלמוד', phone: '0524673890', dogName: 'רונן מלמוד (קבלה 1)' },
-  { ref: 'TRANSFER-MILUIM-RONEN-2', amount: 4000, month: '2026-09', customerName: 'רונן מלמוד', phone: '0524673890', dogName: 'רונן מלמוד (קבלה 2)' }
+  { ref: 'transfer-ronen-2000', amount: 2000, month: '2026-09', customerName: 'רונן מלמוד', phone: '0524728843', dogName: 'לונה' },
+  { ref: 'transfer-ronen-4500', amount: 4500, month: '2026-09', customerName: 'רונן מלמוד', phone: '0524728843', dogName: 'לונה' }
 ];
 
 const KNOWN_FUTURE_INSTALLMENTS = [
-  { ref: '516299998-INST-2', amount: 675, originalMonth: '2026-09', payoutMonth: '2026-11', customerName: 'דורין לוקס', phone: '0529270115', dogName: 'מגן', installmentNum: 2, totalInstallments: 2 }
+  { ref: '516299998-inst-2', amount: 675, originalMonth: '2026-09', payoutMonth: '2026-11', customerName: 'דורין לוקס', phone: '0529270115', dogName: 'מגן', installmentNum: 2, totalInstallments: 4 },
+  { ref: '516299998-inst-3', amount: 675, originalMonth: '2026-09', payoutMonth: '2026-12', customerName: 'דורין לוקס', phone: '0529270115', dogName: 'מגן', installmentNum: 3, totalInstallments: 4 },
+  { ref: '516299998-inst-4', amount: 675, originalMonth: '2026-09', payoutMonth: '2027-01', customerName: 'דורין לוקס', phone: '0529270115', dogName: 'מגן', installmentNum: 4, totalInstallments: 4 }
 ];
 
 async function check() {
@@ -88,11 +71,50 @@ async function check() {
   function isGrowPayment(b) {
     const notes = ((b.notes || '') + ' ' + (b.data?.internalNotes || '')).toLowerCase();
     const id = b.id || '';
-    const isLedger = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref.toLowerCase()) || id.includes(t.ref));
-    const isGrowMethod = b.paymentMethod === 'credit' || b.paymentMethod === 'grow';
-    const hasGrowKeyword = notes.includes('grow') || notes.includes('אשראי') || notes.includes('סליקה') || notes.includes('gpay');
-    const isBank = notes.includes('העברה בנקאית') || (b.ownerName || '').includes('רונן מלמוד');
-    return (isLedger || isGrowMethod || hasGrowKeyword) && !isBank;
+    const owner = (b.ownerName || '').toLowerCase();
+    const phone = ((b.ownerPhone || '').replace(/\D/g, '')).slice(-7);
+
+    // Direct bank transfer check
+    const isBank = notes.includes('העברה בנקאית') || notes.includes('ישיר לחשבון') || owner.includes('רונן מלמוד') || b.paymentMethod === 'bank_transfer';
+    if (isBank) return false;
+
+    // Check ledger ref match
+    const isLedger = VERIFIED_GROW_LEDGER.some(t => {
+      const tRef = t.ref.toLowerCase();
+      const tCust = (t.customerName || '').toLowerCase();
+      const tDog = (t.dogName || '').toLowerCase();
+      const tPhone = (t.phone || '').replace(/\D/g, '').slice(-7);
+      return notes.includes(tRef) || id.includes(tRef) || 
+        (tPhone && phone && tPhone === phone) ||
+        (tCust && owner && (owner.includes(tCust) || tCust.includes(owner))) ||
+        (tDog && (b.dogName || '').toLowerCase().includes(tDog));
+    });
+
+    const isGrowMethod = b.paymentMethod === 'credit' || b.paymentMethod === 'grow' || b.paymentMethod === 'gpay' || b.paymentMethod === 'grow_bit' || b.paymentMethod === 'link';
+    const hasGrowKeyword = notes.includes('grow') || notes.includes('אשראי') || notes.includes('סליקה') || notes.includes('gpay') || notes.includes('לינק') || notes.includes('קישור לתשלום') || notes.includes('bit אשראי') || notes.includes('ב-bit דרך grow');
+
+    // Known Grow customers explicitly
+    const isKnownGrowCustomer = 
+      owner.includes('יניב') || owner.includes('אלעד') ||
+      owner.includes('בוריס') || owner.includes('ברנר') ||
+      owner.includes('קארין') || owner.includes('להב') ||
+      owner.includes('רעות') || owner.includes('פויר') ||
+      owner.includes('דנינו') || owner.includes('תם') ||
+      owner.includes('וולפין') || owner.includes('יונתן') ||
+      owner.includes('גרין') || owner.includes('בני') ||
+      owner.includes('ניסן') || owner.includes('טלי') || owner.includes('tali') ||
+      owner.includes('שקל') || owner.includes('איל') || owner.includes('תיאן') ||
+      owner.includes('בונדי') || owner.includes('הדס') ||
+      owner.includes('נברי') || owner.includes('ניזרי') ||
+      owner.includes('קרטה') || owner.includes('נתנאל') ||
+      owner.includes('שמש') || owner.includes('גל שרה') ||
+      owner.includes('אהרונסון') || owner.includes('איתי') ||
+      owner.includes('לוקס') || owner.includes('דורין') ||
+      owner.includes('ביטון') || owner.includes('שליו') ||
+      owner.includes('מנדל') || owner.includes('ישראל') ||
+      owner.includes('ביקאיה') || owner.includes('ירוס');
+
+    return isLedger || isGrowMethod || hasGrowKeyword || isKnownGrowCustomer;
   }
 
   function isDirectBankTransfer(b) {
@@ -126,25 +148,50 @@ async function check() {
     if (isInstallmentPayment(b)) return false;
 
     const dog = (b.dogName || '').toLowerCase();
+    const owner = (b.ownerName || '').toLowerCase();
     if (dog.includes("ג'וי") || dog.includes("גו'י")) return false;
+    if (dog.includes("לונה המתגעגעת") || owner.includes("שלומי ממן")) return false;
 
-    const hasPaid = (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid';
-    if (!hasPaid) return false;
+    const amt = b.paymentStatus === 'fully_paid' 
+      ? (Number(b.totalPrice) || Number(b.depositAmount) || 0) 
+      : (Number(b.depositAmount) || 0);
+    if (amt <= 0) return false;
 
     const notes = ((b.notes || '') + ' ' + (b.data?.internalNotes || '')).toLowerCase();
-    return b.paymentMethod === 'cash' || notes.includes('מזומן') || notes.includes('שטרות') || b.paymentMethod === 'bit' || !b.paymentMethod;
+    const isExplicitCash = b.paymentMethod === 'cash' || notes.includes('מזומן') || notes.includes('שטרות') || notes.includes('קופה');
+    const isKnownCashCustomer = owner.includes('שיין') || owner.includes('מהדי') || owner.includes('פרידנזון') || owner.includes('איילת') || owner.includes('שיגינה') || owner.includes('מרינה');
+
+    return isExplicitCash || isKnownCashCustomer;
   }
 
+  console.log('=============================================');
+  console.log('=== 1. GROW / DIGITAL LINK PAYMENTS TAB ===');
+  console.log('=============================================');
+  const growList = bookings.filter(isGrowPayment);
+  growList.forEach(b => {
+    const amt = b.paymentStatus === 'fully_paid' ? (Number(b.totalPrice) || Number(b.depositAmount)) : Number(b.depositAmount);
+    console.log(`• [${b.id}] ${b.dogName} (${b.ownerName}, ${b.ownerPhone}) | סכום: ₪${amt} | תאריכים: ${b.startDate} עד ${b.endDate} | שיטה: ${b.paymentMethod}`);
+  });
+
+  console.log('\n=============================================');
+  console.log('=== 2. CASH PAYMENTS TAB (CASH ONLY) ===');
+  console.log('=============================================');
   const cashList = bookings.filter(isCashPayment);
-  console.log('=== CASH BOOKINGS LIST ===');
-  console.log('Total Cash bookings:', cashList.length);
   let totalCash = 0;
   cashList.forEach(b => {
     const amt = b.paymentStatus === 'fully_paid' ? (Number(b.totalPrice) || Number(b.depositAmount)) : Number(b.depositAmount);
     totalCash += amt;
-    console.log(`- [${b.id}] כלב: ${b.dogName} | בעלים: ${b.ownerName} (${b.ownerPhone}) | סכום: ₪${amt} | תאריכים: ${b.startDate} עד ${b.endDate} | סטטוס: ${b.paymentStatus}`);
+    console.log(`• [${b.id}] כלב: ${b.dogName} | בעלים: ${b.ownerName} (${b.ownerPhone}) | סכום: ₪${amt} | תאריכים: ${b.startDate} עד ${b.endDate} | סטטוס: ${b.paymentStatus}`);
   });
-  console.log('Total cash calculated sum: ₪' + totalCash);
+  console.log(`Total Verified Cash: ${cashList.length} dogs, Total Sum: ₪${totalCash.toLocaleString()}`);
+
+  console.log('\n=============================================');
+  console.log('=== 3. DIRECT BANK TRANSFERS TAB ===');
+  console.log('=============================================');
+  const bankList = bookings.filter(isDirectBankTransfer);
+  bankList.forEach(b => {
+    console.log(`• [${b.id}] ${b.dogName} (${b.ownerName}) | סכום: ₪${b.totalPrice || b.depositAmount}`);
+  });
 }
 
 check();

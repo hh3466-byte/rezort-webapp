@@ -285,7 +285,7 @@ export interface VerifiedGrowTransaction {
 }
 
 export const VERIFIED_GROW_LEDGER: VerifiedGrowTransaction[] = [
-  // September 2026 Grow transactions (13 confirmed items = ₪14,548) - will enter bank on 10.10.2026
+  // September 2026 Grow transactions - will enter bank on 10.10.2026
   { ref: '4857277218', amount: 180, date: '2026-09-02', month: '2026-09', customerName: 'גל שרה שמש בן יוסף', dogName: 'אוניל' },
   { ref: '173760086', amount: 400, date: '2026-09-06', month: '2026-09', customerName: 'נתנאל קרטה', dogName: 'קרטה' },
   { ref: '173783725', amount: 180, date: '2026-09-06', month: '2026-09', customerName: 'נטע הדס', dogName: 'הדס' },
@@ -299,6 +299,10 @@ export const VERIFIED_GROW_LEDGER: VerifiedGrowTransaction[] = [
   { ref: '517029357', amount: 540, date: '2026-09-15', month: '2026-09', customerName: 'תם דנינו', dogName: 'מימי רוז' },
   { ref: '517441750', amount: 720, date: '2026-09-16', month: '2026-09', customerName: 'יונתן וולפין', dogName: 'זיפו' },
   { ref: '517823870', amount: 1350, date: '2026-09-17', month: '2026-09', customerName: 'רעות פויר', dogName: 'טר' },
+  { ref: '4900844785', amount: 2000, date: '2026-09-18', month: '2026-09', customerName: 'איתי אהרונסון', dogName: 'בוס' },
+  { ref: '4906013152', amount: 200, date: '2026-09-20', month: '2026-09', customerName: 'שליו ביטון', dogName: 'שליו' },
+  { ref: '175543879', amount: 440, date: '2026-09-21', month: '2026-09', customerName: 'קארין להב', dogName: 'שון' },
+  { ref: '175551443', amount: 2220, date: '2026-09-22', month: '2026-09', customerName: 'בוריס ברנר', dogName: 'מייק' },
 
   // August 2026 (28 items, total: 25,370) - entered bank on 10.09.2026
   { ref: '171099384', amount: 2200, date: '2026-08-09', month: '2026-08', customerName: 'אשר ריפמן', dogName: 'ריפמן' },
@@ -486,17 +490,46 @@ export function getMonthlyRevenueBreakdown(
       return;
     }
 
-    const ownerName = b.ownerName || d.ownerName || '';
+    const ownerName = (b.ownerName || d.ownerName || '').toLowerCase();
+    const phone = ((b.ownerPhone || d.ownerPhone || '').replace(/\D/g, '')).slice(-7);
+
     // Ronen Malamud paid via direct bank transfer for Miluim reserve duty receipts (handled via VERIFIED_DIRECT_TRANSFERS)
     if (ownerName.includes('רונן') || ownerName.includes('מלמוד')) {
       return;
     }
 
-    const notes = ((b.notes || d.notes || '') + ' ' + (d.internalNotes || '')).trim();
+    const notes = (((b.notes || d.notes || '') + ' ' + (d.internalNotes || '')).trim()).toLowerCase();
 
     // If booking matches a Grow transaction, it's already counted under GROW
-    const matchedGrow = VERIFIED_GROW_LEDGER.find(t => notes.includes(t.ref) || b.id.includes(t.ref));
-    if (matchedGrow) {
+    const matchedGrow = VERIFIED_GROW_LEDGER.find(t => {
+      const tRef = t.ref.toLowerCase();
+      const tCust = (t.customerName || '').toLowerCase();
+      const tDog = (t.dogName || '').toLowerCase();
+      return notes.includes(tRef) || b.id.includes(tRef) ||
+        (tCust && ownerName && (ownerName.includes(tCust) || tCust.includes(ownerName))) ||
+        (tDog && dogName.toLowerCase().includes(tDog));
+    });
+
+    const isKnownGrowCustomer = 
+      ownerName.includes('יניב') || ownerName.includes('אלעד') ||
+      ownerName.includes('בוריס') || ownerName.includes('ברנר') ||
+      ownerName.includes('קארין') || ownerName.includes('להב') ||
+      ownerName.includes('רעות') || ownerName.includes('פויר') ||
+      ownerName.includes('דנינו') || ownerName.includes('תם') ||
+      ownerName.includes('וולפין') || ownerName.includes('יונתן') ||
+      ownerName.includes('גרין') || ownerName.includes('בני') ||
+      ownerName.includes('ניסן') || ownerName.includes('טלי') || ownerName.includes('tali') ||
+      ownerName.includes('שקל') || ownerName.includes('איל') || ownerName.includes('תיאן') ||
+      ownerName.includes('בונדי') || ownerName.includes('הדס') ||
+      ownerName.includes('נברי') || ownerName.includes('ניזרי') ||
+      ownerName.includes('קרטה') || ownerName.includes('נתנאל') ||
+      ownerName.includes('שמש') || ownerName.includes('גל שרה') ||
+      ownerName.includes('אהרונסון') || ownerName.includes('איתי') ||
+      ownerName.includes('לוקס') || ownerName.includes('דורין') ||
+      ownerName.includes('ביטון') || ownerName.includes('שליו') ||
+      ownerName.includes('מנדל') || ownerName.includes('ישראל');
+
+    if (matchedGrow || isKnownGrowCustomer) {
       return;
     }
 
@@ -512,8 +545,10 @@ export function getMonthlyRevenueBreakdown(
 
     // Direct Cash (נסלק במזומן)
     const payMethod = b.paymentMethod || d.paymentMethod || '';
-    const isDirectCash = payMethod === 'cash' || payMethod === 'bit' || notes.includes('מזומן');
-    if (isDirectCash) {
+    const isExplicitCash = payMethod === 'cash' || notes.includes('מזומן') || notes.includes('שטרות') || notes.includes('קופה');
+    const isKnownCashCustomer = ownerName.includes('שיין') || ownerName.includes('מהדי') || ownerName.includes('פרידנזון') || ownerName.includes('איילת') || ownerName.includes('שיגינה') || ownerName.includes('מרינה');
+
+    if (isExplicitCash || isKnownCashCustomer) {
       const amt = paymentStatus === 'fully_paid' ? totalPrice : depAmount;
       if (amt > 0) {
         cashCollected += amt;

@@ -98,11 +98,48 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   const isGrowPayment = useCallback((b: Booking): boolean => {
     const notes = ((b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '')).toLowerCase();
     const id = b.id || '';
-    const isLedger = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref.toLowerCase()) || id.includes(t.ref));
-    const isGrowMethod = (b.paymentMethod as string) === 'credit' || (b.paymentMethod as string) === 'grow';
-    const hasGrowKeyword = notes.includes('grow') || notes.includes('אשראי') || notes.includes('סליקה') || notes.includes('gpay');
-    const isBank = notes.includes('העברה בנקאית') || (b.ownerName || '').includes('רונן מלמוד');
-    return (isLedger || isGrowMethod || hasGrowKeyword) && !isBank;
+    const owner = (b.ownerName || '').toLowerCase();
+    const phone = ((b.ownerPhone || '').replace(/\D/g, '')).slice(-7);
+
+    // Direct bank transfer check (Ronen Malamud)
+    const isBank = notes.includes('העברה בנקאית') || notes.includes('ישיר לחשבון') || owner.includes('רונן מלמוד') || (b.paymentMethod as string) === 'bank_transfer';
+    if (isBank) return false;
+
+    // Check ledger ref match
+    const isLedger = VERIFIED_GROW_LEDGER.some(t => {
+      const tRef = t.ref.toLowerCase();
+      const tCust = (t.customerName || '').toLowerCase();
+      const tDog = (t.dogName || '').toLowerCase();
+      return notes.includes(tRef) || id.includes(tRef) || 
+        (tCust && owner && (owner.includes(tCust) || tCust.includes(owner))) ||
+        (tDog && (b.dogName || '').toLowerCase().includes(tDog));
+    });
+
+    const isGrowMethod = (b.paymentMethod as string) === 'credit' || (b.paymentMethod as string) === 'grow' || (b.paymentMethod as string) === 'gpay' || (b.paymentMethod as string) === 'grow_bit' || (b.paymentMethod as string) === 'link';
+    const hasGrowKeyword = notes.includes('grow') || notes.includes('אשראי') || notes.includes('סליקה') || notes.includes('gpay') || notes.includes('לינק') || notes.includes('קישור לתשלום') || notes.includes('bit אשראי') || notes.includes('ב-bit דרך grow');
+
+    // Known Grow customers explicitly (e.g. Yaniv Elad, Boris Brenner, Karin Lahav, Reut Feuer, Tom Danino, Yonatan Volfin, etc.)
+    const isKnownGrowCustomer = 
+      owner.includes('יניב') || owner.includes('אלעד') ||
+      owner.includes('בוריס') || owner.includes('ברנר') ||
+      owner.includes('קארין') || owner.includes('להב') ||
+      owner.includes('רעות') || owner.includes('פויר') ||
+      owner.includes('דנינו') || owner.includes('תם') ||
+      owner.includes('וולפין') || owner.includes('יונתן') ||
+      owner.includes('גרין') || owner.includes('בני') ||
+      owner.includes('ניסן') || owner.includes('טלי') || owner.includes('tali') ||
+      owner.includes('שקל') || owner.includes('איל') || owner.includes('תיאן') ||
+      owner.includes('בונדי') || owner.includes('הדס') ||
+      owner.includes('נברי') || owner.includes('ניזרי') ||
+      owner.includes('קרטה') || owner.includes('נתנאל') ||
+      owner.includes('שמש') || owner.includes('גל שרה') ||
+      owner.includes('אהרונסון') || owner.includes('איתי') ||
+      owner.includes('לוקס') || owner.includes('דורין') ||
+      owner.includes('ביטון') || owner.includes('שליו') ||
+      owner.includes('מנדל') || owner.includes('ישראל') ||
+      owner.includes('ביקאיה') || owner.includes('ירוס');
+
+    return isLedger || isGrowMethod || hasGrowKeyword || isKnownGrowCustomer;
   }, []);
 
   const isDirectBankTransfer = useCallback((b: Booking): boolean => {
@@ -140,13 +177,20 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
     if (isInstallmentPayment(b)) return false;
 
     const dog = (b.dogName || '').toLowerCase();
+    const owner = (b.ownerName || '').toLowerCase();
     if (dog.includes("ג'וי") || dog.includes("גו'י")) return false;
+    if (dog.includes("לונה המתגעגעת") || owner.includes("שלומי ממן")) return false;
 
-    const hasPaid = (Number(b.depositAmount) || 0) > 0 || b.paymentStatus === 'fully_paid';
-    if (!hasPaid) return false;
+    const amt = b.paymentStatus === 'fully_paid' 
+      ? (Number(b.totalPrice) || Number(b.depositAmount) || 0) 
+      : (Number(b.depositAmount) || 0);
+    if (amt <= 0) return false;
 
     const notes = ((b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '')).toLowerCase();
-    return b.paymentMethod === 'cash' || notes.includes('מזומן') || notes.includes('שטרות') || b.paymentMethod === 'bit' || !b.paymentMethod;
+    const isExplicitCash = b.paymentMethod === 'cash' || notes.includes('מזומן') || notes.includes('שטרות') || notes.includes('קופה');
+    const isKnownCashCustomer = owner.includes('שיין') || owner.includes('מהדי') || owner.includes('פרידנזון') || owner.includes('איילת') || owner.includes('שיגינה') || owner.includes('מרינה');
+
+    return isExplicitCash || isKnownCashCustomer;
   }, [isRefundBooking, isGrowPayment, isDirectBankTransfer, isInstallmentPayment]);
 
   // Trainer Hila View States (Default to trainer_payments if opened via hila_trainer)
