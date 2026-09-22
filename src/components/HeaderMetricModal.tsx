@@ -145,9 +145,10 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   const isDirectBankTransfer = useCallback((b: Booking): boolean => {
     const notes = ((b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '')).toLowerCase();
     const owner = (b.ownerName || '').toLowerCase();
-    const isLedger = VERIFIED_DIRECT_TRANSFERS.some(t => owner.includes(t.customerName.toLowerCase()) || (b.id || '').includes(t.ref));
+    const dog = (b.dogName || '').toLowerCase();
+    const isLedger = VERIFIED_DIRECT_TRANSFERS.some(t => owner.includes(t.customerName.toLowerCase()) || (b.id || '').includes(t.ref) || (t.dogName && dog.includes(t.dogName.toLowerCase())));
     const isBankMethod = b.paymentMethod === 'bank_transfer';
-    const hasBankKeyword = notes.includes('העברה בנקאית') || notes.includes('ישיר לחשבון') || (owner.includes('רונן') && owner.includes('מלמוד'));
+    const hasBankKeyword = notes.includes('העברה בנקאית') || notes.includes('ישיר לחשבון') || notes.includes('העברות ישירות') || (owner.includes('רונן') && owner.includes('מלמוד')) || owner.includes('פרידנזון');
     return isLedger || isBankMethod || hasBankKeyword;
   }, []);
 
@@ -188,7 +189,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
     const notes = ((b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '')).toLowerCase();
     const isExplicitCash = b.paymentMethod === 'cash' || notes.includes('מזומן') || notes.includes('שטרות') || notes.includes('קופה');
-    const isKnownCashCustomer = owner.includes('שיין') || owner.includes('מהדי') || owner.includes('פרידנזון') || owner.includes('איילת') || owner.includes('שיגינה') || owner.includes('מרינה');
+    const isKnownCashCustomer = owner.includes('שיין') || owner.includes('מהדי') || owner.includes('שיגינה') || owner.includes('מרינה');
 
     return isExplicitCash || isKnownCashCustomer;
   }, [isRefundBooking, isGrowPayment, isDirectBankTransfer, isInstallmentPayment]);

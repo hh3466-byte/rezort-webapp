@@ -351,6 +351,7 @@ export interface DirectBankTransfer {
 export const VERIFIED_DIRECT_TRANSFERS: DirectBankTransfer[] = [
   { ref: 'transfer-ronen-2000', amount: 2000, date: '2026-09-16', month: '2026-09', customerName: 'רונן מלמוד', dogName: 'לונה', notes: 'העברה בנקאית ישירה (קבלות מילואים)' },
   { ref: 'transfer-ronen-4500', amount: 4500, date: '2026-09-16', month: '2026-09', customerName: 'רונן מלמוד', dogName: 'לונה', notes: 'העברה בנקאית ישירה (קבלות מילואים)' },
+  { ref: 'transfer-ayelet-360', amount: 360, date: '2026-09-22', month: '2026-09', customerName: 'איילת פרידנזון', dogName: 'מרתה', notes: 'העברה ישירה לחשבון (2 תשלומים לפי אישור וואטסאפ)' },
 ];
 
 /**
@@ -493,8 +494,14 @@ export function getMonthlyRevenueBreakdown(
     const ownerName = (b.ownerName || d.ownerName || '').toLowerCase();
     const phone = ((b.ownerPhone || d.ownerPhone || '').replace(/\D/g, '')).slice(-7);
 
-    // Ronen Malamud paid via direct bank transfer for Miluim reserve duty receipts (handled via VERIFIED_DIRECT_TRANSFERS)
-    if (ownerName.includes('רונן') || ownerName.includes('מלמוד')) {
+    // Direct bank transfers (Ronen Malamud, Ayelet Friedensohn) are handled via VERIFIED_DIRECT_TRANSFERS
+    const isDirectBank = (ownerName.includes('רונן') && ownerName.includes('מלמוד')) || 
+      ownerName.includes('פרידנזון') || 
+      (b.paymentMethod || d.paymentMethod) === 'bank_transfer' ||
+      notes.includes('העברה בנקאית') || 
+      notes.includes('ישיר לחשבון') || 
+      notes.includes('העברות ישירות');
+    if (isDirectBank) {
       return;
     }
 
@@ -546,7 +553,7 @@ export function getMonthlyRevenueBreakdown(
     // Direct Cash (נסלק במזומן)
     const payMethod = b.paymentMethod || d.paymentMethod || '';
     const isExplicitCash = payMethod === 'cash' || notes.includes('מזומן') || notes.includes('שטרות') || notes.includes('קופה');
-    const isKnownCashCustomer = ownerName.includes('שיין') || ownerName.includes('מהדי') || ownerName.includes('פרידנזון') || ownerName.includes('איילת') || ownerName.includes('שיגינה') || ownerName.includes('מרינה');
+    const isKnownCashCustomer = ownerName.includes('שיין') || ownerName.includes('מהדי') || ownerName.includes('שיגינה') || ownerName.includes('מרינה');
 
     if (isExplicitCash || isKnownCashCustomer) {
       const amt = paymentStatus === 'fully_paid' ? totalPrice : depAmount;
