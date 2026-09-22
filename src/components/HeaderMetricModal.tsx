@@ -26,6 +26,19 @@ import { Booking, ResortSettings, StayStatus } from '../types';
 import { getTodayStr, calculateDaysCount, formatDateIL, getBookingsForDate, getBookingPaymentsInMonth, getMonthlyRevenueBreakdown, VERIFIED_GROW_LEDGER } from '../utils/dateUtils';
 import { generatePaymentReminderMessage, openWhatsAppMessage, getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { exportRevenueChartsToExcel, ChartPeriodItem } from '../utils/exportUtils';
+import { TrainerReceipt, TrainerPaymentStage } from '../types';
+import { 
+  getTrainerReceipts, 
+  saveTrainerReceipts, 
+  applyReceiptToBookings, 
+  computeTrainerMetrics, 
+  getBookingTrainerStages, 
+  formatManagerReceiptQuery,
+  detectTrainerPaymentAnomalies,
+  TrainerAnomaly,
+  HILA_TRAINER_INFO 
+} from '../utils/trainerPaymentUtils';
+import { TrainerReceiptIntakeModal } from './TrainerReceiptIntakeModal';
 
 export type HeaderMetricType = 'occupancy' | 'boarding' | 'training' | 'debt' | 'revenue';
 
@@ -39,6 +52,8 @@ interface HeaderMetricModalProps {
   onOpenPaymentModal: (booking: Booking) => void;
   onToggleStayStatus?: (bookingId: string, current: StayStatus) => void;
   onInitiateRelease?: (booking: Booking) => void;
+  onUpdateBooking?: (booking: Booking) => void;
+  onUpdateBookings?: (bookings: Booking[]) => void;
 }
 
 const HEBREW_MONTHS = [
@@ -56,12 +71,21 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   onOpenPaymentModal,
   onToggleStayStatus,
   onInitiateRelease,
+  onUpdateBooking,
+  onUpdateBookings,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [trainingFilter, setTrainingFilter] = useState<'all' | 'full' | 'day'>('all');
   const [revenueCategoryFilter, setRevenueCategoryFilter] = useState<'all' | 'digital' | 'grow_10th' | 'direct_transfer' | 'grow_in_2_months' | 'cash' | 'refunds'>('all');
   const [chartMode, setChartMode] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedChartPeriod, setSelectedChartPeriod] = useState<string | null>(null);
+
+  // Trainer Hila View States
+  const [trainingViewTab, setTrainingViewTab] = useState<'active' | 'completed' | 'trainer_payments'>('active');
+  const [isTrainerReceiptModalOpen, setIsTrainerReceiptModalOpen] = useState(false);
+  const [selectedReceiptForEdit, setSelectedReceiptForEdit] = useState<TrainerReceipt | undefined>(undefined);
+  const [trainerReceipts, setTrainerReceipts] = useState<TrainerReceipt[]>(() => getTrainerReceipts());
+  const [trainerActionFeedback, setTrainerActionFeedback] = useState<string | null>(null);
 
   const todayStr = getTodayStr();
   const currentMonthKey = todayStr.substring(0, 7); // e.g. 2026-09
@@ -74,6 +98,96 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   const activeBookings = useMemo(() => {
     return bookings.filter(b => b.stayStatus !== 'cancelled');
   }, [bookings]);
+
+  const allTrainingBookings = useMemo(() => {
+    return bookings.filter(b => 
+      b.serviceType === 'training' || 
+      b.serviceType === 'day_training' || 
+      (b.notes || '').includes('אילוף')
+    );
+  }, [bookings]);
+
+  const trainerMetrics = useMemo(() => {
+    return computeTrainerMetrics(bookings, trainerReceipts);
+  }, [bookings, trainerReceipts]);
+
+  const trainerAnomalies = useMemo(() => {
+    return detectTrainerPaymentAnomalies(bookings, trainerReceipts);
+  }, [bookings, trainerReceipts]);
+
+  const handleSaveReceipt = (receipt: TrainerReceipt) => {
+    const updatedReceipts = [
+      receipt,
+      ...trainerReceipts.filter(r => r.id !== receipt.id)
+    ];
+    setTrainerReceipts(updatedReceipts);
+    saveTrainerReceipts(updatedReceipts);
+
+    const { updatedBookings, completedDogs } = applyReceiptToBookings(receipt, bookings);
+    if (onUpdateBookings) {
+      onUpdateBookings(updatedBookings);
+    }
+    for (const b of updatedBookings) {
+      const orig = bookings.find(ob => ob.id === b.id);
+      if (orig && (JSON.stringify(orig.trainerStages) !== JSON.stringify(b.trainerStages) || orig.isTrainingCompleted !== b.isTrainingCompleted)) {
+        if (onUpdateBooking) onUpdateBooking(b);
+      }
+    }
+
+    if (completedDogs.length > 0) {
+      setTrainerActionFeedback(`🎉 הכלב/ים ${completedDogs.join(', ')} הגיעו לשלב 3/3 והועברו בהצלחה ללשונית "הסתיים האילוף"!`);
+    } else {
+      setTrainerActionFeedback(`✅ קבלה ${receipt.receiptNumber} נשמרה בהצלחה`);
+    }
+    setTimeout(() => setTrainerActionFeedback(null), 5000);
+  };
+
+  const handleMarkReceiptAsPaid = (receiptId: string) => {
+    const updatedReceipts = trainerReceipts.map(r => {
+      if (r.id === receiptId) {
+        return {
+          ...r,
+          isPaidActually: true,
+          paidDate: new Date().toISOString().substring(0, 10),
+          status: 'paid' as const,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return r;
+    });
+    setTrainerReceipts(updatedReceipts);
+    saveTrainerReceipts(updatedReceipts);
+
+    const paidRcpt = updatedReceipts.find(r => r.id === receiptId);
+    if (paidRcpt) {
+      const { updatedBookings } = applyReceiptToBookings(paidRcpt, bookings);
+      if (onUpdateBookings) onUpdateBookings(updatedBookings);
+      for (const b of updatedBookings) {
+        if (onUpdateBooking) onUpdateBooking(b);
+      }
+    }
+    setTrainerActionFeedback('✅ הקבלה סומנה כשולמה בביט והסטטוס סונכרן');
+    setTimeout(() => setTrainerActionFeedback(null), 4000);
+  };
+
+  const handleGraduateDog = (bookingId: string) => {
+    const updated = bookings.map(b => {
+      if (b.id === bookingId) {
+        return {
+          ...b,
+          isTrainingCompleted: true,
+          trainingCompletedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return b;
+    });
+    if (onUpdateBookings) onUpdateBookings(updated);
+    const target = updated.find(b => b.id === bookingId);
+    if (target && onUpdateBooking) onUpdateBooking(target);
+    setTrainerActionFeedback(`🎓 ${target?.dogName || 'הכלב'} הועבר בהצלחה ללשונית "הסתיים האילוף"!`);
+    setTimeout(() => setTrainerActionFeedback(null), 4000);
+  };
 
   // Compute monthly and yearly aggregates for the charts
   const { monthlyChartData, yearlyChartData, currentMonthCollected, allTimeCollected, monthlyMap } = useMemo(() => {
@@ -274,15 +388,30 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       break;
 
     case 'training':
-      title = 'כלבים בתהליך אילוף היום';
-      subtitle = 'תהליך אילוף מלא ואילוף ביומיות ללא לינה';
-      icon = <GraduationCap className="w-5 h-5 text-purple-700" />;
-      badgeColor = 'bg-purple-50 text-purple-800 border-purple-200';
-      filteredItems = todayBookings.filter(b => {
-        if (trainingFilter === 'full') return b.serviceType === 'training';
-        if (trainingFilter === 'day') return b.serviceType === 'day_training';
-        return b.serviceType === 'training' || b.serviceType === 'day_training';
-      });
+      if (trainingViewTab === 'completed') {
+        title = '🏁 כלבים שהסתיים תהליך האילוף שלהם';
+        subtitle = `${trainerMetrics.completedTrainingDogsCount} כלבים שהשלימו את תהליך האילוף ומלוא התשלומים (3/3) שולמו למאלפת הילה`;
+        icon = <CheckCircle className="w-5 h-5 text-emerald-700" />;
+        badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+        filteredItems = allTrainingBookings.filter(b => b.isTrainingCompleted);
+      } else if (trainingViewTab === 'trainer_payments') {
+        title = '🐾 ניהול תשלומי מאלפת (הילה קירזנר - Halodog)';
+        subtitle = `מעקב קבלות ושלבים (1/3, 2/3, 3/3) • שולם בפועל: ₪${trainerMetrics.totalPaidActually.toLocaleString('he-IL')}${trainerMetrics.totalPendingPaymentAmount > 0 ? ` • 🚨 ממתין לתשלום בביט: ₪${trainerMetrics.totalPendingPaymentAmount.toLocaleString('he-IL')}` : ''} • יתרה לכלבים פעילים: ₪${trainerMetrics.totalRemainingLiability.toLocaleString('he-IL')}`;
+        icon = <CreditCard className="w-5 h-5 text-indigo-700" />;
+        badgeColor = 'bg-indigo-50 text-indigo-800 border-indigo-200';
+        filteredItems = [];
+      } else {
+        title = '🎓 כלבים בתהליך אילוף פעיל';
+        subtitle = `${trainerMetrics.activeTrainingDogsCount} כלבים בתהליך אילוף פעיל • מעקב שלבים וחיוב ₪1,500 למאלפת`;
+        icon = <GraduationCap className="w-5 h-5 text-purple-700" />;
+        badgeColor = 'bg-purple-50 text-purple-800 border-purple-200';
+        filteredItems = allTrainingBookings.filter(b => {
+          if (b.isTrainingCompleted) return false;
+          if (trainingFilter === 'full') return b.serviceType === 'training';
+          if (trainingFilter === 'day') return b.serviceType === 'day_training';
+          return true;
+        });
+      }
       break;
 
     case 'debt': {
@@ -433,6 +562,94 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* TRAINING TABS & FEEDBACK (Displayed when metricType === 'training') */}
+        {metricType === 'training' && (
+          <div className="p-3 sm:p-4 bg-purple-50/70 border-b border-purple-200/80 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-1.5 bg-white p-1 rounded-2xl border border-purple-200 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setTrainingViewTab('active')}
+                  className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                    trainingViewTab === 'active'
+                      ? 'bg-purple-700 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-purple-900 hover:bg-purple-50'
+                  }`}
+                >
+                  <GraduationCap className="w-4 h-4" />
+                  <span>🎓 כלבים בתהליך אילוף</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    trainingViewTab === 'active' ? 'bg-purple-900 text-purple-100' : 'bg-purple-100 text-purple-800'
+                  }`}>
+                    {trainerMetrics.activeTrainingDogsCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTrainingViewTab('completed')}
+                  className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                    trainingViewTab === 'completed'
+                      ? 'bg-emerald-700 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-emerald-900 hover:bg-emerald-50'
+                  }`}
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>🏁 הסתיים האילוף</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    trainingViewTab === 'completed' ? 'bg-emerald-900 text-emerald-100' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
+                    {trainerMetrics.completedTrainingDogsCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTrainingViewTab('trainer_payments')}
+                  className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                    trainingViewTab === 'trainer_payments'
+                      ? 'bg-indigo-700 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-indigo-900 hover:bg-indigo-50'
+                  }`}
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>🐾 ניהול תשלומי הילה</span>
+                  {trainerMetrics.totalPendingPaymentAmount > 0 && (
+                    <span className="text-[10px] bg-rose-500 text-white font-black px-1.5 py-0.2 rounded-full animate-pulse" title="יש קבלות שממתינות לתשלום בביט">
+                      !
+                    </span>
+                  )}
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    trainingViewTab === 'trainer_payments' ? 'bg-indigo-900 text-indigo-100' : 'bg-indigo-100 text-indigo-800'
+                  }`}>
+                    {trainerReceipts.length}
+                  </span>
+                </button>
+              </div>
+
+              {/* Action Button: Ingest / Enter Receipt from Hila */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedReceiptForEdit(undefined);
+                  setIsTrainerReceiptModalOpen(true);
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <span>➕</span>
+                <span>קליטת קבלה מהילה</span>
+              </button>
+            </div>
+
+            {trainerActionFeedback && (
+              <div className="p-2.5 bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold rounded-xl flex items-center justify-between animate-in fade-in">
+                <span>{trainerActionFeedback}</span>
+                <button type="button" onClick={() => setTrainerActionFeedback(null)} className="text-emerald-700 hover:text-emerald-900">✕</button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* REVENUE ANALYTICS & COLUMN CHARTS (Displayed when metricType === 'revenue') */}
         {metricType === 'revenue' && (
@@ -803,9 +1020,372 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
           )}
         </div>
 
-        {/* Bookings List */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-3">
-          {filteredItems.length === 0 ? (
+        {/* Bookings List / Trainer Payments View */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-4">
+          
+          {/* TRAINER HILA PAYMENTS DASHBOARD VIEW */}
+          {metricType === 'training' && trainingViewTab === 'trainer_payments' ? (
+            <div className="space-y-4">
+              
+              {/* Trainer Profile Card */}
+              <div className="bg-gradient-to-l from-indigo-900 via-indigo-800 to-purple-900 text-white p-4 sm:p-5 rounded-3xl shadow-md border border-indigo-700/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xl font-black">{HILA_TRAINER_INFO.name} ({HILA_TRAINER_INFO.businessName})</span>
+                    <span className="text-xs bg-indigo-500/40 text-indigo-100 px-2 py-0.5 rounded-full border border-indigo-400/40 font-bold">
+                      {HILA_TRAINER_INFO.status} • ע.פ {HILA_TRAINER_INFO.licensedBusinessId}
+                    </span>
+                    <span className="text-xs bg-emerald-500/30 text-emerald-200 px-2 py-0.5 rounded-full border border-emerald-400/40 font-bold font-mono" dir="ltr">
+                      📞 {HILA_TRAINER_INFO.phone}
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-indigo-100/90 font-medium max-w-2xl">
+                    תעריף קבוע: <strong>₪1,500 לכלב</strong> ב-3 פעימות שוות (1/3: 500 ₪, 2/3: 500 ₪, 3/3: 500 ₪ וסיום אילוף).
+                    הילה שולחת קבלה בוואטסאפ של הריזורט (לפעמים מראש מתוך אמון) • המערכת שואלת את המנהל ב-054-3200007 ומתייקת.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedReceiptForEdit(undefined);
+                      setIsTrainerReceiptModalOpen(true);
+                    }}
+                    className="bg-white hover:bg-indigo-50 active:scale-95 text-indigo-950 font-black text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+                  >
+                    <span>➕ קליטת קבלה</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ANOMALY ALERT CENTER (If any anomalies detected) */}
+              {trainerAnomalies.length > 0 && (
+                <div className="bg-rose-50/90 border-2 border-rose-300 rounded-3xl p-4 sm:p-5 shadow-xs space-y-3 animate-in fade-in">
+                  <div className="flex items-center gap-2 text-rose-900 font-black text-sm sm:text-base">
+                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                    <span>🚨 מרכז התראות ואי-התאמות בתשלומי הילה ({trainerAnomalies.length})</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    {trainerAnomalies.map((anom, idx) => (
+                      <div 
+                        key={idx}
+                        className={`p-3 rounded-2xl border flex flex-col justify-between gap-2 text-xs ${
+                          anom.severity === 'high' 
+                            ? 'bg-rose-100/80 border-rose-300 text-rose-950' 
+                            : 'bg-amber-50 border-amber-300 text-amber-950'
+                        }`}
+                      >
+                        <div>
+                          <div className="font-black flex items-center gap-1.5">
+                            <span>{anom.severity === 'high' ? '🛑' : '⚠️'}</span>
+                            <span>{anom.dogName || (anom.receipt ? `קבלה ${anom.receipt.receiptNumber}` : 'התראה')}</span>
+                          </div>
+                          <p className="font-medium mt-1 text-slate-800">{anom.message}</p>
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1 border-t border-rose-200/60 justify-end">
+                          {anom.receipt && !anom.receipt.isPaidActually && (
+                            <button
+                              type="button"
+                              onClick={() => handleMarkReceiptAsPaid(anom.receipt!.id)}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>סמן כשולם בביט</span>
+                            </button>
+                          )}
+                          {anom.receipt && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const q = formatManagerReceiptQuery(anom.receipt!);
+                                openWhatsAppMessage('0543200007', q);
+                              }}
+                              className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs"
+                            >
+                              <MessageSquare className="w-3 h-3" />
+                              <span>שאילתא למנהל (054-3200007)</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Financial KPI Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-2xs text-right">
+                  <div className="text-[11px] font-bold text-slate-500">💳 שולם בפועל בביט</div>
+                  <div className="text-base sm:text-lg font-black text-emerald-800 font-mono mt-0.5">
+                    ₪{trainerMetrics.totalPaidActually.toLocaleString('he-IL')}
+                  </div>
+                  <div className="text-[10px] text-slate-400">הועבר להילה</div>
+                </div>
+
+                <div className={`border p-3.5 rounded-2xl shadow-2xs text-right ${
+                  trainerMetrics.totalPendingPaymentAmount > 0 
+                    ? 'bg-rose-50 border-rose-300 ring-2 ring-rose-400/40' 
+                    : 'bg-white border-slate-200'
+                }`}>
+                  <div className="text-[11px] font-bold text-rose-800">⏳ ממתין לתשלום בביט</div>
+                  <div className="text-base sm:text-lg font-black text-rose-900 font-mono mt-0.5">
+                    ₪{trainerMetrics.totalPendingPaymentAmount.toLocaleString('he-IL')}
+                  </div>
+                  <div className="text-[10px] text-rose-700 font-medium">קבלות שנשלחו מראש</div>
+                </div>
+
+                <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-2xs text-right">
+                  <div className="text-[11px] font-bold text-slate-500">🎯 יתרת התחייבות פעילה</div>
+                  <div className="text-base sm:text-lg font-black text-indigo-900 font-mono mt-0.5">
+                    ₪{trainerMetrics.totalRemainingLiability.toLocaleString('he-IL')}
+                  </div>
+                  <div className="text-[10px] text-slate-400">עבור {trainerMetrics.activeTrainingDogsCount} כלבים פעילים</div>
+                </div>
+
+                <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-2xs text-right">
+                  <div className="text-[11px] font-bold text-slate-500">📄 סה״כ קבלות שנקלטו</div>
+                  <div className="text-base sm:text-lg font-black text-slate-900 font-mono mt-0.5">
+                    {trainerReceipts.length}
+                  </div>
+                  <div className="text-[10px] text-slate-400">קבלות מאלפת</div>
+                </div>
+              </div>
+
+              {/* Ingested Receipts List */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-black text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                    <span>📑 קבלות שנקלטו מהילה</span>
+                    <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-bold">
+                      {trainerReceipts.length}
+                    </span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedReceiptForEdit(undefined);
+                      setIsTrainerReceiptModalOpen(true);
+                    }}
+                    className="text-xs text-indigo-700 hover:text-indigo-900 font-black bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-xl cursor-pointer"
+                  >
+                    + קליטת קבלה
+                  </button>
+                </div>
+
+                {trainerReceipts.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-xs font-bold">עדיין לא נקלטו קבלות של הילה במערכת</p>
+                    <p className="text-[11px] text-slate-400 mt-1">לחץ על ״קליטת קבלה מהילה״ כדי להזין קבלה ראשונה</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {trainerReceipts.map(rcpt => (
+                      <div 
+                        key={rcpt.id}
+                        className="bg-slate-50/80 hover:bg-slate-50 border border-slate-200 rounded-2xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 transition-all"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-sm text-slate-900">
+                              קבלה מס׳ {rcpt.receiptNumber}
+                            </span>
+                            <span className="text-xs text-slate-500 font-mono">
+                              תאריך: {rcpt.receiptDate}
+                            </span>
+                            <span className="text-xs bg-indigo-50 text-indigo-900 border border-indigo-200 px-2 py-0.5 rounded-md font-black font-mono">
+                              ₪{rcpt.totalAmount.toLocaleString('he-IL')} ({rcpt.paymentMethod})
+                            </span>
+                            
+                            {rcpt.isPaidActually ? (
+                              <span className="text-[11px] bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-md font-black flex items-center gap-1">
+                                <Check className="w-3 h-3 text-emerald-700" />
+                                <span>שולם בביט ({rcpt.paidDate || 'מאושר'})</span>
+                              </span>
+                            ) : (
+                              <span className="text-[11px] bg-rose-100 text-rose-900 border border-rose-300 px-2 py-0.5 rounded-md font-black flex items-center gap-1 animate-pulse">
+                                <span>🚨 נשלחה קבלה מראש (ממתין לתשלום בביט)</span>
+                              </span>
+                            )}
+                          </div>
+
+                          {rcpt.rawLineText && (
+                            <p className="text-xs text-slate-600 font-medium">
+                              פירוט בקבלה: <span className="font-bold text-slate-800">{rcpt.rawLineText}</span>
+                            </p>
+                          )}
+
+                          {rcpt.allocations && rcpt.allocations.length > 0 && (
+                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                              <span className="text-[11px] text-slate-400 font-bold">שיוך לכלבים:</span>
+                              {rcpt.allocations.map((a, i) => (
+                                <span key={i} className="text-[11px] bg-purple-50 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-md font-bold">
+                                  🐾 {a.dogName} • תשלום {a.stage} (₪{a.amount})
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1.5 shrink-0 justify-end pt-2 md:pt-0 border-t md:border-t-0 border-slate-200">
+                          {!rcpt.isPaidActually && (
+                            <button
+                              type="button"
+                              onClick={() => handleMarkReceiptAsPaid(rcpt.id)}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-2xs cursor-pointer flex items-center gap-1"
+                              title="סמן כי התשלום בביט בוצע בפועל"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>סמן כשולם</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const q = formatManagerReceiptQuery(rcpt);
+                              openWhatsAppMessage('0543200007', q);
+                            }}
+                            className="bg-green-50 hover:bg-green-100 text-green-800 border border-green-300 font-bold text-xs px-2.5 py-1.5 rounded-xl cursor-pointer flex items-center gap-1"
+                            title="שלח שאילתא לוואטסאפ של המנהל 054-3200007"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-green-700" />
+                            <span>שאילתא למנהל</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedReceiptForEdit(rcpt);
+                              setIsTrainerReceiptModalOpen(true);
+                            }}
+                            className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs px-2.5 py-1.5 rounded-xl cursor-pointer flex items-center gap-1"
+                            title="ערוך קבלה"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>ערוך</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Training Dogs Payment Matrix */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 shadow-2xs space-y-3">
+                <h4 className="font-black text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                  <span>🐕 מצב תשלומים לפי כלבים באילוף (₪1,500 ב-3 פעימות)</span>
+                </h4>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-slate-500 font-bold bg-slate-50/80">
+                        <th className="p-2.5 rounded-tr-xl">שם הכלב והבעלים</th>
+                        <th className="p-2.5 text-center">פעימה 1/3 (₪500)</th>
+                        <th className="p-2.5 text-center">פעימה 2/3 (₪500)</th>
+                        <th className="p-2.5 text-center">פעימה 3/3 (₪500)</th>
+                        <th className="p-2.5 text-center">שולם להילה</th>
+                        <th className="p-2.5 text-center">יתרה לתשלום</th>
+                        <th className="p-2.5 text-center rounded-tl-xl">פעולות</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {allTrainingBookings.map(b => {
+                        const stages = getBookingTrainerStages(b, trainerReceipts);
+                        const s1 = stages.find(s => s.stage === '1/3');
+                        const s2 = stages.find(s => s.stage === '2/3');
+                        const s3 = stages.find(s => s.stage === '3/3');
+                        const paidTotal = stages.filter(s => s.status === 'paid').reduce((sum, s) => sum + s.amount, 0);
+                        const remaining = Math.max(0, 1500 - paidTotal);
+                        const isCompleted = b.isTrainingCompleted || (s1?.status === 'paid' && s2?.status === 'paid' && s3?.status === 'paid');
+
+                        return (
+                          <tr key={b.id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="p-2.5 font-bold text-slate-900">
+                              <div className="flex items-center gap-1.5">
+                                <span>🐾 {b.dogName}</span>
+                                <span className="text-slate-500 font-normal">({b.ownerName})</span>
+                                {isCompleted && (
+                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded font-black">
+                                    🏁 הסתיים
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="p-2.5 text-center">
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
+                                s1?.status === 'paid' 
+                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                  : s1?.status === 'pending_payment'
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  : 'bg-slate-100 text-slate-400'
+                              }`}>
+                                {s1?.status === 'paid' ? '✓ שולם (500 ₪)' : s1?.status === 'pending_payment' ? '⏳ ממתין לביט' : 'טרם'}
+                              </span>
+                            </td>
+
+                            <td className="p-2.5 text-center">
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
+                                s2?.status === 'paid' 
+                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                  : s2?.status === 'pending_payment'
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  : 'bg-slate-100 text-slate-400'
+                              }`}>
+                                {s2?.status === 'paid' ? '✓ שולם (500 ₪)' : s2?.status === 'pending_payment' ? '⏳ ממתין לביט' : 'טרם'}
+                              </span>
+                            </td>
+
+                            <td className="p-2.5 text-center">
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-[11px] ${
+                                s3?.status === 'paid' 
+                                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                                  : s3?.status === 'pending_payment'
+                                  ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                  : 'bg-slate-100 text-slate-400'
+                              }`}>
+                                {s3?.status === 'paid' ? '✓ שולם (500 ₪)' : s3?.status === 'pending_payment' ? '⏳ ממתין לביט' : 'טרם'}
+                              </span>
+                            </td>
+
+                            <td className="p-2.5 text-center font-black font-mono text-emerald-800">
+                              ₪{paidTotal.toLocaleString('he-IL')}
+                            </td>
+
+                            <td className="p-2.5 text-center font-black font-mono text-indigo-900">
+                              ₪{remaining.toLocaleString('he-IL')}
+                            </td>
+
+                            <td className="p-2.5 text-center">
+                              {!isCompleted ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleGraduateDog(b.id)}
+                                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold px-2 py-1 rounded-lg text-[10px] shadow-2xs cursor-pointer"
+                                  title="סמן כי תהליך האילוף הושלם והעבר ללשונית הסתיים האילוף"
+                                >
+                                  🎓 הסתיים האילוף
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-emerald-700 font-bold">✓ הושלם</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          ) : filteredItems.length === 0 ? (
             <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
               <Dog className="w-12 h-12 mx-auto text-slate-300 mb-2" />
               <p className="font-bold text-slate-700 text-sm">לא נמצאו פריטים להצגה</p>
@@ -820,6 +1400,13 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
               const remainingDebt = Math.max(0, totalPrice - depositAmount);
               const daysCount = calculateDaysCount(b.startDate, b.endDate);
               const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
+
+              // Trainer Hila Stages for this dog
+              const isTrainingDog = b.serviceType === 'training' || b.serviceType === 'day_training' || (b.notes || '').includes('אילוף');
+              const trainerStages = isTrainingDog ? getBookingTrainerStages(b, trainerReceipts) : [];
+              const s1 = trainerStages.find(s => s.stage === '1/3');
+              const s2 = trainerStages.find(s => s.stage === '2/3');
+              const s3 = trainerStages.find(s => s.stage === '3/3');
 
               return (
                 <div
@@ -873,40 +1460,13 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         </span>
                       )}
 
-                      {/* Revenue Metric Badge: 4 Categories */}
-                      {metricType === 'revenue' && (() => {
-                        const notes = (b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '');
-                        const isGrow = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref) || b.id.includes(t.ref));
-                        const isBank = (b.ownerName || '').includes('רונן') || (b.ownerName || '').includes('מלמוד') || notes.includes('העברה בנקאית');
-                        const isInstallment = notes.includes('מתוך') || notes.includes('תשלום ראשון') || (b.ownerName || '').includes('דורין') || (b.ownerName || '').includes('לוקס');
-                        
-                        if (isInstallment) {
-                          return (
-                            <span className="text-[10px] bg-indigo-50 text-indigo-900 font-bold px-1.5 py-0.5 rounded border border-indigo-300">
-                              🗓️ 2+3. נסלק בתשלומים (יכנס ב-10 ובחודש הבא)
-                            </span>
-                          );
-                        }
-                        if (isGrow) {
-                          return (
-                            <span className="text-[10px] bg-sky-50 text-sky-800 font-bold px-1.5 py-0.5 rounded border border-sky-300">
-                              💳 2. יכנס ב-10 לחודש (GROW)
-                            </span>
-                          );
-                        }
-                        if (isBank) {
-                          return (
-                            <span className="text-[10px] bg-teal-50 text-teal-900 font-bold px-1.5 py-0.5 rounded border border-teal-300">
-                              🏛️ הועבר ישירות לחשבון (כבר בבנק)
-                            </span>
-                          );
-                        }
-                        return (
-                          <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-1.5 py-0.5 rounded border border-amber-300">
-                            💵 4. נסלק במזומן
-                          </span>
-                        );
-                      })()}
+                      {/* Training Completed Badge */}
+                      {b.isTrainingCompleted && (
+                        <span className="text-xs bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-md font-black flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>🏁 הסתיים האילוף</span>
+                        </span>
+                      )}
                     </div>
 
                     {/* Metadata: Owner, Phone, Dates */}
@@ -925,6 +1485,59 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         <span className="text-slate-400 font-semibold">({daysCount} ימים)</span>
                       </span>
                     </div>
+
+                    {/* TRAINER HILA STAGES PILLS ON CARD */}
+                    {isTrainingDog && (
+                      <div className="pt-1.5 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] font-bold text-purple-950 bg-purple-100/70 border border-purple-200 px-2 py-0.5 rounded-md">
+                          🐾 תשלומי הילה (₪1,500):
+                        </span>
+
+                        <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
+                          s1?.status === 'paid' 
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            : s1?.status === 'pending_payment'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-slate-100 text-slate-500 border border-slate-200'
+                        }`}>
+                          <span>1/3 (500 ₪)</span>
+                          {s1?.status === 'paid' ? '✓' : s1?.status === 'pending_payment' ? '⏳' : '○'}
+                        </span>
+
+                        <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
+                          s2?.status === 'paid' 
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            : s2?.status === 'pending_payment'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-slate-100 text-slate-500 border border-slate-200'
+                        }`}>
+                          <span>2/3 (500 ₪)</span>
+                          {s2?.status === 'paid' ? '✓' : s2?.status === 'pending_payment' ? '⏳' : '○'}
+                        </span>
+
+                        <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
+                          s3?.status === 'paid' 
+                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                            : s3?.status === 'pending_payment'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-slate-100 text-slate-500 border border-slate-200'
+                        }`}>
+                          <span>3/3 (500 ₪)</span>
+                          {s3?.status === 'paid' ? '✓' : s3?.status === 'pending_payment' ? '⏳' : '○'}
+                        </span>
+
+                        {!b.isTrainingCompleted && (
+                          <button
+                            type="button"
+                            onClick={() => handleGraduateDog(b.id)}
+                            className="text-[10px] bg-purple-700 hover:bg-purple-800 text-white font-bold px-2 py-0.5 rounded-md cursor-pointer transition-all active:scale-95 mr-1"
+                            title="סמן כעת כי תהליך האילוף הושלם והעבר ללשונית הסתיים האילוף"
+                          >
+                            🎓 העבר ל-הסתיים האילוף
+                          </button>
+                        )}
+                      </div>
+                    )}
 
                     {b.notes && (
                       <p className="text-xs text-amber-800/90 italic bg-amber-50/60 px-2 py-1 rounded-lg border border-amber-200/60 max-w-xl">
@@ -1061,6 +1674,23 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
         </div>
 
       </div>
+
+      {/* Trainer Receipt Intake & Processing Modal */}
+      {isTrainerReceiptModalOpen && (
+        <TrainerReceiptIntakeModal
+          isOpen={isTrainerReceiptModalOpen}
+          onClose={() => {
+            setIsTrainerReceiptModalOpen(false);
+            setSelectedReceiptForEdit(undefined);
+          }}
+          onSaveReceipt={handleSaveReceipt}
+          trainingBookings={allTrainingBookings}
+          existingReceipt={selectedReceiptForEdit}
+          greenApiId={settings?.greenApiIdInstance}
+          greenApiToken={settings?.greenApiToken}
+        />
+      )}
+
     </div>
   );
 };

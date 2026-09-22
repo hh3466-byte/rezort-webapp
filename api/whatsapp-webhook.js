@@ -137,7 +137,126 @@ export default async function handler(req, res) {
   const phoneSuffix = cleanPhone.slice(-7); // Last 7 digits
   const senderName = senderData.senderName || senderData.senderContactName || '';
 
-  // 3. Anti-spam / Cooldown check (don't reply more than once every 6 hours)
+  // 3. Special handling for Hila the Trainer (0526908943) and Manager (0543200007)
+  const isHila = cleanPhone.includes('526908943');
+  const isManager = cleanPhone.includes('543200007');
+
+  if (isHila) {
+    const msgData = payload.messageData || {};
+    const text = msgData.textMessageData?.textMessage || 
+                 msgData.extendedTextMessageData?.text || 
+                 msgData.fileMessageData?.caption || '';
+    const fileUrl = msgData.fileMessageData?.downloadUrl || '';
+
+    console.log('--- Incoming message from Hila the Trainer ---', { text, fileUrl });
+
+    // Send immediate query to Manager (054-3200007)
+    const managerChatId = '972543200007@c.us';
+    let alertMsg = `🐾 *התקבלה קבלה/הודעה מהילה המאלפת (Halodog)*\n`;
+    if (text) alertMsg += `\n📄 *פרטי הודעה/קבלה:* "${text}"`;
+    if (fileUrl) alertMsg += `\n📷 *צורפה תמונת קבלה לתיוק*`;
+    alertMsg += `\n\n❓ *האם שולם בפועל וכמה?*\nנא להשיב כאן (לדוגמה: "שולם 1000 בביט") או להעביר אישור תשלום ביט כדי שאתייק אותו בריזורט ואסגור את החשבון.`;
+
+    await sendWhatsAppMessage(managerChatId, alertMsg);
+
+    // Save pending receipt to Supabase settings
+    try {
+      const sRes = await fetch(`${SUPABASE_URL}/rest/v1/resort_settings?id=eq.default&select=data`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+      });
+      if (sRes.ok) {
+        const sData = await sRes.json();
+        const curData = sData?.[0]?.data || {};
+        const curReceipts = Array.isArray(curData.trainerReceipts) ? curData.trainerReceipts : [];
+        const newReceipt = {
+          id: `rcpt-${Date.now()}`,
+          receiptNumber: (text.match(/(?:קבלה|מס'|מספר)\s*[:#]?\s*(\d+)/i) || [])[1] || 'חדשה',
+          receiptDate: new Date().toISOString().substring(0, 10),
+          totalAmount: 1000,
+          paymentMethod: 'ביט',
+          rawLineText: text || 'תמונת קבלה מוואטסאפ',
+          receiptImageUrl: fileUrl,
+          allocations: [],
+          isPaidActually: false,
+          managerQuerySent: true,
+          managerQuerySentAt: new Date().toISOString(),
+          status: 'pending_payment',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        curReceipts.unshift(newReceipt);
+        await fetch(`${SUPABASE_URL}/rest/v1/resort_settings?id=eq.default`, {
+          method: 'PATCH',
+          headers: {
+            apikey: SUPABASE_KEY,
+            Authorization: `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ data: { ...curData, trainerReceipts: curReceipts } })
+        });
+      }
+    } catch (dbErr) {
+      console.warn('Error saving Hila receipt to Supabase:', dbErr);
+    }
+
+    return res.status(200).json({ ok: true, handled: 'hila_notified_manager' });
+  }
+
+  if (isManager) {
+    const msgData = payload.messageData || {};
+    const text = (msgData.textMessageData?.textMessage || 
+                  msgData.extendedTextMessageData?.text || 
+                  msgData.fileMessageData?.caption || '').trim();
+    const fileUrl = msgData.fileMessageData?.downloadUrl || '';
+
+    console.log('--- Incoming message from Manager (0543200007) ---', { text, fileUrl });
+
+    const isPaymentConfirm = text.includes('שולם') || text.includes('ביט') || text.includes('העברתי') || fileUrl.length > 0;
+    if (isPaymentConfirm) {
+      // Update latest pending receipt in Supabase settings
+      try {
+        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/resort_settings?id=eq.default&select=data`, {
+          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
+        });
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          const curData = sData?.[0]?.data || {};
+          const curReceipts = Array.isArray(curData.trainerReceipts) ? curData.trainerReceipts : [];
+          let updated = false;
+          for (const r of curReceipts) {
+            if (!r.isPaidActually) {
+              r.isPaidActually = true;
+              r.paidDate = new Date().toISOString().substring(0, 10);
+              r.paymentConfirmationNotes = text || 'אושר ע"י מנהל בוואטסאפ';
+              if (fileUrl) r.paymentConfirmationUrl = fileUrl;
+              r.status = 'paid';
+              r.updatedAt = new Date().toISOString();
+              updated = true;
+              break;
+            }
+          }
+          if (updated) {
+            await fetch(`${SUPABASE_URL}/rest/v1/resort_settings?id=eq.default`, {
+              method: 'PATCH',
+              headers: {
+                apikey: SUPABASE_KEY,
+                Authorization: `Bearer ${SUPABASE_KEY}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ data: { ...curData, trainerReceipts: curReceipts } })
+            });
+          }
+        }
+      } catch (dbErr) {
+        console.warn('Error updating manager confirmation:', dbErr);
+      }
+
+      await sendWhatsAppMessage(chatId, `✅ *אישור התשלום תויק בהצלחה בריזורט!*\nהקבלה של הילה עודכנה כשולמה בביט והחשבון סגור.`);
+      return res.status(200).json({ ok: true, handled: 'manager_payment_filed' });
+    }
+  }
+
+  // 4. Anti-spam / Cooldown check (don't reply more than once every 6 hours)
   const nowMs = Date.now();
   const lastSent = cooldownMap.get(cleanPhone);
   if (lastSent && (nowMs - lastSent) < 6 * 60 * 60 * 1000) {

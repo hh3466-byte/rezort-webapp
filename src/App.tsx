@@ -1746,59 +1746,41 @@ export default function App() {
                       onClick={() => setIsMonthlyRefundsModalOpen(true)}
                       role="button"
                       tabIndex={0}
-                      className={`flex-1 mx-1 sm:mx-2 px-3 py-2 rounded-xl border transition-all cursor-pointer group flex items-center justify-between gap-2 shadow-2xs ${
+                      className={`flex-1 mx-1 sm:mx-2 px-3.5 py-2.5 rounded-2xl border transition-all cursor-pointer group flex items-center justify-between gap-3 shadow-2xs hover:shadow-xs active:scale-[0.99] ${
                         monthTotalRefunds > 0
                           ? 'bg-rose-50/90 hover:bg-rose-100/90 border-rose-300 hover:border-rose-400 text-rose-950 ring-1 ring-rose-300/60'
                           : 'bg-white/85 hover:bg-slate-100/80 border-slate-200 hover:border-slate-300 text-slate-700'
                       }`}
-                      title="לחץ לצפייה בפירוט כל ההחזרים הכספיים שבוצעו החודש, ניהול סיבות ומעקב"
+                      title="לחץ לצפייה בפירוט מלא של כל ההחזרים הכספיים שבוצעו החודש, ניהול סיבות ומעקב"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0 border ${
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 border ${
                           monthTotalRefunds > 0
-                            ? 'bg-rose-100 border-rose-300 text-rose-700'
+                            ? 'bg-rose-100 border-rose-300 text-rose-700 shadow-2xs'
                             : 'bg-slate-100 border-slate-200 text-slate-500'
                         }`}>
                           ↩️
                         </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-black truncate">
-                              החזרים כספיים החודש
-                            </span>
-                            <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-md border ${
-                              monthTotalRefunds > 0
-                                ? 'bg-rose-200/80 text-rose-900 border-rose-300'
-                                : 'bg-slate-100 text-slate-500 border-slate-200'
-                            }`}>
-                              {monthRefundsList.length} {monthRefundsList.length === 1 ? 'החזר' : 'החזרים'}
-                            </span>
-                          </div>
-                          
-                          {/* Reason preview if there are refunds */}
-                          {monthRefundsList.length > 0 ? (
-                            <p className="text-[11px] text-rose-800/90 truncate font-medium mt-0.5">
-                              {monthRefundsList[0].dogName} ({monthRefundsList[0].ownerName}) • {monthRefundsList[0].refundReason || 'ביטול הזמנה'}
-                              {monthRefundsList.length > 1 && ` • ועוד ${monthRefundsList.length - 1}`}
-                            </p>
-                          ) : (
-                            <p className="text-[11px] text-slate-400 truncate font-medium mt-0.5">
-                              לא בוצעו החזרים כספיים החודש
-                            </p>
-                          )}
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span className="text-sm sm:text-base font-black tracking-tight truncate">
+                            החזרים כספיים החודש
+                          </span>
+                          <span className={`text-xs font-black px-2 py-0.5 rounded-full border ${
+                            monthTotalRefunds > 0
+                              ? 'bg-rose-200/90 text-rose-900 border-rose-300 shadow-2xs'
+                              : 'bg-slate-100 text-slate-500 border-slate-200'
+                          }`}>
+                            {monthRefundsList.length} {monthRefundsList.length === 1 ? 'החזר' : 'החזרים'}
+                          </span>
                         </div>
                       </div>
 
-                      <div className="text-left shrink-0">
-                        <div className={`text-base sm:text-lg font-black font-mono leading-none ${
+                      <div className="text-left shrink-0 pl-1">
+                        <div className={`text-xl sm:text-2xl font-black font-mono leading-none tracking-tight ${
                           monthTotalRefunds > 0 ? 'text-rose-700' : 'text-slate-500'
                         }`}>
                           {monthTotalRefunds > 0 ? `-₪${monthTotalRefunds.toLocaleString('he-IL')}` : '₪0'}
                         </div>
-                        <span className="text-[10px] font-bold text-rose-600/80 group-hover:text-rose-800 transition-colors flex items-center gap-0.5 justify-end mt-0.5">
-                          <span>ניהול</span>
-                          <span>←</span>
-                        </span>
                       </div>
                     </div>
 

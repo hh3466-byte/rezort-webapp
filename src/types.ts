@@ -51,6 +51,9 @@ export interface Booking {
   refundDate?: string;
   refundNotes?: string;
   refundReason?: string;
+  trainerStages?: TrainerPaymentStage[];
+  isTrainingCompleted?: boolean;
+  trainingCompletedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -284,4 +287,48 @@ export interface DigitalVoucher {
   redeemedByDog?: string;
   redeemedBookingId?: string;
   notes?: string;
+}
+
+export type TrainerStageType = '1/3' | '2/3' | '3/3' | 'custom';
+
+export interface TrainerPaymentStage {
+  stage: TrainerStageType;
+  label: string; // e.g. "תשלום 1/3 (ראשון)", "תשלום 2/3 (אמצע)", "תשלום 3/3 (סוף תשלום)"
+  amount: number; // default 500 NIS
+  isPaidActually: boolean; // האם שולם בפועל ע"י הריזורט
+  paidDate?: string;
+  paymentMethod?: PaymentMethod;
+  receiptNumber?: string; // מס' קבלה מהילה
+  receiptDate?: string;
+  receiptImageUrl?: string;
+  paymentConfirmationUrl?: string; // צילום אישור תשלום ביט שהמנהל שלח
+  notes?: string;
+  updatedAt: string;
+}
+
+export interface TrainerReceiptAllocation {
+  bookingId: string;
+  dogName: string;
+  stage: TrainerStageType;
+  amount: number;
+}
+
+export interface TrainerReceipt {
+  id: string;
+  receiptNumber: string;
+  receiptDate: string;
+  totalAmount: number;
+  paymentMethod: string;
+  receiptImageUrl?: string;
+  rawLineText?: string; // e.g. "גוי תשלום 2/3 + תיאן תשלום 1/3"
+  allocations: TrainerReceiptAllocation[];
+  isPaidActually: boolean; // האם הועבר בפועל בביט/בנק
+  paidDate?: string;
+  paymentConfirmationUrl?: string; // צילום אישור ביט/העברה
+  paymentConfirmationNotes?: string;
+  managerQuerySent: boolean; // האם נשלחה שאלה לוואטסאפ של 0543200007
+  managerQuerySentAt?: string;
+  status: 'pending_payment' | 'paid' | 'archived';
+  createdAt: string;
+  updatedAt: string;
 }

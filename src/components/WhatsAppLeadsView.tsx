@@ -230,14 +230,6 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
       const enriched = raw.map(c => enrichChatWithSystemData(c, bookings, intakeRequests, nameOverrides));
       
       const sorted = [...enriched].sort((a, b) => {
-        const statusA = getChatTreatmentStatus(a);
-        const statusB = getChatTreatmentStatus(b);
-        if (CRM_PRIORITY_ORDER[statusA] !== CRM_PRIORITY_ORDER[statusB]) {
-          return CRM_PRIORITY_ORDER[statusA] - CRM_PRIORITY_ORDER[statusB];
-        }
-        const unreadA = a.unreadCount || 0;
-        const unreadB = b.unreadCount || 0;
-        if (unreadA !== unreadB) return unreadB - unreadA;
         return (b.timestamp || 0) - (a.timestamp || 0);
       });
 
@@ -424,19 +416,6 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
       return status === filter;
     })
     .sort((a, b) => {
-      const statusA = getChatTreatmentStatus(a);
-      const statusB = getChatTreatmentStatus(b);
-
-      if (CRM_PRIORITY_ORDER[statusA] !== CRM_PRIORITY_ORDER[statusB]) {
-        return CRM_PRIORITY_ORDER[statusA] - CRM_PRIORITY_ORDER[statusB];
-      }
-
-      const unreadA = a.unreadCount || 0;
-      const unreadB = b.unreadCount || 0;
-      if (unreadA !== unreadB) {
-        return unreadB - unreadA;
-      }
-
       return (b.timestamp || 0) - (a.timestamp || 0);
     });
 
@@ -731,31 +710,51 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
           
           {/* Search Bar with interactive button */}
           <div className="p-3 border-b border-slate-100 bg-slate-50/70 space-y-2">
-            <div className="relative flex items-center">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="חפש לפי שם, כלב או טלפון..."
-                className="w-full bg-white border border-slate-200 focus:border-emerald-500 rounded-xl pr-9 pl-8 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs"
-              />
-              <button
-                type="button"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600 p-0.5"
-                title="חפש"
-              >
-                <Search className="w-4 h-4" />
-              </button>
-              {searchQuery && (
+            <div className="flex items-center gap-1.5">
+              <div className="relative flex-1 flex items-center">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="חפש לפי שם, כלב או טלפון..."
+                  className="w-full bg-white border border-slate-200 focus:border-emerald-500 rounded-xl pr-9 pl-8 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs"
+                />
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-0.5"
-                  title="נקה חיפוש"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600 p-0.5"
+                  title="חפש"
                 >
-                  ✕
+                  <Search className="w-4 h-4" />
                 </button>
-              )}
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-0.5"
+                    title="נקה חיפוש"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Stealth Mode Button in Sidebar */}
+              <button
+                type="button"
+                onClick={handleToggleStealthMode}
+                className={`p-2 rounded-xl border font-bold text-xs transition-all active:scale-95 cursor-pointer shrink-0 shadow-2xs flex items-center justify-center ${
+                  isStealthMode 
+                    ? 'bg-purple-100 text-purple-900 border-purple-400 ring-2 ring-purple-400/40'
+                    : 'bg-white hover:bg-purple-50 text-slate-600 hover:text-purple-800 border-slate-200 hover:border-purple-300'
+                }`}
+                title={isStealthMode ? 'מצב קריאה סמויה פעיל (קוד 3466) - לחץ לכיבוי' : 'לקרוא הודעות מבלי שיסומנו כנקראו (לחץ להקשת קוד 3466)'}
+              >
+                {isStealthMode ? (
+                  <UserCheck className="w-4 h-4 text-purple-700" />
+                ) : (
+                  <User className="w-4 h-4 text-slate-600" />
+                )}
+              </button>
             </div>
 
             {/* Classification Filter Tabs - 4 explicit sorting buttons: שלא נקראו/חדשות, שיחות מתנהלות, ממתינים לתגובה, כל השיחות */}
