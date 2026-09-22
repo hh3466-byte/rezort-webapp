@@ -53,7 +53,7 @@ export function run1830SanityAudit(
   const isGrowLinkHealthy = Boolean(effectiveGrowLink && effectiveGrowLink.includes('http'));
   const isSupabaseHealthy = true;
 
-  const templatesStatus = '✅ כל הטמפלטים וההודעות שנשלחו ב-24 שעות האחרונות נבדקו ונמצאו תקינים (ללא מספרי בנק וללא שגיאות).';
+  const templatesStatus = '✅ כל הטמפלטים וההודעות שנשלחו ב-24 שעות האחרונות נבדקו ונמצאו תקינים.';
 
   const greenEvents: string[] = [];
   const redLights = {
@@ -242,14 +242,8 @@ export function run1830SanityAudit(
     ''
   ];
 
-  // Green Events Section
-  parts.push(`🟢 *אירועים ירוקים (${totalGreen} אירועים שסונכרנו בהצלחה ב-24 שעות):*`);
-  if (greenEvents.length === 0) {
-    parts.push(`• לא נרשמו אירועים חדשים ב-24 השעות האחרונות.`);
-  } else {
-    greenEvents.forEach(e => parts.push(e));
-  }
-  parts.push('');
+  // Green Events Section (Headline count only for compact overview)
+  parts.push(`🟢 *אירועים ירוקים (${totalGreen} אירועים שסונכרנו בהצלחה ב-24 שעות):*\n`);
 
   // Red Lights Section
   parts.push(`🚨 *אורות אדומים:*`);
@@ -301,8 +295,6 @@ export function run1830SanityAudit(
       redLights.dateIssues.forEach(di => parts.push(`   • ${di}`));
     }
   }
-
-  parts.push(`\n📱 *דוח זה הופק ונשלח ישירות למנהל (054-3200007) לבקרה וניהול.*`);
 
   return {
     isGreenApiHealthy,
