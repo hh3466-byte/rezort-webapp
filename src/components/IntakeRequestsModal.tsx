@@ -1051,14 +1051,27 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       
                       {/* 4 Lines - Arranged one below the other, BIG and clear */}
                       <div className="flex flex-col gap-1.5 text-right">
-                        {/* שורה ראשונה: שם הכלב */}
+                        {/* שורה ראשונה: שם הכלב / שמות כל הכלבים בטופס */}
                         <div className="flex items-center gap-2.5 flex-wrap">
-                          <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                            {req.dogName}
+                          <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-1.5 flex-wrap">
+                            <span>{req.dogName}</span>
+                            {req.additionalDogs && req.additionalDogs.length > 0 && (
+                              <>
+                                <span className="text-emerald-700 font-black">+</span>
+                                <span className="text-emerald-950 font-black">
+                                  {req.additionalDogs.map(d => d.dogName).join(' + ')}
+                                </span>
+                              </>
+                            )}
                           </h3>
                           <span className="text-sm font-bold text-slate-500">
                             ({req.dogBreed || 'מעורב'}{req.dogAge ? `, ${req.dogAge}` : ''})
                           </span>
+                          {req.additionalDogs && req.additionalDogs.length > 0 && (
+                            <span className="bg-purple-100 text-purple-950 border border-purple-300 text-[11px] font-black px-2 py-0.5 rounded-lg shadow-2xs">
+                              🐾 {1 + req.additionalDogs.length} כלבים בטופס
+                            </span>
+                          )}
                           
                           {/* Status Badge */}
                           <span className={`text-xs px-3 py-1 rounded-full font-black border shadow-2xs flex items-center gap-1.5 ${
