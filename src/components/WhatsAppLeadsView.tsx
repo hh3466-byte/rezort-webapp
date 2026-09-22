@@ -47,7 +47,10 @@ import {
   generateUnansweredFollowUpMarketingText,
   detectCustomerIntent,
   DetectedIntent,
-  getChatTreatmentStatus as getChatStatusFromService
+  getChatTreatmentStatus as getChatStatusFromService,
+  getReadChatTimestamps,
+  markChatAsRead,
+  markAllChatsAsRead
 } from '../services/whatsappCrmService';
 
 export const CRM_PRIORITY_ORDER: Record<'new' | 'in_chat' | 'waiting_reply' | 'handled', number> = {
@@ -293,8 +296,10 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   // 2. Fetch messages when selected chat changes
   const loadChatMessages = async (chat: EnrichedWhatsAppChat) => {
     setIsLoadingMessages(true);
-    // חוק ברזל: צפייה בהודעות במחשב אינה מסמנת כנקרא ואינה מאפסת unreadCount!
-    // ההודעות נשארות לשמוליק בקטגוריות "שלא נקראו / חדשות" בנייד עד למענה בפועל.
+    // סימון אוטומטי של השיחה כנקראה ברגע ששמוליק פתח אותה
+    markChatAsRead(chat.cleanPhone || chat.id, chat.timestamp || Date.now());
+    setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
+
     try {
       const msgs = await fetchGreenApiChatHistory(chat.id, 50, settings);
       setMessages(msgs);
@@ -442,10 +447,8 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
         key={chat.id}
         onClick={() => {
           setSelectedChat(chat);
-          // אם לא במצב קריאה סמויה (מצב רגיל של שמוליק): איפוס מונה וסימון כנקרא
-          if (!isStealthMode && (chat.unreadCount || 0) > 0) {
-            setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
-          }
+          markChatAsRead(chat.cleanPhone || chat.id, chat.timestamp || Date.now());
+          setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unreadCount: 0 } : c));
         }}
         className={`p-3 transition-all cursor-pointer flex items-start gap-3 select-none ${
           isSelected
@@ -792,6 +795,29 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                 </button>
               ))}
             </div>
+
+            {/* Quick "Mark All as Read" toolbar row when there are unread chats */}
+            {newCount > 0 && (
+              <div className="pt-2 flex items-center justify-between gap-2 px-1 bg-rose-50/60 p-2 rounded-xl border border-rose-200/80 mt-1.5">
+                <span className="text-[11px] text-rose-800 font-black flex items-center gap-1">
+                  <span className="animate-pulse">🔥</span>
+                  <span>{newCount} פניות ממתינות</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    markAllChatsAsRead(chats);
+                    setChats(prev => prev.map(c => ({ ...c, unreadCount: 0 })));
+                    setFilter('in_chat');
+                  }}
+                  className="bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white text-[11px] font-black px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                  title="סמן את כל ההודעות כנקראו ואפס את המונה"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>סמן הכל כנקרא ✅</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Chats Scroll List */}

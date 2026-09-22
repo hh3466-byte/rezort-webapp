@@ -449,9 +449,13 @@ export default function App() {
 
     checkCrmNew();
     const interval = setInterval(checkCrmNew, 45000);
+    window.addEventListener('crm-chats-read-updated', checkCrmNew);
+    window.addEventListener('storage', checkCrmNew);
     return () => {
       isMounted = false;
       clearInterval(interval);
+      window.removeEventListener('crm-chats-read-updated', checkCrmNew);
+      window.removeEventListener('storage', checkCrmNew);
     };
   }, [settings?.greenApiIdInstance, settings?.greenApiToken, bookings, intakeRequests]);
 

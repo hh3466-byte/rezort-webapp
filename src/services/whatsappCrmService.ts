@@ -156,12 +156,15 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
     incoming.forEach(m => processMessage(m, 'incoming'));
     outgoing.forEach(m => processMessage(m, 'outgoing'));
 
-    // חוק ברזל: אם ההודעה האחרונה בשיחה היא הודעה נכנסת מהלקוח (lastMessageType === 'incoming')
-    // השיחה טרם נענתה ונשארת תמיד עבור שמוליק בסטטוס "שלא נקראה" (unreadCount >= 1)!
-    // צפייה במחשב, ב-CRM או סימון נקרא ב-WhatsApp Web לעולם אינם מאפסים את הסטטוס הזה!
+    // Check if chat was marked as read by Shmulik in CRM or on device
+    const readTimestamps = getReadChatTimestamps();
     for (const chat of chatMap.values()) {
-      if (chat.lastMessageType === 'incoming') {
-        chat.unreadCount = Math.max(chat.unreadCount || 0, 1);
+      const cleanP = cleanPhoneNumber(chat.id);
+      const lastRead = readTimestamps[cleanP] || 0;
+      if (chat.lastMessageType === 'incoming' && (chat.timestamp || 0) > lastRead) {
+        chat.unreadCount = Math.max(chat.unreadCount || 1, 1);
+      } else {
+        chat.unreadCount = 0;
       }
     }
 
@@ -714,89 +717,121 @@ export function enrichChatWithSystemData(
 
 /**
  * Determines the CRM treatment status of a chat.
- * Aligns perfectly with Shmulik's requirement:
- * - Customers with bookings or approved/rejected intakes -> 'handled'
- * - Older than 24h with outgoing message (unanswered) -> 'handled'
- * - Older than 48h -> 'handled'
- * - Negative / cancellation intents -> 'handled'
- * - Genuine new incoming messages within 24h -> 'new'
- * - Active ongoing dialogue within 24h -> 'in_chat'
- * - Outgoing waiting for reply within 24h -> 'waiting_reply'
+const READ_CHATS_KEY = 'crm_read_chat_timestamps';
+
+/**
+ * Returns a map of phone numbers to timestamp of when the chat was marked as read by Shmulik
+ */
+export function getReadChatTimestamps(): Record<string, number> {
+  if (typeof window === 'undefined' || !window.localStorage) return {};
+  try {
+    const raw = localStorage.getItem(READ_CHATS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Marks a specific chat as read by Shmulik
+ */
+export function markChatAsRead(phoneOrChatId: string, timestamp = Date.now()): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const cleanP = cleanPhoneNumber(phoneOrChatId);
+    if (!cleanP) return;
+    const cur = getReadChatTimestamps();
+    cur[cleanP] = Math.max(cur[cleanP] || 0, timestamp);
+    localStorage.setItem(READ_CHATS_KEY, JSON.stringify(cur));
+    window.dispatchEvent(new CustomEvent('crm-chats-read-updated'));
+  } catch {}
+}
+
+/**
+ * Marks all chats as read by Shmulik
+ */
+export function markAllChatsAsRead(chats: { cleanPhone?: string; id?: string; timestamp?: number }[]): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const cur = getReadChatTimestamps();
+    const now = Date.now();
+    chats.forEach(c => {
+      const p = cleanPhoneNumber(c.cleanPhone || c.id || '');
+      if (p) {
+        cur[p] = Math.max(cur[p] || 0, c.timestamp || now, now);
+      }
+    });
+    localStorage.setItem(READ_CHATS_KEY, JSON.stringify(cur));
+    window.dispatchEvent(new CustomEvent('crm-chats-read-updated'));
+  } catch {}
+}
+
+/**
+ * Determines treatment status for a lead/chat in the CRM:
+ * - 'new': פנייה חדשה / הודעה נכנסת שלא נקראה
+ * - 'in_chat': שיחה מתנהלת (הודעות נקראו / דו-שיח פעיל)
+ * - 'waiting_reply': נשלח מענה או שאלון וממתינים לתגובה
+ * - 'handled': טופל / ארכוב
  */
 export function getChatTreatmentStatus(
   chat: EnrichedWhatsAppChat,
-  statusOverrides: Record<string, string> = {}
+  statusOverrides: Record<string, string> = {},
+  readTimestamps: Record<string, number> = getReadChatTimestamps()
 ): 'new' | 'in_chat' | 'waiting_reply' | 'handled' {
-  // 1. לקוח שיש לו הזמנה ביומן, שאלון שאושר, שאלון שנדחה/בוטל, או סומן לביטול (כמו חגי הילמן) -> סגור/טופל!
-  if (
-    chat.classification === 'customer_with_booking' || 
-    (chat.matchedBooking && chat.matchedBooking.stayStatus !== 'cancelled') || 
-    chat.matchedIntake?.status === 'approved' ||
-    chat.matchedIntake?.status === 'rejected' ||
-    (chat.matchedBooking && chat.matchedBooking.stayStatus === 'cancelled') ||
-    chat.cleanPhone === '0543200007' ||
-    (chat.name && chat.name.includes('חגי הילמן'))
-  ) {
+  if (isExcludedChat(chat.name, chat.cleanPhone, chat.id)) {
     return 'handled';
   }
 
-  const incCount = chat.incomingCount || 0;
-  const outCount = chat.outgoingCount || 0;
   const now = Date.now();
   const chatTime = chat.timestamp ? (chat.timestamp < 1e12 ? chat.timestamp * 1000 : chat.timestamp) : now;
   const ageHours = (now - chatTime) / (1000 * 60 * 60);
 
-  // 2. חוק ברזל: "אם לקוח לא ענה, תסיר אותו מהרשימה עד לפעם הבאה שהוא כותב"
-  // אם ההודעה האחרונה הייתה שלנו (יוצאת):
-  // א. אם חלפו מעל 24 שעות ללא מענה מהלקוח -> מוסר אוטומטית מרשימת הממתינים (handled)!
-  // ב. אם סומן ידנית "לא ענה" (statusOverrides === 'handled' / 'unanswered') -> מוסר מיידית!
-  // **אך ברגע שהלקוח כותב הודעה נכנסת (lastMessageType === 'incoming') הוא חוזר אוטומטית לקדמת הרשימה!**
+  // Check if this chat was read/opened by Shmulik
+  const lastReadTime = readTimestamps[chat.cleanPhone] || 0;
+  const isReadByShmulik = lastReadTime >= chatTime || chat.unreadCount === 0;
+
+  // 1. קביעה ידנית מפורשת של שמוליק
+  if (statusOverrides[chat.cleanPhone]) {
+    // If a new incoming message arrived AFTER the override and AFTER last read, it's new
+    if (chat.lastMessageType === 'incoming' && chatTime > lastReadTime && !isReadByShmulik) {
+      return 'new';
+    }
+    return statusOverrides[chat.cleanPhone] as any;
+  }
+
+  // 2. אם ההודעה האחרונה הייתה שלנו (יוצאת):
   if (chat.lastMessageType === 'outgoing') {
     if (ageHours >= 24 || statusOverrides[chat.cleanPhone] === 'handled' || statusOverrides[chat.cleanPhone] === 'unanswered') {
       return 'handled';
     }
+    if (ageHours < 24) {
+      return 'waiting_reply';
+    }
   }
 
-  // 3. קביעה ידנית מפורשת של שמוליק (אלא אם הלקוח שלח הודעה חדשה מאז!)
-  if (statusOverrides[chat.cleanPhone] && chat.lastMessageType !== 'incoming') {
-    return statusOverrides[chat.cleanPhone] as any;
-  }
-
-  // 4. סגירה אוטומטית של שיחות ללא תנועה מעל 48 שעות
+  // 3. סגירה אוטומטית של שיחות ללא תנועה מעל 48 שעות
   if (ageHours >= 48) {
     return 'handled';
   }
 
-  // 5. ניתוח כוונות חכם של הודעת הלקוח האחרונה (Smart Intent Classification)
+  // 4. ניתוח כוונות חכם של הודעת הלקוח האחרונה
   if (chat.lastMessageType === 'incoming') {
     const intent = detectCustomerIntent(chat.lastMessage, chat.name, chat.matchedDogName);
     if (intent) {
-      // סגירה סופית ("כבר הסתדרתי", "לא רלוונטי", "טעות", "תודה/ביי") -> ארכוב מיידי
-      if (intent.shouldArchive) {
-        return 'handled';
-      }
-      // בקשת דחייה ("נדבר שבוע הבא", "מחר") -> משאירים ברשימת הממתינים למעקב מסודר
-      if (intent.type === 'deferral') {
-        return 'waiting_reply';
-      }
-      // התנגדות מחיר ("יקר לי") -> שיחה פעילה שדורשת מענה מקצועי
-      if (intent.type === 'price_objection') {
-        return 'in_chat';
-      }
+      if (intent.shouldArchive) return 'handled';
+      if (intent.type === 'deferral') return 'waiting_reply';
+      if (intent.type === 'price_objection') return 'in_chat';
     }
   }
 
-  // 6. חוק ברזל: פנייה נכנסת מהלקוח שטרם נענתה (lastMessageType === 'incoming') ב-48 השעות האחרונות
-  // השיחה נשארת תמיד ב-'new' (קטגוריית "שלא נקראו / חדשות") עבור שמוליק!
-  // צפייה בהודעה במחשב, סריקת היסטוריה, או סימון נקרא ב-WhatsApp Web לעולם אינם מעבירים אותה ל"נקראו" או ל"מתנהלת"!
-  // היא תעבור לקטגוריה אחרת אך ורק כאשר נשלחת תשובה יוצאת ללקוח (או כשסומנה מפורשות כטופלה).
-  if (chat.lastMessageType === 'incoming' && ageHours < 48) {
-    return 'new';
+  // 5. אם ההודעה כבר נקראה/נפתחה ע"י שמוליק (בטלפון או במחשב) -> עוברת לשיחות מתנהלות!
+  if (isReadByShmulik) {
+    return 'in_chat';
   }
 
-  // 7. שלחנו שאלון או הודעה אחרונה ואנחנו ממתינים לתגובת הלקוח בתוך 24 שעות ראשונות:
-  if (chat.lastMessageType === 'outgoing' && ageHours < 24) {
-    return 'waiting_reply';
+  // 6. פנייה נכנסת שטרם נפתחה וטרם נקראה -> 'new' (שלא נקראו)
+  if (chat.lastMessageType === 'incoming' && ageHours < 48) {
+    return 'new';
   }
 
   return 'handled';
@@ -824,8 +859,9 @@ export async function fetchNewCrmChatsCount(
       if (rawNames) nameOverrides = JSON.parse(rawNames);
     } catch {}
 
+    const readTimestamps = getReadChatTimestamps();
     const enriched = raw.map(c => enrichChatWithSystemData(c, bookings, intakeRequests, nameOverrides));
-    const newCount = enriched.filter(c => getChatTreatmentStatus(c, overrides) === 'new').length;
+    const newCount = enriched.filter(c => getChatTreatmentStatus(c, overrides, readTimestamps) === 'new').length;
     return newCount;
   } catch (err) {
     console.warn('Error fetching new CRM chats count:', err);
