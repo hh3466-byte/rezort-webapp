@@ -595,6 +595,8 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
 
       if (!isLikelyReceipt && text.length < 5) continue;
 
+      const parsed = parseTrainerReceiptText(text, trainingBookings);
+
       let receiptNumber = parsed.detectedReceiptNumber;
       let dogName = parsed.allocations[0]?.dogName || '';
       let detectedTotal = parsed.detectedTotal || (parsed.allocations.length * 500) || 500;
@@ -642,7 +644,6 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
           }
         ] : [],
         isPaidActually: isReceiptAlreadySettled,
-        paid: isReceiptAlreadySettled,
         paidDate: isReceiptAlreadySettled ? dateStr : undefined,
         managerQuerySent: true,
         managerQuerySentAt: timestamp,

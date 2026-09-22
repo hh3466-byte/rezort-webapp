@@ -715,9 +715,15 @@ export function enrichChatWithSystemData(
   };
 }
 
-/**
- * Determines the CRM treatment status of a chat.
-const READ_CHATS_KEY = 'crm_read_chat_timestamps';
+export const READ_CHATS_KEY = 'crm_read_chat_timestamps';
+
+export function isExcludedChat(name?: string, phone?: string, id?: string): boolean {
+  const p = cleanPhoneNumber(phone || id || '');
+  if (p === '0506336896' || p === '0506816001' || p === '0548765888' || p === '0543200007') return true;
+  const n = (name || '').toLowerCase();
+  if (n.includes('שמוליק') || n.includes('בוט') || n.includes('התראות')) return true;
+  return false;
+}
 
 /**
  * Returns a map of phone numbers to timestamp of when the chat was marked as read by Shmulik

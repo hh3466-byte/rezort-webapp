@@ -23,11 +23,20 @@ import {
   TrendingUp,
   Home
 } from 'lucide-react';
-import { Booking, ResortSettings, StayStatus } from '../types';
-import { getTodayStr, calculateDaysCount, formatDateIL, getBookingsForDate, getBookingPaymentsInMonth, getMonthlyRevenueBreakdown, VERIFIED_GROW_LEDGER } from '../utils/dateUtils';
+import { 
+  getTodayStr, 
+  calculateDaysCount, 
+  formatDateIL, 
+  getBookingsForDate, 
+  getBookingPaymentsInMonth, 
+  getMonthlyRevenueBreakdown, 
+  VERIFIED_GROW_LEDGER,
+  VERIFIED_DIRECT_TRANSFERS,
+  KNOWN_FUTURE_INSTALLMENTS 
+} from '../utils/dateUtils';
 import { generatePaymentReminderMessage, openWhatsAppMessage, getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { exportRevenueChartsToExcel, ChartPeriodItem } from '../utils/exportUtils';
-import { TrainerReceipt, TrainerPaymentStage } from '../types';
+import { Booking, ResortSettings, StayStatus, TrainerReceipt, TrainerPaymentStage } from '../types';
 import { 
   getTrainerReceipts, 
   saveTrainerReceipts, 
@@ -90,7 +99,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
     const notes = ((b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '')).toLowerCase();
     const id = b.id || '';
     const isLedger = VERIFIED_GROW_LEDGER.some(t => notes.includes(t.ref.toLowerCase()) || id.includes(t.ref));
-    const isGrowMethod = b.paymentMethod === 'credit' || b.paymentMethod === 'grow';
+    const isGrowMethod = (b.paymentMethod as string) === 'credit' || (b.paymentMethod as string) === 'grow';
     const hasGrowKeyword = notes.includes('grow') || notes.includes('אשראי') || notes.includes('סליקה') || notes.includes('gpay');
     const isBank = notes.includes('העברה בנקאית') || (b.ownerName || '').includes('רונן מלמוד');
     return (isLedger || isGrowMethod || hasGrowKeyword) && !isBank;

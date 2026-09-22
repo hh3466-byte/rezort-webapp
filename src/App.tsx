@@ -2357,6 +2357,7 @@ export default function App() {
                   consolidatePayment: true
                 }
               : undefined;
+            const dailyRateVal = boardingRateInfo.dailyRate || Number(settings?.defaultDailyRateBoarding) || 180;
 
             setBookingWizardOpen({
               isOpen: true,
