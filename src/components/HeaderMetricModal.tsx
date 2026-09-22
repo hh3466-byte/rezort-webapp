@@ -34,6 +34,7 @@ import {
   applyReceiptToBookings, 
   computeTrainerMetrics, 
   getBookingTrainerStages, 
+  getDeduplicatedTrainingBookings,
   formatManagerReceiptQuery,
   detectTrainerPaymentAnomalies,
   syncTrainerReceiptsFromWhatsAppChat,
@@ -137,7 +138,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   }, [bookings]);
 
   const allTrainingBookings = useMemo(() => {
-    return bookings.filter(isRealTrainingBooking);
+    return getDeduplicatedTrainingBookings(bookings);
   }, [bookings]);
 
   const trainerMetrics = useMemo(() => {
@@ -422,7 +423,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
     case 'training':
       if (trainingViewTab === 'completed') {
-        title = '🏁 כלבים שהסתיים תהליך האילוף שלהם';
+        title = '🏁 הסתיים האילוף (ארכיון)';
         subtitle = `${trainerMetrics.completedTrainingDogsCount} כלבים שהשלימו את תהליך האילוף ומלוא התשלומים (3/3) שולמו למאלפת הילה`;
         icon = <CheckCircle className="w-5 h-5 text-emerald-700" />;
         badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
@@ -435,15 +436,16 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
         filteredItems = [];
       } else {
         title = '🎓 כלבים בתהליך אילוף פעיל';
-        subtitle = `${trainerMetrics.activeTrainingDogsCount} כלבים בתהליך אילוף פעיל • מעקב שלבים וחיוב ₪1,500 למאלפת`;
-        icon = <GraduationCap className="w-5 h-5 text-purple-700" />;
-        badgeColor = 'bg-purple-50 text-purple-800 border-purple-200';
         filteredItems = allTrainingBookings.filter(b => {
           if (b.isTrainingCompleted) return false;
+          if (b.startDate > '2026-09-30') return false; // עתידיים באוקטובר
           if (trainingFilter === 'full') return b.serviceType === 'training';
           if (trainingFilter === 'day') return b.serviceType === 'day_training';
           return true;
         });
+        subtitle = `${filteredItems.length} כלבים בתהליך אילוף פעיל • מעקב שלבים וחיוב ₪1,500 למאלפת`;
+        icon = <GraduationCap className="w-5 h-5 text-purple-700" />;
+        badgeColor = 'bg-purple-50 text-purple-800 border-purple-200';
       }
       break;
 
@@ -1370,142 +1372,244 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                 <p className="font-bold text-slate-700 text-sm">לא נמצאו כלבי אילוף להצגה</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3.5">
                 {filteredItems.map(b => {
                   const daysCount = calculateDaysCount(b.startDate, b.endDate);
                   const stages = getBookingTrainerStages(b);
                   const s1 = stages.find(s => s.stage === '1/3');
                   const s2 = stages.find(s => s.stage === '2/3');
                   const s3 = stages.find(s => s.stage === '3/3');
+                  const paidStagesCount = stages.filter(s => s.isPaidActually).length;
                   const paidTotal = stages.filter(s => s.isPaidActually).reduce((sum, s) => sum + s.amount, 0);
 
                   return (
                     <div
                       key={b.id}
-                      className="bg-white border border-slate-200 hover:border-purple-300 rounded-2xl p-4 shadow-xs transition-all flex flex-col md:flex-row md:items-center justify-between gap-3"
+                      className="bg-white border border-slate-200 hover:border-purple-300 rounded-2xl p-4 sm:p-5 shadow-xs transition-all flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4"
                     >
-                      {/* Left: Dog & Owner Details */}
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-black text-base sm:text-lg text-slate-900">
+                      {/* RIGHT: Dog Name (Owner Name), Dates, Phone & WhatsApp */}
+                      <div className="lg:w-64 space-y-2 text-right shrink-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-black text-lg text-slate-900">
                             🐾 {b.dogName}
                           </span>
-                          <span className="text-xs sm:text-sm font-bold text-slate-600">
+                          <span className="text-sm font-bold text-slate-600">
                             ({b.ownerName})
                           </span>
-                          <span className="text-xs bg-purple-50 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-md font-semibold">
-                            {getServiceTypeHebrew(b.serviceType)} ({daysCount} ימים)
+                        </div>
+
+                        <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5 flex-wrap">
+                          <span className="bg-purple-50 text-purple-900 border border-purple-200 px-2 py-0.5 rounded-md font-bold">
+                            אילוף ({daysCount} ימים)
                           </span>
-                          {b.isTrainingCompleted && (
-                            <span className="text-xs bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-md font-black flex items-center gap-1">
-                              <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
-                              <span>🏁 הסתיים האילוף</span>
+                          <span className="text-slate-600 font-mono">
+                            {formatDateIL(b.startDate)} עד {formatDateIL(b.endDate)}
+                          </span>
+                        </div>
+
+                        {b.ownerPhone && (
+                          <div className="pt-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => handleSendWhatsApp(b, e)}
+                              className="text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 font-bold px-2.5 py-1 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                              title="פתח שיחת וואטסאפ עם הלקוח"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                              <span dir="ltr">{b.ownerPhone}</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* CENTER: 3-TIER VERTICAL STACK (מלמעלה למטה בדיוק לפי הסקיצה) */}
+                      <div className="flex-1 bg-slate-50/80 border border-slate-200/90 rounded-2xl p-3 sm:p-3.5 space-y-2">
+                        {/* 1. תשלום ראשון */}
+                        <div className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                          s1?.isPaidActually
+                            ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                            : s1?.receiptNumber
+                            ? 'bg-amber-50 border-amber-300 text-amber-950'
+                            : 'bg-white border-slate-200 text-slate-500'
+                        }`}>
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-5 h-5 rounded-md flex items-center justify-center text-xs font-black border transition-all ${
+                              s1?.isPaidActually
+                                ? 'bg-emerald-600 border-emerald-700 text-white'
+                                : 'bg-white border-slate-300 text-transparent'
+                            }`}>
+                              ✓
+                            </div>
+                            <span className="text-xs font-black text-slate-800">
+                              תשלום ראשון (1/3)
                             </span>
-                          )}
-                        </div>
+                            <span className="text-xs text-slate-500 font-mono font-normal">
+                              — ₪500
+                            </span>
+                          </div>
 
-                        {/* Dates & Phone */}
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
-                          <span className="flex items-center gap-1 font-mono text-slate-800 font-semibold" dir="ltr">
-                            <Phone className="w-3.5 h-3.5 text-green-600" />
-                            {b.ownerPhone}
-                          </span>
-                          <span className="flex items-center gap-1 text-slate-800 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
-                            <Calendar className="w-3.5 h-3.5 text-amber-600" />
-                            <span>{formatDateIL(b.startDate)} עד {formatDateIL(b.endDate)}</span>
-                          </span>
-                        </div>
-
-                        {/* 3 Payment Stages Pills */}
-                        <div className="pt-1 flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-slate-700">תשלומי הילה (₪1,500):</span>
-
-                          {/* Stage 1/3 */}
-                          <div className={`text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 ${
-                            s1?.isPaidActually
-                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                              : s1?.receiptNumber
-                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                              : 'bg-slate-100 text-slate-400 border border-slate-200'
-                          }`}>
-                            <span>1/3: {s1?.isPaidActually ? `שולם (קבלה ${s1.receiptNumber || '20056'})` : s1?.receiptNumber ? `קבלה ${s1.receiptNumber} (ממתין)` : 'טרם'}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[11px] px-2.5 py-0.5 rounded-md font-bold ${
+                              s1?.isPaidActually
+                                ? 'bg-emerald-200/80 text-emerald-900 font-black'
+                                : s1?.receiptNumber
+                                ? 'bg-amber-200/80 text-amber-900'
+                                : 'bg-slate-100 text-slate-400'
+                            }`}>
+                              {s1?.isPaidActually 
+                                ? (s1.receiptNumber ? `שולם (קבלה ${s1.receiptNumber})` : 'שולם בביט') 
+                                : s1?.receiptNumber 
+                                ? `קבלה ${s1.receiptNumber} (ממתין)` 
+                                : 'טרם שולם'}
+                            </span>
                             {s1?.receiptImageUrl && (
                               <button
                                 type="button"
                                 onClick={() => setReceiptImagePreview({ url: s1.receiptImageUrl!, title: `קבלה ${s1.receiptNumber} - ${b.dogName}` })}
-                                className="text-[11px] underline text-indigo-700 hover:text-indigo-900 mr-0.5 cursor-pointer"
+                                className="text-indigo-600 hover:text-indigo-800 text-xs font-bold flex items-center gap-0.5 cursor-pointer"
+                                title="צפה בקבלה"
                               >
-                                👁️
+                                <span>👁️</span>
                               </button>
                             )}
                           </div>
+                        </div>
 
-                          {/* Stage 2/3 */}
-                          <div className={`text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 ${
-                            s2?.isPaidActually
-                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                              : s2?.receiptNumber
-                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                              : 'bg-slate-100 text-slate-400 border border-slate-200'
-                          }`}>
-                            <span>2/3: {s2?.isPaidActually ? `שולם (קבלה ${s2.receiptNumber || '20056'})` : s2?.receiptNumber ? `קבלה ${s2.receiptNumber} (ממתין)` : 'טרם'}</span>
+                        {/* 2. תשלום שני */}
+                        <div className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                          s2?.isPaidActually
+                            ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                            : s2?.receiptNumber
+                            ? 'bg-amber-50 border-amber-300 text-amber-950'
+                            : 'bg-white border-slate-200 text-slate-500'
+                        }`}>
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-5 h-5 rounded-md flex items-center justify-center text-xs font-black border transition-all ${
+                              s2?.isPaidActually
+                                ? 'bg-emerald-600 border-emerald-700 text-white'
+                                : 'bg-white border-slate-300 text-transparent'
+                            }`}>
+                              ✓
+                            </div>
+                            <span className="text-xs font-black text-slate-800">
+                              תשלום שני (2/3)
+                            </span>
+                            <span className="text-xs text-slate-500 font-mono font-normal">
+                              — ₪500
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[11px] px-2.5 py-0.5 rounded-md font-bold ${
+                              s2?.isPaidActually
+                                ? 'bg-emerald-200/80 text-emerald-900 font-black'
+                                : s2?.receiptNumber
+                                ? 'bg-amber-200/80 text-amber-900'
+                                : 'bg-slate-100 text-slate-400'
+                            }`}>
+                              {s2?.isPaidActually 
+                                ? (s2.receiptNumber ? `שולם (קבלה ${s2.receiptNumber})` : 'שולם בביט') 
+                                : s2?.receiptNumber 
+                                ? `קבלה ${s2.receiptNumber} (ממתין)` 
+                                : 'טרם שולם'}
+                            </span>
                             {s2?.receiptImageUrl && (
                               <button
                                 type="button"
                                 onClick={() => setReceiptImagePreview({ url: s2.receiptImageUrl!, title: `קבלה ${s2.receiptNumber} - ${b.dogName}` })}
-                                className="text-[11px] underline text-indigo-700 hover:text-indigo-900 mr-0.5 cursor-pointer"
+                                className="text-indigo-600 hover:text-indigo-800 text-xs font-bold flex items-center gap-0.5 cursor-pointer"
+                                title="צפה בקבלה"
                               >
-                                👁️
+                                <span>👁️</span>
                               </button>
                             )}
                           </div>
+                        </div>
 
-                          {/* Stage 3/3 */}
-                          <div className={`text-xs px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 ${
-                            s3?.isPaidActually
-                              ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                              : s3?.receiptNumber
-                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                              : 'bg-slate-100 text-slate-400 border border-slate-200'
-                          }`}>
-                            <span>3/3: {s3?.isPaidActually ? 'שולם (סיום)' : s3?.receiptNumber ? `קבלה ${s3.receiptNumber} (ממתין)` : 'טרם'}</span>
+                        {/* 3. תשלום שלישי */}
+                        <div className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                          s3?.isPaidActually
+                            ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                            : s3?.receiptNumber
+                            ? 'bg-amber-50 border-amber-300 text-amber-950'
+                            : paidStagesCount === 2
+                            ? 'bg-amber-50/70 border-amber-200 text-amber-950'
+                            : 'bg-white border-slate-200 text-slate-500'
+                        }`}>
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-5 h-5 rounded-md flex items-center justify-center text-xs font-black border transition-all ${
+                              s3?.isPaidActually
+                                ? 'bg-emerald-600 border-emerald-700 text-white'
+                                : 'bg-white border-slate-300 text-transparent'
+                            }`}>
+                              ✓
+                            </div>
+                            <span className="text-xs font-black text-slate-800">
+                              תשלום שלישי (3/3)
+                            </span>
+                            <span className="text-xs text-slate-500 font-mono font-normal">
+                              — ₪500
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[11px] px-2.5 py-0.5 rounded-md font-bold ${
+                              s3?.isPaidActually
+                                ? 'bg-emerald-200/80 text-emerald-900 font-black'
+                                : s3?.receiptNumber
+                                ? 'bg-amber-200/80 text-amber-900'
+                                : paidStagesCount === 2
+                                ? 'bg-amber-100 text-amber-900 font-black'
+                                : 'bg-slate-100 text-slate-400'
+                            }`}>
+                              {s3?.isPaidActually 
+                                ? 'שולם (סיום)' 
+                                : s3?.receiptNumber 
+                                ? `קבלה ${s3.receiptNumber}` 
+                                : paidStagesCount === 2 
+                                ? '⏳ נשאר תשלום אחרון' 
+                                : 'טרם שולם'}
+                            </span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Right: Summary & Action */}
-                      <div className="flex flex-col sm:flex-row md:flex-col items-end justify-between gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-                        <div className="text-right bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
-                          <div className="text-xs text-slate-500 font-medium">שולם להילה:</div>
-                          <div className="text-sm font-black font-mono text-emerald-800">
+                      {/* LEFT: TOTAL (ס"הכ) & ARCHIVE ACTION */}
+                      <div className="lg:w-48 flex flex-col items-center lg:items-end justify-between gap-3 text-right shrink-0 bg-white border border-slate-200 p-3.5 rounded-2xl shadow-2xs">
+                        <div className="w-full text-right space-y-0.5">
+                          <div className="text-[11px] font-bold text-slate-400">סה״כ שולם להילה:</div>
+                          <div className="text-xl font-black font-mono text-emerald-700">
                             ₪{paidTotal.toLocaleString('he-IL')} <span className="text-xs text-slate-400 font-normal">/ ₪1,500</span>
+                          </div>
+                          <div className="text-[11px] font-bold mt-1">
+                            {paidTotal === 1500 ? (
+                              <span className="text-emerald-700 font-black">✓ שולם במלואו</span>
+                            ) : paidTotal === 1000 ? (
+                              <span className="text-amber-700 font-black">⏳ נשאר תשלום אחרון (₪500)</span>
+                            ) : paidTotal === 500 ? (
+                              <span className="text-indigo-700 font-bold">נשארו 2 תשלומים (₪1,000)</span>
+                            ) : (
+                              <span className="text-slate-500 font-medium">טרם החלו תשלומים</span>
+                            )}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5">
-                          {b.ownerPhone && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleSendWhatsApp(b, e)}
-                              className="bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 text-xs font-semibold px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
-                              title="שלח וואטסאפ לבעלים"
-                            >
-                              <MessageSquare className="w-3.5 h-3.5 text-green-600" />
-                              <span>וואטסאפ</span>
-                            </button>
-                          )}
-
-                          {!b.isTrainingCompleted && (
-                            <button
-                              type="button"
-                              onClick={() => handleGraduateDog(b.id)}
-                              className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-2xs cursor-pointer transition-all active:scale-95"
-                              title="סמן כי תהליך האילוף הושלם והעבר ללשונית הסתיים האילוף"
-                            >
-                              🎓 הסתיים האילוף
-                            </button>
-                          )}
-                        </div>
+                        {!b.isTrainingCompleted ? (
+                          <button
+                            type="button"
+                            onClick={() => handleGraduateDog(b.id)}
+                            className="w-full bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-bold text-xs py-2 px-3 rounded-xl shadow-2xs cursor-pointer transition-all flex items-center justify-center gap-1.5"
+                            title="סמן כי האילוף הושלם והעבר ללשונית ארכיון"
+                          >
+                            <span>🎓</span>
+                            <span>העבר לארכיון</span>
+                          </button>
+                        ) : (
+                          <div className="text-xs bg-emerald-100 text-emerald-900 border border-emerald-300 px-3 py-1.5 rounded-xl font-black flex items-center justify-center gap-1 w-full">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>בארכיון (הסתיים)</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

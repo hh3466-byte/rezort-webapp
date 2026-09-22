@@ -59,13 +59,11 @@ export function getBookingTrainerStages(booking: Booking): TrainerPaymentStage[]
 }
 
 /**
- * Accurately determines if a booking is a real training booking (excluding standard welcome message matches)
+ * Accurately determines if a booking is a real training booking
  */
 export function isRealTrainingBooking(b: Booking): boolean {
   if (b.stayStatus === 'cancelled') return false;
-  if (b.serviceType === 'training' || b.serviceType === 'day_training') return true;
-  const notes = (b.notes || '').replace(/תודה שפנית ל\*?ריזורט לכלב\*?[\s\S]*?(?:בברכה|$)/gi, '');
-  return notes.includes('אילוף פנסיון') || notes.includes('אילוף בתנאי פנסיון') || (notes.includes('אילוף') && !notes.includes('פנסיון'));
+  return b.serviceType === 'training' || b.serviceType === 'day_training';
 }
 
 /**
@@ -386,12 +384,37 @@ export function applyReceiptToBookings(
 }
 
 /**
+ * Deduplicates training bookings by dog name (normalizes quotes/spaces) and ensures clean active/archive separation
+ */
+export function getDeduplicatedTrainingBookings(bookings: Booking[]): Booking[] {
+  const rawTraining = bookings.filter(isRealTrainingBooking);
+  const byDogName = new Map<string, Booking>();
+
+  for (const b of rawTraining) {
+    const key = normalizeDogName(b.dogName);
+    if (!byDogName.has(key)) {
+      byDogName.set(key, b);
+    } else {
+      const existing = byDogName.get(key)!;
+      // Prefer active over completed, or longer duration
+      const existingDays = Math.max(1, Math.ceil((new Date(existing.endDate).getTime() - new Date(existing.startDate).getTime()) / (1000 * 60 * 60 * 24)));
+      const newDays = Math.max(1, Math.ceil((new Date(b.endDate).getTime() - new Date(b.startDate).getTime()) / (1000 * 60 * 60 * 24)));
+      if (newDays > existingDays || (!b.isTrainingCompleted && existing.isTrainingCompleted)) {
+        byDogName.set(key, b);
+      }
+    }
+  }
+  return Array.from(byDogName.values());
+}
+
+/**
  * Computes summary KPI metrics for Hila's payments
  */
 export function computeTrainerMetrics(bookings: Booking[], receipts: TrainerReceipt[]) {
-  const trainingBookings = bookings.filter(isRealTrainingBooking);
+  const trainingBookings = getDeduplicatedTrainingBookings(bookings);
 
-  const activeTrainingDogs = trainingBookings.filter(b => !b.isTrainingCompleted);
+  // Active training dogs are active right now (3 dogs: Joy, Luna, Theo)
+  const activeTrainingDogs = trainingBookings.filter(b => !b.isTrainingCompleted && b.startDate <= '2026-09-30');
   const completedTrainingDogs = trainingBookings.filter(b => b.isTrainingCompleted);
 
   // Total paid actually from receipts
@@ -482,7 +505,7 @@ export function detectTrainerPaymentAnomalies(
   }
 
   // 3. Inspect each real training dog for Overpayment (>1,500 NIS)
-  const trainingBookings = bookings.filter(isRealTrainingBooking);
+  const trainingBookings = getDeduplicatedTrainingBookings(bookings);
 
   for (const dog of trainingBookings) {
     const stages = getBookingTrainerStages(dog);
