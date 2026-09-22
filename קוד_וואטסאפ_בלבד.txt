@@ -346,21 +346,62 @@ function processResortEmails() {
           Logger.log("✓ תשלום נרשם ב-Supabase (" + paymentStatusInDb + "): " + customerName + " | ₪" + amount);
         } catch (ePayIns) {}
 
-        // שליחת מייל דיווח נקי ומסודר לשמוליק ולמנהל (זה המייל היחיד שנשאר בתיבה!)
+        // שליחת מייל דיווח נקי ומסודר לשמוליק ולמנהל
         try {
           var emailSubject = "[תשלום חדש בריזורט לכלב] " + customerName + " - " + amount + " ש״ח";
-          var emailHtml = "<div dir='rtl' style='font-family: Arial, sans-serif; padding: 15px; border: 1px solid #10b981; border-radius: 12px; background: #f0fdf4;'>"
+          var emailHtml = "<div dir='rtl' style='font-family: Arial, sans-serif; padding: 18px; border: 1px solid #10b981; border-radius: 14px; background: #f0fdf4; color: #0f172a;'>"
             + "<h2 style='color: #065f46; margin-top: 0;'>&#10004; תשלום חדש נקלט בהצלחה בריזורט לכלב!</h2>"
-            + "<p><strong>שם המשלם:</strong> " + customerName + "</p>"
-            + "<p><strong>סכום:</strong> " + amount + " ש״ח</p>"
-            + "<p><strong>אמצעי תשלום:</strong> " + paymentMethod + "</p>"
-            + "<p><strong>אסמכתא:</strong> " + referenceId + "</p>"
-            + "<p><strong>טלפון:</strong> " + customerPhone + "</p>"
-            + "<p>התשלום נרשם במערכת הניהול של הריזורט לכלב (" + (isLinkedToBooking ? "שויך אוטומטית להזמנה" : "ממתין לשיוך ביומן") + ").</p>"
+            + "<p style='font-size: 15px;'><strong>שם המשלם:</strong> " + customerName + "</p>"
+            + "<p style='font-size: 16px; color: #047857;'><strong>סכום ששולם:</strong> ₪" + amount.toLocaleString('he-IL') + "</p>"
+            + "<p style='font-size: 14px;'><strong>אמצעי תשלום:</strong> " + paymentMethod + "</p>"
+            + "<p style='font-size: 14px;'><strong>אסמכתא:</strong> " + referenceId + "</p>"
+            + "<p style='font-size: 14px;'><strong>טלפון:</strong> " + customerPhone + "</p>"
+            + "<p style='font-size: 14px; background: #dcfce7; padding: 10px; border-radius: 8px;'>התשלום נרשם במערכת הניהול של הריזורט לכלב (" + (isLinkedToBooking ? "שויך אוטומטית להזמנה ביומן" : "ממתין לשיוך ביומן") + ").</p>"
             + "</div>";
-          GmailApp.sendEmail(targetRecipients, emailSubject, "", { htmlBody: emailHtml });
+
+          try {
+            GmailApp.sendEmail(targetRecipients, emailSubject, "", { 
+              htmlBody: emailHtml,
+              name: "הריזורט לכלב - עדכוני תשלומים"
+            });
+          } catch (eGApp) {
+            MailApp.sendEmail({
+              to: targetRecipients,
+              subject: emailSubject,
+              htmlBody: emailHtml,
+              name: "הריזורט לכלב - עדכוני תשלומים"
+            });
+          }
           Logger.log("✓ נשלח מייל דיווח לעסקה אל: " + targetRecipients);
-        } catch (eMail) {}
+        } catch (eMail) {
+          Logger.log("שגיאה בשליחת מייל דיווח: " + eMail.toString());
+        }
+
+        // שליחת התראת וואטסאפ מיידית לשמוליק ולמנהל דרך Green-API
+        try {
+          var waMsg = "🟢 *התקבל תשלום חדש ב-Grow לריזורט לכלב!*\n\n"
+            + "👤 *שם המשלם:* " + customerName + "\n"
+            + "💰 *סכום:* ₪" + Number(amount).toLocaleString('he-IL') + "\n"
+            + "💳 *אמצעי תשלום:* " + paymentMethod + "\n"
+            + "🔢 *אסמכתא:* " + referenceId + "\n"
+            + "📞 *טלפון:* " + customerPhone + "\n"
+            + "📅 *סטטוס במערכת:* " + (isLinkedToBooking ? "שויך אוטומטית להזמנה ביומן ✓" : "ממתין לשיוך ביומן ⏳");
+
+          var waRecipients = ["972506336896@c.us", "972543200007@c.us"];
+          for (var wi = 0; wi < waRecipients.length; wi++) {
+            try {
+              UrlFetchApp.fetch("https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN, {
+                method: "post",
+                contentType: "application/json",
+                payload: JSON.stringify({ chatId: waRecipients[wi], message: waMsg }),
+                muteHttpExceptions: true
+              });
+            } catch (eWaInner) {}
+          }
+          Logger.log("✓ נשלחה התראת וואטסאפ מיידית לשמוליק ולמנהל.");
+        } catch (eWa) {
+          Logger.log("שגיאה בשליחת וואטסאפ: " + eWa.toString());
+        }
 
         growCount++;
         threadHandled = true;
@@ -419,6 +460,1655 @@ function checkUpcomingDeparturesWithDebtAndAlert() {
 
 function ensureTaliEmailDraftCreated() {
   // שמירה לתאימות
+}
+
+/**
+ * =========================================================================
+ * חלק ב': בוט וואטסאפ חכם (Green-API), הודעות יומיות ב-20:00 ושאלון קליטה
+ * =========================================================================
+ */
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var payload = JSON.parse(e.postData.contents);
+    if (!payload || payload.typeWebhook !== "incomingMessageReceived") {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, ignored: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // וידוא שהטריגר לשעה 20:00 פעיל ומוגדר תמיד
+    ensureEveningTriggerInstalled();
+
+    var senderData = payload.senderData || {};
+    var chatId = senderData.chatId || "";
+    var sender = senderData.sender || "";
+
+    // סינון קבוצות וסטטוסים
+    if (!chatId || chatId.indexOf("@c.us") === -1 || chatId.indexOf("status@broadcast") !== -1) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, reason: "group or broadcast ignored" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // סינון הודעות עצמיות
+    var wid = (payload.instanceData && payload.instanceData.wid) ? payload.instanceData.wid : "972548765888@c.us";
+    if (sender === wid || chatId === wid) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, reason: "self message ignored" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var cleanPhone = chatId.replace("@c.us", "").replace(/[^0-9]/g, "");
+    var phoneSuffix = cleanPhone.slice(-7);
+
+    // מניעת ספאם (Cooldown של 6 שעות ללקוחות רגילים, מאפשר בדיקות חוזרות לטלפון מנהל)
+    var cache = CacheService.getScriptCache();
+    var cacheKey = "wa_reply_" + cleanPhone;
+    var isTestPhone = (cleanPhone.indexOf("3200007") !== -1);
+    if (!isTestPhone && cache.get(cacheKey)) {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, reason: "cooldown active" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // בדיקת זמנים ושבתות/חגים
+    var israelTz = "Asia/Jerusalem";
+    var now = new Date();
+    var dayOfWeek = parseInt(Utilities.formatDate(now, israelTz, "u"), 10);
+    var hour = parseInt(Utilities.formatDate(now, israelTz, "H"), 10);
+    var minute = parseInt(Utilities.formatDate(now, israelTz, "m"), 10);
+    var timeInMinutes = hour * 60 + minute;
+    var senderName = (senderData.senderName || "").trim();
+
+    // =========================================================================
+    // בדיקת יום כיפור (קודש קודשים - שקט מוחלט! תור פניות למענה בצאת החג)
+    // =========================================================================
+    if (isYomKippurNow(now, israelTz)) {
+      Logger.log("התקבלה הודעה במהלך יום כיפור מ: " + chatId + " (" + senderName + ") - נרשמת בתור צאת כיפור ללא שליחה מיידית");
+      queueYomKippurContact(chatId, senderName);
+      scheduleYomKippurFollowupTrigger(now, israelTz);
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, reason: "yom_kippur_silent_queued" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // בדיקת חגים וערבי חג מול Hebcal API
+    var isHoliday = false;
+    var holidayTitle = "";
+    var isErevHoliday = false;
+
+    try {
+      var todayStr = Utilities.formatDate(now, israelTz, "yyyy-MM-dd");
+      var year = Utilities.formatDate(now, israelTz, "yyyy");
+      var month = Utilities.formatDate(now, israelTz, "M");
+      var hebcalUrl = "https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=off&mod=off&nx=off&year=" + year + "&month=" + month + "&ss=off&mf=off&c=off&geo=none&i=on";
+      var hRes = UrlFetchApp.fetch(hebcalUrl, { muteHttpExceptions: true });
+      if (hRes.getResponseCode() === 200) {
+        var hData = JSON.parse(hRes.getContentText());
+        var items = (hData && hData.items) ? hData.items : [];
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          if (item.date === todayStr) {
+            var title = item.title || "";
+            var heb = item.hebrew || "";
+            if (title.indexOf("Erev ") !== -1 || heb.indexOf("ערב ") !== -1) {
+              isErevHoliday = true;
+              holidayTitle = heb || title;
+            } else {
+              isHoliday = true;
+              holidayTitle = heb || title;
+            }
+          }
+        }
+      }
+    } catch (eH) {}
+
+    // הגדרת זמני סגירה:
+    var isClosedWeekend = false;
+    var closedReason = "";
+
+    if (dayOfWeek === 5 && timeInMinutes >= (14 * 60)) {
+      isClosedWeekend = true;
+      closedReason = "סוף השבוע (שישי אחה\"צ)";
+    } else if (dayOfWeek === 6) {
+      isClosedWeekend = true;
+      closedReason = "שבת קודש";
+    } else if (dayOfWeek === 7 && timeInMinutes < (9 * 60 + 30)) {
+      isClosedWeekend = true;
+      closedReason = "מוצאי שבת / בוקר יום ראשון";
+    } else if (isHoliday) {
+      isClosedWeekend = true;
+      closedReason = holidayTitle || "חג";
+    } else if (isErevHoliday && timeInMinutes >= (14 * 60)) {
+      isClosedWeekend = true;
+      closedReason = "ערב " + (holidayTitle || "חג");
+    }
+
+    // בדיקת קיום לקוח במאגר (לקוח חוזר ביומן או לקוח שכבר מילא שאלון קליטה)
+    var isReturningCustomer = false;
+    var hasSubmittedIntake = false;
+    var customerName = "";
+    var dogName = "";
+
+    try {
+      // 1. בדיקה מול טבלת ההזמנות ביומן (לקוח עם הזמנה פעילה/קודמת)
+      var queryUrl = SUPABASE_URL + "/rest/v1/bookings?select=owner_name,dog_name,owner_phone&order=created_at.desc&limit=200";
+      var response = UrlFetchApp.fetch(queryUrl, {
+        method: "get",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+        muteHttpExceptions: true
+      });
+
+      if (response.getResponseCode() === 200) {
+        var bookings = JSON.parse(response.getContentText());
+        if (bookings && bookings.length > 0) {
+          for (var j = 0; j < bookings.length; j++) {
+            var bPhone = (bookings[j].owner_phone || "").replace(/[^0-9]/g, "");
+            if (bPhone && bPhone.slice(-7) === phoneSuffix) {
+              isReturningCustomer = true;
+              customerName = (bookings[j].owner_name || "").trim();
+              dogName = (bookings[j].dog_name || "").trim();
+              break;
+            }
+          }
+        }
+      }
+
+      // 2. בדיקה מול טבלת בקשות הקליטה (לקוח שכבר מילא שאלון קליטה)
+      var intakeQueryUrl = SUPABASE_URL + "/rest/v1/intake_requests?select=owner_name,dog_name,owner_phone&order=created_at.desc&limit=200";
+      var intakeRes = UrlFetchApp.fetch(intakeQueryUrl, {
+        method: "get",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+        muteHttpExceptions: true
+      });
+
+      if (intakeRes.getResponseCode() === 200) {
+        var intakes = JSON.parse(intakeRes.getContentText());
+        if (intakes && intakes.length > 0) {
+          for (var k = 0; k < intakes.length; k++) {
+            var iPhone = (intakes[k].owner_phone || "").replace(/[^0-9]/g, "");
+            if (iPhone && iPhone.slice(-7) === phoneSuffix) {
+              hasSubmittedIntake = true;
+              if (!customerName) customerName = (intakes[k].owner_name || "").trim();
+              if (!dogName) dogName = (intakes[k].dog_name || "").trim();
+              break;
+            }
+          }
+        }
+      }
+    } catch (dbErr) {
+      Logger.log("DB Error: " + dbErr.toString());
+    }
+
+    // בדיקה האם הבוט כבר שלח בעבר קישור שאלון למספר זה (מניעת כל כפילות בשליחה אוטומטית)
+    var props = PropertiesService.getScriptProperties();
+    var intakeSentKey = "intake_sent_" + phoneSuffix;
+    var wasIntakeEverSent = props.getProperty(intakeSentKey) ? true : false;
+
+    var cleanName = customerName ? customerName.split(" ")[0] : (senderName ? senderName.split(" ")[0] : "");
+    var greetingName = cleanName ? (" " + cleanName) : "";
+
+    // ניסוח מענה אוטומטי
+    var message = "";
+
+    if (isClosedWeekend) {
+      message = "היי" + greetingName + "! 🐾🐶\n"
+        + "תודה שפנית ל*ריזורט לכלב*.\n\n"
+        + "⏰ *שימו לב:* בסופי שבוע ובחגים שירות הלקוחות והמענה הטלפוני סגורים (סגור משישי ב-14:00 ועד ראשון ב-09:30).\n"
+        + "בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐕🤍\n\n";
+
+      var intakeLinkWithParams = "https://rezort-webapp.vercel.app/?request=true"
+        + (cleanPhone ? ("&phone=" + encodeURIComponent(cleanPhone)) : "")
+        + (cleanName ? ("&name=" + encodeURIComponent(cleanName)) : "");
+
+      if (isReturningCustomer) {
+        message += "שמחנו לראות את הודעתך! " + (dogName ? "ד\"ש חם ל-" + dogName + "! 🐶\n" : "\n")
+          + "נחזור אליך בשמחה ביום ראשון החל מהשעה 09:30.\n\n"
+          + "בברכה,\nשמוליק - הריזורט לכלב 🐾";
+      } else if (hasSubmittedIntake) {
+        // לקוח שכבר הגיש שאלון קליטה - לא שולחים שוב שאלון!
+        message += "ראינו ששאלון בקשת הקליטה" + (dogName ? " עבור *" + dogName + "*" : "") + " כבר נקלט במערכת שלנו בהצלחה! 📋✨\n"
+          + "שמוליק והצוות בוחנים את הבקשה ונחזור אליך בשמחה ביום ראשון החל מהשעה 09:30 לתיאום סופי.\n\n"
+          + "בברכה,\nשמוליק וצוות הריזורט לכלב 🐾";
+      } else if (wasIntakeEverSent) {
+        // לקוח שכבר קיבל את הקישור לשאלון בפנייה קודמת - לא שולחים שוב שאלון!
+        message += "הודעתך נרשמה במערכת ונחזור אליך בשמחה ביום ראשון החל מהשעה 09:30.\n\n"
+          + "בברכה,\nשמוליק וצוות הריזורט לכלב 🐾";
+      } else {
+        // פנייה חדשה ראשונית בלבד - מקבל קישור לשאלון
+        message += "אם פניתם לגבי קליטה או שריון מקום לכלבכם, נשמח מאוד שתמלאו שאלון קצר (דקה אחת בלבד) כדי שנוכל לחזור אליכם ראשונים עם כל הפרטים והזמינות ביום ראשון בבוקר:\n"
+          + "👉 " + intakeLinkWithParams + "\n\n"
+          + "שיהיה סוף שבוע נעים ושקט,\nשמוליק וצוות הריזורט לכלב 🐾✨";
+        props.setProperty(intakeSentKey, new Date().toISOString());
+      }
+    } else {
+      // שעות פעילות פתוחות:
+      // אם זה לקוח קיים, לקוח שכבר הגיש שאלון, או שכבר קיבל קישור בעבר - אין לשלוח הודעה אוטומטית (שמוליק מתכתב איתו ידנית במערכת)
+      if (isReturningCustomer || hasSubmittedIntake || wasIntakeEverSent) {
+        return ContentService.createTextOutput(JSON.stringify({ 
+          ok: true, 
+          reason: "open hours - customer in CRM, no auto intake spam",
+          isReturningCustomer: isReturningCustomer,
+          hasSubmittedIntake: hasSubmittedIntake,
+          wasIntakeEverSent: wasIntakeEverSent
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+
+      var intakeLinkWithParamsOpen = "https://rezort-webapp.vercel.app/?request=true"
+        + (cleanPhone ? ("&phone=" + encodeURIComponent(cleanPhone)) : "")
+        + (cleanName ? ("&name=" + encodeURIComponent(cleanName)) : "");
+
+      // פנייה חדשה לגמרי בפעם הראשונה בלבד:
+      message = "היי" + greetingName + "! 🐾🐶\n"
+        + "תודה שפנית ל*ריזורט לכלב* – פנסיון בוטיק, אילוף וחוויות לכלבים!\n\n"
+        + "כדי שנוכל לתת לכם את המענה הטוב והמדויק ביותר, אנא מלאו שאלון קצר (דקה אחת בלבד) עם פרטי הכלב והתאריכים המבוקשים:\n"
+        + "👉 " + intakeLinkWithParamsOpen + "\n\n"
+        + "⏰ *שימו לב:* אנחנו נמצאים כרגע במתחם ומטפלים במסירות בכלבים, ולא נשכח אתכם! 🐾\n"
+        + "מיד שנתפנה נעבור על פרטי השאלון ונחזור אליכם לשיחה בנוגע לתשובות לתיאום סופי.\n\n"
+        + "בברכה חמה,\nשמוליק וצוות הריזורט לכלב 🐕🤍";
+      props.setProperty(intakeSentKey, new Date().toISOString());
+    }
+
+    // שליחת ההודעה דרך Green-API
+    var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+    var sendRes = UrlFetchApp.fetch(sendUrl, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify({ chatId: chatId, message: message }),
+      muteHttpExceptions: true
+    });
+
+    // רישום Cooldown
+    cache.put(cacheKey, "sent", 21600); // 6 שעות
+
+    return ContentService.createTextOutput(JSON.stringify({
+      ok: true,
+      sent: true,
+      statusCode: sendRes.getResponseCode(),
+      isClosedWeekend: isClosedWeekend,
+      isReturningCustomer: isReturningCustomer
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    Logger.log("doPost Error: " + err.toString());
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/**
+ * בדיקה האם היום הוא יום חול תקין למשלוח הודעות ערב (ימי ראשון עד חמישי בלבד, ללא שישי, שבת, ערבי חג וחגים)
+ */
+function isWeekdayForEveningSend(nowDate, israelTz) {
+  var tz = israelTz || "Asia/Jerusalem";
+  var d = nowDate || new Date();
+
+  var dayOfWeek = parseInt(Utilities.formatDate(d, tz, "u"), 10); // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
+
+  // 1. שישי (5) ושבת (6) - לעולם לא שולחים בהם הודעות ערב
+  if (dayOfWeek === 5 || dayOfWeek === 6) {
+    return { isWeekday: false, reason: "סוף שבוע (שישי / שבת)" };
+  }
+
+  // 2. יום כיפור
+  if (isYomKippurNow(d, tz)) {
+    return { isWeekday: false, reason: "יום כיפור" };
+  }
+
+  // 3. חגים וערבי חגים (ראש השנה, סוכות, פסח, שבועות וכו') מול Hebcal API
+  try {
+    var todayStr = Utilities.formatDate(d, tz, "yyyy-MM-dd");
+    var year = Utilities.formatDate(d, tz, "yyyy");
+    var month = Utilities.formatDate(d, tz, "M");
+    var hebcalUrl = "https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=off&mod=off&nx=off&year=" + year + "&month=" + month + "&ss=off&mf=off&c=off&geo=none&i=on";
+    var hRes = UrlFetchApp.fetch(hebcalUrl, { muteHttpExceptions: true });
+    if (hRes.getResponseCode() === 200) {
+      var hData = JSON.parse(hRes.getContentText());
+      var items = (hData && hData.items) ? hData.items : [];
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        if (item.date === todayStr) {
+          var title = item.title || "";
+          var heb = item.hebrew || "";
+          return { isWeekday: false, reason: heb || title || "חג / ערב חג" };
+        }
+      }
+    }
+  } catch (eH) {
+    Logger.log("isWeekdayForEveningSend Hebcal warning: " + eH.toString());
+  }
+
+  return { isWeekday: true, reason: "יום חול" };
+}
+
+/**
+ * 2. שליחה יומית של בקשות חוות דעת והטבת מועדון יום לאחר שחרור הכלב
+ * (מופעל בטריגר אוטומטי בימי חול בלבד בשעה 19:00 בערב)
+ */
+function sendDayAfterDepartureReviewRequests() {
+  try {
+    var now = new Date();
+    var israelTz = "Asia/Jerusalem";
+    var dayOfWeek = parseInt(Utilities.formatDate(now, israelTz, "u"), 10);
+    var hour = parseInt(Utilities.formatDate(now, israelTz, "H"), 10);
+
+    // וידוא ימי חול בלבד: לא שולחים בשישי, בשבת, בערבי חג ובחגים!
+    var weekdayCheck = isWeekdayForEveningSend(now, israelTz);
+    if (!weekdayCheck.isWeekday) {
+      Logger.log("היום אינו יום חול (" + weekdayCheck.reason + ") - לא נשלחת בקשת חוות דעת. שקט מוחלט בסופ\"ש וחגים.");
+      return;
+    }
+
+    // שולפים שחרורים מ-4 הימים האחרונים שטרם קיבלו בקשה (כדי לתפוס שחרורים מסופ\"ש או חג ביום ראשון הראשון שאחריהם)
+    var fourDaysAgo = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000);
+    var fourDaysAgoStr = Utilities.formatDate(fourDaysAgo, israelTz, "yyyy-MM-dd");
+    var yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    var yesterdayStr = Utilities.formatDate(yesterday, israelTz, "yyyy-MM-dd");
+
+    var queryUrl = SUPABASE_URL + "/rest/v1/bookings?end_date=gte." + fourDaysAgoStr + "&end_date=lte." + yesterdayStr + "&stay_status=neq.cancelled&select=*";
+    var response = UrlFetchApp.fetch(queryUrl, {
+      method: "get",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+      muteHttpExceptions: true
+    });
+
+    if (response.getResponseCode() !== 200) return;
+
+    var departures = JSON.parse(response.getContentText());
+    if (!departures || departures.length === 0) return;
+
+    var scriptProperties = PropertiesService.getScriptProperties();
+
+    for (var i = 0; i < departures.length; i++) {
+      var b = departures[i];
+      var bookingKey = "review_request_sent_" + b.id;
+      if (scriptProperties.getProperty(bookingKey)) continue;
+
+      // בדיקה האם בוטלה שליחת בקשת חוות דעת (למשל: בעל הכלב לא הסתדר איתנו)
+      var bkData = {};
+      try {
+        if (b.data) {
+          bkData = (typeof b.data === "string") ? JSON.parse(b.data) : b.data;
+        }
+      } catch (eData) {}
+
+      if (b.skip_review_request === true || bkData.skipReviewRequest === true || (b.notes && b.notes.indexOf("ללא_סקר") !== -1)) {
+        Logger.log("דילוג על בקשת חוות דעת עבור " + (b.dog_name || "") + " (" + (b.owner_name || "") + ") - בוטל בשחרור (הלקוח לא הסתדר)");
+        scriptProperties.setProperty(bookingKey, "skipped");
+        continue;
+      }
+
+      var ownerName = b.owner_name || "לקוח יקר";
+      var dogName = b.dog_name || "הכלב";
+      var ownerPhone = (b.owner_phone || "").replace(/[^0-9]/g, '');
+      if (!ownerPhone) continue;
+
+      var intlPhone = ownerPhone.indexOf('0') === 0 ? '972' + ownerPhone.substring(1) : ownerPhone;
+      var chatId = intlPhone + "@c.us";
+
+      var cleanDog = dogName.replace(/[^a-zA-Z0-9\u0590-\u05FF]/g, '').slice(0, 8);
+      var friendCode = "חבר-" + (cleanDog || "ריזורט") + "-" + Math.floor(100 + Math.random() * 900);
+
+      var reviewMsg = "היי " + ownerName + " 😊\n"
+        + "שמחנו ממש לארח את " + dogName + " אצלנו בריזורט לכלב! 🐾🤍\n"
+        + "איך " + dogName + " התאקלם בחזרה בבית? התגעגענו אליו כבר!\n\n"
+        + "💎 מעכשיו אתם רשמית חלק ממועדון ה-VIP של הריזורט לכלב!\n"
+        + "באירוח הבא שלכם (3 ימים ומעלה), יחכה לכם פינוק VIP מתנה לבחירתכם:\n"
+        + "✨ 100 ₪ הנחה ישירה\n"
+        + "✨ יום כיף ושהות יומית VIP מתנה (09:00–19:00)\n"
+        + "✨ סשן משחקי חשיבה והעשרה מנטלית (Brain Games)\n"
+        + "✨ ספא חפיפה, פתיחת קשרים ובישום יוקרתי\n"
+        + "✨ צ'ק אאוט מאוחר מוארך עד 19:00\n"
+        + "✨ מארז שף גורמה: עצם לעיסה טבעית מעושנת ומעדני בריאות\n"
+        + "(בהזמנה הבאה שלכם, פשוט מזינים את מספר הנייד בטופס והתפריט נפתח אוטומטית לבחירתכם!)\n\n"
+        + "🤝 רוצים לפנק חברים עם כלב?\n"
+        + "שתפו אותם בהודעה הזו – הם ייהנו מ-100 ₪ הנחה לשהות ראשונה (תוקף ל-6 חודשים), ואתם תצברו 100 ₪ הנחה לשהות הבאה שלכם!\n"
+        + "קוד שובר חבר מביא חבר שלכם: *" + friendCode + "*\n\n"
+        + "נשמח מאוד אם תפרגנו לנו בכמה מילים על החוויה שלכם:\n"
+        + "⭐ ביקורת בגוגל: https://maps.app.goo.gl/G31uwaQXP6Ln5myX9\n"
+        + "👍 פייסבוק: https://www.facebook.com/profile.php?id=61576998315714&sk=reviews\n"
+        + "📸 אינסטגרם: https://www.instagram.com/dogz.resort/\n\n"
+        + "מחכים לראותכם שוב!\n"
+        + "שמוליק וצוות הריזורט לכלב 🐾🐶";
+
+      var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+      var sendRes = UrlFetchApp.fetch(sendUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ chatId: chatId, message: reviewMsg }),
+        muteHttpExceptions: true
+      });
+
+      if (sendRes.getResponseCode() === 200) {
+        scriptProperties.setProperty(bookingKey, new Date().toISOString());
+      }
+      Utilities.sleep(1500);
+    }
+  } catch (err) {
+    Logger.log("sendDayAfterDepartureReviewRequests error: " + err.toString());
+  }
+}
+
+/**
+ * =========================================================================
+ * 3. בדיקת יום כיפור (קודש קודשים - שקט מוחלט ללא שום הודעה אוטומטית ללקוחות)
+ * =========================================================================
+ * תחילת החסימה: ערב יום כיפור החל מהשעה 14:00 בדיוק.
+ * סיום יום כיפור: 40 דקות בדיוק אחרי שקיעת השמש בישראל (מוצאי יום כיפור).
+ */
+function getYomKippurEndTimeMinutes(d) {
+  try {
+    var year = d.getFullYear();
+    var month = d.getMonth() + 1;
+    var hebcalUrl = "https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=off&mod=off&nx=off&year=" + year + "&month=" + month + "&ss=off&mf=off&c=on&geo=pos&latitude=32.08&longitude=34.78&tzid=Asia/Jerusalem&m=40";
+    var hRes = UrlFetchApp.fetch(hebcalUrl, { muteHttpExceptions: true });
+    if (hRes.getResponseCode() === 200) {
+      var hData = JSON.parse(hRes.getContentText());
+      var items = (hData && hData.items) ? hData.items : [];
+      var todayStr = Utilities.formatDate(d, "Asia/Jerusalem", "yyyy-MM-dd");
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        if (it.category === "havdalah" && it.date && it.date.indexOf(todayStr) === 0) {
+          var timePart = it.date.split("T")[1];
+          if (timePart) {
+            var parts = timePart.split(":");
+            return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+          }
+        }
+      }
+    }
+  } catch (e) {}
+
+  // חישוב אסטרונומי מקומי מדויק לשקיעת השמש בישראל
+  try {
+    var lat = 32.085;
+    var lon = 34.781;
+    var startOfYear = new Date(d.getFullYear(), 0, 0);
+    var dayOfYear = Math.floor((d.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+    var gamma = (2 * Math.PI / 365) * (dayOfYear - 1);
+    var eqtime = 229.18 * (0.000075 + 0.001868 * Math.cos(gamma) - 0.032077 * Math.sin(gamma) - 0.014615 * Math.cos(2 * gamma) - 0.040849 * Math.sin(2 * gamma));
+    var decl = 0.006918 - 0.399912 * Math.cos(gamma) + 0.070257 * Math.sin(gamma) - 0.006758 * Math.cos(2 * gamma) + 0.000907 * Math.sin(2 * gamma);
+    var latRad = lat * Math.PI / 180;
+    var zenithRad = 90.8333 * Math.PI / 180;
+    var cosHourAngle = (Math.cos(zenithRad) / (Math.cos(latRad) * Math.cos(decl))) - (Math.tan(latRad) * Math.tan(decl));
+    var hourAngle = Math.acos(cosHourAngle) * 180 / Math.PI;
+    var sunsetUtcMinutes = 720 - 4 * lon - eqtime + hourAngle * 4;
+    var sunsetIsraelMinutes = sunsetUtcMinutes + 180;
+    return Math.round(sunsetIsraelMinutes + 40);
+  } catch (e2) {}
+
+  return 19 * 60 + 20;
+}
+
+function isYomKippurNow(nowDate, israelTz) {
+  try {
+    var tz = israelTz || "Asia/Jerusalem";
+    var d = nowDate || new Date();
+    var hour = parseInt(Utilities.formatDate(d, tz, "H"), 10);
+    var minute = parseInt(Utilities.formatDate(d, tz, "m"), 10);
+    var timeInMinutes = hour * 60 + minute;
+    var todayStr = Utilities.formatDate(d, tz, "yyyy-MM-dd");
+    var year = Utilities.formatDate(d, tz, "yyyy");
+    var month = Utilities.formatDate(d, tz, "M");
+
+    // בדיקה מול לוח עברי (Intl)
+    try {
+      var parts = new Intl.DateTimeFormat('en-u-ca-hebrew', { day: 'numeric', month: 'numeric' }).formatToParts(d);
+      var hDay = 0;
+      for (var p = 0; p < parts.length; p++) {
+        if (parts[p].type === 'day') hDay = parseInt(parts[p].value, 10);
+      }
+      var hMonth = new Intl.DateTimeFormat('he-u-ca-hebrew', { month: 'long' }).format(d).trim();
+      if (hMonth.indexOf('תשרי') !== -1) {
+        if (hDay === 9 && timeInMinutes >= 14 * 60) return true;
+        if (hDay === 10) {
+          var endKippurMinutes = getYomKippurEndTimeMinutes(d);
+          return timeInMinutes < endKippurMinutes;
+        }
+      }
+    } catch (eIntl) {}
+
+    // גיבוי מול Hebcal API
+    try {
+      var hebcalUrl = "https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=off&mod=off&nx=off&year=" + year + "&month=" + month + "&ss=off&mf=off&c=off&geo=none&i=on";
+      var hRes = UrlFetchApp.fetch(hebcalUrl, { muteHttpExceptions: true });
+      if (hRes.getResponseCode() === 200) {
+        var hData = JSON.parse(hRes.getContentText());
+        var items = (hData && hData.items) ? hData.items : [];
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          if (item.date === todayStr) {
+            var title = item.title || "";
+            var isErev = (title.indexOf("Erev") !== -1 || heb.indexOf("ערב") !== -1);
+            if (!isErev && (title === "Yom Kippur" || heb === "יום כיפור")) {
+              var endKippurMinutesHebcal = getYomKippurEndTimeMinutes(d);
+              return timeInMinutes < endKippurMinutesHebcal;
+            }
+            if (isErev && (title.indexOf("Yom Kippur") !== -1 || heb.indexOf("יום כיפור") !== -1)) {
+              if (timeInMinutes >= 14 * 60) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+    } catch (eHebcal) {}
+
+    return false;
+  } catch (err) {
+    Logger.log("isYomKippurNow error: " + err.toString());
+    return false;
+  }
+}
+
+/**
+ * =========================================================================
+ * 4. ניהול תור פניות במהלך יום כיפור ומענה אוטומטי מותאם מיד בצאת החג
+ * =========================================================================
+ */
+function queueYomKippurContact(chatId, senderName) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var key = "yom_kippur_queue";
+    var raw = props.getProperty(key);
+    var list = [];
+    if (raw) {
+      try { list = JSON.parse(raw); } catch (e) { list = []; }
+    }
+    
+    var exists = false;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].chatId === chatId) {
+        exists = true;
+        break;
+      }
+    }
+    
+    if (!exists) {
+      list.push({
+        chatId: chatId,
+        name: senderName || "",
+        time: new Date().toISOString()
+      });
+      props.setProperty(key, JSON.stringify(list));
+      Logger.log("נרשמה פנייה בתור יום כיפור מ: " + chatId);
+    }
+  } catch (err) {
+    Logger.log("queueYomKippurContact error: " + err.toString());
+  }
+}
+
+function scheduleYomKippurFollowupTrigger(now, israelTz) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var scheduledKey = "yk_trigger_scheduled";
+    if (props.getProperty(scheduledKey)) {
+      return;
+    }
+
+    var targetDate = getYomKippurEndDate(now, israelTz);
+    if (!targetDate) return;
+
+    var triggers = ScriptApp.getProjectTriggers();
+    for (var i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === "sendYomKippurFollowups") {
+        ScriptApp.deleteTrigger(triggers[i]);
+      }
+    }
+
+    ScriptApp.newTrigger("sendYomKippurFollowups")
+      .timeBased()
+      .at(targetDate)
+      .create();
+
+    props.setProperty(scheduledKey, targetDate.toISOString());
+    Logger.log("תוזמן טריגר צאת יום כיפור לשעה: " + targetDate.toISOString());
+  } catch (err) {
+    Logger.log("scheduleYomKippurFollowupTrigger error: " + err.toString());
+  }
+}
+
+function getYomKippurEndDate(now, israelTz) {
+  try {
+    var tz = israelTz || "Asia/Jerusalem";
+    var d = now || new Date();
+    var parts = new Intl.DateTimeFormat('en-u-ca-hebrew', { day: 'numeric', month: 'numeric', timeZone: tz }).formatToParts(d);
+    var hDay = 0;
+    for (var p = 0; p < parts.length; p++) {
+      if (parts[p].type === 'day') hDay = parseInt(parts[p].value, 10);
+    }
+    
+    var kippurDay = new Date(d.getTime());
+    if (hDay === 9) {
+      kippurDay.setDate(kippurDay.getDate() + 1);
+    }
+
+    var totalMins = getYomKippurEndTimeMinutes(kippurDay);
+    var endH = Math.floor(totalMins / 60);
+    var endM = totalMins % 60;
+
+    var yStr = Utilities.formatDate(kippurDay, tz, "yyyy-MM-dd");
+    var targetIso = yStr + "T" + (endH < 10 ? "0" + endH : endH) + ":" + (endM < 10 ? "0" + endM : endM) + ":00+03:00";
+    return new Date(targetIso);
+  } catch (err) {
+    Logger.log("getYomKippurEndDate error: " + err.toString());
+    return null;
+  }
+}
+
+function sendYomKippurFollowups() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    props.deleteProperty("yk_trigger_scheduled");
+
+    // 1. שליפת הודעות מותאמות מ-Supabase (כגון שוברי VIP ופיצוי אישיים ללקוחות)
+    try {
+      var sRes = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/settings?select=*&limit=1", {
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+      });
+      if (sRes.getResponseCode() === 200) {
+        var sList = JSON.parse(sRes.getContentText());
+        var sRow = (sList && sList.length > 0) ? sList[0] : {};
+        var sData = sRow.data || {};
+        var customList = sData.yomKippurCustomFollowups || [];
+        var updatedAny = false;
+
+        for (var cIdx = 0; cIdx < customList.length; cIdx++) {
+          var cItem = customList[cIdx];
+          if (cItem.status === "pending" && cItem.phone && cItem.message) {
+            var cCleanPhone = (cItem.phone || "").replace(/[^0-9]/g, "");
+            var cIntlPhone = cCleanPhone.indexOf("0") === 0 ? "972" + cCleanPhone.substring(1) : cCleanPhone;
+            var cChatId = cIntlPhone + "@c.us";
+
+            var cSendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+            var cSendRes = UrlFetchApp.fetch(cSendUrl, {
+              method: "post",
+              contentType: "application/json",
+              payload: JSON.stringify({ chatId: cChatId, message: cItem.message }),
+              muteHttpExceptions: true
+            });
+
+            if (cSendRes.getResponseCode() === 200) {
+              cItem.status = "sent";
+              cItem.sentAt = new Date().toISOString();
+              updatedAny = true;
+              Logger.log("נשלחה בהצלחה הודעת צאת כיפור מותאמת (שובר VIP) ל-" + (cItem.name || "לקוח") + " (" + cCleanPhone + ")");
+            }
+            Utilities.sleep(1200);
+          }
+        }
+
+        if (updatedAny) {
+          UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/settings?id=eq." + encodeURIComponent(sRow.id || "resort_config"), {
+            method: "patch",
+            headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+            payload: JSON.stringify({ data: sData }),
+            muteHttpExceptions: true
+          });
+        }
+      }
+    } catch (eCustom) {
+      Logger.log("שגיאה בטיפול ב-yomKippurCustomFollowups מ-Supabase: " + eCustom.toString());
+    }
+
+    // 2. טיפול בפניות שהתקבלו בוואטסאפ במהלך יום כיפור (yom_kippur_queue)
+    var key = "yom_kippur_queue";
+    var raw = props.getProperty(key);
+    if (!raw) return;
+
+    var list = [];
+    try { list = JSON.parse(raw); } catch (e) { list = []; }
+    if (!list || list.length === 0) return;
+
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      var chatId = item.chatId;
+      var cleanName = (item.name || "").trim().split(" ")[0];
+      var greetingName = cleanName ? (" " + cleanName) : "";
+
+      var message = item.customMessage || ("גמר חתימה טובה" + greetingName + "! 🕯️🐾\n"
+        + "תודה רבה על פנייתך לריזורט לכלב.\n"
+        + "בשל קדושת יום כיפור, שירות הלקוחות שלנו שבת מפעילות ולא שלחנו מענה מיידי. אנו מקווים מכל הלב שעבר עליכם צום מועיל, ושהשנה החדשה תביא עמה ברכה, שלווה ובריאות איתנה. 🤍✨\n\n"
+        + "🐶 כמובן שכל הכלבים היקרים שמתארחים אצלנו בריזורט קיבלו לאורך כל החג והצום את מלוא תשומת הלב, האהבה, הטיפול והפינוק 24/7 מסביב לשעון!\n\n"
+        + "⏰ שירות הלקוחות והמענה הטלפוני יחזור לפעילות מלאה מחר בבוקר בשעה 09:30, ונשמח לעמוד לרשותכם ולחזור אליכם לכל שאלה ותיאום.\n\n"
+        + "אם פניתם לקליטה, שריון מקום או בדיקת זמינות, נשמח שתמלאו בינתיים שאלון קצר (דקה אחת בלבד) כדי שנוכל לחזור אליכם ראשונים עם כל הפרטים:\n"
+        + "👉 https://rezort-webapp.vercel.app/?request=true\n\n"
+        + "בברכה חמה ושנה טובה,\n"
+        + "שמוליק וצוות הריזורט לכלב 🐾🐕");
+
+      var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+      UrlFetchApp.fetch(sendUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ chatId: chatId, message: message }),
+        muteHttpExceptions: true
+      });
+
+      Utilities.sleep(1200);
+    }
+
+    props.deleteProperty(key);
+    Logger.log("נשלח מענה צאת יום כיפור ל-" + list.length + " פונים בהצלחה.");
+  } catch (err) {
+    Logger.log("sendYomKippurFollowups error: " + err.toString());
+  }
+}
+
+/**
+ * =========================================================================
+ * 5. משלוח יומי אוטומטי בשעה 20:00 לבעלי כלבים השוהים בריזורט (הודעות מנקודת מבט הכלב)
+ * =========================================================================
+ */
+
+/**
+ * -------------------------------------------------------------------------
+ * תבניות ייעודיות למוצאי שבת (סיכום סופ"ש חוויתי ומפנק בריזורט)
+ * מותאמות אישית: פריקת אנרגיה בדשא לכלבים חברותיים, ושלווה VIP לכלבים בבידוד.
+ * -------------------------------------------------------------------------
+ */
+var WEEKEND_DOG_TEMPLATES = [
+  // --- לכלבים חברותיים בלהקה (friendly / safe) ---
+  { id: 201, type: "friendly", text: "שבוע טוב {ownerName}! 🐾 שמעתי שהיה לכם סופ\"ש סוער בעניינים שלכם, אבל חכו שתשמעו על הסופ\"ש שלי בריזורט! שבת שלמה של משחקי דשא עם כל החברים, ריצות וחטיפי שבת 🎾👑 עכשיו אני נח כמו מלך בסוויטה לקראת שבוע חדש. אוהב מלא, {dogName} 🐶❤️✨" },
+  { id: 202, type: "friendly", text: "היי {ownerName}, שבוע טוב! 🌟 בזמן שאתם נחתם בסופ\"ש, אני קרעתי את החצר בתופסת עם להקת החברים! 🏃‍♂️🐾 היה סופ\"ש של חלומות, ועכשיו שקעתי בחלומות מתוקים בסוויטה המפנקת שלי. שיהיה שבוע נהדר, {dogName} 🐕✨" },
+  { id: 203, type: "friendly", text: "שבוע מבורך {ownerName}! 🐶 איזה סופ\"ש מהסרטים עבר עלי בריזורט! רצתי על הדשא, השתזפתי בפינות המוצלות, ולא הפסקתי לכשכש בזנב מרוב אושר 🌿🎾 תמשיכו לבלות בכיף, אני הכי בסבבה בעולם! {dogName} 🐾😎" },
+  { id: 204, type: "friendly", text: "שבוע טוב {ownerName}! 🐾 רק מעדכן שהסופ\"ש שלי בריזורט היה 10 מתוך 10! אוויר צח של שבת, חברים טובים וליטופים ללא הפסקה מהצוות המסור. אל תדאגו לי בכלל, הכל מושלם! אוהב, {dogName} 🐕👑" },
+  { id: 205, type: "friendly", text: "היי {ownerName}! 🐾 מקווה שהיה לכם סופ\"ש רגוע כמו שהיה לי בריזורט! שבת שלמה של כיף, מים צוננים ומשחקי כדור עם החברים 🎾💤 עכשיו אחרי ארוחת ערב טעימה אני מוכן לשבוע חדש. שבוע טוב ומבורך! {dogName} 🐶❤️" },
+  { id: 206, type: "friendly", text: "שבוע טוב {ownerName}! 🌟 אם תהיתם איך עבר עלי הסופ\"ש – תדמיינו מלון חמישה כוכבים עם חצר דשא ענקית וחברים על 4 בלי הפסקה! היה מושלם, תיהנו בעניינים שלכם! {dogName} 🐕🏖️" },
+  { id: 207, type: "friendly", text: "ד\"ש חם ממוצאי שבת {ownerName}! 🐾 איזה כיף של סופ\"ש היה לי! בזמן שאתם ביליתם, אני ניהלתי פה את משחקי השבת בחצר והוכחתי לכולם מי אלוף הריצות 🏃‍♂️👑 שבוע מבורך ושקט, {dogName} 🐶✨" },
+  { id: 208, type: "friendly", text: "שבוע טוב {ownerName}! 🐶 סיכום סופ\"ש קצר: רצתי, שיחקתי, נבחתי מאושר, אכלתי מצוין והתפנקתי במיטה הנוחה שלי 🛋️🐾 אתם יכולים להיות רגועים לגמרי! שבוע קסום, {dogName} ❤️✨" },
+  { id: 209, type: "friendly", text: "היי {ownerName}! 🐾 מוצאי שבת הגיע ואני מסכם סופ\"ש אגדי בריזורט! כלבים, משחקים, פינוקים והמון אהבה. עכשיו אני ישן שנת ישרים. שבוע מוצלח ומלא חיוכים! {dogName} 🐕💤" },
+  { id: 210, type: "friendly", text: "שבוע טוב ומבורך {ownerName}! 🌟 רק רציתי להזכיר לכם שסופ\"ש בריזורט הוא חלום – לא התגעגעתי אפילו לרגע (טוב, אולי טיפונת 😉) כי היה פשוט מדהים עם כל החברים! אוהב, {dogName} 🐶❤️" },
+
+  // --- לכלבים בבידוד / יחס אישי בלבד (isolation / safe) ---
+  { id: 211, type: "isolation", text: "שבוע טוב {ownerName}! 🐾 איזה סופ\"ש של שקט ורוגע מלכותי עבר עלי בסוויטה הפרטית בריזורט! 🛋️✨ בזמן שאתם ביליתם בסופ\"ש, אני קיבלתי יחס אישי VIP, טיולים מפנקים בחצר הפרטית וים של ליטופי בטן בלי שאף אחד יפריע לי. שבוע מבורך! {dogName} 🐶👑❤️" },
+  { id: 212, type: "isolation", text: "היי {ownerName}, שבוע טוב! 🌿 רציתי לעדכן שהסופ\"ש שלי היה שיא השלווה והפינוק. טיולי רחרוח אישיים, חטיפי שבת טעימים והמון זמן איכות וחיבוקים עם המטפלים. אני רגוע, שבע ומאושר! {dogName} 🐕✨" },
+  { id: 213, type: "isolation", text: "שבוע טוב ומבורך {ownerName}! 🐾 אם חשבתם שהיה לי משעמם בסופ\"ש – ממש לא! הסוויטה מרווחת, המתחם הפרטי שלי שקט ובטוח, וקיבלתי פינוקי שבת ברמה הכי גבוהה שיש. שיהיה שבוע שקט ומוצלח! {dogName} 🐶💤" },
+  { id: 214, type: "isolation", text: "ד\"ש מסוף שבוע פרטי של אלופים {ownerName}! 👑 סיכום סופ\"ש בסוויטה האישית: אפס לחצים, מקסימום פינוקים, ארוחות שבת טעימות ורוגע אמיתי. תיהנו בעניינים שלכם, אני בידיים הכי טובות! שבוע טוב, {dogName} 🐾❤️" },
+  { id: 215, type: "isolation", text: "שבוע טוב {ownerName}! 🌟 סיימתי עכשיו סופ\"ש שליו ומפנק במיוחד במתחם המוגן שלי. המטפלים ישבו איתו לזמן איכות ארוך והרעיפו עלי אהבה. עכשיו אני ישן עמוק ושלו. שבוע מקסים! {dogName} 🐕🌸" }
+];
+
+var DAILY_DOG_TEMPLATES = [
+  // קבוצה 1: טיול יומי בטבע, הרפתקאות וריחות (1–20) - מתאים לכולם
+  { id: 1, type: "safe", text: "היי {ownerName}! 🐾 סיימתי עכשיו טיול יומי בטבע של אלופים אמיתיים! 🌲🌿 ריחרחתי כל עץ ושיח, ועכשיו אני שוכב רגוע ומרוצה בסוויטה שלי 🛋️✨ תיהנו בעניינים שלכם, אוהב {dogName} 🐶❤️" },
+  { id: 2, type: "safe", text: "ערב טוב {ownerName}! 🐾 בזמן שאתם בעניינים שלכם, אני חרשתי היום את השבילים בטיול טבע משגע! 🌲🐾 שמוליק ניסה לעמוד בקצב המלכותי שלי... תבלו בכיף, {dogName} 🐕👑🌿" },
+  { id: 3, type: "safe", text: "היי {ownerName}! 🐾 רק רציתי לעדכן שהטבע פה פשוט וואוו! 🌲✨ חזרתי מהטיול היומי עמוס בחוויות וריחות חדשים, ועכשיו אני נח כמו מלך אמיתי 👑🛋️ נשיקות מ-{dogName} 🐶💋" },
+  { id: 4, type: "safe", text: "ערב טוב {ownerName}! 🐾 הודעתי לשמוליק ששעת היציאה לטבע הגיעה, והוא מיד התייצב ללוות אותי למסלול מהמם! 🌲🐕 היה מושלם ואני הכי בסבבה בעולם! {dogName} 🐶👑🌾" },
+  { id: 5, type: "safe", text: "היי {ownerName}! 🐾 נשמתי היום אוויר צלול בטיול בטבע, חקרתי שבילים חדשים ועכשיו הראש שלי שקוע עמוק בכרית 🌲😴 תיהנו איפה שאתם, הכל דבש! {dogName} 🐕🍃✨" },
+  { id: 6, type: "safe", text: "ערב טוב {ownerName}! 🐾 עשיתי היום צעידה של אלופים בטיול בטבע, ועכשיו אני מתכנן שנת יופי ארוכה ומלכותית 🌲💤👑 תמשיכו לבלות בראש שקט לגמרי, {dogName} 🐶✨" },
+  { id: 7, type: "safe", text: "היי {ownerName}! 🐾 הטיול היומי בטבע היה כזה מושלם, שממש מגיע לכם להמשיך לבלות בלי שום דאגות! 🌲🐾 הכל פה 10 מתוך 10! אוהב המון, {dogName} 🐕⭐❤️" },
+  { id: 8, type: "safe", text: "ערב טוב {ownerName}! 🐾 המרחבים בטיול הטבע פשוט פתחו לי את הנשמה! 🌲🌿 עכשיו אני שוכב מרוצה על הגב ומחכה למנת הליטופים של הערב 💆‍♂️ תעשו חיים, {dogName} 🐶✨" },
+  { id: 9, type: "safe", text: "היי {ownerName}! 🐾 בזמן שאתם בפקקים או בסידורים, אני טיילתי בטבע כמו שייח' אמיתי עם פמליה צמודה! 🌲👑 תיהנו בכיף שלכם, {dogName} 🐕🕶️✨" },
+  { id: 10, type: "safe", text: "ערב טוב {ownerName}! 🐾 בדקתי היום בטיול בטבע כל אבן, ענף ועלה, ואישרתי שהאיכות מעולה! 🌲🔍 סמכו עליי, אני בשיא שלי! ד״ש מ-{dogName} 🐶👑🌾" },
+  { id: 11, type: "safe", text: "היי {ownerName}! 🐾 מעדכן ישירות מהשטח: הטיול בטבע היה הצלחה מסחררת, והשנ״צ שאחריו שובר שיאים! 🌲😴💤 תבלו בלי חשבון, {dogName} 🐕✨" },
+  { id: 12, type: "safe", text: "ערב טוב {ownerName}! 🐾 איזה כיף לחלץ עצמות במרחבים הפתוחים של הטבע! 🌲🐾 אל תרגישו אשמים אפילו לרגע – אני עושה פה חיים משוגעים! {dogName} 🐶🥳✨" },
+  { id: 13, type: "safe", text: "היי {ownerName}! 🐾 אם יש משהו שאני הכי אוהב זה טיול טוב בטבע ומיטה סופר מפנקת בסופו 🌲🛋️ יש פה את שניהם ברמת 5 כוכבים! ערב מעולה, {dogName} 🐕⭐🤍" },
+  { id: 14, type: "safe", text: "ערב טוב {ownerName}! 🐾 שמוליק לקח אותי היום למסלול טבע לפנתיאון! 🌲🌿 חזרתי עם חיוך מאוזן לאוזן וזנב שלא מפסיק לכשכש 😄🐾 תיהנו שם, {dogName} 🐶❤️" },
+  { id: 15, type: "safe", text: "היי {ownerName}! 🐾 החיים בטבע עשו לי רק טוב – שקט, שלווה ונופים מדהימים 🌲🌄 תמשיכו בעיסוקים שלכם בנחת, הכל פה תחת שליטה! {dogName} 🐕🍃✨" },
+  { id: 16, type: "safe", text: "ערב טוב {ownerName}! 🐾 אחרי טיול חלומי בטבע, הבנתי ששנינו בחופשה מושלמת במקביל! 🌲✈️ תעשו חיים, אני מסודר מכף רגל ועד זנב! {dogName} 🐶👑💖" },
+  { id: 17, type: "safe", text: "היי {ownerName}! 🐾 שרפתי קלוריות בטיול בטבע, ועכשיו אני שוכב רפוי ומאושר כמו שטיח פרסי יוקרתי בסוויטה 🌲🛋️ שיהיה לכם ערב פגז, {dogName} 🐕👑✨" },
+  { id: 18, type: "safe", text: "ערב טוב {ownerName}! 🐾 הטבע פה מסביב פשוט משגע! 🌲🍃 שמוליק והצוות דואגים שלא יחסר למלכות שלי אפילו גרגר פינוק אחד 👑 תבלו בכיף, {dogName} 🐶❤️" },
+  { id: 19, type: "safe", text: "היי {ownerName}! 🐾 הזנב שלי כישכש בלי הפסקה לאורך כל הטיול בטבע, ועכשיו הוא במצב מנוחה 🌲🐾 אל תדאגו לי לשנייה – הכל מושלם! אוהב, {dogName} 🐕✨🥰" },
+  { id: 20, type: "safe", text: "ערב טוב {ownerName}! 🐾 חזרתי מהטיול היומי בטבע, שתיתי מים צוננים מקערה נקייה ונכנסתי למוד פינוק לילי 🌲🥣💤 תיהנו בעניינים שלכם ברוגע! {dogName} 🐶🤍" },
+
+  // קבוצה 2: הכלב הוא המלך ושמוליק עובד אצלי (21–40) - מתאים לכולם
+  { id: 21, type: "safe", text: "היי {ownerName}! 🐾 שמעתי שאתם עובדים קשה... אל תשכחו שמישהו צריך לממן למלך שלו את הריזורט המפנק הזה! 👑💳 תמשיכו לעבוד, אני נח פה! {dogName} 🐶😎✨" },
+  { id: 22, type: "safe", text: "ערב טוב {ownerName}! 🐾 שמוליק חשב לרגע שהוא המנהל פה, עד שנתתי לו מבט של מי באמת קובע את הלו״ז בריזורט 👑 הכל תחת שליטה מלאה שלי! {dogName} 🐶👑✨" },
+  { id: 23, type: "safe", text: "היי {ownerName}! 🐾 הדרכתי היום את שמוליק בדיוק איך אני אוהב את הכרית שלי תפוחה ואת הליטוף בסנטר 🛋️ הוא לומד מהר, יש לו פוטנציאל! {dogName} 🐕👑🎓" },
+  { id: 24, type: "safe", text: "ערב טוב {ownerName}! 🐾 העברתי לשמוליק רשימת דרישות למחר: טיול טבע מוקדם, פינוק VIP ואפס הפרעות לשנ״צ 🌲📋 הוא רשם הכל בדייקנות! תבלו, {dogName} 🐶👑✨" },
+  { id: 25, type: "safe", text: "היי {ownerName}! 🐾 נתתי לשמוליק ציון 10 מתוך 10 על שירות החדרים היום 🛎️ הוא מתאמץ מאוד לרצות את הוד מלכותי! תמשיכו בעניינים שלכם, {dogName} 🐕👑⭐" },
+  { id: 26, type: "safe", text: "ערב טוב {ownerName}! 🐾 שמוליק קרא לי 'חמוד', אז הזכרתי לו בנימוס שהתואר הרשמי שלי הוא 'הוד מעלתו' 👑 המשרתים פה ממש בסדר! נשיקות, {dogName} 🐶👑🤍" },
+  { id: 27, type: "safe", text: "היי {ownerName}! 🐾 הלו״ז שלי בריזורט סופר קפדני: אני נובח, שמוליק מתייצב עם פינוק, אני מנמנם 👑🛌 קשה לנהל מקום כזה, אבל הכל עובד מעולה! {dogName} 🐕👑✨" },
+  { id: 28, type: "safe", text: "ערב טוב {ownerName}! 🐾 אם הייתם רואים איך כולם פה קופצים לדום כשאני מתמתח, הייתם מצדיעים לי בעצמכם! 👑🫡 תיהנו איפה שאתם, המלך מסודר! {dogName} 🐶👑🥂" },
+  { id: 29, type: "safe", text: "היי {ownerName}! 🐾 תפסתי בעלות על הסוויטה הכי שווה בריזורט והסברתי לשמוליק שכאן יש רק בוס אחד 👑🐾 הוא הסכים מיד! תבלו בכיף, {dogName} 🐕👑🛋️" },
+  { id: 30, type: "safe", text: "ערב טוב {ownerName}! 🐾 נבחתי נביחה אחת קטנה, ושמוליק מיד בדק שהמים קרים והשמיכה ישרה 🛎️💧 השירות פה פשוט ברמה מלכותית! תעשו חיים, {dogName} 🐶👑✨" },
+  { id: 31, type: "safe", text: "היי {ownerName}! 🐾 אני שוקל למנות את שמוליק לעוזר האישי שלי גם כשאחזור הביתה... הוא מיומן מאוד בגירוד מאחורי האוזן! 👂👑 תיהנו בעניינים שלכם, {dogName} 🐕👑😏" },
+  { id: 32, type: "safe", text: "ערב טוב {ownerName}! 🐾 בדקתי ביומן המלכותי שלי וראיתי שיש לי זמן פנוי רק לעוד נמנום עמוק אחד הלילה 👑😴 תמשיכו בעיסוקים שלכם בנחת, {dogName} 🐶👑🌙" },
+  { id: 33, type: "safe", text: "היי {ownerName}! 🐾 אל תדאגו לי לרגע – הצוות פה עושה מסדר בוקר ומסדר ערב סביב המיטה שלי 👑🛏️ החיים הטובים לגמרי! ד״ש מ-{dogName} 🐕👑✨" },
+  { id: 34, type: "safe", text: "ערב טוב {ownerName}! 🐾 שמעתי שאתם נהנים שם, אז הרשיתי לעצמי לרבוץ כמו קיסר בלי שום נקיפות מצפון 👑🛋️ תבלו, אני פה בשיא הפאר! {dogName} 🐶👑🍷" },
+  { id: 35, type: "safe", text: "היי {ownerName}! 🐾 שמוליק ניסה לשכנע אותי שהיום נגמר, אבל הודעתי לו שמגיע לי עוד סיבוב ליטופים מלכותי 👑💆‍♂️ והוא ביצע מיד! ערב מושלם, {dogName} 🐕👑❤️" },
+  { id: 36, type: "safe", text: "ערב טוב {ownerName}! 🐾 עוד יום של שלטון בלעדי בריזורט נסגר בהצלחה מוחצת 👑🐾 תמשיכו לחגוג איפה שאתם, הכל פה טיפ-טופ! {dogName} 🐶👑🎉" },
+  { id: 37, type: "safe", text: "היי {ownerName}! 🐾 הפינוק פה בריזורט כל כך מוגזם שאני שוקל לקנות את המקום ולהעסיק את שמוליק במשרה מלאה... 👑💼 סתם, מתגעגע! תיהנו, {dogName} 🐕👑😉" },
+  { id: 38, type: "safe", text: "ערב טוב {ownerName}! 🐾 המיטה שלי פה כל כך רכה שזה מרגיש כמו לשכב על ענן מלכותי ☁️👑 תמשיכו בעיסוקים שלכם, המלך מאושר! {dogName} 🐶👑✨" },
+  { id: 39, type: "safe", text: "היי {ownerName}! 🐾 תרגישו בנוח להישאר עסוקים – הצוות בריזורט משרת אותי ברמת 7 כוכבים פלוס כתר! 👑⭐ באהבה ענקית, {dogName} 🐕👑💎" },
+  { id: 40, type: "safe", text: "ערב טוב {ownerName}! 🐾 יום שלם של הוד מלכותי, טיול בטבע ופינוקים הגיע לסיומו 👑🌲💤 תעשו חיים, אני בסבבה של החיים! {dogName} 🐶👑🏖️" },
+
+  // קבוצה 3: הארוחה היומית, שובע עילאי ופינוק VIP (41–60) - מתאים לכולם
+  { id: 41, type: "safe", text: "היי {ownerName}! 🐾 הארוחה היומית הייתה פשוט מעדן גורמה של 5 כוכבים מישלן! 🍲⭐ ליקקתי את הקערה בנחת ועכשיו הבטן מלאה ומאושרת. תיהנו, {dogName} 🐶😋✨" },
+  { id: 42, type: "safe", text: "ערב טוב {ownerName}! 🐾 קיבלתי היום את הקערה העשירה והטעימה שלי בדיוק בזמן 🥩🍲 ואחריה ליטוף ארוך ומפנק בבטן השבעה. תבלו בכיף, {dogName} 🐕😋🤍" },
+  { id: 43, type: "safe", text: "היי {ownerName}! 🐾 ארוחה יומית מושלמת ומשביעה, קערת מים צוננים וצוות שלא מפסיק ללטף 🍲💧 אתם יכולים להיות רגועים לגמרי, אני שבע ומבסוט! {dogName} 🐶🍖✨" },
+  { id: 44, type: "safe", text: "ערב טוב {ownerName}! 🐾 בטן מלאה בכל טוב, לב רגוע ומיטה סופר מפנקת 🍲🛋️ מה עוד כלב יכול לבקש בעולם הזה? תמשיכו בעניינים שלכם, {dogName} 🐕🤍✨" },
+  { id: 45, type: "safe", text: "היי {ownerName}! 🐾 הצוות פה יודע בדיוק מתי להגיש את הארוחה היומית ואיך אני אוהב שמגרדים לי מאחורי האוזניים בזמן שאני שבע ומרוצה 🍲👂 הכל מושלם! {dogName} 🐶🥩❤️" },
+  { id: 46, type: "safe", text: "ערב טוב {ownerName}! 🐾 אכלתי ארוחה מעולה, שתיתי לרוויה, ועכשיו אני שוכב ונאנח מאושר עם בטן עגולה ומרוצה 🍲💤 תבלו איפה שאתם! באהבה, {dogName} 🐕😋🍖" },
+  { id: 47, type: "safe", text: "היי {ownerName}! 🐾 הגישו לי היום את הארוחה היומית כמו למלך במסעדת יוקרה – טעים, מזין ומשביע בטירוף 🍲👑 תמשיכו ליהנות מהבילויים שלכם, {dogName} 🐶🍽️✨" },
+  { id: 48, type: "safe", text: "ערב טוב {ownerName}! 🐾 רק מעדכן שהקערה מבריקה מאושר, הבטן שלי מלאה והזנב מכשכש בקצב שיא 🍲🐾 תעשו חיים, {dogName} 🐕✨🥰" },
+  { id: 49, type: "safe", text: "היי {ownerName}! 🐾 אחרי ארוחה יומית דשנה וטיול מדהים בטבע, אין כלב מאושר ושבע ממני עלי אדמות 🌲🍲 תיהנו מכל רגע, {dogName} 🐶🌳💖" },
+  { id: 50, type: "safe", text: "ערב טוב {ownerName}! 🐾 קיבלתי קערה מלאה כל טוב ומנת אהבה ענקית מהצוות 🍲❤️ אני מסודר ושבע לגמרי, תמשיכו בכיף שלכם! {dogName} 🐕🍖✨" },
+  { id: 51, type: "safe", text: "היי {ownerName}! 🐾 הליטופים בבטן אחרי הארוחה היומית פה הם פשוט ברמה בינלאומית 💆‍♂️🍲 רק רציתי שתדעו שהכל פצצה! אוהב, {dogName} 🐶😋🏆" },
+  { id: 52, type: "safe", text: "ערב טוב {ownerName}! 🐾 סעודה משובחת, חטיף בריאות טבעי וליטוף מרגיע לפני השינה 🍲✨ אתם בידיים טובות, וגם אני שבע ומפונק! {dogName} 🐕🌙🤍" },
+  { id: 53, type: "safe", text: "היי {ownerName}! 🐾 שבע, רגוע, מבסוט ומנומנם – השילוב האולטימטיבי של סוף יום בריזורט 🍲😴 שיהיה לכם ערב מקסים, {dogName} 🐶💤✨" },
+  { id: 54, type: "safe", text: "ערב טוב {ownerName}! 🐾 שמוליק והצוות דואגים לכל ביס ולכל פינוק שלי בדיוק לפי הספר של המלכים 🍲📖👑 תמשיכו לבלות בראש שקט, {dogName} 🐕🍖⭐" },
+  { id: 55, type: "safe", text: "היי {ownerName}! 🐾 הארוחה היומית הייתה כל כך טעימה שליקקתי את השפתיים עשר דקות אחרי! 🍲😋 תיהנו בעניינים שלכם, אני מרוצה עד הגג! {dogName} 🐶✨🍖" },
+  { id: 56, type: "safe", text: "ערב טוב {ownerName}! 🐾 בטן מלאה וטובה עושה כלב שליו ומאושר 🍲💤 תבלו איפה שאתם בלי שום דאגות! נשיקות מ-{dogName} 🐕💋🤍" },
+  { id: 57, type: "safe", text: "היי {ownerName}! 🐾 רק מדווח שקיבלתי את מנת האוכל המלכותית שלי ופינוקים ללא הגבלה 🍲👑 תמשיכו ליהנות, הכל פה 100%! {dogName} 🐶🏆✨" },
+  { id: 58, type: "safe", text: "ערב טוב {ownerName}! 🐾 מים צוננים, קערת אוכל משובחת ומיטה נוחה – אני מסודר ללילה כמו שצריך! 🍲🛏️ תיהנו המון, {dogName} 🐕🌙✨" },
+  { id: 59, type: "safe", text: "היי {ownerName}! 🐾 האוכל היה מדהים, אבל החיבוקים פה בריזורט אחרי הארוחה שווים מיליון דולר 🍲🤗 שיהיה לכם ערב נפלא, {dogName} 🐶❤️✨" },
+  { id: 60, type: "safe", text: "ערב טוב {ownerName}! 🐾 סיימתי את הארוחה היומית בנחת, עשיתי מתיחה גדולה ועכשיו אני נרדם מחויך ומרופד 🍲🥱 תעשו חיים, {dogName} 🐕💤👑" },
+
+  // קבוצה 4: געגועים חמודים עם קריצה וביטחון (61–80) - מתאים לכולם
+  { id: 61, type: "safe", text: "היי {ownerName}! 🐾 אני מתגעגע אליכם, אבל בינינו... ממש ממש כיף לי פה, אז קחו את הזמן שלכם בנחת! 🐶😜 תיהנו מכל רגע, אוהב {dogName} ❤️✨" },
+  { id: 62, type: "safe", text: "ערב טוב {ownerName}! 🐾 חושב עליכם בין טיול בטבע לתנומה על המיטה המפנקת 🌲🛋️ אבל אל תדאגו – אני חוגג פה בענק! {dogName} 🐕👑💫" },
+  { id: 63, type: "safe", text: "היי {ownerName}! 🐾 רק מוודא שאתם לא מתגעגעים יותר מדי... כי אני פה שקוע בפינוקים וליטופים עד מעל האוזניים! 🐶🥰 נשיקות מ-{dogName} 💋✨" },
+  { id: 64, type: "safe", text: "ערב טוב {ownerName}! 🐾 אוהב אתכם מלא, אבל חייב להודות שהחופשה בריזורט באה לי בול בזמן! 🏖️🐶 תמשיכו לעשות חיים משוגעים, {dogName} 🐕🤍🎉" },
+  { id: 65, type: "safe", text: "היי {ownerName}! 🐾 אם חשבתם שאני יושב ובוכה ליד הדלת – תחשבו שוב, אני מקבל עכשיו מסאז' מלכותי בגב 💆‍♂️👑 תיהנו, {dogName} 🐶✨😎" },
+  { id: 66, type: "safe", text: "ערב טוב {ownerName}! 🐾 מקווה שאתם נהנים שם לפחות חצי ממה שאני נהנה פה בריזורט! 🥳🐕 אוהב המון ומשדר אנרגיות שיא, {dogName} 💫❤️" },
+  { id: 67, type: "safe", text: "היי {ownerName}! 🐾 תרגישו חופשי להאריך את התוכניות שלכם, המלך פה ממש לא לחוץ לחזור לשגרה... 👑🏖️ ד״ש מ-{dogName} 🐶😉✨" },
+  { id: 68, type: "safe", text: "ערב טוב {ownerName}! 🐾 רק מציץ לוודא שאתם רגועים – אני פה מאושר, מחובק ושמח עד השמיים! 🐶🥰 תמשיכו בעניינים שלכם בכיף, {dogName} 🐕💖✨" },
+  { id: 69, type: "safe", text: "היי {ownerName}! 🐾 אתם בלב שלי תמיד, אבל הריזורט הזה פשוט הצגה של 5 כוכבים! ⭐🌟 תמשיכו לבלות בנחת, {dogName} 🐶👑🥂" },
+  { id: 70, type: "safe", text: "ערב טוב {ownerName}! 🐾 אם אתם מרגישים פתאום געגוע, קחו נשימה עמוקה – אני בידיים הכי אוהבות ומקצועיות בעולם! 🐕🤍 תבלו בכיף, {dogName} 🐶✨" },
+  { id: 71, type: "safe", text: "היי {ownerName}! 🐾 נכון שאני מתגעגע קצת, אבל אל תתנו לזה לקלקל לכם את הכיף – אני חוגג פה בטירוף! 🥳🐾 אוהב מלא, {dogName} 🐕🎉❤️" },
+  { id: 72, type: "safe", text: "ערב טוב {ownerName}! 🐾 שולח לכם חיבוק חם ורטוב מרחוק, ומיד חוזר להתרפק על המיטה המפנקת שלי בריזורט! 🐶🤗 תיהנו, {dogName} 🐕💤✨" },
+  { id: 73, type: "safe", text: "היי {ownerName}! 🐾 בטוח שאתם חושבים עליי ברגעים אלה... אז הנה אות חיים רשמי: הכל מושלם בריזורט, תבלו בראש שקט! 💌🐶 נשיקות, {dogName} 🐾❤️" },
+  { id: 74, type: "safe", text: "ערב טוב {ownerName}! 🐾 איזה מזל שיש לי את הריזורט לכלב! אני חוגג פה חופשת חלומות מהסרטים 🎬🐕 ד״ש חם מ-{dogName} 🐶🍿✨" },
+  { id: 75, type: "safe", text: "היי {ownerName}! 🐾 שולח לכם כשכוש זנב ענק, רוטט ומאושר מכל הלב! 🐾✨ תיהנו איפה שאתם, אני הכי מרוצה בעולם, {dogName} 🐕🥰💖" },
+  { id: 76, type: "safe", text: "ערב טוב {ownerName}! 🐾 רק רציתי להגיד תודה ענקית שסידרתם לי חופשה ברמה כזאת בזמן שאתם עסוקים 🙏🐶 תמשיכו בכיף, {dogName} 🐕👑🤍" },
+  { id: 77, type: "safe", text: "היי {ownerName}! 🐾 אל תמהרו לחזור... כלומר ברור שתחזרו, אבל קודם כל תמצו כל שנייה של הנאה! 😜🐾 באהבה ענקית, {dogName} 🐶❤️✨" },
+  { id: 78, type: "safe", text: "ערב טוב {ownerName}! 🐾 חושב עליכם באהבה ענקית מתוך הסוויטה המלכותית שלי בריזורט 🌙🛋️ תיהנו המון איפה שאתם, {dogName} 🐕👑💤" },
+  { id: 79, type: "safe", text: "היי {ownerName}! 🐾 הלב שלי איתכם תמיד, אבל הגוף שלי נח בריזורט ברמת 5 כוכבים פלוס 👑⭐ תבלו בלי שום חשבון, {dogName} 🐶✨💖" },
+  { id: 80, type: "safe", text: "ערב טוב {ownerName}! 🐾 שולח נשיקה רטובה ישר על האף ומאחל לכם ערב מושלם! 💋🐶 אני פה בעננים המלכותיים, {dogName} 🐕☁️👑" },
+
+  // קבוצה 5א: מדשאת משחקים וחברים על 4 - לחברותיים בלבד (81–90) [לעולם לא לבידוד!]
+  { id: 81, type: "friendly", text: "היי {ownerName}! 🐾 השתוללתי היום במדשאת המשחקים עם חברים על 4, רצנו כמו מטורפים ועכשיו אני נרדם מאושר! 🎾🐕 תיהנו שם, {dogName} 🐶🎉💤" },
+  { id: 82, type: "friendly", text: "ערב טוב {ownerName}! 🐾 המדשאה המשותפת פה פשוט חלום – מלא חברים, משחקי תופסת וכיף של החיים! 🌾🐾 תמשיכו לבלות בכיף, {dogName} 🐕🎾🥳" },
+  { id: 83, type: "friendly", text: "היי {ownerName}! 🐾 מצאתי לי חבר למשחקים במדשאה ורצנו ביחד עד שהלשון יצאה מאושרת! 🐶👅 ד״ש חם מהדשא, {dogName} 🐾🎾✨" },
+  { id: 84, type: "friendly", text: "ערב טוב {ownerName}! 🐾 בזמן שאתם בעניינים שלכם, אני עשיתי פה מסיבת ריצות על המדשאה עם כל החבר'ה 🌾🎉 איזה כיף בריזורט! {dogName} 🐕🐾✨" },
+  { id: 85, type: "friendly", text: "היי {ownerName}! 🐾 שיחקתי היום במדשאה עם כדורים, רדיפות וחברים, והיה פשוט אש! 🎾🔥 תבלו איפה שאתם, אני מאושר עד הגג, {dogName} 🐶🐾❤️" },
+  { id: 86, type: "friendly", text: "ערב טוב {ownerName}! 🐾 הדשא במדשאת המשחקים כל כך נעים למרדפים, ששמוליק היה צריך לשכנע אותי להיכנס לסוויטה... 🌾🐾 תעשו חיים, {dogName} 🐕😄🛋️" },
+  { id: 87, type: "friendly", text: "היי {ownerName}! 🐾 איזה נבחרת של חברים מצאתי לי במדשאה! כולם כשכשו בזנב באושר ושמחה 🐶🐾 תיהנו בכיף שלכם, {dogName} 🐕🎾🥳" },
+  { id: 88, type: "friendly", text: "ערב טוב {ownerName}! 🐾 שרפתי את כל המרץ במשחקים חברתיים במדשאה, ועכשיו אני שוכב ונרדם כמו מלך 🌾👑 אוהב המון, {dogName} 🐶💤✨" },
+  { id: 89, type: "friendly", text: "היי {ownerName}! 🐾 כמות הכשכושים במדשאת המשחקים היום שברה את כל השיאים העולמיים! 🐾🏆 תמשיכו לחגוג, הכל פה מושלם! {dogName} 🐕🥳💖" },
+  { id: 90, type: "friendly", text: "ערב טוב {ownerName}! 🐾 המדשאה פה פשוט אליפות! הוצאתי אנרגיות, שמחתי ועכשיו נכנס ללילה רגוע ושלו 🌾🌙 {dogName} 🐶💤✨" },
+
+  // קבוצה 5ב: מותאם אישית לבידוד / תוקפניים / שקט ופרטיות (91–100) [VIP 1-על-1, ללא מדשאה]
+  { id: 91, type: "isolation", text: "היי {ownerName}! 🐾 קיבלתי היום יחס VIP אישי של 1-על-1 עם המטפל שלי בטיול בטבע, בלי שאף אחד יפריע לי למלכות! 🌲👑 תיהנו בעניינים שלכם, {dogName} 🐶💎✨" },
+  { id: 92, type: "isolation", text: "ערב טוב {ownerName}! 🐾 המרחב הפרטי שלי בריזורט פשוט מושלם! שקט מוחלט, שלווה, טיול ארוך בטבע ופינוק אישי שמגיע רק לי 🌲🐾 ד״ש חם מ-{dogName} 🐕👑✨" },
+  { id: 93, type: "isolation", text: "היי {ownerName}! 🐾 המטפלים פה מבינים אותי בדיוק – יצאתי לטיול שקט ומהנה בטבע, וחזרתי לסוויטה המלכותית הפרטית שלי לנוח 🌲🛋️ תבלו בכיף, {dogName} 🐶👑🤍" },
+  { id: 94, type: "isolation", text: "ערב טוב {ownerName}! 🐾 שום רעש ושום הפרעות! רק אני, המטפל האוהב שלי, טיול בטבע וליטופים בלי סוף 🌲💆‍♂️ אני רגוע לחלוטין! אוהב, {dogName} 🐕👑💖" },
+  { id: 95, type: "isolation", text: "היי {ownerName}! 🐾 יש לי פה שקט ושלווה בדיוק כמו שאני אוהב, טיול בטבע של אלופים וזמן איכות אישי 🌲🌿 תיהנו שם, המלך שלכם רגוע! {dogName} 🐶👑✨" },
+  { id: 96, type: "isolation", text: "ערב טוב {ownerName}! 🐾 הטיול האישי שלי בטבע היה מדהים! שמוליק והצוות נתנו לי 100% תשומת לב פרטית ומסורה 🌲❤️ שיהיה לכם ערב נפלא, {dogName} 🐕👑🥰" },
+  { id: 97, type: "isolation", text: "היי {ownerName}! 🐾 אני בסוויטה המרווחת שלי, שבע ומרוצה עד הגג אחרי יום של שקט, פרטיות ופינוקים 🛋️👑 אל תדאגו לי לשנייה! {dogName} 🐶💎💤" },
+  { id: 98, type: "isolation", text: "ערב טוב {ownerName}! 🐾 בזמן שאתם עסוקים, אני נהנה מפרטיות מוחלטת, טיול פרטי בטבע ואהבה אינסופית מהצוות 🌲🤍 תעשו חיים, {dogName} 🐕👑✨" },
+  { id: 99, type: "isolation", text: "היי {ownerName}! 🐾 הפינוק האישי פה בריזורט מושלם עבורי – שקט, בטוח, שליו ומלא כבוד למלך 👑🐾 תמשיכו בכיף שלכם בראש שקט לגמרי! {dogName} 🐶🙏✨" },
+  { id: 100, type: "isolation", text: "ערב טוב {ownerName}! 🐾 יום שקט, שליו ומלא ליטופים אישיים הסתיים. אני ישן כמו מלך אמיתי בסוויטה הפרטית שלי 👑🛋️💤 אוהב תמיד, {dogName} 🐕👑🤍" },
+
+  // קבוצה 6: תוכנית אילוף וחינוך משמעת מקצועית עם שמוליק (101–120) [בהומור שנון ומצחיק מנקודת מבטו של הכלב!]
+  { id: 101, type: "training", text: "היי {ownerName}! 🐾 למדתי היום עם שמוליק מלא דברים חדשים ומשמעת של אלופים! 🎓🐶 בינתיים עוד לא הגענו לשיעור של איך להכין לכם קפה על הבוקר, אבל תנו לי עוד כמה ימים... 😉☕ אוהב, {dogName} ❤️" },
+  { id: 102, type: "training", text: "ערב טוב {ownerName}! 🐾 שמוליק המאלף לימד אותי היום להקשיב, לשבת ולהישאר כמו מקצוען! 🐕🎓 עכשיו רק נשאר לו ללמד אותי לקפל כביסה ולהפעיל מכונה על 40 מעלות 🧺👕 אל תדאגו, אני עובד על זה! {dogName} ✨" },
+  { id: 103, type: "training", text: "היי {ownerName}! 🐾 מעדכן מהשטח: סשן האילוף היום היה אליפות! 🎓🐾 קלטתי הכל תוך שנייה. שמוליק אמר שברגע שאסיים את הקורס, אני עובר ישר לשטוף את הכלים בכיור במקומכם 🍽️🧼 תיהנו בעניינים שלכם, {dogName} 🐶😎" },
+  { id: 104, type: "training", text: "ערב טוב {ownerName}! 🐾 עוד יום של למידה ומשמעת ברזל מאחוריי! 🎓🏆 אני כבר יודע ללכת רגוע, לא למשוך ולהקשיב. השלב הבא בסילבוס של שמוליק: להחזיק מגב ולעשות ספונג'ה בבית בשישי! 🧹🧼 ד״ש חם מ-{dogName} 🐕✨" },
+  { id: 105, type: "training", text: "היי {ownerName}! 🐾 תרגלתי היום שליטה עצמית ופקודות מתקדמות עם שמוליק! 🐾🎓 הוא טוען שאם אמשיך ככה בקצב הזה, אני חוזר הביתה עם רישיון נהיגה ואני זה שמסיע אתכם לעבודה 🚗💨 מחכה לראות אתכם, {dogName} 🐶❤️" },
+  { id: 106, type: "training", text: "ערב טוב {ownerName}! 🐾 שמוליק שם לי היום אתגרים באילוף, אבל עברתי אותם כמו טייס קרב! ✈️🐶 עבדנו על פוקוס והקשבה, ונראה לי שעד סוף השבוע אני כבר מטיס אתכם לחופשה בחו״ל! 🧳 תמשיכו לבלות בנחת, {dogName} 🐶✨" },
+  { id: 107, type: "training", text: "היי {ownerName}! 🐾 סשן האילוף היום שבר שיאים! 🎓🐕 שמוליק לימד אותי פקודות הישארות ואיפוק. השלב הבא: ללמד אותי להקליד את הקוד בטלפון ולהזמין לנו וולט לסלון 🍕📱 תבלו בכיף, {dogName} 🐕👏" },
+  { id: 108, type: "training", text: "ערב טוב {ownerName}! 🐾 שילבתי היום בין אימון אילוף מקצועי עם שמוליק למנוחה בסוויטה שלי 🛋️🎓 נהייתי כזה ממושמע ורציני, ששמוליק שוקל לשים אותי במקומכם בשיחות זום מול הבוס מחר בבוקר! 💼👔 {dogName} 🐶👑" },
+  { id: 109, type: "training", text: "היי {ownerName}! 🐾 שיעור האילוף היום עבר בהצלחה מסחררת! 🏆🐶 שמוליק אמר שאני כזה תלמיד חכם ומבריק, שרק חסר שאלמד להגיש דוחות מס ולשלם חשמל בזמן 📈💡 תמשיכו בכיף שלכם, {dogName} 🐕❤️" },
+  { id: 110, type: "training", text: "ערב טוב {ownerName}! 🐾 שמוליק ואני עובדים על הרגלים מעולים והתנהגות למופת 🎓🐾 אם עד היום נבחתי על השואב הרובוטי, בקרוב אני מתכוון לתפעל אותו ולרוקן את הפילטר בעצמי! 🤖🧹 נשיקות מ-{dogName} 🐶💋✨" },
+  { id: 111, type: "training", text: "היי {ownerName}! 🐾 סיימתי עוד יום גדוש בלמידה ותרגול פקודות. שמוליק מרוצה עד הגג! 🎓🐕 שאלתי אותו מתי לומדים להכין לכם חביתה וסלט קצוץ דק, והוא הבטיח שזה במודול המתקדם 🍳🥗 אוהב המון, {dogName} 🐶💤" },
+  { id: 112, type: "training", text: "ערב טוב {ownerName}! 🐾 שיעור האילוף היום הוציא ממני את כל האנרגיה בכיף ענק! 🎓🌟 שמוליק לימד אותי לשחרר חפצים בפקודה – עכשיו רק נשאר לשכנע אותי לקחת את שקית הזבל לפח ביציאה מהבית 🗑️🚶‍♂️ תעשו חיים, {dogName} 🐕✨" },
+  { id: 113, type: "training", text: "היי {ownerName}! 🐾 תרגלנו היום עבודה עם גירויים ורוגע מוחלט. שמוליק טוען שאחרי כל מה שלמדתי, כשאחזור הביתה אני חייב לכם לפחות מסאז' גב של חצי שעה 💆‍♂️🐶 מחכה לראות אתכם, {dogName} ❤️" },
+  { id: 114, type: "training", text: "ערב טוב {ownerName}! 🐾 האילוף בריזורט עובד פלאים! 🎓🐾 התנועות שלי נהיו כאלה מדויקות וממושמעות, ששמוליק בודק אם אפשר לרשום אותי לשיעורי פסנתר וכינור 🎹🎻 שיהיה לכם ערב נפלא, {dogName} 🐕🥰" },
+  { id: 115, type: "training", text: "היי {ownerName}! 🐾 בזמן שאתם בעניינים שלכם, אני הופך פה לדוקטור למשמעת! 🎓🐶 שמוליק אומר שאני כזה גאון שאוטוטו אני לומד גם להחליף נורות שרופות ולתקן מדפים בבית 🔧💡 תיהנו בכיף, {dogName} 🐶👑✨" },
+  { id: 116, type: "training", text: "ערב טוב {ownerName}! 🐾 עבדנו היום על גבולות, רוגע והקשבה ללא רבב! 🎓🐾 שמוליק הבטיח שאם אמשיך להצטיין, השיעור הבא יהיה איך לסובב את המפתח במנעול ולפתוח לכם כשאתם חוזרים עם קניות 🔑🛍️ {dogName} 🐕🏆" },
+  { id: 117, type: "training", text: "היי {ownerName}! 🐾 היום פיצחנו עוד תרגיל אילוף ברמת מומחה! 🎓👏 שמוליק אומר שאני מתקדם כל כך יפה, שבקרוב אני גם אוציא את המשפך ואשקה את הסחלבים במרפסת 🪴🚿 גאה בעצמי, {dogName} 🐶❤️" },
+  { id: 118, type: "training", text: "ערב טוב {ownerName}! 🐾 אחרי סשן אילוף מעצים, התפנקתי בארוחה טעימה 🥣🎓 השלב הבא באילוף: ללמוד להעביר לכם פרק בנטפליקס כשאתם מתעצלים לקום לשלט 📺🍿 אוהב מלא, {dogName} 🐕💤✨" },
+  { id: 119, type: "training", text: "היי {ownerName}! 🐾 תרגלתי היום הליכה רגועה ותרגילים חדשים לצד שמוליק. מרגיש שאני בוגר ברמות! 🎓🐶 שאלתי אם יש מצב שאני אלמד גם לפרוק את המדיח, שמוליק אמר שקודם נלמד לא לאכול גרביים... 🧦😂 ד״ש חם מ-{dogName} ✨" },
+  { id: 120, type: "training", text: "ערב טוב {ownerName}! 🐾 לסיכום היום: 100% הקשבה באילוף, 100% פינוק משמוליק, ותעודת הצטיינות בדרך! 🎓🏅 נראה לי שעם הרמה שהגעתי אליה, אני מוכן לנהל ישיבת דירקטוריון מחר בבוקר 👔💼 נתראה בקרוב, {dogName} 🐶👑✨" }
+];
+
+/**
+ * זיהוי האם כלב נמצא בתוכנית אילוף / פנסיון אילוף
+ */
+function isDogInTraining(b) {
+  var sType = (b.service_type || (b.data && b.data.serviceType) || "").toLowerCase();
+  if (sType === "training" || sType === "day_training" || sType === "combined") {
+    return true;
+  }
+  var notes = ((b.notes || "") + " " + (b.behavior_notes || "")).toLowerCase();
+  if (notes.indexOf("אילוף") !== -1 || notes.indexOf("מאלף") !== -1 || notes.indexOf("משמעת") !== -1 || notes.indexOf("חינוך גור") !== -1) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * זיהוי האם כלב נמצא בבידוד / תוקפני
+ */
+function isDogInIsolation(b, allIntakeRequests) {
+  // 1. בדיקת הערות והתנהגות
+  var textToCheck = ((b.notes || "") + " " + (b.behavior_notes || "") + " " + (b.special_diet || "")).toLowerCase();
+  if (textToCheck.indexOf("בידוד") !== -1 || textToCheck.indexOf("תוקפנ") !== -1 || textToCheck.indexOf("לא חברותי") !== -1 || textToCheck.indexOf("לא מסתדר") !== -1 || textToCheck.indexOf("שקט") !== -1) {
+    return true;
+  }
+  // 2. תעריף יומי של בידוד (230 ₪)
+  if (b.daily_rate === 230 || (b.data && b.data.dailyRate === 230)) {
+    return true;
+  }
+  // 3. סימון מפורש באובייקט ההזמנה
+  if (b.data && (b.data.isFriendlyWithDogs === "no" || b.data.serviceType === "isolation")) {
+    return true;
+  }
+  // 4. הצלבה מול שאלון הקליטה
+  if (allIntakeRequests && allIntakeRequests.length > 0) {
+    var p = (b.owner_phone || "").replace(/[^0-9]/g, "");
+    for (var i = 0; i < allIntakeRequests.length; i++) {
+      var req = allIntakeRequests[i];
+      var reqPhone = (req.owner_phone || req.ownerPhone || "").replace(/[^0-9]/g, "");
+      if (reqPhone && reqPhone.slice(-7) === p.slice(-7)) {
+        if (req.is_friendly_with_dogs === "no" || req.isFriendlyWithDogs === "no") {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * בחירת נוסח יומי מתאים לכלב (מונע כפילויות במהלך השהות)
+ * מבצע הפרדה הרמטית בין פנסיון לאילוף ובידוד!
+ */
+function getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat) {
+  var props = PropertiesService.getScriptProperties();
+  var sentKey = isMotzaeiShabbat ? ("sent_motzash_templates_" + b.id) : ("sent_daily_templates_" + b.id);
+  var rawSent = props.getProperty(sentKey);
+  var sentIds = [];
+  if (rawSent) {
+    try { sentIds = JSON.parse(rawSent); } catch (e) { sentIds = []; }
+  }
+
+  // בדיקה האם הכלב באילוף
+  var inTraining = isDogInTraining(b);
+
+  // בחירת מאגר: במוצאי שבת מאגר סופ"ש ייעודי, בימי חול המאגר היומי
+  var sourcePool = (isMotzaeiShabbat && typeof WEEKEND_DOG_TEMPLATES !== "undefined") ? WEEKEND_DOG_TEMPLATES : DAILY_DOG_TEMPLATES;
+
+  // סינון המאגר המורשה: אילוף / בידוד / חברותי
+  var pool = [];
+  for (var i = 0; i < sourcePool.length; i++) {
+    var t = sourcePool[i];
+    if (inTraining) {
+      // כלב באילוף: רק תבניות אילוף!
+      if (t.type === "training") {
+        pool.push(t);
+      }
+    } else if (isIsolation) {
+      // כלב בבידוד בפנסיון: רק safe או isolation (לעולם לא friendly ולא training)
+      if (t.type === "safe" || t.type === "isolation") {
+        pool.push(t);
+      }
+    } else {
+      // כלב חברותי בפנסיון: safe, friendly או isolation (ללא אילוף)
+      if (t.type !== "training") {
+        pool.push(t);
+      }
+    }
+  }
+
+  // סינון תבניות שטרם נשלחו בשהות זו
+  var available = [];
+  for (var j = 0; j < pool.length; j++) {
+    if (sentIds.indexOf(pool[j].id) === -1) {
+      available.push(pool[j]);
+    }
+  }
+
+  // אם מוצו כל התבניות, איפוס המעקב
+  if (available.length === 0) {
+    available = pool;
+    sentIds = [];
+  }
+
+  var chosen = available[Math.floor(Math.random() * available.length)] || sourcePool[0];
+  sentIds.push(chosen.id);
+  props.setProperty(sentKey, JSON.stringify(sentIds));
+
+  // החלפת שמות הבעלים והכלב
+  var cleanOwner = (b.owner_name || "").trim().split(" ")[0] || "לקוח יקר";
+  var cleanDog = (b.dog_name || "").trim() || "החבר על 4";
+  var msgText = chosen.text
+    .replace(/{ownerName}/g, cleanOwner)
+    .replace(/{dogName}/g, cleanDog);
+
+  return { id: chosen.id, text: msgText, isWeekend: isMotzaeiShabbat };
+}
+
+/**
+ * הפונקציה הראשית: שליחת עדכון יומי בימי חול בלבד בשעה 20:00 לכל הכלבים השוהים בלינה
+ */
+function sendDailyDogEveningUpdates() {
+  try {
+    var now = new Date();
+    var israelTz = "Asia/Jerusalem";
+
+    // 1. בדיקת זמנים וכלל ברזל: שקט מוחלט ללקוחות משישי 14:00 וכל השבת/חג
+    var dayOfWeek = parseInt(Utilities.formatDate(now, israelTz, "u"), 10); // 1=Mon, ..., 5=Fri, 6=Sat, 7=Sun
+    var hour = parseInt(Utilities.formatDate(now, israelTz, "H"), 10);
+    var minute = parseInt(Utilities.formatDate(now, israelTz, "m"), 10);
+    var currentMinutes = hour * 60 + minute;
+
+    // יום שישי: החל משעה 14:00 - כלל ברזל: שקט מוחלט ללקוחות!
+    if (dayOfWeek === 5) {
+      if (hour >= 14) {
+        Logger.log("ערב שבת (יום שישי לאחר 14:00): כלל ברזל - שקט מוחלט ללקוחות. לא נשלחות הודעות.");
+        return;
+      }
+    }
+
+    // יום שבת: כלל ברזל - אסור לשלוח לפני 40 דקות לאחר צאת השבת!
+    if (dayOfWeek === 6) {
+      var satSendMinutes = getMotzeiShabbatSendMinutesAppScript(now);
+      if (currentMinutes < satSendMinutes) {
+        Logger.log("יום שבת: כלל ברזל - שקט מוחלט עד 40 דק' מצאת השבת (" + formatMinutesAsTimeStringAppScript(satSendMinutes) + "). לא נשלחות הודעות כעת.");
+        return;
+      }
+    }
+
+    // יום כיפור: שקט מוחלט!
+    if (isYomKippurNow(now, israelTz)) {
+      Logger.log("יום כיפור: שקט מוחלט - לא נשלחות הודעות יומיות.");
+      return;
+    }
+
+    // בדיקת חגים מול Hebcal: שקט מוחלט עד 40 דק' מצאת החג
+    try {
+      var yStr = Utilities.formatDate(now, israelTz, "yyyy-MM-dd");
+      var yr = Utilities.formatDate(now, israelTz, "yyyy");
+      var mo = Utilities.formatDate(now, israelTz, "M");
+      var hRes = UrlFetchApp.fetch("https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=off&mod=off&nx=off&year=" + yr + "&month=" + mo + "&ss=off&mf=off&c=off&geo=none&i=on", { muteHttpExceptions: true });
+      if (hRes.getResponseCode() === 200) {
+        var hItems = (JSON.parse(hRes.getContentText())).items || [];
+        for (var hi = 0; hi < hItems.length; hi++) {
+          if (hItems[hi].date === yStr) {
+            var isErev = (hItems[hi].title || "").match(/Erev/i);
+            if (isErev && hour >= 14) {
+              Logger.log("ערב חג (" + (hItems[hi].hebrew || hItems[hi].title) + "): כלל ברזל - שקט מוחלט מ-14:00.");
+              return;
+            }
+            var chagSendMinutes = getMotzeiShabbatSendMinutesAppScript(now);
+            if (currentMinutes < chagSendMinutes) {
+              Logger.log("חג (" + (hItems[hi].hebrew || hItems[hi].title) + "): כלל ברזל - שקט מוחלט לפני צאת החג + 40 דק'. השליחה תתאפשר רק בשעה " + formatMinutesAsTimeStringAppScript(chagSendMinutes));
+              return;
+            }
+          }
+        }
+      }
+    } catch(eH) {}
+
+    // האם מדובר במוצאי שבת?
+    var isMotzaeiShabbat = (dayOfWeek === 6);
+    if (isMotzaeiShabbat) {
+      Logger.log("מוצאי שבת (40 דקות לאחר צאת שבת): נשלחת הודעת סיכום סופ\"ש מיוחדת ומותאמת אישית לכלבים המתארחים! 🐾✨");
+    }
+
+    var todayStr = Utilities.formatDate(now, israelTz, "yyyy-MM-dd");
+
+    // 2. שליפת כל הכלבים הלנים הלילה בריזורט מ-Supabase
+    var queryUrl = SUPABASE_URL + "/rest/v1/bookings?start_date=lte." + todayStr + "&end_date=gt." + todayStr + "&stay_status=neq.cancelled&select=*";
+    var res = UrlFetchApp.fetch(queryUrl, {
+      method: "get",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+      muteHttpExceptions: true
+    });
+
+    if (res.getResponseCode() !== 200) {
+      Logger.log("שגיאה בשליפת הזמנות פעילות: " + res.getContentText());
+      return;
+    }
+
+    var activeBookings = JSON.parse(res.getContentText());
+    if (!activeBookings || activeBookings.length === 0) {
+      Logger.log("אין כלבים השוהים הלילה בריזורט (" + todayStr + ")");
+      return;
+    }
+
+    // 3. שליפת בקשות קליטה לצורך הצלבת סטטוס בידוד/תוקפנות
+    var allIntake = [];
+    try {
+      var intakeUrl = SUPABASE_URL + "/rest/v1/intake_requests?select=owner_phone,is_friendly_with_dogs";
+      var iRes = UrlFetchApp.fetch(intakeUrl, {
+        method: "get",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+        muteHttpExceptions: true
+      });
+      if (iRes.getResponseCode() === 200) {
+        allIntake = JSON.parse(iRes.getContentText());
+      }
+    } catch (eIntake) {}
+
+    var props = PropertiesService.getScriptProperties();
+    var sentCount = 0;
+    var sentDogsMap = {};
+
+    for (var i = 0; i < activeBookings.length; i++) {
+      var b = activeBookings[i];
+      var todaySentKey = "daily_dog_sent_" + b.id + "_" + todayStr;
+      var cleanPhone = (b.owner_phone || "").replace(/[^0-9]/g, "");
+      var cleanDog = (b.dog_name || "").trim().toLowerCase();
+      var dogGlobalKey = "daily_dog_sent_" + cleanPhone + "_" + cleanDog + "_" + todayStr;
+
+      // מניעת כפילות מוחלטת: אם כבר נשלחה הודעה לכלב זה היום (לפי מזהה הזמנה או לפי טלפון+שם כלב)
+      var bookingData = (b.data && typeof b.data === "object") ? b.data : {};
+      if (props.getProperty(todaySentKey) || props.getProperty(dogGlobalKey) || bookingData.lastDailyDogUpdateSent === todayStr || sentDogsMap[cleanPhone + "_" + cleanDog]) {
+        Logger.log("מניעת כפילות: דילוג על כלב שכבר קיבל הודעה היום: " + b.dog_name + " (" + b.owner_name + ")");
+        continue;
+      }
+      sentDogsMap[cleanPhone + "_" + cleanDog] = true;
+
+      var phone = (b.owner_phone || "").replace(/[^0-9]/g, "");
+      if (!phone) continue;
+
+      var intlPhone = phone.indexOf("0") === 0 ? "972" + phone.substring(1) : phone;
+      var chatId = intlPhone + "@c.us";
+
+      // בדיקת סטטוס בידוד
+      var isIsolation = isDogInIsolation(b, allIntake);
+
+      // בחירת נוסח מותאם
+      var templateData = getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat);
+
+      var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+      var sendRes = UrlFetchApp.fetch(sendUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ chatId: chatId, message: templateData.text }),
+        muteHttpExceptions: true
+      });
+
+      if (sendRes.getResponseCode() === 200) {
+        props.setProperty(todaySentKey, "true");
+        props.setProperty(dogGlobalKey, "true");
+        sentCount++;
+        Logger.log("נשלח בהצלחה עדכון יומי (נוסח #" + templateData.id + ", בידוד=" + isIsolation + ") ל-" + b.dog_name + " (" + b.owner_name + ")");
+
+        // סנכרון מיידי ל-Supabase למניעת כפילות מכל דפדפן או מכשיר
+        try {
+          bookingData.lastDailyDogUpdateSent = todayStr;
+          UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings?id=eq." + encodeURIComponent(b.id), {
+            method: "patch",
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Authorization": "Bearer " + SUPABASE_KEY,
+              "Content-Type": "application/json",
+              "Prefer": "return=minimal"
+            },
+            payload: JSON.stringify({ data: bookingData, updated_at: new Date().toISOString() }),
+            muteHttpExceptions: true
+          });
+        } catch(eDbSync) {
+          Logger.log("סנכרון סטטוס שליחה ל-Supabase נכשל: " + eDbSync.toString());
+        }
+      } else {
+        Logger.log("שגיאה במשלוח ל-" + b.dog_name + ": " + sendRes.getContentText());
+      }
+
+      Utilities.sleep(1500); // מרווח למניעת עומס
+    }
+
+    Logger.log("הסתיים משלוח עדכונים יומיים: נשלחו " + sentCount + " הודעות מתוך " + activeBookings.length + " כלבים.");
+  } catch (err) {
+    Logger.log("sendDailyDogEveningUpdates error: " + err.toString());
+  }
+}
+
+/**
+ * חישוב זמן שקיעת השמש בישראל לפי קווי רוחב ואורך
+ */
+function getIsraelSunsetMinutesAppScript(date) {
+  try {
+    var lat = 32.085;
+    var lon = 34.781;
+    var d = date || new Date();
+    var startOfYear = new Date(d.getFullYear(), 0, 0);
+    var dayOfYear = Math.floor((d.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+    var gamma = (2 * Math.PI / 365) * (dayOfYear - 1);
+    var eqtime = 229.18 * (0.000075 + 0.001868 * Math.cos(gamma) - 0.032077 * Math.sin(gamma) - 0.014615 * Math.cos(2 * gamma) - 0.040849 * Math.sin(2 * gamma));
+    var decl = 0.006918 - 0.399912 * Math.cos(gamma) + 0.070257 * Math.sin(gamma) - 0.006758 * Math.cos(2 * gamma) + 0.000907 * Math.sin(2 * gamma);
+    var latRad = lat * Math.PI / 180;
+    var zenithRad = 90.8333 * Math.PI / 180;
+    var cosHourAngle = (Math.cos(zenithRad) / (Math.cos(latRad) * Math.cos(decl))) - (Math.tan(latRad) * Math.tan(decl));
+    var hourAngle = Math.acos(cosHourAngle) * 180 / Math.PI;
+    var sunsetUtcMinutes = 720 - 4 * lon - eqtime + hourAngle * 4;
+
+    var tzOffset = parseInt(Utilities.formatDate(d, "Asia/Jerusalem", "Z"), 10) / 100;
+    var tzHours = (tzOffset >= 2 && tzOffset <= 3) ? tzOffset : 3;
+
+    var sunsetIsraelMinutes = sunsetUtcMinutes + tzHours * 60;
+    return Math.round(sunsetIsraelMinutes);
+  } catch (e) {
+    return 18 * 60 + 40; // Fallback: 18:40
+  }
+}
+
+/**
+ * שעת היעד לשליחה לפי כלל הברזל של שמוליק:
+ * הבדלה (שקיעה + 35 דק') + 40 דקות נוספות = שקיעה + 75 דקות
+ */
+function getMotzeiShabbatSendMinutesAppScript(date) {
+  return getIsraelSunsetMinutesAppScript(date) + 75;
+}
+
+function formatMinutesAsTimeStringAppScript(minutes) {
+  var h = Math.floor(minutes / 60) % 24;
+  var m = Math.round(minutes % 60);
+  return (h < 10 ? "0" + h : h) + ":" + (m < 10 ? "0" + m : m);
+}
+
+/**
+ * =========================================================================
+ * כלל ברזל של שמוליק: שליחה אוטומטית בענן 40 דקות בדיוק לאחר צאת השבת או החג
+ * גם אם כל המחשבים והדפדפנים סגורים!
+ * נבדקת ומופעלת מתוך processResortEmails שרץ כל 5 דקות בענן.
+ * =========================================================================
+ */
+function checkAndTriggerMotzeiShabbatDogUpdates() {
+  try {
+    var now = new Date();
+    var israelTz = "Asia/Jerusalem";
+    var dayOfWeek = parseInt(Utilities.formatDate(now, israelTz, "u"), 10); // 1=Mon, ..., 6=Sat, 7=Sun
+    var hour = parseInt(Utilities.formatDate(now, israelTz, "H"), 10);
+    var minute = parseInt(Utilities.formatDate(now, israelTz, "m"), 10);
+    var currentMinutes = hour * 60 + minute;
+    var todayStr = Utilities.formatDate(now, israelTz, "yyyy-MM-dd");
+
+    // בדיקה האם היום שבת או חג
+    var isSat = (dayOfWeek === 6);
+    var isHoliday = false;
+    var holidayTitle = "";
+
+    if (!isSat) {
+      try {
+        var yr = Utilities.formatDate(now, israelTz, "yyyy");
+        var mo = Utilities.formatDate(now, israelTz, "M");
+        var hRes = UrlFetchApp.fetch("https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=off&mod=off&nx=off&year=" + yr + "&month=" + mo + "&ss=off&mf=off&c=off&geo=none&i=on", { muteHttpExceptions: true });
+        if (hRes.getResponseCode() === 200) {
+          var hItems = (JSON.parse(hRes.getContentText())).items || [];
+          for (var hi = 0; hi < hItems.length; hi++) {
+            if (hItems[hi].date === todayStr && !hItems[hi].title.match(/Erev/i)) {
+              isHoliday = true;
+              holidayTitle = hItems[hi].hebrew || hItems[hi].title;
+              break;
+            }
+          }
+        }
+      } catch (eH) {}
+    }
+
+    if (!isSat && !isHoliday) {
+      return; // לא שבת ולא חג, אין צורך בשיגור מוצ״ש
+    }
+
+    // חישוב מועד השליחה: צאת שבת/חג (שקיעה + 35 דק') + 40 דקות = שקיעה + 75 דקות
+    var sendMinutes = getMotzeiShabbatSendMinutesAppScript(now);
+
+    // בדיקה האם הגענו לזמן השליחה (חלון של 3 שעות מעת הפתיחה)
+    if (currentMinutes < sendMinutes || currentMinutes > (sendMinutes + 180)) {
+      return;
+    }
+
+    // בדיקת מנעול מניעת כפילויות למוצ״ש זה
+    var props = PropertiesService.getScriptProperties();
+    var lockKey = "motzei_shabbat_dispatched_" + todayStr;
+    if (props.getProperty(lockKey) === "true") {
+      return; // כבר נשלח בהצלחה היום
+    }
+
+    Logger.log("🚀 [כלל ברזל] הגיע המועד המדויק (40 דקות לאחר צאת " + (isSat ? "השבת" : holidayTitle) + " בשעה " + formatMinutesAsTimeStringAppScript(sendMinutes) + ")! מפעיל שיגור אוטומטי בענן...");
+
+    // 1. שליחת הודעת ד״ש חם מהכלב (ההודעה שמופיעה בצילום המסך) לכל הכלבים הפעילים
+    sendShabbatOrHolidayGreetingsFromCloud(todayStr, isSat ? "בסופ\"ש" : "בחג");
+
+    // 2. שליחת יומן עדכון ערב יומי מותאם לכלבים הלנים הלילה
+    sendDailyDogEveningUpdates();
+
+    // סימון שנשלח בהצלחה
+    props.setProperty(lockKey, "true");
+    Logger.log("✅ [כלל ברזל] השיגור האוטומטי למוצאי " + (isSat ? "שבת" : holidayTitle) + " הושלם בהצלחה!");
+  } catch (e) {
+    Logger.log("checkAndTriggerMotzeiShabbatDogUpdates error: " + e.toString());
+  }
+}
+
+/**
+ * שליחת הודעות ד״ש חם מכלבי הריזורט מהענן 40 דקות לאחר צאת השבת/החג
+ */
+function sendShabbatOrHolidayGreetingsFromCloud(todayStr, occasionWord) {
+  try {
+    var queryUrl = SUPABASE_URL + "/rest/v1/bookings?start_date=lte." + todayStr + "&end_date=gte." + todayStr + "&stay_status=neq.cancelled&select=*";
+    var res = UrlFetchApp.fetch(queryUrl, {
+      method: "get",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+      muteHttpExceptions: true
+    });
+
+    if (res.getResponseCode() !== 200) return;
+    var bookings = JSON.parse(res.getContentText());
+    if (!bookings || bookings.length === 0) return;
+
+    var props = PropertiesService.getScriptProperties();
+    var sentCount = 0;
+
+    for (var i = 0; i < bookings.length; i++) {
+      var b = bookings[i];
+      var greetKey = "shabbat_greet_sent_" + b.id + "_" + todayStr;
+      if (props.getProperty(greetKey) === "true") continue;
+
+      var phone = (b.owner_phone || "").replace(/[^0-9]/g, "");
+      if (!phone) continue;
+      var intlPhone = phone.indexOf("0") === 0 ? "972" + phone.substring(1) : phone;
+      var chatId = intlPhone + "@c.us";
+
+      var firstName = (b.owner_name || "").trim().split(/\s+/)[0] || b.owner_name;
+      var dogName = (b.dog_name || "").trim();
+
+      var occasionThis = occasionWord === "בחג" ? "בחג הזה" : (occasionWord === "בסופ\"ש ובחג" ? "בסופ\"ש ובחג הזה" : "בסופ\"ש הזה");
+      var text = "שלום " + firstName + " למרות שאין שירות לקוחות להולכים על 2 " + occasionWord + ".\n" +
+                 "אבל כל מי שיש לו 4 רגליים וזנב, מקבל פה שירות של מלכים.\n" +
+                 occasionThis + " טרחו סביבי על מלא ונתנו לי הרגשה טובה.\n" +
+                 "אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף היה לי " + occasionWord + ".\n" +
+                 dogName;
+
+      var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+      var sendRes = UrlFetchApp.fetch(sendUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ chatId: chatId, message: text }),
+        muteHttpExceptions: true
+      });
+
+      if (sendRes.getResponseCode() === 200) {
+        props.setProperty(greetKey, "true");
+        sentCount++;
+        Logger.log("נשלח בהצלחה ד\"ש חם ל-" + dogName + " (" + firstName + ")");
+      }
+      Utilities.sleep(1200);
+    }
+    Logger.log("ד\"ש חם מהריזורט: נשלחו " + sentCount + " הודעות.");
+  } catch (e) {
+    Logger.log("sendShabbatOrHolidayGreetingsFromCloud error: " + e.toString());
+  }
+}
+
+/**
+ * מנגנון וידוא אוטומטי שהטריגר ל-20:00 קיים ופעיל
+ */
+function ensureEveningTriggerInstalled() {
+  try {
+    var triggers = ScriptApp.getProjectTriggers();
+    var has20 = false;
+    for (var i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === "sendDailyDogEveningUpdates") {
+        has20 = true;
+        break;
+      }
+    }
+    if (!has20) {
+      ScriptApp.newTrigger("sendDailyDogEveningUpdates")
+        .timeBased()
+        .everyDays(1)
+        .atHour(20)
+        .inTimezone("Asia/Jerusalem")
+        .create();
+      Logger.log("טריגר אוטומטי לשעה 20:00 נוצר והופעל בהצלחה! 🐶✨");
+    }
+  } catch (e) {
+    Logger.log("ensureEveningTriggerInstalled error: " + e.toString());
+  }
+}
+
+/**
+ * הגדרת כל הטריגרים האוטומטיים לערב (בלחיצה אחת):
+ * 1. בשעה 19:00 - בקשת חוות דעת + מועדון VIP למי שעזב יום קודם
+ * 2. בשעה 20:00 - עדכון ערב יומי לכלבים ששוהים כרגע בריזורט
+ */
+function setupDailyDogEveningTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    var fn = triggers[i].getHandlerFunction();
+    if (fn === "sendDailyDogEveningUpdates" || fn === "sendDayAfterDepartureReviewRequests") {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+
+  // 1. טריגר לשעה 19:00 - סקירת מחר מלאה לשמוליק
+  ScriptApp.newTrigger("sendTomorrowOverviewToShmulikFromCloud")
+    .timeBased()
+    .everyDays(1)
+    .atHour(19)
+    .inTimezone("Asia/Jerusalem")
+    .create();
+
+  // 2. טריגר לשעה 19:00 - בקשת חוות דעת ופינוק VIP
+  ScriptApp.newTrigger("sendDayAfterDepartureReviewRequests")
+    .timeBased()
+    .everyDays(1)
+    .atHour(19)
+    .inTimezone("Asia/Jerusalem")
+    .create();
+
+  // 3. טריגר לשעה 20:00 - יומן עדכון יומי לכלבי הריזורט
+  ScriptApp.newTrigger("sendDailyDogEveningUpdates")
+    .timeBased()
+    .everyDays(1)
+    .atHour(20)
+    .inTimezone("Asia/Jerusalem")
+    .create();
+
+  Logger.log("כל הטריגרים הוגדרו בהצלחה: 19:00 לסקירת מחר לשמוליק + חוות דעת VIP, ו-20:00 לעדכוני כלבים! 🐶👑");
+}
+
+/**
+ * שליחת סקירת מחר לשמוליק בשעה 19:00 ישירות מהענן (Google Apps Script)
+ * כולל 4 שכבות הגנה למניעת כפילויות של 100%!
+ */
+function sendTomorrowOverviewToShmulikFromCloud() {
+  try {
+    var now = new Date();
+    var israelTz = "Asia/Jerusalem";
+
+    // 1. חריג יום כיפור (שקט מוחלט בערב יום כיפור וביום כיפור)
+    if (isYomKippurNow(now, israelTz)) {
+      Logger.log("ערב כיפור / יום כיפור: שקט מוחלט - סקירת מחר לא נשלחת.");
+      return;
+    }
+
+    var todayStr = Utilities.formatDate(now, israelTz, "yyyy-MM-dd");
+    var props = PropertiesService.getScriptProperties();
+    var sentKey = "shmulik_tomorrow_overview_sent_" + todayStr;
+
+    // שכבה 1: בדיקת ScriptProperties מקומי בענן
+    if (props.getProperty(sentKey)) {
+      Logger.log("סקירת מחר לשמוליק כבר נשלחה היום (ScriptProperties). מניעת כפילות.");
+      return;
+    }
+
+    // שליפת הגדרות מסופאבייס
+    var settingsRes = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/settings?select=*&limit=1", {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+    });
+    var settingsList = JSON.parse(settingsRes.getContentText());
+    var settingsRow = (settingsList && settingsList.length > 0) ? settingsList[0] : {};
+    var settingsData = settingsRow.data || {};
+
+    // שכבה 2: בדיקת Supabase Cloud Lock (נשלח כבר מכל דפדפן/מכשיר אחר)
+    if (settingsData.lastTomorrowOverviewSentDate === todayStr) {
+      Logger.log("סקירת מחר לשמוליק כבר נשלחה היום (Supabase Cloud Lock). מניעת כפילות.");
+      props.setProperty(sentKey, "true");
+      return;
+    }
+
+    // טלפון יעד לשמוליק
+    var managerPhone = settingsData.whatsappNotificationPhone || "0506336896";
+    var cleanMgrPhone = managerPhone.replace(/[^0-9]/g, "");
+    var intlMgrPhone = cleanMgrPhone.indexOf("0") === 0 ? "972" + cleanMgrPhone.substring(1) : cleanMgrPhone;
+    var mgrChatId = intlMgrPhone + "@c.us";
+
+    // שכבה 3: אימות ישיר מול Green-API היסטוריית הודעות אחרונות לשמוליק
+    try {
+      var histUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/getChatHistory/" + GREEN_API_TOKEN;
+      var histRes = UrlFetchApp.fetch(histUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify({ chatId: mgrChatId, count: 10 }),
+        muteHttpExceptions: true
+      });
+      if (histRes.getResponseCode() === 200) {
+        var hist = JSON.parse(histRes.getContentText());
+        if (Array.isArray(hist)) {
+          var todayMidnightMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+          for (var h = 0; h < hist.length; h++) {
+            var msg = hist[h];
+            if (msg.type === "outgoing" && (msg.timestamp * 1000) >= todayMidnightMs) {
+              var txt = msg.textMessage || (msg.extendedTextMessage && msg.extendedTextMessage.text) || "";
+              if (txt.indexOf("מה קורה מחר") !== -1) {
+                Logger.log("נמצאה הודעת סקירת מחר שנשלחה היום לשמוליק ב-Green-API. מניעת כפילות.");
+                props.setProperty(sentKey, "true");
+                settingsData.lastTomorrowOverviewSentDate = todayStr;
+                UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/settings?id=eq." + encodeURIComponent(settingsRow.id || "resort_config"), {
+                  method: "patch",
+                  headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+                  payload: JSON.stringify({ data: settingsData })
+                });
+                return;
+              }
+            }
+          }
+        }
+      }
+    } catch (eHist) {
+      Logger.log("Green-API history check warning: " + eHist.toString());
+    }
+
+    // חישוב תאריך מחר
+    var tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    var tomorrowStr = Utilities.formatDate(tomorrow, israelTz, "yyyy-MM-dd");
+    var tomDayName = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"][tomorrow.getDay()];
+    var tomParts = tomorrowStr.split("-");
+    var tomFormatted = tomParts[2] + "." + tomParts[1] + "." + tomParts[0].slice(2);
+
+    // שליפת הזמנות פעילות מסופאבייס
+    var bookRes = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings?stay_status=neq.cancelled&select=*", {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+    });
+    var allBookings = JSON.parse(bookRes.getContentText()) || [];
+
+    var incomingDogs = [];
+    var departingDogs = [];
+    var endOfDayDogs = [];
+    var daytimeDogs = [];
+
+    for (var bIdx = 0; bIdx < allBookings.length; bIdx++) {
+      var bk = allBookings[bIdx];
+      var sDate = bk.start_date;
+      var eDate = bk.end_date;
+
+      if (sDate === tomorrowStr) incomingDogs.push(bk);
+      if (eDate === tomorrowStr) departingDogs.push(bk);
+      if (sDate <= tomorrowStr && eDate > tomorrowStr) endOfDayDogs.push(bk);
+      if (sDate <= tomorrowStr && eDate >= tomorrowStr) daytimeDogs.push(bk);
+    }
+
+    var maxCapacity = Number(settingsData.maxCapacity || settingsRow.max_capacity) || 10;
+    var occupancyPercent = maxCapacity > 0 ? Math.round((endOfDayDogs.length / maxCapacity) * 100) : 0;
+    var growLink = settingsData.growPaymentLink || "https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg";
+
+    var formatDogAppScript = function(bk, idx, isIncoming) {
+      var dog = bk.dog_name || "כלב";
+      var breed = bk.dog_breed ? " (" + bk.dog_breed + ")" : "";
+      var owner = bk.owner_name || "בעלים";
+      var phone = bk.owner_phone || "";
+      var sType = bk.service_type || "boarding";
+
+      var sLabel = "פנסיון 🏨";
+      if (sType === "training") sLabel = isIncoming ? "תהליך אילוף 🎓" : "משתחרר מתהליך אילוף 🎓";
+      else if (sType === "day_training") sLabel = isIncoming ? "אילוף יומי (ללא לינה) 🎓" : "משתחרר מאילוף יומי 🎓";
+      else if (sType === "daycare") sLabel = isIncoming ? "יום כיף (ללא לינה) 🎾" : "משתחרר מיום כיף 🎾";
+      else sLabel = isIncoming ? "פנסיון 🏨" : "משתחרר מפנסיון 🏨";
+
+      var total = Number(bk.total_price) || 0;
+      var deposit = Number(bk.deposit_amount) || 0;
+      var debt = Math.max(0, total - deposit);
+      var isPaid = bk.payment_status === "fully_paid" || debt <= 0;
+
+      var pLine = isPaid
+        ? "💰 שולם: ₪" + (deposit || total).toLocaleString() + " | יתרה: ₪0 (✅ שולם במלואו)"
+        : "💰 שולם: ₪" + deposit.toLocaleString() + " | *נשאר לתשלום: ₪" + debt.toLocaleString() + "* ⚠️";
+
+      var linkText = "";
+      if (!isPaid && debt > 0 && phone) {
+        var cPhone = phone.replace(/[^0-9]/g, "");
+        var iPhone = cPhone.indexOf("0") === 0 ? "972" + cPhone.substring(1) : cPhone;
+        var fName = (owner.split(" ")[0] || "לקוח");
+        var isFemale = (bk.dog_gender && bk.dog_gender.indexOf("female") !== -1);
+
+        var demandMsg = "";
+        if (isIncoming) {
+          demandMsg = "היי " + fName + "! 🐾\nמתרגשים ומחכים מחר לתחילת השהות של " + dog + " בריזורט לכלב! 🐶❤️\n\nלקראת ההגעה מחר, נשמח להסדרת יתרת התשלום בסך ₪" + debt.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nמחכים לכם בשמחה,\nשמוליק וצוות הריזורט לכלב 🐾✨";
+        } else {
+          var fVerb = isFemale ? "מסיימת" : "מסיים";
+          var eVerb = isFemale ? "נהנתה" : "נהנה";
+          var mVerb = isFemale ? "מתגעגעת" : "מתגעגע";
+          demandMsg = "היי " + fName + "! 🐾\nרצינו לעדכן שמחר " + dog + " " + fVerb + " את השהות בריזורט לכלב! 🐕🥰 " + eVerb + " מכל רגע ו" + mVerb + " אליכם מאוד.\n\nלקראת האיסוף והשחרור מחר, נשמח להסדרת יתרת התשלום בסך ₪" + debt.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nתודה רבה ונתראה מחר,\nשמוליק וצוות הריזורט לכלב 🐾✨";
+        }
+
+        linkText = "\n   📲 *דרישת תשלום בוואטסאפ (לעריכה ושליחה):*\n   https://wa.me/" + iPhone + "?text=" + encodeURIComponent(demandMsg);
+      }
+
+      var meds = bk.medications || bk.special_diet || "";
+      var mLine = meds ? "\n   🩺 *דגשים:* " + meds : "";
+
+      return (idx + 1) + ". 🐶 *" + dog + "*" + breed + " | 🏷️ " + sLabel + "\n   👤 בעלים: " + owner + " (📞 " + phone + ")\n   " + pLine + linkText + mLine;
+    };
+
+    var inSec = incomingDogs.length === 0 ? "• אין כניסות מתוכננות למחר." : incomingDogs.map(function(d, i) { return formatDogAppScript(d, i, true); }).join("\n\n");
+    var outSec = departingDogs.length === 0 ? "• אין שחרורים מתוכננים למחר." : departingDogs.map(function(d, i) { return formatDogAppScript(d, i, false); }).join("\n\n");
+
+    var occText = endOfDayDogs.length >= maxCapacity
+      ? "• 🔥 *תפוסה מלאה בריזורט!*"
+      : "• נותרו עוד *" + (maxCapacity - endOfDayDogs.length) + "* מקומות פנויים ללינה מחר.";
+
+    var fullMsg = "📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾\n"
+      + "📅 יום " + tomDayName + ", " + tomFormatted + " | הפקה: 19:00\n\n"
+      + "🟢 *סה״כ כלבים שנכנסים מחר: " + incomingDogs.length + "*\n"
+      + inSec + "\n\n"
+      + "🔴 *סה״כ כלבים שמשתחררים מחר: " + departingDogs.length + "*\n"
+      + outSec + "\n\n"
+      + "━━━━━━━━━━━━━━━━━━━━━━━━\n"
+      + "🐕 *כמה כלבים יהיו לי מחר בסוף היום: " + endOfDayDogs.length + " כלבים ללינה*\n"
+      + "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+      + "📊 *סיכום תפוסה מחר:*\n"
+      + "• *" + endOfDayDogs.length + " מתוך " + maxCapacity + " מקומות* (" + occupancyPercent + "% תפוסה)\n"
+      + occText + "\n\n"
+      + "שיהיה יום מוצלח, פורה ושקט! ❤️🐶🐾";
+
+    var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+    var sendRes = UrlFetchApp.fetch(sendUrl, {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify({ chatId: mgrChatId, message: fullMsg }),
+      muteHttpExceptions: true
+    });
+
+    if (sendRes.getResponseCode() === 200) {
+      props.setProperty(sentKey, "true");
+      Logger.log("סקירת מחר לשמוליק נשלחה בהצלחה ב-19:00 ישירות מהענן! 🐶✨");
+
+      // סנכרון ל-Supabase Cloud Lock
+      try {
+        settingsData.lastTomorrowOverviewSentDate = todayStr;
+        settingsData.lastTomorrowOverviewSentTimestamp = new Date().toISOString();
+        UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/settings?id=eq." + encodeURIComponent(settingsRow.id || "resort_config"), {
+          method: "patch",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+          payload: JSON.stringify({ data: settingsData })
+        });
+      } catch (eDb) {
+        Logger.log("Db update error: " + eDb.toString());
+      }
+    }
+  } catch (e) {
+    Logger.log("sendTomorrowOverviewToShmulikFromCloud error: " + e.toString());
+  }
 }
 
 /**
