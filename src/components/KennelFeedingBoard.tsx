@@ -151,13 +151,13 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
 
           <div>
             <h2 className="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2">
-              <span>🪣 11 תאים ודליי מזון</span>
+              <span>🏠 שיבוצי תאים והנחיות מיוחדות</span>
               <span className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-0.5 rounded-full font-bold">
                 {formatFullHebrewDate(selectedDate)}
               </span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              ניהול שקיות מזון אישיות, שעות האכלה, תרופות והלנה ביתית בבית של שמוליק
+              ניהול שיבוצי תאים 1–11, הלנה ביתית, שקיות מזון אישיות, שעות האכלה והנחיות מיוחדות
             </p>
           </div>
         </div>
@@ -242,19 +242,24 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
             </span>
           </div>
           <p className="text-xs text-red-800 mb-3">
-            חל איסור מוחלט על קליטת כלב בריזורט ללא כתובת שיבוץ מדויקת. אנא שייך כלב זה לתא 1–11 או להלנה ביתית:
+            חל איסור מוחלט על קליטת כלב בריזורט ללא כתובת שיבוץ מדויקת. לחץ על הכלב לעריכה מלאה של כל ההזמנה, או שבץ בלחיצה מהירה:
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {unassigned.map(b => (
               <div
                 key={b.id}
-                className="bg-white p-3 rounded-2xl border border-red-200 shadow-2xs flex items-center justify-between gap-2"
+                onClick={() => onSelectBooking(b)}
+                className="bg-white hover:bg-slate-50 p-3 rounded-2xl border border-red-200 hover:border-indigo-400 shadow-2xs flex items-center justify-between gap-2 cursor-pointer transition-all group"
+                title="לחץ לעריכה מלאה של כל ההזמנה, שעות האכלה, תרופות והנחיות מיוחדות"
               >
-                <div>
-                  <div className="font-black text-slate-900 text-sm flex items-center gap-1.5">
+                <div className="min-w-0 flex-1">
+                  <div className="font-black text-slate-900 text-sm flex items-center gap-1.5 flex-wrap">
                     <span>🐾 {b.dogName}</span>
                     <span className="text-xs font-normal text-slate-500">({b.ownerName})</span>
+                    <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded-md font-bold group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                      ✏️ ערוך הכל
+                    </span>
                   </div>
                   <div className="text-[11px] text-slate-600 mt-0.5">
                     {b.feedingSchedule ? `⏰ ${b.feedingSchedule}` : 'טרם הוגדרו שעות האכלה'}
@@ -262,10 +267,15 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
                 </div>
 
                 <button
-                  onClick={() => setAssigningDog(b)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition-all cursor-pointer shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAssigningDog(b);
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition-all cursor-pointer shrink-0 shadow-2xs flex items-center gap-1"
+                  title="שיבוץ מהיר בלחיצה אחת"
                 >
-                  שבץ תא 🏠
+                  <span>🏠</span>
+                  <span>שבץ תא</span>
                 </button>
               </div>
             ))}

@@ -315,8 +315,25 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     }
   }
 
+  // 7. Unassigned kennel placement check (חוק ברזל: חובת שיבוץ מיקום לינה)
+  const unassignedKennels = [];
+  activeBookings.filter(b => {
+    const s = b.start_date || b.startDate;
+    const e = b.end_date || b.endDate;
+    return s <= todayStr && e >= todayStr;
+  }).forEach(b => {
+    const k = b.kennel_number !== undefined ? b.kennel_number : b.kennelNumber;
+    if (!k && k !== 0) {
+      const dog = b.dog_name || b.dogName || 'כלב';
+      const owner = b.owner_name || b.ownerName || 'בעלים';
+      const phone = b.owner_phone || b.ownerPhone || 'ללא טלפון';
+      unassignedKennels.push(`🏠 *${dog}* (${owner} - 📞 ${phone}) | שוהה כעת בריזורט ללא שיבוץ תא (1–11) או הלנה ביתית ודלי מזון!`);
+    }
+  });
+
   const totalGreen = greenEvents.length;
   const totalRed =
+    unassignedKennels.length +
     redLights.unansweredChats.length +
     redLights.unpaidLinks.length +
     redLights.unfilledIntakes.length +
@@ -344,6 +361,10 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
   if (totalRed === 0) {
     parts.push(`✅ אין אורות אדומים! כל הנתונים, השיחות, השריונים והמקדמות תקינים לחלוטין. 🎉`);
   } else {
+    if (unassignedKennels.length > 0) {
+      parts.push(`\n🚨 *כלבים שוהים ללא שיבוץ תא לינה/דלי מזון (${unassignedKennels.length}):*`);
+      unassignedKennels.forEach(k => parts.push(`   • ${k}`));
+    }
     if (redLights.unansweredChats.length > 0) {
       parts.push(`\n💬 *שיחות לקוחות הממתינות למענה:*`);
       redLights.unansweredChats.forEach(c => parts.push(`   • ${c}`));

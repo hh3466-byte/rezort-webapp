@@ -57,6 +57,7 @@ export function run1830SanityAudit(
 
   const greenEvents: string[] = [];
   const redLights = {
+    unassignedKennels: [] as string[],
     unansweredChats: [] as string[],
     unpaidLinks: [] as string[],
     unfilledIntakes: [] as string[],
@@ -218,9 +219,17 @@ export function run1830SanityAudit(
     }
   }
 
+  // 7. Check for unassigned kennel placement (חוק ברזל: חובת שיבוץ מיקום לינה)
+  activeBookings.filter(b => b.startDate <= todayStr && b.endDate >= todayStr).forEach(b => {
+    if (!b.kennelNumber && b.kennelNumber !== 0) {
+      redLights.unassignedKennels.push(`🏠 *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone || 'ללא טלפון'}) | שוהה כעת בריזורט ללא שיבוץ תא (1–11) או הלנה ביתית ודלי מזון!`);
+    }
+  });
+
   // Count totals
   const totalGreen = greenEvents.length;
   const totalRed =
+    redLights.unassignedKennels.length +
     redLights.unansweredChats.length +
     redLights.unpaidLinks.length +
     redLights.unfilledIntakes.length +
@@ -251,6 +260,11 @@ export function run1830SanityAudit(
   if (totalRed === 0) {
     parts.push(`אין אורות אדומים ✅`);
   } else {
+    if (redLights.unassignedKennels.length > 0) {
+      parts.push(`\n🚨 *כלבים שוהים ללא שיבוץ תא לינה/דלי מזון (${redLights.unassignedKennels.length}):*`);
+      redLights.unassignedKennels.forEach(k => parts.push(`   • ${k}`));
+    }
+
     if (redLights.unansweredChats.length > 0) {
       parts.push(`\n💬 *שיחות לקוחות הממתינות למענה:*`);
       redLights.unansweredChats.forEach(c => parts.push(`   • ${c}`));

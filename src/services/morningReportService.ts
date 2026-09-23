@@ -260,6 +260,19 @@ export function formatTomorrowOverviewReport(
 
   const actionBlocks: string[] = [];
 
+  // 0. Check for dogs staying tomorrow or today without kennel placement (חוק ברזל)
+  const unassignedKennelDogs = activeBookings.filter(b => {
+    const isStayingOrIncoming = (b.startDate <= tomorrowStr && b.endDate >= tomorrowStr) || b.startDate === tomorrowStr;
+    return isStayingOrIncoming && !b.kennelNumber && b.kennelNumber !== 0;
+  });
+  if (unassignedKennelDogs.length > 0) {
+    const list = unassignedKennelDogs.map((b, idx) => {
+      const phone = formatPhoneFormatted(b.ownerPhone || '');
+      return `${idx + 1}. 🚨 *${b.dogName}* (${b.ownerName} - 📞 ${phone}) | שהייה: ${formatDateIL(b.startDate)}–${formatDateIL(b.endDate)} (חסר שיבוץ תא 1–11 או הלנה ביתית ודלי מזון!)`;
+    }).join('\n');
+    actionBlocks.push(`🏠 *כלבים ללא שיבוץ תא לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
+  }
+
   if (Array.isArray(unansweredChats) && unansweredChats.length > 0) {
     const list = unansweredChats.map((uc, idx) => {
       const name = uc.name || 'לקוח';

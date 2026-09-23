@@ -1134,385 +1134,7 @@ export default function App() {
           </div>
         </header>
 
-        {/* Row 1: Operational Actions & Alerts Strip */}
-        <div className="flex items-center gap-2 flex-wrap py-1 border-b border-slate-200/70 pb-2.5">
-          {/* 1. Intake Questionnaires for Review (שאלונים לבדיקה) */}
-          <button
-            type="button"
-            onClick={() => {
-              setIntakeModalFilter('new');
-              setIsIntakeModalOpen(true);
-            }}
-            id="btn-intake-new-top"
-            className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-2xs shrink-0 ${
-              newIntakeCount > 0
-                ? 'bg-gradient-to-r from-rose-50 via-white to-rose-50 hover:from-rose-100 hover:to-rose-50 border-2 border-rose-500 text-rose-950 shadow-md shadow-rose-600/15 ring-2 ring-rose-400/25 hover:scale-[1.02] active:scale-95'
-                : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700'
-            }`}
-            title="צפייה בשאלוני קליטה חדשים מלקוחות שממתינים לבדיקה וקליטה ליומן"
-          >
-            <span className="text-base">📥</span>
-            <span className="font-black">שאלונים לבדיקה</span>
-            {newIntakeCount > 0 ? (
-              <span className="relative flex items-center justify-center mr-0.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 bg-gradient-to-r from-red-600 to-rose-600 text-white text-xs sm:text-sm font-black font-mono rounded-full shadow-md ring-2 ring-white">
-                  {newIntakeCount}
-                </span>
-              </span>
-            ) : (
-              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full font-mono font-bold">0</span>
-            )}
-          </button>
-
-          {/* 2. In-Progress Intake Requests (שאלונים בתהליך) */}
-          <button
-            type="button"
-            onClick={() => {
-              setIntakeModalFilter('in_progress');
-              setIsIntakeModalOpen(true);
-            }}
-            id="btn-intake-inprogress-top"
-            className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-2xs shrink-0 ${
-              inProgressIntakeCount > 0
-                ? 'bg-gradient-to-r from-amber-50 via-white to-amber-50 hover:from-amber-100 hover:to-amber-50 border-2 border-amber-500 text-amber-950 shadow-md shadow-amber-600/15 ring-2 ring-amber-400/25 hover:scale-[1.02] active:scale-95'
-                : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700'
-            }`}
-            title="צפייה בשאלונים פעילים הנמצאים בתהליך טיפול או בהמתנה לתשלום"
-          >
-            <span className="text-base">⏳</span>
-            <span className="font-black">שאלונים בתהליך</span>
-            {inProgressIntakeCount > 0 ? (
-              <span className="relative inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white text-xs sm:text-sm font-black font-mono rounded-full shadow-md ring-2 ring-white">
-                {inProgressIntakeCount}
-              </span>
-            ) : (
-              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full font-mono font-bold">0</span>
-            )}
-          </button>
-
-          {/* 3. WhatsApp CRM with Live Count Badge & Flashing Green Border */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('whatsapp')}
-            id="btn-whatsapp-crm-top"
-            className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-md shrink-0 active:scale-95 ${
-              activeTab === 'whatsapp'
-                ? 'bg-gradient-to-r from-[#065f46] via-emerald-800 to-[#065f46] text-white ring-2 ring-emerald-400 shadow-emerald-900/30 scale-[1.02]'
-                : newCrmChatsCount > 0
-                ? 'bg-white hover:bg-rose-50 text-slate-900 border-2 border-rose-400 shadow-rose-200 hover:scale-[1.02] ring-2 ring-rose-300/60'
-                : 'bg-white hover:bg-emerald-50 text-emerald-950 hover:scale-[1.02] blink-border-green'
-            }`}
-            title="מרכז וואטסאפ ופניות (CRM) – ניהול שיחות, סיווג לקוחות ומענה מהיר"
-          >
-            <span className="text-base relative flex items-center">
-              💬
-              {newCrmChatsCount > 0 ? (
-                <>
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border border-white animate-ping"></span>
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-600 rounded-full border border-white"></span>
-                </>
-              ) : (
-                <>
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white animate-ping"></span>
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white"></span>
-                </>
-              )}
-            </span>
-            <span className="font-black">וואטסאפ ו-CRM</span>
-            {newCrmChatsCount > 0 ? (
-              <span className="bg-rose-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse flex items-center gap-1 font-mono">
-                <span>{newCrmChatsCount}</span>
-                <span className="font-sans text-[10px]">שלא נקראו 🔥</span>
-              </span>
-            ) : (
-              <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
-                activeTab === 'whatsapp'
-                  ? 'bg-emerald-900 text-emerald-100'
-                  : 'bg-emerald-100 text-emerald-800'
-              }`}>
-                {activeTab === 'whatsapp' ? 'פתוח' : 'CRM 🟢'}
-              </span>
-            )}
-          </button>
-
-          {/* Desktop-Only WhatsApp History & Problem Scanner Button */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('whatsapp')}
-            id="btn-desktop-scan-whatsapp-top"
-            className="hidden lg:flex items-center gap-2 bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 hover:from-purple-100 hover:to-indigo-100 active:scale-95 border border-indigo-300 text-indigo-950 font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-2xs transition-all cursor-pointer shrink-0"
-            title="צפייה וסריקת היסטוריית וואטסאפ במחשב – חוק ברזל: ההודעות לעולם לא מסומנות כנקראו ונשארות לשמוליק ב-שלא נקראו"
-          >
-            <span className="text-base">🖥️🔍</span>
-            <span>סריקת וואטסאפ (מחשב)</span>
-            <span className="bg-indigo-200/80 text-indigo-900 text-[10px] font-extrabold px-1.5 py-0.2 rounded-md border border-indigo-300">
-              מוגן 🛡️
-            </span>
-          </button>
-
-          {/* Pending Grow Payments Quick Access Button (if any) */}
-          {pendingGrowPayments.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                setIsGrowPaymentsMinimized(false);
-                setIsGrowFloatingSnoozed(false);
-              }}
-              id="btn-pending-grow-payments-top"
-              className="relative bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black px-3 py-2 rounded-xl text-xs sm:text-sm shadow-md hover:shadow-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0 border border-emerald-400/60 active:scale-95 animate-pulse"
-              title="התקבל תשלום חדש ממתין להקמת הזמנה - לחץ לפתיחת החלון"
-            >
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-300 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
-              </span>
-              <span>💳 תשלום ממתין</span>
-              <span className="bg-amber-400 text-slate-950 text-[11px] font-black px-1.5 py-0.2 rounded-full font-mono shadow-2xs">
-                ₪{pendingGrowPayments[0]?.amount.toLocaleString()}
-              </span>
-              {pendingGrowPayments.length > 1 && (
-                <span className="bg-emerald-900/80 text-emerald-100 text-[10px] font-extrabold px-1 rounded-full">
-                  +{pendingGrowPayments.length - 1}
-                </span>
-              )}
-            </button>
-          )}
-
-          {/* 4. Daily Evening Dog Update (20:00) */}
-          <button
-            type="button"
-            onClick={() => setIsDailyDogUpdatesOpen(true)}
-            id="btn-daily-dog-updates-top"
-            className="bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 active:scale-95 border border-amber-300 text-amber-950 font-black px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
-            title="עדכון יומי לבעלי כלבים בשעה 20:00 - תצוגה מקדימה, החלפת נוסחים ושליחה"
-          >
-            <span className="text-base">🐶👑</span>
-            <span>עדכון 20:00</span>
-            {activeTonightCount > 0 && (
-              <span className="bg-amber-500 text-white text-[11px] font-black px-1.5 py-0.2 rounded-full shadow-2xs font-mono">
-                {activeTonightCount}
-              </span>
-            )}
-          </button>
-
-          {/* 5. Tomorrow Overview to Shmulik (19:00) */}
-          <button
-            type="button"
-            onClick={() => setIsTomorrowOverviewModalOpen(true)}
-            id="btn-tomorrow-overview-top"
-            className="bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 active:scale-95 border border-indigo-300 text-indigo-950 font-black px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
-            title="מה קורה מחר? סקירה יומית מלאה לשמוליק ב-19:00 (כניסות, שחרורים, יתרות לתשלום, תפוסה ודגשים)"
-          >
-            <span className="text-base">📋</span>
-            <span className="hidden sm:inline">מה קורה מחר (19:00)</span>
-            <span className="sm:hidden">מחר</span>
-          </button>
-
-          {/* 6. + New Booking Primary CTA */}
-          <button
-            onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
-            id="btn-new-booking-top"
-            className="bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
-          >
-            <span className="text-base font-bold">+</span>
-            <span>הזמנה חדשה</span>
-          </button>
-        </div>
-
-        {/* Row 2: Unified Navigation (Right), Shabbat/Holiday Banner in the Center Gap, and Utilities (Left) */}
-        <div className="flex items-center justify-between gap-2.5 p-1.5 sm:p-2 bg-white/95 backdrop-blur-xs rounded-2xl border border-slate-200/90 shadow-2xs w-full overflow-x-auto no-scrollbar">
-          
-          {/* Right Side in RTL (מימין): Main Navigation Tabs */}
-          <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => setActiveTab('calendar')}
-              className={`text-xs sm:text-sm font-black px-3.5 sm:px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                activeTab === 'calendar'
-                  ? 'bg-[#065f46] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
-              }`}
-              title="יומן פנסיון ואילוף"
-            >
-              <span className="text-base">📅</span>
-              <span>יומן</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('forecast')}
-              className={`text-xs sm:text-sm font-black px-3.5 sm:px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                activeTab === 'forecast'
-                  ? 'bg-[#065f46] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
-              }`}
-              title="תחזית תפוסה"
-            >
-              <span className="text-base">📊</span>
-              <span>תפוסה</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('kennels')}
-              className={`text-xs sm:text-sm font-black px-3.5 sm:px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                activeTab === 'kennels'
-                  ? 'bg-[#065f46] text-white shadow-xs ring-2 ring-emerald-400'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
-              }`}
-              title="11 תאים, הלנה ביתית ודליי מזון"
-            >
-              <span className="text-base">🪣</span>
-              <span>11 תאים ודליי מזון</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('customers')}
-              className={`text-xs sm:text-sm font-black px-3.5 sm:px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                activeTab === 'customers'
-                  ? 'bg-[#065f46] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
-              }`}
-              title="מאגר לקוחות וכלבים"
-            >
-              <span className="text-base">⭐</span>
-              <span>לקוחות</span>
-            </button>
-          </div>
-
-          {/* Center Gap (ברווח בין הכפתורים): Shabbat / Jewish Holiday Dog Greetings Reminder Banner */}
-          {todayHolidayInfo.isSpecial && totalDogsToday > 0 && !isGreetingBannerDismissed && (() => {
-            const rest = isCustomerMessagingRestrictedNow();
-            if (rest.isRestricted) {
-              return (
-                <div className="flex-1 min-w-[260px] mx-1 sm:mx-2 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white rounded-xl px-2.5 sm:px-3.5 py-1.5 shadow-xs border border-amber-400/60 flex items-center justify-between gap-2 animate-in fade-in duration-200">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-lg shrink-0">🛡️</span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-black text-xs sm:text-sm tracking-tight truncate">
-                          כלל ברזל: שקט מוחלט ללקוחות משישי 14:00 וכל השבת והחג
-                        </span>
-                        <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.2 rounded-full shrink-0">
-                          {totalDogsToday} כלבים בריזורט
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-amber-100 font-medium truncate hidden xl:block">
-                        הודעות הד״ש והעדכונים ישלחו אוטומטית בענן 40 דקות לאחר צאת השבת/החג {rest.sendTimeStr ? `בשעה ${rest.sendTimeStr}` : ''} (גם כשהדפדפנים סגורים).
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setGreetingModalDate(todayStr)}
-                      className="bg-white/95 hover:bg-white text-slate-900 font-black px-3 py-1.5 rounded-lg text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95"
-                      title="צפה בנוסח ההודעות וברשימת הכלבים"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5 text-amber-700" />
-                      <span className="whitespace-nowrap">צפה בנוסח וברשימה</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            }
-
-            if (todayUnsentGreetingsCount > 0) {
-              return (
-                <div className="flex-1 min-w-[260px] mx-1 sm:mx-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white rounded-xl px-2.5 sm:px-3.5 py-1.5 shadow-xs border border-emerald-400/60 flex items-center justify-between gap-2 animate-in fade-in duration-200">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-lg shrink-0">🚀</span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-black text-xs sm:text-sm tracking-tight truncate">
-                          מוצאי שבת/חג – חלון המשלוח האוטומטי פעיל (40 דק׳ לאחר צאת השבת)!
-                        </span>
-                        <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.2 rounded-full shadow-2xs shrink-0">
-                          {todayUnsentGreetingsCount} להשלמה
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-emerald-100 font-medium truncate hidden xl:block">
-                        הודעות הד״ש החם נשלחות כעת אוטומטית ברקע לכל {totalDogsToday} הכלבים בריזורט.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setGreetingModalDate(todayStr)}
-                      className="bg-white hover:bg-emerald-50 text-emerald-950 font-black px-3 py-1.5 rounded-lg text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="whitespace-nowrap">צפה ברשימה ובהתקדמות</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <div className="flex-1 mx-1 sm:mx-2 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-3 py-1.5 text-xs font-bold flex items-center justify-between shadow-2xs">
-                <div className="flex items-center gap-1.5 truncate">
-                  <span className="text-base shrink-0">🎉</span>
-                  <span className="font-black text-emerald-950 truncate">
-                    מעולה שמוליק! כל {totalDogsToday} הודעות הד״ש נשלחו בהצלחה לבעלים.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setGreetingModalDate(todayStr)}
-                  className="text-emerald-700 hover:text-emerald-900 underline font-black text-xs cursor-pointer shrink-0 mr-2"
-                >
-                  פתח רשימה
-                </button>
-              </div>
-            );
-          })()}
-
-          {/* Left Side in RTL (משמאל): System & Management Utilities */}
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Reports Button */}
-            <button
-              type="button"
-              onClick={() => setIsReportsOpen(true)}
-              className="bg-slate-50 hover:bg-amber-50/80 active:scale-95 border border-slate-200/90 hover:border-amber-300 text-slate-700 hover:text-amber-900 font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-              title="דוחות כספיים ותפוסה"
-            >
-              <span className="text-base">💰</span>
-              <span>דוחות</span>
-            </button>
-
-            {/* Settings Button */}
-            <button
-              onClick={handleOpenSettingsWithAuth}
-              id="btn-settings-top"
-              className="bg-slate-50 hover:bg-slate-100 active:scale-95 border border-slate-200/90 hover:border-slate-300 text-slate-700 hover:text-slate-900 font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-              title="הגדרות תפוסה, תעריפים, ביט וגיבוי (אישור מנהל)"
-            >
-              <span className="text-base">⚙️</span>
-              <span>הגדרות</span>
-            </button>
-
-            {/* Lock System / Logout Button */}
-            <button
-              type="button"
-              onClick={handleManagerLogout}
-              id="btn-lock-system-top"
-              className="bg-slate-50 hover:bg-rose-50 active:scale-95 border border-slate-200/90 hover:border-rose-300 text-slate-500 hover:text-rose-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer group"
-              title="נעילת יומן ויציאה מאובטחת"
-            >
-              <Lock className="w-4 h-4 text-slate-400 group-hover:text-rose-600" />
-              <span>נעילה</span>
-            </button>
-          </div>
-
-        </div>
-
-        {/* Header Metrics Section: Ultra-Compact & Space-Efficient (Hidden on mobile when in WhatsApp CRM to maximize full-screen view) */}
+        {/* 1. Header Metrics Section: Placed at the TOP as requested, with all buttons underneath */}
         <div className={activeTab === 'whatsapp' ? 'hidden sm:block' : ''}>
         {isMetricsRowCollapsed ? (
           /* Collapsed Single-Line Summary Bar (~36px height) */
@@ -1966,6 +1588,386 @@ export default function App() {
           </div>
         )}
         </div>
+
+        {/* Row 1: Operational Actions & Alerts Strip */}
+        <div className="flex items-center gap-2 flex-wrap py-1 border-b border-slate-200/70 pb-2.5">
+          {/* 1. Intake Questionnaires for Review (שאלונים לבדיקה) */}
+          <button
+            type="button"
+            onClick={() => {
+              setIntakeModalFilter('new');
+              setIsIntakeModalOpen(true);
+            }}
+            id="btn-intake-new-top"
+            className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-2xs shrink-0 ${
+              newIntakeCount > 0
+                ? 'bg-gradient-to-r from-rose-50 via-white to-rose-50 hover:from-rose-100 hover:to-rose-50 border-2 border-rose-500 text-rose-950 shadow-md shadow-rose-600/15 ring-2 ring-rose-400/25 hover:scale-[1.02] active:scale-95'
+                : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700'
+            }`}
+            title="צפייה בשאלוני קליטה חדשים מלקוחות שממתינים לבדיקה וקליטה ליומן"
+          >
+            <span className="text-base">📥</span>
+            <span className="font-black">שאלונים לבדיקה</span>
+            {newIntakeCount > 0 ? (
+              <span className="relative flex items-center justify-center mr-0.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 bg-gradient-to-r from-red-600 to-rose-600 text-white text-xs sm:text-sm font-black font-mono rounded-full shadow-md ring-2 ring-white">
+                  {newIntakeCount}
+                </span>
+              </span>
+            ) : (
+              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full font-mono font-bold">0</span>
+            )}
+          </button>
+
+          {/* 2. In-Progress Intake Requests (שאלונים בתהליך) */}
+          <button
+            type="button"
+            onClick={() => {
+              setIntakeModalFilter('in_progress');
+              setIsIntakeModalOpen(true);
+            }}
+            id="btn-intake-inprogress-top"
+            className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-2xs shrink-0 ${
+              inProgressIntakeCount > 0
+                ? 'bg-gradient-to-r from-amber-50 via-white to-amber-50 hover:from-amber-100 hover:to-amber-50 border-2 border-amber-500 text-amber-950 shadow-md shadow-amber-600/15 ring-2 ring-amber-400/25 hover:scale-[1.02] active:scale-95'
+                : 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-200 hover:border-slate-300 text-slate-700'
+            }`}
+            title="צפייה בשאלונים פעילים הנמצאים בתהליך טיפול או בהמתנה לתשלום"
+          >
+            <span className="text-base">⏳</span>
+            <span className="font-black">שאלונים בתהליך</span>
+            {inProgressIntakeCount > 0 ? (
+              <span className="relative inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white text-xs sm:text-sm font-black font-mono rounded-full shadow-md ring-2 ring-white">
+                {inProgressIntakeCount}
+              </span>
+            ) : (
+              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full font-mono font-bold">0</span>
+            )}
+          </button>
+
+          {/* 3. WhatsApp CRM with Live Count Badge & Flashing Green Border */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('whatsapp')}
+            id="btn-whatsapp-crm-top"
+            className={`font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer relative shadow-md shrink-0 active:scale-95 ${
+              activeTab === 'whatsapp'
+                ? 'bg-gradient-to-r from-[#065f46] via-emerald-800 to-[#065f46] text-white ring-2 ring-emerald-400 shadow-emerald-900/30 scale-[1.02]'
+                : newCrmChatsCount > 0
+                ? 'bg-white hover:bg-rose-50 text-slate-900 border-2 border-rose-400 shadow-rose-200 hover:scale-[1.02] ring-2 ring-rose-300/60'
+                : 'bg-white hover:bg-emerald-50 text-emerald-950 hover:scale-[1.02] blink-border-green'
+            }`}
+            title="מרכז וואטסאפ ופניות (CRM) – ניהול שיחות, סיווג לקוחות ומענה מהיר"
+          >
+            <span className="text-base relative flex items-center">
+              💬
+              {newCrmChatsCount > 0 ? (
+                <>
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-500 rounded-full border border-white animate-ping"></span>
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-rose-600 rounded-full border border-white"></span>
+                </>
+              ) : (
+                <>
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white animate-ping"></span>
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-white"></span>
+                </>
+              )}
+            </span>
+            <span className="font-black">וואטסאפ ו-CRM</span>
+            {newCrmChatsCount > 0 ? (
+              <span className="bg-rose-600 text-white text-[11px] font-black px-2 py-0.5 rounded-full shadow-sm animate-pulse flex items-center gap-1 font-mono">
+                <span>{newCrmChatsCount}</span>
+                <span className="font-sans text-[10px]">שלא נקראו 🔥</span>
+              </span>
+            ) : (
+              <span className={`text-[10px] px-1.5 py-0.2 rounded-md font-bold ${
+                activeTab === 'whatsapp'
+                  ? 'bg-emerald-900 text-emerald-100'
+                  : 'bg-emerald-100 text-emerald-800'
+              }`}>
+                {activeTab === 'whatsapp' ? 'פתוח' : 'CRM 🟢'}
+              </span>
+            )}
+          </button>
+
+          {/* Desktop-Only WhatsApp History & Problem Scanner Button */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('whatsapp')}
+            id="btn-desktop-scan-whatsapp-top"
+            className="hidden lg:flex items-center gap-2 bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 hover:from-purple-100 hover:to-indigo-100 active:scale-95 border border-indigo-300 text-indigo-950 font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-2xs transition-all cursor-pointer shrink-0"
+            title="צפייה וסריקת היסטוריית וואטסאפ במחשב – חוק ברזל: ההודעות לעולם לא מסומנות כנקראו ונשארות לשמוליק ב-שלא נקראו"
+          >
+            <span className="text-base">🖥️🔍</span>
+            <span>סריקת וואטסאפ (מחשב)</span>
+            <span className="bg-indigo-200/80 text-indigo-900 text-[10px] font-extrabold px-1.5 py-0.2 rounded-md border border-indigo-300">
+              מוגן 🛡️
+            </span>
+          </button>
+
+          {/* Pending Grow Payments Quick Access Button (if any) */}
+          {pendingGrowPayments.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsGrowPaymentsMinimized(false);
+                setIsGrowFloatingSnoozed(false);
+              }}
+              id="btn-pending-grow-payments-top"
+              className="relative bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black px-3 py-2 rounded-xl text-xs sm:text-sm shadow-md hover:shadow-lg flex items-center gap-1.5 transition-all cursor-pointer shrink-0 border border-emerald-400/60 active:scale-95 animate-pulse"
+              title="התקבל תשלום חדש ממתין להקמת הזמנה - לחץ לפתיחת החלון"
+            >
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-300 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
+              </span>
+              <span>💳 תשלום ממתין</span>
+              <span className="bg-amber-400 text-slate-950 text-[11px] font-black px-1.5 py-0.2 rounded-full font-mono shadow-2xs">
+                ₪{pendingGrowPayments[0]?.amount.toLocaleString()}
+              </span>
+              {pendingGrowPayments.length > 1 && (
+                <span className="bg-emerald-900/80 text-emerald-100 text-[10px] font-extrabold px-1 rounded-full">
+                  +{pendingGrowPayments.length - 1}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* 4. Daily Evening Dog Update (20:00) */}
+          <button
+            type="button"
+            onClick={() => setIsDailyDogUpdatesOpen(true)}
+            id="btn-daily-dog-updates-top"
+            className="bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 active:scale-95 border border-amber-300 text-amber-950 font-black px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+            title="עדכון יומי לבעלי כלבים בשעה 20:00 - תצוגה מקדימה, החלפת נוסחים ושליחה"
+          >
+            <span className="text-base">🐶👑</span>
+            <span>עדכון 20:00</span>
+            {activeTonightCount > 0 && (
+              <span className="bg-amber-500 text-white text-[11px] font-black px-1.5 py-0.2 rounded-full shadow-2xs font-mono">
+                {activeTonightCount}
+              </span>
+            )}
+          </button>
+
+          {/* 5. Tomorrow Overview to Shmulik (19:00) */}
+          <button
+            type="button"
+            onClick={() => setIsTomorrowOverviewModalOpen(true)}
+            id="btn-tomorrow-overview-top"
+            className="bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 active:scale-95 border border-indigo-300 text-indigo-950 font-black px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+            title="מה קורה מחר? סקירה יומית מלאה לשמוליק ב-19:00 (כניסות, שחרורים, יתרות לתשלום, תפוסה ודגשים)"
+          >
+            <span className="text-base">📋</span>
+            <span className="hidden sm:inline">מה קורה מחר (19:00)</span>
+            <span className="sm:hidden">מחר</span>
+          </button>
+
+          {/* 6. + New Booking Primary CTA */}
+          <button
+            onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
+            id="btn-new-booking-top"
+            className="bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+          >
+            <span className="text-base font-bold">+</span>
+            <span>הזמנה חדשה</span>
+          </button>
+        </div>
+
+        {/* Row 2: Unified Navigation (Right), Shabbat/Holiday Banner in the Center Gap, and Utilities (Left) */}
+        <div className="flex items-center justify-between gap-2.5 p-1.5 sm:p-2 bg-white/95 backdrop-blur-xs rounded-2xl border border-slate-200/90 shadow-2xs w-full overflow-x-auto no-scrollbar">
+          
+          {/* Right Side in RTL (מימין): Main Navigation Tabs */}
+          <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveTab('calendar')}
+              className={`text-xs sm:text-sm font-black px-3.5 sm:px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'calendar'
+                  ? 'bg-[#065f46] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+              title="יומן פנסיון ואילוף"
+            >
+              <span className="text-base">📅</span>
+              <span>יומן</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('forecast')}
+              className={`text-xs sm:text-sm font-black px-3.5 sm:px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'forecast'
+                  ? 'bg-[#065f46] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+              title="תחזית תפוסה"
+            >
+              <span className="text-base">📊</span>
+              <span>תפוסה</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('kennels')}
+              className={`text-xs sm:text-sm font-black px-3.5 sm:px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'kennels'
+                  ? 'bg-[#065f46] text-white shadow-xs ring-2 ring-emerald-400'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+              title="שיבוצי תאים, הלנה ביתית, שעות האכלה והנחיות מיוחדות"
+            >
+              <span className="text-base">🏠</span>
+              <span>שיבוצי תאים והנחיות מיוחדות</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('customers')}
+              className={`text-xs sm:text-sm font-black px-3.5 sm:px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'customers'
+                  ? 'bg-[#065f46] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+              title="מאגר לקוחות וכלבים"
+            >
+              <span className="text-base">⭐</span>
+              <span>לקוחות</span>
+            </button>
+          </div>
+
+          {/* Center Gap (ברווח בין הכפתורים): Shabbat / Jewish Holiday Dog Greetings Reminder Banner */}
+          {todayHolidayInfo.isSpecial && totalDogsToday > 0 && !isGreetingBannerDismissed && (() => {
+            const rest = isCustomerMessagingRestrictedNow();
+            if (rest.isRestricted) {
+              return (
+                <div className="flex-1 min-w-[260px] mx-1 sm:mx-2 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white rounded-xl px-2.5 sm:px-3.5 py-1.5 shadow-xs border border-amber-400/60 flex items-center justify-between gap-2 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-lg shrink-0">🛡️</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-black text-xs sm:text-sm tracking-tight truncate">
+                          כלל ברזל: שקט מוחלט ללקוחות משישי 14:00 וכל השבת והחג
+                        </span>
+                        <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.2 rounded-full shrink-0">
+                          {totalDogsToday} כלבים בריזורט
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-100 font-medium truncate hidden xl:block">
+                        הודעות הד״ש והעדכונים ישלחו אוטומטית בענן 40 דקות לאחר צאת השבת/החג {rest.sendTimeStr ? `בשעה ${rest.sendTimeStr}` : ''} (גם כשהדפדפנים סגורים).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setGreetingModalDate(todayStr)}
+                      className="bg-white/95 hover:bg-white text-slate-900 font-black px-3 py-1.5 rounded-lg text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95"
+                      title="צפה בנוסח ההודעות וברשימת הכלבים"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-amber-700" />
+                      <span className="whitespace-nowrap">צפה בנוסח וברשימה</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            if (todayUnsentGreetingsCount > 0) {
+              return (
+                <div className="flex-1 min-w-[260px] mx-1 sm:mx-2 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white rounded-xl px-2.5 sm:px-3.5 py-1.5 shadow-xs border border-emerald-400/60 flex items-center justify-between gap-2 animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-lg shrink-0">🚀</span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-black text-xs sm:text-sm tracking-tight truncate">
+                          מוצאי שבת/חג – חלון המשלוח האוטומטי פעיל (40 דק׳ לאחר צאת השבת)!
+                        </span>
+                        <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.2 rounded-full shadow-2xs shrink-0">
+                          {todayUnsentGreetingsCount} להשלמה
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-emerald-100 font-medium truncate hidden xl:block">
+                        הודעות הד״ש החם נשלחות כעת אוטומטית ברקע לכל {totalDogsToday} הכלבים בריזורט.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setGreetingModalDate(todayStr)}
+                      className="bg-white hover:bg-emerald-50 text-emerald-950 font-black px-3 py-1.5 rounded-lg text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="whitespace-nowrap">צפה ברשימה ובהתקדמות</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="flex-1 mx-1 sm:mx-2 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl px-3 py-1.5 text-xs font-bold flex items-center justify-between shadow-2xs">
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="text-base shrink-0">🎉</span>
+                  <span className="font-black text-emerald-950 truncate">
+                    מעולה שמוליק! כל {totalDogsToday} הודעות הד״ש נשלחו בהצלחה לבעלים.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGreetingModalDate(todayStr)}
+                  className="text-emerald-700 hover:text-emerald-900 underline font-black text-xs cursor-pointer shrink-0 mr-2"
+                >
+                  פתח רשימה
+                </button>
+              </div>
+            );
+          })()}
+
+          {/* Left Side in RTL (משמאל): System & Management Utilities */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Reports Button */}
+            <button
+              type="button"
+              onClick={() => setIsReportsOpen(true)}
+              className="bg-slate-50 hover:bg-amber-50/80 active:scale-95 border border-slate-200/90 hover:border-amber-300 text-slate-700 hover:text-amber-900 font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="דוחות כספיים ותפוסה"
+            >
+              <span className="text-base">💰</span>
+              <span>דוחות</span>
+            </button>
+
+            {/* Settings Button */}
+            <button
+              onClick={handleOpenSettingsWithAuth}
+              id="btn-settings-top"
+              className="bg-slate-50 hover:bg-slate-100 active:scale-95 border border-slate-200/90 hover:border-slate-300 text-slate-700 hover:text-slate-900 font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="הגדרות תפוסה, תעריפים, ביט וגיבוי (אישור מנהל)"
+            >
+              <span className="text-base">⚙️</span>
+              <span>הגדרות</span>
+            </button>
+
+            {/* Lock System / Logout Button */}
+            <button
+              type="button"
+              onClick={handleManagerLogout}
+              id="btn-lock-system-top"
+              className="bg-slate-50 hover:bg-rose-50 active:scale-95 border border-slate-200/90 hover:border-rose-300 text-slate-500 hover:text-rose-700 font-bold px-3 py-2 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer group"
+              title="נעילת יומן ויציאה מאובטחת"
+            >
+              <Lock className="w-4 h-4 text-slate-400 group-hover:text-rose-600" />
+              <span>נעילה</span>
+            </button>
+          </div>
+
+        </div>
+
+
 
 
 

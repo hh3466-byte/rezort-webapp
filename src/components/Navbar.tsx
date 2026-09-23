@@ -145,6 +145,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => {
+              onSelectTab('kennels');
+              if (onToggleSidebar) onToggleSidebar();
+            }}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+              activeTab === 'kennels'
+                ? 'bg-slate-800 text-white shadow-sm border border-slate-700 ring-1 ring-emerald-400'
+                : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+            }`}
+          >
+            <span className="text-lg">🏠</span>
+            <span>שיבוצי תאים והנחיות מיוחדות</span>
+          </button>
+
+          <button
+            onClick={() => {
               onSelectTab('bookings');
               if (onToggleSidebar) onToggleSidebar();
             }}
