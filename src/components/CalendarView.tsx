@@ -598,6 +598,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               const freeSpots = Math.max(0, maxCap - occupiedCount);
               const isFull = occupiedCount >= maxCap;
               const occupancyPercent = Math.min(100, Math.round((occupiedCount / maxCap) * 100));
+              const exactOccupancyPercent = maxCap > 0 ? Math.round((occupiedCount / maxCap) * 100) : 0;
               const holidayInfo = getDateShabbatOrHoliday(day.dateStr);
 
               return (
@@ -653,9 +654,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       <span>תפוסה: {occupiedCount}/{maxCap}</span>
                       <span>
                         {isFull ? (
-                          <span className="text-red-700 font-black">בתפוסה מלאה 🔴</span>
+                          <span className="text-red-700 font-black">{exactOccupancyPercent}% תפוסה 🔴</span>
                         ) : (
-                          <span className="text-emerald-700 font-black">🟢 {freeSpots} מקומות פנויים</span>
+                          <span className="text-emerald-700 font-black">{exactOccupancyPercent}% תפוסה ({freeSpots} פנויים)</span>
                         )}
                       </span>
                     </div>
@@ -1006,9 +1007,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   {/* Occupancy Mini Progress Bar */}
                   <div className="my-2 bg-white p-2 rounded-xl border border-slate-200/80">
                     <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
-                      <span>תפוסה:</span>
-                      <span className={isFull ? 'text-red-600' : 'text-slate-900'}>
-                        {dayBookings.length}/{settings.maxCapacity}
+                      <span>תפוסה: {Math.round((dayBookings.length / Math.max(1, settings.maxCapacity)) * 100)}%</span>
+                      <span className={isFull ? 'text-red-600 font-black' : 'text-slate-900'}>
+                        {dayBookings.length}/{settings.maxCapacity} {isFull ? '🔴' : ''}
                       </span>
                     </div>
                     <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">

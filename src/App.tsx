@@ -1145,7 +1145,7 @@ export default function App() {
                 className="cursor-pointer hover:text-emerald-700 transition-colors shrink-0"
                 title="לחץ לפתיחת פירוט תפוסה כללית"
               >
-                📊 תפוסה: <strong className="text-slate-900">{totalDogsToday}/{settings.maxCapacity}</strong> ({freeSlots > 0 ? `${freeSlots} פנויים` : 'מלא'})
+                📊 תפוסה: <strong className="text-slate-900">{totalDogsToday}/{settings.maxCapacity}</strong> ({Math.round((totalDogsToday / Math.max(1, settings.maxCapacity)) * 100)}%{freeSlots > 0 ? ` · ${freeSlots} פנויים` : ' · מלא'})
               </span>
               <span className="text-slate-200">|</span>
               <span 
