@@ -23,6 +23,7 @@ import { calculateDaysCount, checkRangeOccupancy, getTodayStr, addDays, formatDa
 import { calculateBoardingRate } from '../utils/pricingUtils';
 import { parseVoiceOrWhatsAppText } from '../services/agentService';
 import { getLearnedRefundReasons, saveLearnedRefundReason } from '../utils/refundUtils';
+import { TimeSchedulePicker } from './TimeSchedulePicker';
 
 interface BookingFormModalProps {
   initialData?: Partial<Booking> | null;
@@ -956,6 +957,58 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               </div>
             </div>
 
+            {/* Quick Duration Buttons */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[11px] font-bold text-slate-500 ml-1">משך מהיר:</span>
+              <button
+                type="button"
+                onClick={() => setEndDate(addDays(startDate, 1))}
+                className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+              >
+                לילה 1
+              </button>
+              <button
+                type="button"
+                onClick={() => setEndDate(addDays(startDate, 3))}
+                className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+              >
+                3 לילות
+              </button>
+              <button
+                type="button"
+                onClick={() => setEndDate(addDays(startDate, 7))}
+                className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+              >
+                שבוע (7 לילות)
+              </button>
+              <button
+                type="button"
+                onClick={() => setEndDate(addDays(startDate, 14))}
+                className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+              >
+                שבועיים (14 לילות)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEndDate(addDays(startDate, 365));
+                  setIsFreeStay(true);
+                  setDailyRate(0);
+                  setTotalPrice(0);
+                  setDepositAmount(0);
+                  setNotes(prev => prev ? (prev.includes('ללא הגבלת זמן') ? prev : `${prev} | שהות פתוחה בחינם ללא הגבלת זמן`) : 'שהות פתוחה בחינם ללא הגבלת זמן');
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer shadow-2xs border ${
+                  isFreeStay
+                    ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30'
+                    : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-950'
+                }`}
+                title="קביעת שהות פתוחה ללא הגבלת זמן ובחינם (למשל עבור לונה)"
+              >
+                🎁 ♾️ שהות פתוחה ללא הגבלת זמן (חינם)
+              </button>
+            </div>
+
             {/* If Training: Dedicated Estimated Days Input */}
             {serviceType === 'training' && (
               <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
@@ -1114,10 +1167,10 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
             
             {/* Free Stay / Multi-dog Payment Consolidation Box */}
             <div className={`p-3.5 rounded-2xl border transition-all ${
-              isFreeStay ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/20' : 'bg-white border-slate-200'
+              isFreeStay ? 'bg-emerald-50/90 border-emerald-400 ring-2 ring-emerald-400/20 shadow-xs' : 'bg-white border-slate-200 hover:border-emerald-300'
             }`}>
               <div className="flex items-start justify-between gap-3">
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none flex-1">
                   <input
                     type="checkbox"
                     checked={isFreeStay}
@@ -1128,9 +1181,12 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                         setTotalPrice(0);
                         setDailyRate(0);
                         setDepositAmount(0);
+                        if (!notes.includes('אירוח בחינם')) {
+                          setNotes(prev => prev ? `${prev} | אירוח בחינם` : 'אירוח בחינם');
+                        }
                       } else {
                         const days = calculateDaysCount(startDate, endDate);
-                        const rate = settings.defaultDailyRateBoarding;
+                        const rate = settings.defaultDailyRateBoarding || 180;
                         setDailyRate(rate);
                         setTotalPrice(days * rate);
                       }
@@ -1138,8 +1194,8 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                     className="mt-0.5 w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
                   />
                   <div>
-                    <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                      <span>🎁 סמן כאירוח ללא תשלום (חינם / כלב נוסף)</span>
+                    <span className="text-xs font-black text-slate-900 flex items-center gap-1.5 flex-wrap">
+                      <span>🎁 שהות בחינם (ללא עלות / ₪0)</span>
                       {isFreeStay && (
                         <span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
                           פעיל - ₪0
@@ -1147,10 +1203,38 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                       )}
                     </span>
                     <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
-                      סמן כאן אם השהות היא בחינם, או שמדובר בכלב שני/נוסף של אותו לקוח שהתשלום נרשם על הכלב הראשי (כדי לשלוח ללקוח לינק תשלום יחיד).
+                      סמן כאן אם השהות היא ללא תשלום (למשל: <strong>לונה</strong>, פנסיון בחינם, או כלב שני של אותו לקוח שהתשלום נרשם על הכלב הראשי).
                     </span>
                   </div>
                 </label>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !isFreeStay;
+                    setIsFreeStay(next);
+                    if (next) {
+                      setTotalPrice(0);
+                      setDailyRate(0);
+                      setDepositAmount(0);
+                      if (!notes.includes('אירוח בחינם')) {
+                        setNotes(prev => prev ? `${prev} | אירוח בחינם` : 'אירוח בחינם');
+                      }
+                    } else {
+                      const days = calculateDaysCount(startDate, endDate);
+                      const rate = settings.defaultDailyRateBoarding || 180;
+                      setDailyRate(rate);
+                      setTotalPrice(days * rate);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl font-black text-xs transition-all cursor-pointer border ${
+                    isFreeStay
+                      ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-200'
+                  }`}
+                >
+                  {isFreeStay ? '✓ אירוח בחינם' : '🎁 סמן בחינם'}
+                </button>
               </div>
 
               {isFreeStay && (
@@ -1158,28 +1242,49 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                   <span className="text-[11px] font-bold text-emerald-950 block">
                     סיבת הפטור מתשלום:
                   </span>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setFreeStayReason('free')}
-                      className={`p-2 rounded-xl border text-right text-xs transition-all cursor-pointer ${
+                      onClick={() => {
+                        setFreeStayReason('free');
+                        if (!notes.includes('אירוח בחינם')) {
+                          setNotes(prev => prev ? `${prev} | אירוח בחינם` : 'אירוח בחינם (ללא עלות)');
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-xl border text-xs transition-all cursor-pointer ${
                         freeStayReason === 'free'
                           ? 'bg-emerald-100/90 border-emerald-500 text-emerald-950 font-black shadow-2xs'
                           : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 font-medium'
                       }`}
                     >
-                      🎁 שהות בחינם / הטבה / סגירה מיוחדת
+                      🎁 שהות בחינם (למשל: לונה / פנסיון ללא עלות)
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEndDate(addDays(startDate, 365));
+                        if (!notes.includes('ללא הגבלת זמן')) {
+                          setNotes(prev => prev ? `${prev} | שהות פתוחה ללא הגבלת זמן` : 'שהות פתוחה ללא הגבלת זמן');
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                      title="קביעת תאריך סיום פתוח לשנה קדימה"
+                    >
+                      <span>♾️</span>
+                      <span>שהות פתוחה (ללא הגבלת זמן)</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => setFreeStayReason('second_dog')}
-                      className={`p-2 rounded-xl border text-right text-xs transition-all cursor-pointer ${
+                      className={`px-2.5 py-1.5 rounded-xl border text-xs transition-all cursor-pointer ${
                         freeStayReason === 'second_dog'
-                          ? 'bg-emerald-100/90 border-emerald-500 text-emerald-950 font-black shadow-2xs'
+                          ? 'bg-indigo-100/90 border-indigo-500 text-indigo-950 font-black shadow-2xs'
                           : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 font-medium'
                       }`}
                     >
-                      🐕 כלב שני/נוסף – התשלום נרשם על הכלב הראשי
+                      🐾 כלב שני של אותו לקוח
                     </button>
                   </div>
 
@@ -1526,22 +1631,16 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
             </div>
 
             {/* Feeding Schedule & Food Details */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-200">
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
-                  ⏰ שעות האכלה:
-                </label>
-                <input
-                  type="text"
-                  value={feedingSchedule}
-                  onChange={(e) => setFeedingSchedule(e.target.value)}
-                  placeholder="למשל: 08:00, 18:00"
-                  className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none font-medium"
-                />
-              </div>
+            <div className="space-y-3 pt-2 border-t border-slate-200">
+              <TimeSchedulePicker
+                value={feedingSchedule}
+                onChange={(val) => setFeedingSchedule(val)}
+                label="⏰ שעות האכלה:"
+                placeholder="למשל: 08:00, 18:00"
+              />
 
-              <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 block">
                   🥣 כמות מנה והנחיות מזון:
                 </label>
                 <input
@@ -1552,19 +1651,13 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                   className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none font-medium"
                 />
               </div>
-            </div>
 
-            {/* Medication Schedule & Instructions */}
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">
-                💊 תרופות, שעות ומינון (אם יש):
-              </label>
-              <input
-                type="text"
+              <TimeSchedulePicker
                 value={medicationSchedule}
-                onChange={(e) => setMedicationSchedule(e.target.value)}
-                placeholder="למשל: אפוקוול חצי כדור ב-08:00 עם האוכל, טיפות עיניים פעמיים ביום"
-                className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-rose-500 focus:outline-none font-medium"
+                onChange={(val) => setMedicationSchedule(val)}
+                label="💊 תרופות, שעות ומינון (אם יש):"
+                placeholder="למשל: אפוקוול חצי כדור ב-08:00 עם האוכל, טיפות עיניים ב-20:00"
+                isMedication={true}
               />
             </div>
 

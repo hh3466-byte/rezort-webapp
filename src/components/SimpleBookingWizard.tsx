@@ -57,6 +57,7 @@ import {
 } from '../utils/whatsappUtils';
 import { calculateBoardingRate } from '../utils/pricingUtils';
 import { parseVoiceOrWhatsAppText } from '../services/agentService';
+import { TimeSchedulePicker } from './TimeSchedulePicker';
 
 interface SimpleBookingWizardProps {
   isOpen: boolean;
@@ -1336,6 +1337,26 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       </button>
                     </>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEndDate(addDays(startDate, 365));
+                      setIsFreeStay(true);
+                      setDailyRate(0);
+                      setTotalPrice(0);
+                      setDepositAmount(0);
+                      setPaymentType('full');
+                      setNotes(prev => prev ? (prev.includes('ללא הגבלת זמן') ? prev : `${prev} | שהות פתוחה בחינם ללא הגבלת זמן`) : 'שהות פתוחה בחינם ללא הגבלת זמן');
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer shadow-2xs border ${
+                      isFreeStay
+                        ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30'
+                        : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-950'
+                    }`}
+                    title="קביעת שהות פתוחה ללא הגבלת זמן ובחינם (למשל עבור לונה)"
+                  >
+                    🎁 ♾️ שהות פתוחה ללא הגבלת זמן (חינם)
+                  </button>
                 </div>
 
                 {/* Flexible Training Period Selector */}
@@ -1547,6 +1568,155 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
               {/* ======================================================== */}
               <div className="bg-slate-50 border border-slate-200 p-4 sm:p-5 rounded-2xl space-y-4">
                 
+                {/* Free Stay / Zero Cost Card */}
+                <div className={`p-3.5 rounded-2xl border-2 transition-all ${
+                  isFreeStay
+                    ? 'bg-emerald-50/95 border-emerald-500 ring-2 ring-emerald-400/20 shadow-xs'
+                    : 'bg-white border-slate-200 hover:border-emerald-300'
+                }`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <label className="flex items-start gap-2.5 cursor-pointer select-none flex-1">
+                      <input
+                        type="checkbox"
+                        checked={isFreeStay}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIsFreeStay(checked);
+                          if (checked) {
+                            setTotalPrice(0);
+                            setDailyRate(0);
+                            setDepositAmount(0);
+                            setPaymentType('full');
+                            if (!notes.includes('אירוח בחינם')) {
+                              setNotes(prev => prev ? `${prev} | אירוח בחינם` : 'אירוח בחינם');
+                            }
+                          } else {
+                            const days = calculateDaysCount(startDate, endDate);
+                            const rate = serviceType === 'day_training' 
+                              ? (settings.defaultDailyRateDayTraining || 250)
+                              : serviceType === 'daycare'
+                              ? (settings.defaultDailyRateDaycare || 90)
+                              : (settings.defaultDailyRateBoarding || 180);
+                            setDailyRate(rate);
+                            const newTotal = days * rate;
+                            setTotalPrice(newTotal);
+                            setDepositAmount(Math.round(newTotal * 0.3) || 200);
+                            setPaymentType('deposit');
+                          }
+                        }}
+                        className="mt-0.5 w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-xs font-black text-slate-900 flex items-center gap-1.5 flex-wrap">
+                          <span>🎁 שהות בחינם (ללא עלות / ₪0)</span>
+                          {isFreeStay && (
+                            <span className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 rounded-full font-black">
+                              פעיל - ₪0
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-[11px] text-slate-500 leading-tight block mt-0.5">
+                          עבור שהות ללא חיוב (למשל: <strong>לונה</strong>, פנסיון בחינם, או כלב שני של אותו לקוח שהתשלום נרשם על הכלב הראשי).
+                        </span>
+                      </div>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !isFreeStay;
+                        setIsFreeStay(next);
+                        if (next) {
+                          setTotalPrice(0);
+                          setDailyRate(0);
+                          setDepositAmount(0);
+                          setPaymentType('full');
+                          if (!notes.includes('אירוח בחינם')) {
+                            setNotes(prev => prev ? `${prev} | אירוח בחינם` : 'אירוח בחינם');
+                          }
+                        } else {
+                          const days = calculateDaysCount(startDate, endDate);
+                          const rate = settings.defaultDailyRateBoarding || 180;
+                          setDailyRate(rate);
+                          setTotalPrice(days * rate);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-xl font-black text-xs transition-all cursor-pointer border ${
+                        isFreeStay
+                          ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border-emerald-200'
+                      }`}
+                    >
+                      {isFreeStay ? '✓ אירוח בחינם' : '🎁 סמן בחינם'}
+                    </button>
+                  </div>
+
+                  {isFreeStay && (
+                    <div className="mt-3 pt-2.5 border-t border-emerald-200/80 space-y-2 animate-in fade-in">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFreeStayReason('free');
+                            if (!notes.includes('אירוח בחינם')) {
+                              setNotes(prev => prev ? `${prev} | אירוח בחינם` : 'אירוח בחינם (ללא עלות)');
+                            }
+                          }}
+                          className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                            freeStayReason === 'free'
+                              ? 'bg-emerald-100/90 border-emerald-500 text-emerald-950 font-black shadow-2xs'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          🎁 שהות בחינם (למשל: לונה / פנסיון ללא עלות)
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEndDate(addDays(startDate, 365));
+                            if (!notes.includes('ללא הגבלת זמן')) {
+                              setNotes(prev => prev ? `${prev} | שהות פתוחה ללא הגבלת זמן` : 'שהות פתוחה ללא הגבלת זמן');
+                            }
+                          }}
+                          className="px-2.5 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                          title="קביעת תאריך סיום פתוח לשנה קדימה"
+                        >
+                          <span>♾️</span>
+                          <span>שהות פתוחה (ללא הגבלת זמן)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setFreeStayReason('second_dog')}
+                          className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                            freeStayReason === 'second_dog'
+                              ? 'bg-indigo-100/90 border-indigo-500 text-indigo-950 font-black shadow-2xs'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          🐾 כלב שני של אותו לקוח
+                        </button>
+                      </div>
+
+                      {freeStayReason === 'second_dog' && (
+                        <div className="pt-2">
+                          <label className="text-[11px] font-bold text-slate-700 block mb-1">
+                            שם הכלב הראשי שהתשלום נרשם עליו:
+                          </label>
+                          <input
+                            type="text"
+                            value={linkedMainDogName}
+                            onChange={(e) => setLinkedMainDogName(e.target.value)}
+                            placeholder="למשל: מקס"
+                            className="w-full bg-white text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* 1. Daily Rate & Total Price Calculation (or Fixed Training Total Price) */}
                 {serviceType === 'training' ? (
                   <div className="space-y-2">
@@ -2119,22 +2289,16 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 </div>
 
                 {/* Feeding Schedule & Food Details */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-200">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
-                      ⏰ שעות האכלה:
-                    </label>
-                    <input
-                      type="text"
-                      value={feedingSchedule}
-                      onChange={(e) => setFeedingSchedule(e.target.value)}
-                      placeholder="למשל: 08:00, 18:00"
-                      className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none font-medium"
-                    />
-                  </div>
+                <div className="space-y-3 pt-2 border-t border-slate-200">
+                  <TimeSchedulePicker
+                    value={feedingSchedule}
+                    onChange={(val) => setFeedingSchedule(val)}
+                    label="⏰ שעות האכלה:"
+                    placeholder="למשל: 08:00, 18:00"
+                  />
 
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 block">
                       🥣 כמות מנה והנחיות מזון:
                     </label>
                     <input
@@ -2145,19 +2309,13 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none font-medium"
                     />
                   </div>
-                </div>
 
-                {/* Medication Schedule & Instructions */}
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    💊 תרופות, שעות ומינון (אם יש):
-                  </label>
-                  <input
-                    type="text"
+                  <TimeSchedulePicker
                     value={medicationSchedule}
-                    onChange={(e) => setMedicationSchedule(e.target.value)}
-                    placeholder="למשל: אפוקוול חצי כדור ב-08:00 עם האוכל, טיפות עיניים פעמיים ביום"
-                    className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-rose-500 focus:outline-none font-medium"
+                    onChange={(val) => setMedicationSchedule(val)}
+                    label="💊 תרופות, שעות ומינון (אם יש):"
+                    placeholder="למשל: אפוקוול חצי כדור ב-08:00 עם האוכל, טיפות עיניים ב-20:00"
+                    isMedication={true}
                   />
                 </div>
 
