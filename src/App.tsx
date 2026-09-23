@@ -68,18 +68,20 @@ import { DailyDogUpdatesModal } from './components/DailyDogUpdatesModal';
 import { TomorrowOverviewModal } from './components/TomorrowOverviewModal';
 import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
 import { MobileTodayDashboardModal } from './components/MobileTodayDashboardModal';
+import { KennelFeedingBoard } from './components/KennelFeedingBoard';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
 import { initDailyDogAutoSender } from './services/dailyDogAutoSender';
 import { initTomorrowOverviewScheduler, init1830SanityScheduler } from './services/morningReportService';
 import { initOrangeFollowUpScheduler } from './services/orangeFollowUpService';
 import { initAutoReviewScheduler } from './services/reviewService';
+import { initFeedingReminderScheduler } from './services/feedingReminderService';
 import { fetchNewCrmChatsCount } from './services/whatsappCrmService';
 
 export default function App() {
   // Core application state with live Cloud synchronization
   const [bookings, setBookings] = useState<Booking[]>(() => loadStoredBookings());
   const [settings, setSettings] = useState<ResortSettings>(() => loadStoredSettings());
-  const [activeTab, setActiveTab] = useState<'calendar' | 'forecast' | 'bookings' | 'customers' | 'whatsapp'>('calendar');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'forecast' | 'bookings' | 'customers' | 'kennels' | 'whatsapp'>('calendar');
   const [newCrmChatsCount, setNewCrmChatsCount] = useState<number>(0);
 
   // Calendar year/month state
@@ -256,13 +258,25 @@ export default function App() {
       setIntakeRequests(requests);
     });
 
+    const unsubFeedingReminders = initFeedingReminderScheduler(
+      () => bookings,
+      (event) => {
+        showToast(
+          event.type === 'food'
+            ? `🥣 תזכורת האכלה: ${event.dogName} ${event.kennelNumber ? `(תא ${event.kennelNumber})` : ''} - ${event.details}`
+            : `💊 תזכורת תרופה: ${event.dogName} ${event.kennelNumber ? `(תא ${event.kennelNumber})` : ''} - ${event.details}`
+        );
+      }
+    );
+
     return () => {
       unsubBookings();
       unsubSettings();
       unsubGrowPayments();
       unsubIntake();
+      unsubFeedingReminders();
     };
-  }, []);
+  }, [bookings]);
 
   // Today stats calculations
   const todayStr = getTodayStr();
@@ -1341,6 +1355,20 @@ export default function App() {
 
             <button
               type="button"
+              onClick={() => setActiveTab('kennels')}
+              className={`text-xs sm:text-sm font-black px-3.5 sm:px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                activeTab === 'kennels'
+                  ? 'bg-[#065f46] text-white shadow-xs ring-2 ring-emerald-400'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+              title="11 תאים, הלנה ביתית ודליי מזון"
+            >
+              <span className="text-base">🪣</span>
+              <span>11 תאים ודליי מזון</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActiveTab('customers')}
               className={`text-xs sm:text-sm font-black px-3.5 sm:px-4 py-2 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                 activeTab === 'customers'
@@ -2045,12 +2073,37 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'kennels' && (
+            <KennelFeedingBoard
+              bookings={bookings}
+              settings={settings}
+              onSaveBooking={handleSaveBookingForm}
+              onSelectBooking={(b) => {
+                setBookingFormModal({ isOpen: true, initialData: b });
+              }}
+              onNewBooking={(initialData) => {
+                setBookingWizardOpen({
+                  isOpen: true,
+                  initialData: initialData || null,
+                });
+              }}
+            />
+          )}
+
           {activeTab === 'whatsapp' && (
             <WhatsAppLeadsView
               bookings={bookings}
               intakeRequests={intakeRequests}
               settings={settings}
               onNewCountChange={setNewCrmChatsCount}
+              onUpdateIntakeStatus={async (id, status, notes) => {
+                await updateIntakeRequestStatusInDb(id, status, notes);
+                setIntakeRequests(prev => prev.map(r => r.id === id ? { ...r, status, ...(notes !== undefined ? { internalNotes: notes } : {}) } : r));
+              }}
+              onSaveIntakeRequest={async (updatedReq) => {
+                await saveIntakeRequestToDb(updatedReq);
+                setIntakeRequests(prev => prev.map(r => r.id === updatedReq.id ? updatedReq : r));
+              }}
               onOpenNewBookingWithData={(data) => {
                 setBookingWizardOpen({
                   isOpen: true,

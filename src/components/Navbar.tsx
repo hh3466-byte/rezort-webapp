@@ -18,8 +18,8 @@ import { Booking, ResortSettings } from '../types';
 import { getDailyBreakdown, getTodayStr } from '../utils/dateUtils';
 
 interface NavbarProps {
-  activeTab: 'calendar' | 'forecast' | 'bookings' | 'customers';
-  onSelectTab: (tab: 'calendar' | 'forecast' | 'bookings' | 'customers') => void;
+  activeTab: 'calendar' | 'forecast' | 'bookings' | 'customers' | 'kennels';
+  onSelectTab: (tab: 'calendar' | 'forecast' | 'bookings' | 'customers' | 'kennels') => void;
   bookings: Booking[];
   settings: ResortSettings;
   onOpenNewBooking: () => void;
@@ -111,6 +111,21 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <span className="text-lg">📅</span>
             <span>יומן הזמנות</span>
+          </button>
+
+          <button
+            onClick={() => {
+              onSelectTab('kennels');
+              if (onToggleSidebar) onToggleSidebar();
+            }}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+              activeTab === 'kennels'
+                ? 'bg-indigo-900/60 text-white shadow-sm border border-indigo-500/50'
+                : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'
+            }`}
+          >
+            <span className="text-lg">🪣</span>
+            <span>11 תאים ודליי מזון</span>
           </button>
 
           <button

@@ -55,6 +55,7 @@ import {
   isValidIsraeliPhone,
   formatIsraeliPhoneDisplay
 } from '../utils/whatsappUtils';
+import { calculateBoardingRate } from '../utils/pricingUtils';
 import { parseVoiceOrWhatsAppText } from '../services/agentService';
 
 interface SimpleBookingWizardProps {
@@ -118,6 +119,19 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const [medications, setMedications] = useState(initialData?.medications || '');
   const [notes, setNotes] = useState(initialData?.notes || '');
   const [placementNotes, setPlacementNotes] = useState(initialData?.placementNotes || '');
+  const [kennelPlacement, setKennelPlacement] = useState<number | 'home' | ''>(
+    initialData?.kennelNumber !== undefined ? initialData.kennelNumber : ''
+  );
+  const [feedingSchedule, setFeedingSchedule] = useState(initialData?.feedingSchedule || '');
+  const [foodPortion, setFoodPortion] = useState(initialData?.foodPortion || '');
+  const [medicationSchedule, setMedicationSchedule] = useState(
+    initialData?.medicationSchedule || initialData?.medications || ''
+  );
+  const [complexitySurcharge, setComplexitySurcharge] = useState<number>(
+    initialData?.complexitySurcharge || 0
+  );
+  const [complexityReason, setComplexityReason] = useState(initialData?.complexityReason || '');
+  const [placementError, setPlacementError] = useState<string>('');
   const [secondDog, setSecondDog] = useState<{
     hasSecondDog: boolean;
     name: string;
@@ -391,9 +405,19 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       }
     } else {
       setPricingMode('daily');
-      let rate = settings.defaultDailyRateBoarding;
-      if (type === 'day_training') rate = settings.defaultDailyRateDayTraining || 250;
-      if (type === 'daycare') rate = settings.defaultDailyRateDaycare;
+      let rate = settings.defaultDailyRateBoarding || 180;
+      if (type === 'boarding') {
+        const calculated = calculateBoardingRate(
+          daysCount,
+          settings.defaultDailyRateBoarding || 180,
+          { dogGender, isolationRate: 230 }
+        );
+        rate = calculated.dailyRate;
+      } else if (type === 'day_training') {
+        rate = settings.defaultDailyRateDayTraining || 250;
+      } else if (type === 'daycare') {
+        rate = settings.defaultDailyRateDaycare || 90;
+      }
       setDailyRate(rate);
     }
   };
@@ -401,6 +425,18 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   // Re-calculate Total Price
   const daysCount = Math.max(1, calculateDaysCount(startDate, endDate));
   const extrasTotal = extraServices.filter(s => s.selected).reduce((sum, s) => sum + s.price, 0);
+
+  // Auto-update daily rate for boarding when duration or dog gender changes
+  useEffect(() => {
+    if (serviceType === 'boarding' && pricingMode === 'daily') {
+      const calculated = calculateBoardingRate(
+        daysCount,
+        settings.defaultDailyRateBoarding || 180,
+        { dogGender, isolationRate: 230 }
+      );
+      setDailyRate(calculated.dailyRate);
+    }
+  }, [serviceType, daysCount, dogGender, settings.defaultDailyRateBoarding, pricingMode]);
 
   useEffect(() => {
     if (isFreeStay) {
@@ -452,6 +488,12 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     if (initialData.depositAmount !== undefined) setDepositAmount(initialData.depositAmount);
     if (initialData.notes) setNotes(initialData.notes);
     if (initialData.placementNotes !== undefined) setPlacementNotes(initialData.placementNotes);
+    if (initialData.kennelNumber !== undefined) setKennelPlacement(initialData.kennelNumber);
+    if (initialData.feedingSchedule) setFeedingSchedule(initialData.feedingSchedule);
+    if (initialData.foodPortion) setFoodPortion(initialData.foodPortion);
+    if (initialData.medicationSchedule) setMedicationSchedule(initialData.medicationSchedule);
+    if (initialData.complexitySurcharge !== undefined) setComplexitySurcharge(initialData.complexitySurcharge);
+    if (initialData.complexityReason) setComplexityReason(initialData.complexityReason);
     if (initialData.vaccinationValid !== undefined) setVaccinationValid(initialData.vaccinationValid);
     if (initialData.paymentMethod) setPaymentMethod(initialData.paymentMethod);
     if (initialData.isFreeStay !== undefined) setIsFreeStay(initialData.isFreeStay);
@@ -548,6 +590,14 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
   // Final submission
   const handleFinalSave = () => {
+    if ((kennelPlacement === '' || kennelPlacement === undefined) && !isFreeStay) {
+      alert('חובה לבחור תא 1–11 או הלנה ביתית לקליטת הכלב!');
+      setCurrentStep(2);
+      setPlacementError('חובה לבחור תא 1–11 או הלנה ביתית לקליטת הכלב!');
+      return;
+    }
+    setPlacementError('');
+
     const finalPaymentStatus: PaymentStatus = isFreeStay 
       ? 'fully_paid' 
       : (depositAmount >= totalPrice && totalPrice > 0 
@@ -593,6 +643,12 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       ownerAddress: ownerAddress.trim() || undefined,
       ownerCoordinates: ownerCoordinates,
       placementNotes: placementNotes.trim() || undefined,
+      kennelNumber: (kennelPlacement === '' || kennelPlacement === undefined) ? undefined : kennelPlacement,
+      feedingSchedule: feedingSchedule.trim() || undefined,
+      foodPortion: foodPortion.trim() || undefined,
+      medicationSchedule: medicationSchedule.trim() || undefined,
+      complexitySurcharge: Number(complexitySurcharge) || 0,
+      complexityReason: complexityReason.trim() || undefined,
       notes: formattedNotes,
       vaccinationValid,
       specialDiet,
@@ -1175,7 +1231,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     <span>קביעת תאריכי השהות *</span>
                   </label>
                   <span className="text-xs font-extrabold text-indigo-700 bg-white px-3 py-1 rounded-full border border-indigo-200 shadow-2xs">
-                    סה״כ {daysCount} {daysCount === 1 ? 'יום' : 'ימים'} ({daysCount > 1 ? `${daysCount - 1} לילות` : 'ללא לינה'})
+                    {serviceType === 'boarding' 
+                      ? `סה״כ ${daysCount} לילות (תעריף ₪${dailyRate} ללילה)`
+                      : serviceType === 'training'
+                      ? `סה״כ ${daysCount} ימי אילוף`
+                      : `סה״כ ${daysCount} ימי שהות (תעריף ₪${dailyRate} ליום)`}
                   </span>
                 </div>
 
@@ -1235,14 +1295,21 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     onClick={() => setEndDate(addDays(startDate, 7))}
                     className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
                   >
-                    שבוע
+                    שבוע (7 לילות)
                   </button>
                   <button
                     type="button"
                     onClick={() => setEndDate(addDays(startDate, 14))}
                     className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
                   >
-                    שבועיים
+                    שבועיים (14 לילות)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEndDate(addDays(startDate, 21))}
+                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+                  >
+                    3 שבועות (21 לילות · ₪120)
                   </button>
                   {serviceType === 'training' && (
                     <>
@@ -1990,6 +2057,142 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   placeholder="למשל: שיבוץ אך ורק עם ג'נגו / לא להוציא עם נקבות / תוקפת דרך גדר..."
                   className="w-full bg-white text-xs font-bold text-slate-900 p-2.5 rounded-xl border border-amber-300 focus:border-amber-600 focus:outline-none"
                 />
+              </div>
+
+              {/* 🏠 Mandatory Placement (תא 1-11 או הלנה ביתית) & Feeding System */}
+              <div className={`p-4 rounded-2xl border-2 space-y-3 transition-all ${
+                placementError ? 'border-red-500 bg-red-50/50' : 'border-indigo-200 bg-indigo-50/40'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+                    <span>🏠 מיקום לינה ושיבוץ תא:</span>
+                    <span className="text-red-500 font-black">* (שדה חובה)</span>
+                  </label>
+                  {placementError && (
+                    <span className="text-xs text-red-600 font-bold animate-pulse">
+                      {placementError}
+                    </span>
+                  )}
+                </div>
+
+                {/* Placement Buttons: 1..11 and Home */}
+                <div className="space-y-2">
+                  <div className="grid grid-cols-6 sm:grid-cols-11 gap-1.5">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(num => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => {
+                          setKennelPlacement(num);
+                          setPlacementError('');
+                        }}
+                        className={`py-2 rounded-xl border text-center transition-all cursor-pointer font-black text-xs ${
+                          kennelPlacement === num
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs scale-105'
+                            : 'bg-white border-slate-200 hover:border-indigo-300 text-slate-800'
+                        }`}
+                      >
+                        תא {num}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Home Boarding Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setKennelPlacement('home');
+                      setPlacementError('');
+                    }}
+                    className={`w-full p-2.5 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between text-xs font-bold ${
+                      kennelPlacement === 'home'
+                        ? 'bg-amber-500 border-amber-600 text-white shadow-xs'
+                        : 'bg-amber-50/80 border-amber-300 hover:bg-amber-100 text-amber-950'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>🏡</span>
+                      <span>הלנה ביתית (בבית של שמוליק) | 🪣 דלי הלנה ביתית</span>
+                    </div>
+                    {kennelPlacement === 'home' && <span>✓ נבחר</span>}
+                  </button>
+                </div>
+
+                {/* Feeding Schedule & Food Details */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-200">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      ⏰ שעות האכלה:
+                    </label>
+                    <input
+                      type="text"
+                      value={feedingSchedule}
+                      onChange={(e) => setFeedingSchedule(e.target.value)}
+                      placeholder="למשל: 08:00, 18:00"
+                      className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none font-medium"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block mb-1">
+                      🥣 כמות מנה והנחיות מזון:
+                    </label>
+                    <input
+                      type="text"
+                      value={foodPortion}
+                      onChange={(e) => setFoodPortion(e.target.value)}
+                      placeholder="למשל: 1 כוס בוקר וערב, להרטיב במים"
+                      className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none font-medium"
+                    />
+                  </div>
+                </div>
+
+                {/* Medication Schedule & Instructions */}
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    💊 תרופות, שעות ומינון (אם יש):
+                  </label>
+                  <input
+                    type="text"
+                    value={medicationSchedule}
+                    onChange={(e) => setMedicationSchedule(e.target.value)}
+                    placeholder="למשל: אפוקוול חצי כדור ב-08:00 עם האוכל, טיפות עיניים פעמיים ביום"
+                    className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-rose-500 focus:outline-none font-medium"
+                  />
+                </div>
+
+                {/* Complexity Surcharge (תוספת שקלים להנחיה מורכבת) */}
+                <div className="bg-amber-50/90 border border-amber-200 rounded-xl p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="flex-1">
+                    <label className="text-xs font-black text-amber-950 flex items-center gap-1 mb-0.5">
+                      <span>💰 תוספת הנחיה מורכבת (בשקלים):</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={complexityReason}
+                      onChange={(e) => setComplexityReason(e.target.value)}
+                      placeholder="סיבה: טיפול תרופתי מורכב / מזון מבושל מיוחד..."
+                      className="w-full bg-white text-slate-900 text-xs px-2.5 py-1.5 rounded-lg border border-amber-300 focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="w-full sm:w-32 shrink-0">
+                    <label className="text-[11px] font-bold text-amber-900 block mb-0.5">
+                      סכום תוספת (₪):
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={complexitySurcharge || ''}
+                      onChange={(e) => {
+                        const val = Number(e.target.value) || 0;
+                        setComplexitySurcharge(val);
+                      }}
+                      placeholder="0 ₪"
+                      className="w-full bg-white text-slate-900 text-xs px-2.5 py-1.5 rounded-lg border border-amber-300 font-mono font-bold focus:outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Second Dog Optional Accordion */}

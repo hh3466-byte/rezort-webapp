@@ -1,5 +1,5 @@
 import { Booking, IntakeRequest, ResortSettings } from '../types';
-import { cleanPhoneNumber, formatPhoneFormatted } from '../utils/whatsappUtils';
+import { cleanPhoneNumber, formatPhoneFormatted, isActionableIncomingMessage } from '../utils/whatsappUtils';
 import { isShabbatOrHolidayRestricted } from '../utils/jewishCalendar';
 
 export interface WhatsAppChat {
@@ -621,21 +621,74 @@ export function detectCustomerIntent(lastMessage?: string, clientName?: string, 
     };
   }
 
-  // 5. תודה וסיום
+  // 5. תודה, צחוק (חחחח), סיום, מחמאות, תגובות לד״ש, אדיבות וסגירה (סיווג ישיר לארכיון/טופל להפחתת עומס משמוליק)
   if (
     msg === 'ביי' ||
     msg === 'סגור' ||
-    msg === 'תודה' ||
-    msg === 'תודה רבה' ||
+    msg === 'הבנתי' ||
+    msg === 'אוקיי' ||
+    msg === 'אוקי' ||
+    msg.includes('חח') ||
+    msg.includes('חחח') ||
+    msg.includes('חחחח') ||
+    msg.includes('חחחחח') ||
+    msg.includes('תודה') ||
+    msg.includes('תודה רבה') ||
+    msg.includes('המון תודה') ||
     msg.includes('אחלה ביי') ||
-    msg.includes('בסדר גמור')
+    msg.includes('בסדר גמור') ||
+    msg.includes('שבת שלום') ||
+    msg.includes('חג שמח') ||
+    msg.includes('שבוע טוב') ||
+    msg.includes('מעולה נתראה') ||
+    msg.includes('סבבה') ||
+    msg.includes('אחלה') ||
+    msg.includes('מעולה') ||
+    msg.includes('בסדר') ||
+    msg.includes('העברתי') ||
+    msg.includes('שילמתי') ||
+    msg.includes('שלחתי') ||
+    msg.includes('אשלם') ||
+    msg.includes('בנסיעה') ||
+    msg.includes('אין בעיה') ||
+    msg.includes('נתראה') ||
+    msg.includes('אין על') ||
+    msg.includes('גזע מיוחד') ||
+    msg.includes('איזה חמוד') ||
+    msg.includes('איזה מתוק') ||
+    msg.includes('איזה יופי') ||
+    msg.includes('איזה יפה') ||
+    msg.includes('איזה נסיך') ||
+    msg.includes('איזה מושלם') ||
+    msg.includes('איזה כיף') ||
+    msg.includes('תמונה') ||
+    msg.includes('סרטון') ||
+    msg.includes('חיים שלי') ||
+    msg.includes('אהבה שלי') ||
+    msg.includes('הלב שלי') ||
+    msg.includes('מתגעגעים') ||
+    msg.includes('נשיקות') ||
+    msg.includes('חיבוקים') ||
+    msg.includes('דש') ||
+    msg.includes('שמחים לשמוע') ||
+    msg.includes('מלך') ||
+    msg.includes('אלופים') ||
+    msg === 'כן' ||
+    msg === 'לא' ||
+    msg === '👍' ||
+    msg === '🙏' ||
+    msg === '❤️' ||
+    msg === '🐶' ||
+    msg === '🙂' ||
+    msg === '😂' ||
+    msg === '🤣'
   ) {
     return {
       type: 'terminal_thanks',
-      label: 'סיום / תודה',
-      badge: '✓ סיום שיחה',
-      badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-      shouldArchive: true
+      label: 'סיום / אדיבות / תגובה לד״ש',
+      badge: '✓ הסתיים / טופל',
+      badgeClass: 'bg-slate-100 text-slate-700 border-slate-300',
+      shouldArchive: true // ארכוב אוטומטי מלא - לא מעמיס על שמוליק בשיחות מתנהלות!
     };
   }
 
@@ -774,10 +827,10 @@ export function markAllChatsAsRead(chats: { cleanPhone?: string; id?: string; ti
 
 /**
  * Determines treatment status for a lead/chat in the CRM:
- * - 'new': פנייה חדשה / הודעה נכנסת שלא נקראה
- * - 'in_chat': שיחה מתנהלת (הודעות נקראו / דו-שיח פעיל)
+ * - 'new': פנייה חדשה אמיתית / שאילתה נכנסת שטרם נקראה
+ * - 'in_chat': שיחה מתנהלת (הודעות נקראו / דו-שיח פעיל / לקוח קיים עם שאילתה)
  * - 'waiting_reply': נשלח מענה או שאלון וממתינים לתגובה
- * - 'handled': טופל / ארכוב
+ * - 'handled': טופל / ארכוב / תגובה לד״ש / מחמאות / צחוק / לקוח שמור
  */
 export function getChatTreatmentStatus(
   chat: EnrichedWhatsAppChat,
@@ -798,8 +851,8 @@ export function getChatTreatmentStatus(
 
   // 1. קביעה ידנית מפורשת של שמוליק
   if (statusOverrides[chat.cleanPhone]) {
-    // If a new incoming message arrived AFTER the override and AFTER last read, it's new
-    if (chat.lastMessageType === 'incoming' && chatTime > lastReadTime && !isReadByShmulik) {
+    // If a new incoming actionable message arrived AFTER the override and AFTER last read, it's new
+    if (chat.lastMessageType === 'incoming' && chatTime > lastReadTime && !isReadByShmulik && isActionableIncomingMessage(chat.lastMessage)) {
       return 'new';
     }
     return statusOverrides[chat.cleanPhone] as any;
@@ -820,8 +873,26 @@ export function getChatTreatmentStatus(
     return 'handled';
   }
 
-  // 4. ניתוח כוונות חכם של הודעת הלקוח האחרונה
+  // 4. שיחות עם לקוחות קיימים ביומן (customer_with_booking)
+  // לעולם לא מוגדרות כ-'new' (פנייה חדשה)!
+  // אם זו הודעה פעילה אך אינה שאילתה דחופה (למשל תשובה לד"ש, מחמאה, אשלם מחר) -> handled
+  // אם זו שאילתה פעילה שדורשת מענה -> in_chat
+  if (chat.classification === 'customer_with_booking') {
+    if (chat.lastMessageType === 'incoming') {
+      if (!isActionableIncomingMessage(chat.lastMessage)) {
+        return 'handled';
+      }
+      return 'in_chat';
+    }
+    return 'handled';
+  }
+
+  // 5. ניתוח כוונות חכם של הודעת הלקוח האחרונה
   if (chat.lastMessageType === 'incoming') {
+    if (!isActionableIncomingMessage(chat.lastMessage)) {
+      return 'handled';
+    }
+
     const intent = detectCustomerIntent(chat.lastMessage, chat.name, chat.matchedDogName);
     if (intent) {
       if (intent.shouldArchive) return 'handled';
@@ -830,13 +901,29 @@ export function getChatTreatmentStatus(
     }
   }
 
-  // 5. אם ההודעה כבר נקראה/נפתחה ע"י שמוליק (בטלפון או במחשב) -> עוברת לשיחות מתנהלות!
+  // 6. שאלון שננטש / בארכיון -> handled אלא אם הלקוח שלח פנייה חדשה אקטיבית
+  if (chat.matchedIntake?.status === 'abandoned') {
+    if (chat.lastMessageType === 'incoming' && isActionableIncomingMessage(chat.lastMessage)) {
+      return 'in_chat';
+    }
+    return 'handled';
+  }
+
+  // 7. שיחה שמתנהל בה דו-שיח או ששמוליק כבר ענה בה בעבר
+  if (chat.outgoingCount && chat.outgoingCount > 0) {
+    return 'in_chat';
+  }
+  if (chat.isOngoingDialogue) {
+    return 'in_chat';
+  }
+
+  // 8. אם ההודעה כבר נקראה/נפתחה ע"י שמוליק -> עוברת לשיחות מתנהלות!
   if (isReadByShmulik) {
     return 'in_chat';
   }
 
-  // 6. פנייה נכנסת שטרם נפתחה וטרם נקראה -> 'new' (שלא נקראו)
-  if (chat.lastMessageType === 'incoming' && ageHours < 48) {
+  // 9. פנייה נכנסת חדשה ואמיתית (שלא נקראה, בעלת תוכן רלוונטי שדורש מענה) -> 'new'
+  if (chat.lastMessageType === 'incoming' && ageHours < 48 && isActionableIncomingMessage(chat.lastMessage)) {
     return 'new';
   }
 
@@ -886,12 +973,40 @@ export interface UnansweredChatSummary {
 }
 
 export async function fetchUnansweredChatsSummary(
-  settings: ResortSettings
+  settings: ResortSettings,
+  bookings: Booking[] = []
 ): Promise<UnansweredChatSummary[]> {
   try {
     const raw = await fetchGreenApiChats(settings);
+    const readTimestamps = getReadChatTimestamps();
+
     return raw
-      .filter(c => c.lastMessageType === 'incoming')
+      .filter(c => {
+        if (c.lastMessageType !== 'incoming') return false;
+        const text = (c.lastMessage || '').trim();
+        if (!isActionableIncomingMessage(text)) return false;
+
+        const cleanP = cleanPhoneNumber(c.id);
+        // Exclude internal / manager / test numbers
+        if (isExcludedChat(c.name, cleanP, c.id)) return false;
+
+        // Exclude customers with active bookings in the calendar (routine client conversation)
+        if (bookings && bookings.length > 0) {
+          const hasBooking = bookings.some(b => {
+            if (b.stayStatus === 'cancelled') return false;
+            const bPhone = cleanPhoneNumber(b.ownerPhone || '');
+            return bPhone && cleanP && (bPhone.slice(-7) === cleanP.slice(-7));
+          });
+          if (hasBooking) return false;
+        }
+
+        // Exclude chats already read/opened by Shmulik
+        const lastRead = readTimestamps[cleanP] || 0;
+        const chatTime = c.timestamp ? (c.timestamp < 1e12 ? c.timestamp * 1000 : c.timestamp) : 0;
+        if (lastRead >= chatTime || c.unreadCount === 0) return false;
+
+        return true;
+      })
       .map(c => {
         const phone = extractPhoneFromChatId(c.id);
         const name = c.name && !c.name.includes('@') ? c.name : 'לקוח';

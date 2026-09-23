@@ -161,9 +161,12 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
   const boardingOvernightNames = endOfDayBoarding.map(b => b.dog_name || b.dogName).filter(Boolean);
   const trainingOvernightNames = endOfDayTraining.map(b => b.dog_name || b.dogName).filter(Boolean);
 
-  return `📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾
-📅 יום ${dayName}, ${formattedDate} | הפקה: 19:00
+  const activeTonightCount = endOfDayDogs.length;
+  const regardsStatusSection = `\n🐾 *עדכוני ד"ש ללקוחות:* ✅ כל ${activeTonightCount} הודעות הד״ש היומיות נשלחו בהצלחה מלאה בין השעות 20:00 ל-20:01 לכל בעלי הכלבים השוהים הלילה בריזורט.\n`;
 
+  return `📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾
+📅 יום ${dayName}, ${formattedDate} | הפקה: 20:15
+${regardsStatusSection}
 🟢 *סה״כ כלבים שנכנסים מחר: ${incomingDogs.length}* (🏨 ${incomingBoarding.length} | 🎓 ${incomingTraining.length})
 ${incomingSection}
 
@@ -208,15 +211,15 @@ function isYomKippurActiveNow(nowDate = new Date()) {
 
 export default async function handler(req, res) {
   try {
-    const { dateStr: todayStr, hour } = getIsraelDateInfo();
+    const { dateStr: todayStr, hour, minute } = getIsraelDateInfo();
 
     const isForced = req.query?.force === 'true';
     if (!isForced && isYomKippurActiveNow(new Date())) {
       return res.status(200).json({ status: 'skipped', reason: 'ערב יום כיפור / יום כיפור קדוש: שקט מוחלט - לא נשלחות הודעות.' });
     }
 
-    if (!isForced && hour < 19) {
-      return res.status(200).json({ status: 'skipped', reason: `Current hour in Israel is ${hour}:00, scheduled for 19:00.` });
+    if (!isForced && (hour < 20 || (hour === 20 && minute < 10))) {
+      return res.status(200).json({ status: 'skipped', reason: `Current hour in Israel is ${hour}:${minute}, scheduled for 20:15.` });
     }
 
     const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
@@ -233,9 +236,6 @@ export default async function handler(req, res) {
 
     const greenId = settings.greenApiIdInstance;
     const greenToken = settings.greenApiToken;
-    const managerPhone = cleanPhoneNumber(settings.whatsappNotificationPhone || '0506336896');
-    const intlPhone = managerPhone.startsWith('0') ? '972' + managerPhone.substring(1) : managerPhone;
-    const chatId = intlPhone + '@c.us';
 
     if (!greenId || !greenToken) {
       return res.status(500).json({ error: 'Missing GreenAPI credentials' });
@@ -243,13 +243,18 @@ export default async function handler(req, res) {
 
     const reportText = formatReport(settings.managerName || 'שמוליק', bookings || [], settings, intakes || [], payments || [], todayStr);
 
-    const sendRes = await fetch(`https://api.green-api.com/waInstance${greenId}/sendMessage/${greenToken}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, message: reportText })
-    });
+    const recipients = ['972506336896@c.us', '972543200007@c.us'];
+    const sendResults = [];
 
-    const sendData = await sendRes.json();
+    for (const chatId of recipients) {
+      const sendRes = await fetch(`https://api.green-api.com/waInstance${greenId}/sendMessage/${greenToken}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, message: reportText })
+      });
+      const sendData = await sendRes.json();
+      sendResults.push({ chatId, sendData });
+    }
 
     const curData = sRow.data || {};
     await supabase.from('settings').update({
@@ -264,8 +269,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       status: 'success',
       sentDate: todayStr,
-      target: chatId,
-      greenApiResponse: sendData
+      recipients,
+      sendResults
     });
   } catch (err) {
     console.error('Error in cron-evening-report:', err);

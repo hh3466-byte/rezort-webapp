@@ -60,6 +60,7 @@ export const getIntakeRequestAgeHours = (r: IntakeRequest): number => {
  */
 export const getEffectiveIntakeStatus = (r: IntakeRequest, bookings: Booking[] = []): IntakeRequest['status'] => {
   if (r.status === 'approved') return 'approved';
+  if (r.status === 'abandoned') return 'abandoned';
   if (hasActiveBookingForIntake(r, bookings)) return 'approved';
   return r.status;
 };
@@ -70,7 +71,7 @@ export const getEffectiveIntakeStatus = (r: IntakeRequest, bookings: Booking[] =
  */
 export const isUnansweredIntakeRequest = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
   if (r.status === 'approved' || hasActiveBookingForIntake(r, bookings)) return false;
-  if (r.status === 'rejected') return false;
+  if (r.status === 'rejected' || r.status === 'abandoned') return false;
   const notes = r.internalNotes || '';
   const hasUnansweredNote = notes.includes('לא ענה') || notes.includes('תזכורת שיווקית');
   const isAgeOver24h = getIntakeRequestAgeHours(r) >= 24;
@@ -79,9 +80,10 @@ export const isUnansweredIntakeRequest = (r: IntakeRequest, bookings: Booking[] 
 
 /**
  * Is this a brand new intake questionnaire waiting for initial review by Shmulik?
- * Must be pending, without notes, no active booking, and within 24h.
+ * Must be pending, without notes, no active booking, not abandoned, and within 24h.
  */
 export const isIntakeRequestNew = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
+  if (r.status === 'abandoned' || r.status === 'rejected') return false;
   if (isUnansweredIntakeRequest(r, bookings)) return false;
   const effStatus = getEffectiveIntakeStatus(r, bookings);
   return effStatus === 'pending' && (!r.internalNotes || !r.internalNotes.trim());
@@ -89,10 +91,12 @@ export const isIntakeRequestNew = (r: IntakeRequest, bookings: Booking[] = []): 
 
 /**
  * Is this an intake request actively in progress / waiting for payment?
- * (Excluded if customer already booked in calendar or unanswered >24h).
+ * (Excluded if customer already booked in calendar, abandoned, or unanswered >24h).
  */
 export const isIntakeRequestInTreatment = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
+  if (r.status === 'abandoned' || r.status === 'rejected') return false;
   if (isUnansweredIntakeRequest(r, bookings)) return false;
   const effStatus = getEffectiveIntakeStatus(r, bookings);
   return effStatus === 'payment_requested' || (effStatus === 'pending' && Boolean(r.internalNotes && r.internalNotes.trim()));
 };
+

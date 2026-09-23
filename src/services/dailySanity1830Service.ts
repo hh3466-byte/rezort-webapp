@@ -1,6 +1,6 @@
 import { Booking, ResortSettings, IntakeRequest } from '../types';
 import { getTodayStr, formatDateIL, addDays, VERIFIED_GROW_LEDGER } from '../utils/dateUtils';
-import { cleanPhoneNumber, isValidIsraeliPhone, getFirstName } from '../utils/whatsappUtils';
+import { cleanPhoneNumber, isValidIsraeliPhone, getFirstName, isActionableIncomingMessage } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from './notificationService';
 import { supabase } from '../utils/supabase';
 import { EnrichedWhatsAppChat, fetchGreenApiChats, enrichChatWithSystemData } from './whatsappCrmService';
@@ -135,9 +135,10 @@ export function run1830SanityAudit(
 
     const phone = c.cleanPhone;
     const name = c.name || 'לקוח';
+    const hasBooking = c.classification === 'customer_with_booking' || activeBookings.some(b => cleanPhoneNumber(b.ownerPhone || '') === phone);
 
-    // Unanswered incoming message from client
-    if (c.lastMessageType === 'incoming') {
+    // Unanswered incoming message from lead (only if truly actionable, unread, and NOT an already booked customer engaged in routine stay chat)
+    if (c.lastMessageType === 'incoming' && !hasBooking && c.unreadCount !== 0 && isActionableIncomingMessage(text)) {
       const msgTime = c.timestamp ? (c.timestamp < 1e12 ? c.timestamp * 1000 : c.timestamp) : nowMs;
       const elapsedHours = Math.round((nowMs - msgTime) / (1000 * 60 * 60));
       // Truncate message quote to 60 chars
@@ -168,14 +169,14 @@ export function run1830SanityAudit(
     }
 
     // Check for customer complaints or problem keywords
-    const problemKeywords = ['טעות', 'שגוי', 'תקלה', 'בעיה', 'הבטחתם', 'מאוכזב', 'למה'];
+    const problemKeywords = ['טעות', 'שגוי', 'תקלה', 'בעיה', 'הבטחתם', 'מאוכזב', 'לבטל הגעה', 'ביטול שריון'];
     const foundProblem = problemKeywords.find(k => text.includes(k));
     if (foundProblem && c.lastMessageType === 'incoming') {
       redLights.customerIssues.push(`⚠️ *${name}* (📞 ${phone}): אותרה מילת בעיה ("${foundProblem}") בהודעה: "${text.slice(0, 70)}"`);
     }
   });
 
-  // 4. Check unhandled / open intake questionnaires (sent but not filled or pending over 12h)
+  // 4. Check unhandled / open intake questionnaires (only pending and active, excluding abandoned / booked)
   const pendingIntakes = intakeRequests.filter(r => r.status === 'pending');
   pendingIntakes.forEach(r => {
     redLights.unfilledIntakes.push(`📋 שאלון ממתין: *${r.dogName}* (${r.ownerName} - 📞 ${r.ownerPhone || 'ללא טלפון'}) | נשלח לתאריכים ${formatDateIL(r.startDate)}-${formatDateIL(r.endDate)}`);

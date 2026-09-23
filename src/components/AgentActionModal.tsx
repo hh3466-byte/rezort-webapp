@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { AgentActionProposal, Booking, ResortSettings, ServiceType } from '../types';
 import { formatDateIL, calculateDaysCount, addDays, getTodayStr } from '../utils/dateUtils';
+import { calculateBoardingRate } from '../utils/pricingUtils';
 import { getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { 
   getClarificationQuestions, 
@@ -128,10 +129,14 @@ export const AgentActionModal: React.FC<AgentActionModalProps> = ({
           const e = field === 'endDate' ? value : updated.endDate;
           if (s && e && s <= e) {
             const days = calculateDaysCount(s, e);
-            let rate = settings.defaultDailyRateBoarding;
-            if (srv === 'day_training') rate = settings.defaultDailyRateDayTraining || 250;
-            if (srv === 'daycare') rate = settings.defaultDailyRateDaycare;
-            updated.totalPrice = days * rate;
+            if (srv === 'day_training') {
+              updated.totalPrice = days * (settings.defaultDailyRateDayTraining || 250);
+            } else if (srv === 'daycare') {
+              updated.totalPrice = days * (settings.defaultDailyRateDaycare || 90);
+            } else {
+              const boardingRate = calculateBoardingRate(days, settings.defaultDailyRateBoarding || 180, { dogGender: updated.dogGender, isolationRate: 230 });
+              updated.totalPrice = boardingRate.totalPrice;
+            }
           }
         }
       }

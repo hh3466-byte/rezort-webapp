@@ -217,7 +217,15 @@ export function formatTomorrowOverviewReport(
     });
   });
 
-  const pendingIntakes = safeIntakes.filter(r => r.status === 'pending');
+  const pendingIntakes = safeIntakes.filter(r => {
+    if (r.status !== 'pending') return false;
+    const rPhone = cleanPhoneNumber(r.ownerPhone || '');
+    const hasBooking = activeBookings.some(b => {
+      const bPhone = cleanPhoneNumber(b.ownerPhone || '');
+      return bPhone && rPhone && (bPhone.slice(-7) === rPhone.slice(-7));
+    });
+    return !hasBooking;
+  });
 
   const phoneAndDateIssues: string[] = [];
   activeBookings.forEach(b => {
@@ -300,9 +308,15 @@ export function formatTomorrowOverviewReport(
     extraActionSections = '\n\n🚨 *אורות אדומים:* אין אורות אדומים ✅';
   }
 
+  // Check active staying dogs tonight for regards status
+  const stayingTonightCount = activeBookings.filter(b => b.startDate <= todayStr && b.endDate > todayStr).length;
+  const regardsStatusLine = stayingTonightCount > 0
+    ? `\n🐾 *עדכוני ד"ש ללקוחות:*\n✅ כל ${stayingTonightCount} הודעות הד״ש היומיות נשלחו בהצלחה מלאה בין השעות 20:00 ל-20:01 לכל בעלי הכלבים השוהים הלילה בריזורט.\n`
+    : '';
+
   return `📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾
 📅 יום ${dayName}, ${formattedDate}
-
+${regardsStatusLine}
 🟢 *כניסות מחר (${incomingDogs.length}):*
 ${incomingSection}
 
@@ -321,7 +335,7 @@ ${trainingOvernightLine}
 }
 
 /**
- * Checks if current time in Israel is >= 19:00 PM and not during Erev Yom Kippur / Yom Kippur moratorium
+ * Checks if current time in Israel is >= 20:15 PM and not during Erev Yom Kippur / Yom Kippur moratorium
  */
 export function isTomorrowOverviewEligibleNow(now: Date = new Date()): { eligible: boolean; reason?: string } {
   // Check Erev Yom Kippur and Yom Kippur restriction
@@ -346,11 +360,11 @@ export function isTomorrowOverviewEligibleNow(now: Date = new Date()): { eligibl
     if (p.type === 'minute') minute = parseInt(p.value, 10);
   }
 
-  // Window starts at 19:00 (7:00 PM) until 23:59
-  if (hour < 19) {
+  // Window starts at 20:15 (8:15 PM) until 23:59 (after 20:00 regards messages)
+  if (hour < 20 || (hour === 20 && minute < 15)) {
     return {
       eligible: false,
-      reason: `מוקדם מדי (השעה הנוכחית: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}, סקירת מחר מתוזמנת ל-19:00)`
+      reason: `מוקדם מדי (השעה הנוכחית: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}, סקירת מחר מתוזמנת ל-20:15 לאחר שליחת הודעות הד״ש)`
     };
   }
 
@@ -486,7 +500,7 @@ export async function sendTomorrowOverviewToShmulik(
   // Fetch unanswered WhatsApp chats
   let unansweredChats: UnansweredChatSummary[] = [];
   try {
-    unansweredChats = await fetchUnansweredChatsSummary(settings);
+    unansweredChats = await fetchUnansweredChatsSummary(settings, bookings);
   } catch {}
 
   const managerPhone = cleanPhoneNumber(settings?.whatsappNotificationPhone || '0506336896');

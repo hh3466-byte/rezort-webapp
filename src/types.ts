@@ -27,6 +27,13 @@ export interface Booking {
   medications?: string;
   behaviorNotes?: string;
   placementNotes?: string; // דגשי שיבוץ והוראות מיוחדות (למשל: לשים רק עם ג'נגו / תוקפת דרך גדר)
+  kennelNumber?: number | 'home'; // תא 1 עד 11, או 'home' להלנה ביתית בבית של שמוליק
+  feedingSchedule?: string; // שעות האכלה (למשל: "08:00, 18:00")
+  foodPortion?: string; // כמות מנה והנחיית הגשה (למשל: "1 כוס בוקר וערב, להרטיב במים")
+  medicationSchedule?: string; // הנחיות תרופות ומינון (למשל: "אפוקוול חצי כדור בבוקר")
+  complexitySurcharge?: number; // תוספת מחיר בשקלים עקב טיפול/האכלה מורכבת
+  complexityReason?: string; // הסבר לתוספת המחיר
+  dailyFeedingsCompleted?: { [dateStr: string]: { morning?: boolean; evening?: boolean; meds?: boolean } }; // מעקב ביצוע יומי
   emergencyContact?: string;
   ownerAddress?: string; // כתובת מגורים של הבעלים (חיוני לאיתור במקרה בריחה וחירום)
   ownerCoordinates?: { lat: number; lng: number }; // קואורדינטות GPS לניווט ישיר ב-Waze
@@ -92,7 +99,7 @@ export interface GrowIncomingPayment {
   updated_at?: string;
 }
 
-export type IntakeRequestStatus = 'pending' | 'payment_requested' | 'approved' | 'rejected';
+export type IntakeRequestStatus = 'pending' | 'payment_requested' | 'approved' | 'rejected' | 'abandoned';
 
 export interface IntakeRequest {
   id: string;
@@ -117,6 +124,14 @@ export interface IntakeRequest {
   isHouseTrained?: boolean; // מחונך לצרכים
   isTreatedParasites?: boolean; // מטופל נגד קרציות ופשפשים
   specialNeeds?: string;
+  specialDiet?: string;
+  medications?: string;
+  feedingSchedule?: string;
+  foodPortion?: string;
+  medicationSchedule?: string;
+  kennelNumber?: number | 'home';
+  complexitySurcharge?: number;
+  complexityReason?: string;
   notes?: string;
   calculatedPrice?: number;
   depositRequested?: number;
@@ -148,6 +163,14 @@ export interface AdditionalDogIntake {
   isHouseTrained?: boolean;
   isTreatedParasites?: boolean;
   specialNeeds?: string;
+  specialDiet?: string;
+  medications?: string;
+  feedingSchedule?: string;
+  foodPortion?: string;
+  medicationSchedule?: string;
+  kennelNumber?: number | 'home';
+  complexitySurcharge?: number;
+  complexityReason?: string;
   notes?: string;
 }
 
@@ -205,7 +228,7 @@ export interface AgentActionProposal {
   };
 }
 
-export type TabType = 'calendar' | 'occupancy' | 'bookings' | 'customers' | 'reports' | 'guide';
+export type TabType = 'calendar' | 'occupancy' | 'bookings' | 'customers' | 'kennels' | 'reports' | 'guide';
 
 export type VoucherStatus = 'active' | 'redeemed' | 'expired';
 

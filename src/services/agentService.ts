@@ -1,5 +1,6 @@
 import { AgentActionProposal, Booking, ResortSettings } from '../types';
 import { addDays, calculateDaysCount, checkRangeOccupancy, getTodayStr } from '../utils/dateUtils';
+import { calculateBoardingRate } from '../utils/pricingUtils';
 
 export interface ParseAgentOptions {
   text: string;
@@ -302,7 +303,8 @@ export function applyClarificationAnswer(
       const sDate = updated.startDate || referenceDate;
       const eDate = updated.endDate || addDays(sDate, 3);
       const calculatedDays = Math.max(1, calculateDaysCount(sDate, eDate));
-      updated.totalPrice = calculatedDays * (settings.defaultDailyRateBoarding || 180);
+      const boardingRate = calculateBoardingRate(calculatedDays, settings.defaultDailyRateBoarding || 180, { isolationRate: 230 });
+      updated.totalPrice = boardingRate.totalPrice;
     }
   } else if (questionId === 'pricing_mode') {
     const priceMatches = [...clean.matchAll(/(\d{2,5})/g)];
@@ -348,16 +350,18 @@ export function applyClarificationAnswer(
     }
 
     // Recalculate price
-    const sObj = new Date(sDate + 'T00:00:00').getTime();
-    const eObj = new Date(updated.endDate + 'T00:00:00').getTime();
-    const calculatedDays = Math.max(1, Math.round((eObj - sObj) / (1000 * 60 * 60 * 24)));
+    const calculatedDays = Math.max(1, calculateDaysCount(sDate, updated.endDate));
     
-    let rate = settings.defaultDailyRateBoarding;
-    if (updated.serviceType === 'training') rate = settings.defaultDailyRateTraining;
-    if (updated.serviceType === 'combined') rate = settings.defaultDailyRateCombined;
-    if (updated.serviceType === 'daycare') rate = settings.defaultDailyRateDaycare;
-
-    updated.totalPrice = calculatedDays * rate;
+    if (updated.serviceType === 'training') {
+      updated.totalPrice = settings.defaultDailyRateTraining || 6500;
+    } else if (updated.serviceType === 'day_training') {
+      updated.totalPrice = calculatedDays * (settings.defaultDailyRateDayTraining || 250);
+    } else if (updated.serviceType === 'daycare') {
+      updated.totalPrice = calculatedDays * (settings.defaultDailyRateDaycare || 90);
+    } else {
+      const boardingRate = calculateBoardingRate(calculatedDays, settings.defaultDailyRateBoarding || 180, { isolationRate: 230 });
+      updated.totalPrice = boardingRate.totalPrice;
+    }
   } else if (questionId === 'payment') {
     const priceMatches = [...clean.matchAll(/(\d{2,5})/g)];
     if (clean.includes('לא שולם') || clean.includes('כלום') || clean.includes('0')) {
@@ -666,15 +670,15 @@ export function parseWithClientHeuristic(
     if (serviceType === 'training') {
       totalPrice = settings.defaultDailyRateTraining || 6500;
     } else {
-      const startObj = new Date(startDate + 'T00:00:00').getTime();
-      const endObj = new Date(endDate + 'T00:00:00').getTime();
-      const days = Math.max(1, Math.round((endObj - startObj) / (1000 * 60 * 60 * 24)));
-      
-      let rate = settings.defaultDailyRateBoarding;
-      if (serviceType === 'day_training') rate = settings.defaultDailyRateDayTraining || 250;
-      if (serviceType === 'daycare') rate = settings.defaultDailyRateDaycare;
-
-      totalPrice = days * rate;
+      const days = Math.max(1, calculateDaysCount(startDate, endDate));
+      if (serviceType === 'day_training') {
+        totalPrice = days * (settings.defaultDailyRateDayTraining || 250);
+      } else if (serviceType === 'daycare') {
+        totalPrice = days * (settings.defaultDailyRateDaycare || 90);
+      } else {
+        const boardingRate = calculateBoardingRate(days, settings.defaultDailyRateBoarding || 180, { isolationRate: 230 });
+        totalPrice = boardingRate.totalPrice;
+      }
     }
   }
 

@@ -425,12 +425,21 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       setErrorMessage('נא להזין מספר טלפון נייד ישראלי תקין (10 ספרות, למשל 054-1234567)');
       return false;
     }
-    if (!dogName.trim()) {
-      setErrorMessage('נא למלא את שם הכלב/ה (שדה חובה)');
+    if (!ownerEmail.trim()) {
+      setErrorMessage('חובה למלא כתובת אימייל (שדה חובה)');
       return false;
     }
-    if (!ownerAddress.trim() || ownerAddress.trim().length < 4) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(ownerEmail.trim())) {
+      setErrorMessage('נא להזין כתובת אימייל תקינה (למשל name@gmail.com)');
+      return false;
+    }
+    if (!ownerAddress.trim() || ownerAddress.trim().length < 5) {
       setErrorMessage('חובה למלא כתובת מגורים מלאה (עיר, רחוב ומספר בית)');
+      return false;
+    }
+    if (!dogName.trim()) {
+      setErrorMessage('נא למלא את שם הכלב/ה (שדה חובה)');
       return false;
     }
     if (!dogBreed.trim()) {
@@ -1059,10 +1068,11 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
 
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
-                  כתובת אימייל (אופציונלי)
+                  כתובת אימייל <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="email"
+                  required
                   value={ownerEmail}
                   onChange={(e) => setOwnerEmail(e.target.value)}
                   placeholder="name@example.com"

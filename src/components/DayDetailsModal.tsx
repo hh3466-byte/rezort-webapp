@@ -383,6 +383,15 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium border border-slate-200">
               {getServiceTypeHebrew(booking.serviceType)}
             </span>
+            {booking.kennelNumber && (
+              <span className={`text-xs px-2.5 py-0.5 rounded-full font-black border ${
+                booking.kennelNumber === 'home'
+                  ? 'bg-amber-100 text-amber-950 border-amber-300'
+                  : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+              }`}>
+                {booking.kennelNumber === 'home' ? '🏡 הלנה ביתית (בבית של שמוליק)' : `🏠 תא ${booking.kennelNumber} (דלי מס' ${booking.kennelNumber})`}
+              </span>
+            )}
             {isEnded && (
               <span className="text-[10px] bg-slate-200/80 text-slate-600 px-2 py-0.5 rounded-full font-bold">
                 הסתיים
@@ -419,6 +428,27 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
               </span>
             )}
           </div>
+
+          {/* Feeding & Medication Details Line */}
+          {(booking.feedingSchedule || booking.foodPortion || booking.medicationSchedule || booking.specialDiet) && (
+            <div className="flex flex-wrap items-center gap-2 text-xs mt-1">
+              {(booking.feedingSchedule || booking.foodPortion || booking.specialDiet) && (
+                <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md font-medium">
+                  🥣 מזון: {booking.feedingSchedule ? `⏰ ${booking.feedingSchedule} ` : ''}{[booking.foodPortion, booking.specialDiet].filter(Boolean).join(' | ')}
+                </span>
+              )}
+              {(booking.medicationSchedule || (booking.medications && !booking.medications.includes('אין') && !booking.medications.includes('בריא'))) && (
+                <span className="bg-rose-50 text-rose-800 border border-rose-200 px-2 py-0.5 rounded-md font-bold">
+                  💊 תרופות: {booking.medicationSchedule || booking.medications}
+                </span>
+              )}
+              {booking.complexitySurcharge && booking.complexitySurcharge > 0 && (
+                <span className="bg-amber-50 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-md font-bold">
+                  💰 תוספת מורכבות: ₪{booking.complexitySurcharge}
+                </span>
+              )}
+            </div>
+          )}
 
           {booking.placementNotes && (
             <div className="bg-amber-100/90 border border-amber-300 text-amber-950 font-black text-xs px-2.5 py-1 rounded-xl inline-flex items-center gap-1.5 shadow-2xs mt-1">

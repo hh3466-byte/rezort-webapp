@@ -34,10 +34,13 @@ import {
   Mic,
   MicOff,
   Bell,
-  MapPin
+  MapPin,
+  Archive,
+  Ban
 } from 'lucide-react';
 import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import { calculateDaysCount, addDays, formatDateIL, getDayNameHebrew, getBookingsForDate } from '../utils/dateUtils';
+import { calculateBoardingRate } from '../utils/pricingUtils';
 import { generateUnansweredFollowUpMarketingText } from '../services/whatsappCrmService';
 import { 
   normalizeHebrew, 
@@ -61,82 +64,7 @@ interface IntakeRequestsModalProps {
   onSaveRequest?: (request: IntakeRequest) => Promise<void>;
 }
 
-export interface BoardingRateOptions {
-  isFriendlyWithDogs?: 'yes' | 'no' | 'depends' | string | boolean;
-  dogGender?: 'male' | 'female' | 'male_intact' | 'male_neutered' | 'female_spayed' | 'female_intact' | string;
-  isNeutered?: boolean;
-  isolationRate?: number;
-}
-
-/**
- * Calculate boarding daily rate based on duration and dog profile:
- * - When dog requires isolation / is aggressive (isFriendlyWithDogs === 'no')
- *   OR dog is an unneutered male (male intact):
- *   Fixed rate of 230 NIS/day (or defaultDailyRateIsolation from settings) with NO duration discounts.
- * - Regular dogs:
- *   - 1 to 7 days: default rate (180 NIS/day)
- *   - > 7 days (8 to 29 days): 150 NIS/day
- *   - 30+ days (month): 120 NIS/day
- */
-export function calculateBoardingRate(
-  days: number, 
-  defaultRate: number = 180,
-  optionsOrFriendly?: BoardingRateOptions | 'yes' | 'no' | 'depends' | string | boolean,
-  isolationRateParam: number = 230
-): { dailyRate: number; totalPrice: number; explanation: string; isSpecialRate: boolean } {
-  const isObj = typeof optionsOrFriendly === 'object' && optionsOrFriendly !== null;
-  const isFriendlyWithDogs = isObj ? optionsOrFriendly.isFriendlyWithDogs : optionsOrFriendly;
-  const dogGender = isObj ? optionsOrFriendly.dogGender : undefined;
-  const isNeutered = isObj ? optionsOrFriendly.isNeutered : undefined;
-  const isolationRate = (isObj && optionsOrFriendly.isolationRate) ? optionsOrFriendly.isolationRate : (isolationRateParam || 230);
-
-  const isAggressiveOrIsolation = isFriendlyWithDogs === 'no' || isFriendlyWithDogs === false;
-  const isMaleIntact = dogGender === 'male_intact' || (dogGender === 'male' && isNeutered === false);
-
-  // If dog requires isolation / aggressive OR is an unneutered male: 230 NIS/day, NO duration discounts!
-  if (isAggressiveOrIsolation || isMaleIntact) {
-    const rate = isolationRate || 230;
-    let reason = 'בידוד / תוקפני';
-    if (isAggressiveOrIsolation && isMaleIntact) {
-      reason = 'בידוד / זכר לא מסורס';
-    } else if (isMaleIntact) {
-      reason = 'זכר לא מסורס';
-    }
-    return {
-      dailyRate: rate,
-      totalPrice: days * rate,
-      explanation: `${days} ימים × ₪${rate} (${reason})`,
-      isSpecialRate: true
-    };
-  }
-
-  // מעבר ל-3 שבועות (21 ימים ומעלה): 120 ₪ ללילה
-  if (days >= 21) {
-    return {
-      dailyRate: 120,
-      totalPrice: days * 120,
-      explanation: `${days} ימים × ₪120 (מעל 3 שבועות)`,
-      isSpecialRate: false
-    };
-  }
-  // 7 לילות ומעלה: 150 ₪ ללילה
-  if (days >= 7) {
-    return {
-      dailyRate: 150,
-      totalPrice: days * 150,
-      explanation: `${days} ימים × ₪150 (7 לילות ומעלה)`,
-      isSpecialRate: false
-    };
-  }
-  // עד 6 לילות: 180 ₪ ללילה (תעריף ברירת מחדל)
-  const rate = defaultRate || 180;
-  return {
-    dailyRate: rate,
-    totalPrice: days * rate,
-    explanation: `${days} ימים × ₪${rate} (עד 6 לילות)`,
-    isSpecialRate: false
-  };
-}
+export { calculateBoardingRate, type BoardingRateOptions } from '../utils/pricingUtils';
 
 // Subcomponent: Live Calendar & Available Spots for Requested Dates
 const RequestedDatesCalendar: React.FC<{
@@ -288,7 +216,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   onDeleteRequest,
   onSaveRequest
 }) => {
-  const [filter, setFilter] = useState<'all' | 'pending' | 'new' | 'in_progress' | 'payment_requested' | 'approved' | 'rejected' | 'archived_48h'>(initialFilter || 'new');
+  const [filter, setFilter] = useState<'all' | 'pending' | 'new' | 'in_progress' | 'payment_requested' | 'approved' | 'rejected' | 'archived_48h' | 'abandoned'>(initialFilter || 'new');
 
   useEffect(() => {
     if (initialFilter) {
@@ -394,6 +322,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const paymentRequestedCount = requests.filter(r => getEffectiveStatus(r) === 'payment_requested' && !isUnansweredRequest(r)).length;
   const approvedCount = requests.filter(r => getEffectiveStatus(r) === 'approved').length;
   const unansweredCount = requests.filter(isUnansweredRequest).length;
+  const abandonedCount = requests.filter(r => r.status === 'abandoned').length;
 
   const filteredRequests = requests.filter(r => {
     if (searchQuery.trim()) {
@@ -427,10 +356,42 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     if (filter === 'pending' && (effectiveStatus !== 'pending' || isUnansweredRequest(r))) return false;
     if (filter === 'payment_requested' && (effectiveStatus !== 'payment_requested' || isUnansweredRequest(r))) return false;
     if (filter === 'approved' && effectiveStatus !== 'approved') return false;
+    if (filter === 'abandoned' && effectiveStatus !== 'abandoned') return false;
     if (filter === 'rejected' && effectiveStatus !== 'rejected') return false;
     if (filter === 'archived_48h' && !isUnansweredRequest(r)) return false;
+    if (filter !== 'abandoned' && filter !== 'all' && effectiveStatus === 'abandoned') return false;
     return true;
   });
+
+  const handleAbandonIntake = async (req: IntakeRequest) => {
+    const confirmMsg = `האם לנטוש את תהליך הקליטה של ${req.dogName} (${req.ownerName})?\nהשאלון יועבר לארכיון ויוסר מהמעקב ומדוחות האורות האדומים. במידה והלקוח יצור קשר שוב, המערכת תשלוף אותו מהארכיון ותציג את ההיסטוריה.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+      const noteAppend = `\n[תהליך קליטה ננטש והועבר לארכיון ע"י שמוליק ב-${dateStr} ${timeStr}]`;
+      const updatedNotes = (req.internalNotes || '') + noteAppend;
+
+      const updated: IntakeRequest = {
+        ...req,
+        status: 'abandoned',
+        internalNotes: updatedNotes
+      };
+
+      if (onSaveRequest) {
+        await onSaveRequest(updated);
+      } else {
+        await onUpdateStatus(req.id, 'abandoned', updatedNotes);
+      }
+      setSavedNoteSuccess(prev => ({ ...prev, [req.id]: true }));
+      setTimeout(() => setSavedNoteSuccess(prev => ({ ...prev, [req.id]: false })), 3500);
+    } catch (err) {
+      console.warn('Error abandoning intake:', err);
+      alert('אירעה שגיאה בנטילת תהליך הקליטה.');
+    }
+  };
 
   const handleOpenPaymentPrompt = (request: IntakeRequest) => {
     setPaymentPromptRequest(request);
@@ -884,6 +845,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               { id: 'payment_requested', label: '💳 נשלח קישור לתשלום', count: paymentRequestedCount, isHot: false },
               { id: 'approved', label: '🟢 נקלטו ביומן', count: approvedCount, isHot: false },
               { id: 'archived_48h', label: '⌛ לא ענו / מעל 24 שעות', count: unansweredCount, isHot: false },
+              { id: 'abandoned', label: '📦 ארכיון / ננטשו', count: abandonedCount, isHot: false },
               { id: 'rejected', label: 'נדחו', count: requests.filter(r => r.status === 'rejected').length, isHot: false },
               { id: 'all', label: 'הכול', count: requests.length, isHot: false },
             ].map(tab => (
@@ -1103,6 +1065,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                               ? 'bg-blue-100 text-blue-900 border-blue-300'
                               : req.status === 'approved'
                               ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                              : req.status === 'abandoned'
+                              ? 'bg-slate-100 text-slate-700 border-slate-300'
                               : 'bg-slate-200 text-slate-700 border-slate-300'
                           }`}>
                             {isNew ? (
@@ -1119,6 +1083,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                               <span>💳 נשלח קישור לתשלום</span>
                             ) : req.status === 'approved' ? (
                               <span>🟢 נקלט ביומן הראשי</span>
+                            ) : req.status === 'abandoned' ? (
+                              <span>📦 תהליך קליטה ננטש (בארכיון)</span>
                             ) : (
                               <span>⚪ נדחה / בוטל</span>
                             )}
@@ -1680,18 +1646,37 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         <span>{req.additionalDogs && req.additionalDogs.length > 0 ? `קלוט ${1 + req.additionalDogs.length} כלבים ליומן 🟢` : 'קלוט ליומן הראשי 🟢'}</span>
                       </button>
 
-                      {/* Reject / Dismiss OR Restore & Permanent Deletion */}
-                      {req.status !== 'rejected' ? (
-                        <button
-                          type="button"
-                          onClick={() => handleOpenRejectPrompt(req)}
-                          className="bg-white hover:bg-red-50 text-red-600 border border-slate-200 hover:border-red-200 font-bold px-2.5 py-1.5 rounded-xl text-xs transition-colors cursor-pointer"
-                          title="דחה בקשה זו (עם אפשרות שליחת הודעת וואטסאפ מנומסת ללקוח)"
-                        >
-                          דחה
-                        </button>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
+                      {/* Action buttons depending on status */}
+                      {req.status === 'abandoned' ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Restore / Reopen to active treatment */}
+                          <button
+                            type="button"
+                            onClick={() => onUpdateStatus(req.id, 'pending')}
+                            className="bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                            title="שחזר את שאלון הקליטה מהארכיון לטיפול פעיל"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>שחזר לטיפול פעיל 🟢</span>
+                          </button>
+
+                          {/* Permanent Deletion */}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (window.confirm(`האם למחוק סופית את בקשת הקליטה של ${req.dogName} (${req.ownerName})?\nפעולה זו תמחק את הבקשה לחלוטין מהמערכת ללא אפשרות שחזור.`)) {
+                                await onDeleteRequest(req.id);
+                              }
+                            }}
+                            className="bg-red-600 hover:bg-red-700 active:scale-98 text-white font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                            title="מחיקה סופית ומוחלטת של ההזמנה/בקשה מהמערכת"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>מחיקה סופית 🗑️</span>
+                          </button>
+                        </div>
+                      ) : req.status === 'rejected' ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {/* Send rejection WhatsApp message */}
                           <button
                             type="button"
@@ -1727,6 +1712,29 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                             <span>מחיקה סופית 🗑️</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Abandon Intake Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleAbandonIntake(req)}
+                            className="bg-amber-50 hover:bg-amber-100 active:scale-98 text-amber-900 border border-amber-300 font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                            title="נטוש תהליך קליטה והעבר לארכיון (מסיר את השאלון מכל מעקב ומדוחות האורות האדומים)"
+                          >
+                            <Archive className="w-3.5 h-3.5 text-amber-700" />
+                            <span>נטוש תהליך קליטה 📦</span>
+                          </button>
+
+                          {/* Reject / Dismiss */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenRejectPrompt(req)}
+                            className="bg-white hover:bg-red-50 text-red-600 border border-slate-200 hover:border-red-200 font-bold px-2.5 py-1.5 rounded-xl text-xs transition-colors cursor-pointer"
+                            title="דחה בקשה זו (עם אפשרות שליחת הודעת וואטסאפ מנומסת ללקוח)"
+                          >
+                            דחה
                           </button>
                         </div>
                       )}

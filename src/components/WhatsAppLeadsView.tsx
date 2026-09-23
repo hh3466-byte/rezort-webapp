@@ -26,9 +26,10 @@ import {
   ChevronRight,
   UserCheck
 } from 'lucide-react';
-import { Booking, IntakeRequest, ResortSettings } from '../types';
+import { Booking, IntakeRequest, IntakeRequestStatus, ResortSettings } from '../types';
 import { DesktopWhatsAppAuditModal } from './DesktopWhatsAppAuditModal';
 import { cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
+import { formatDateIL } from '../utils/dateUtils';
 import { 
   WhatsAppChat, 
   WhatsAppMessage, 
@@ -66,6 +67,8 @@ interface WhatsAppLeadsViewProps {
   settings: ResortSettings;
   onOpenNewBookingWithData?: (data: { ownerName: string; ownerPhone: string; dogName?: string }) => void;
   onNewCountChange?: (count: number) => void;
+  onUpdateIntakeStatus?: (id: string, status: IntakeRequestStatus, notes?: string) => Promise<void> | void;
+  onSaveIntakeRequest?: (request: IntakeRequest) => Promise<void> | void;
 }
 
 export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
@@ -73,7 +76,9 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   intakeRequests,
   settings,
   onOpenNewBookingWithData,
-  onNewCountChange
+  onNewCountChange,
+  onUpdateIntakeStatus,
+  onSaveIntakeRequest
 }) => {
   const [chats, setChats] = useState<EnrichedWhatsAppChat[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
@@ -1100,6 +1105,23 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     </button>
                   </div>
 
+                  {/* Abandon Intake Button */}
+                  {onUpdateIntakeStatus && selectedChat.matchedIntake && (selectedChat.matchedIntake.status === 'pending' || selectedChat.matchedIntake.status === 'payment_requested') && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (confirm(`האם לנטוש את תהליך הקליטה עבור ${selectedChat.matchedIntake?.dogName || 'הכלב'} ולהעבירו לארכיון?`)) {
+                          await onUpdateIntakeStatus(selectedChat.matchedIntake!.id, 'abandoned', 'ננטש על ידי שמוליק מה-CRM');
+                          updateChatStatus(selectedChat.cleanPhone, 'handled');
+                        }
+                      }}
+                      className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-2xs transition-all cursor-pointer shrink-0"
+                      title="נטוש תהליך קליטה והעבר לארכיון (לא יציף התראות באורות אדומים)"
+                    >
+                      <span>נטוש תהליך קליטה 📦</span>
+                    </button>
+                  )}
+
                   {/* "קלוט להזמנה ביומן" */}
                   {onOpenNewBookingWithData && (
                     <button
@@ -1112,7 +1134,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                           dogName: selectedChat.matchedDogName || ''
                         });
                       }}
-                      className="bg-[#065f46] hover:bg-[#044e45] text-white font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                      className="bg-[#065f46] hover:bg-[#044e45] text-white font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer shrink-0"
                       title="פתח את אשף ההזמנה עם פרטי הלקוח ממולאים מראש"
                     >
                       <PlusCircle className="w-3.5 h-3.5" />
@@ -1121,6 +1143,33 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* Restored / Archived Intake Notice Banner */}
+              {selectedChat.matchedIntake?.status === 'abandoned' && (
+                <div className="bg-amber-50 border-b border-amber-300/90 px-4 py-2.5 flex items-center justify-between gap-3 text-xs shrink-0">
+                  <div className="flex items-center gap-2 text-amber-950 font-bold min-w-0">
+                    <span className="text-base shrink-0">📦</span>
+                    <div>
+                      <span className="font-black text-amber-900">פנייה מלקוח ששאלון הקליטה שלו בארכיון</span>
+                      <span className="text-amber-800 mr-1.5 font-normal">
+                        (תהליך קליטה עבור <strong>{selectedChat.matchedIntake.dogName}</strong> ננטש בעבר{selectedChat.matchedIntake.startDate ? ` - תאריכים מבוקשים בעבר: ${formatDateIL(selectedChat.matchedIntake.startDate)} עד ${formatDateIL(selectedChat.matchedIntake.endDate)}` : ''})
+                      </span>
+                    </div>
+                  </div>
+                  {onUpdateIntakeStatus && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await onUpdateIntakeStatus(selectedChat.matchedIntake!.id, 'pending', 'שוחזר מארכיון עקב פנייה של הלקוח');
+                        updateChatStatus(selectedChat.cleanPhone, 'in_chat');
+                      }}
+                      className="bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-bold px-3 py-1 rounded-lg text-xs flex items-center gap-1 shadow-2xs transition-all cursor-pointer shrink-0"
+                    >
+                      <span>שחזר לטיפול פעיל 🟢</span>
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Stealth Reading Mode Banner */}
               {isStealthMode && (

@@ -15,8 +15,8 @@ const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIs
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const SHMULIK_PRIVATE_PHONE = '0506336896';
-const SHMULIK_CHAT_ID = '972506336896@c.us';
+const MANAGER_PHONE = '0543200007';
+const MANAGER_CHAT_ID = '972543200007@c.us';
 
 function getIsraelDateInfo() {
   const now = new Date();
@@ -58,10 +58,91 @@ function isValidIsraeliPhone(phone) {
 function formatDateIL(dateStr) {
   if (!dateStr) return '';
   const parts = dateStr.split('-');
-  if (parts.length >= 3) {
-    return `${parts[2].substring(0, 2)}.${parts[1]}.${parts[0].slice(2)}`;
-  }
+  if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0].slice(-2)}`;
   return dateStr;
+}
+
+function isActionableIncomingMessage(rawText) {
+  if (!rawText) return false;
+  const text = String(rawText).trim();
+  if (text.length === 0) return false;
+
+  if (/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\s.,!?:;"'()\-–—~`_+=\[\]{}<>]+$/gu.test(text)) {
+    return false;
+  }
+
+  const clean = text
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}]/gu, ' ')
+    .replace(/[.,!?:;"'()\-–—~`_+=\[\]{}<>/\\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  if (clean.length === 0) return false;
+
+  if (/^(ח{2,}|ה{3,}|חה|חח|lol|haha|xd|\s)+$/i.test(clean)) return false;
+  if (clean.includes('חחח') || clean.includes('חחחח') || clean.includes('תתפנק') || clean.includes('אין על')) return false;
+
+  const nonActionablePhrases = [
+    'תודה', 'תודה רבה', 'המון תודה', 'תודה רבה שוב', 'תודה על הכל', 'תודה ענקית', 'תודה לכם', 'תודה אחי',
+    'סבבה', 'אחלה', 'מעולה', 'מצוין', 'יופי', 'בסדר גמור', 'בסדר', 'הבנתי', 'סגור', 'ברור',
+    'מעולה תודה', 'סבבה תודה', 'אחלה תודה', 'יופי תודה', 'תודה ניפגש', 'תודה נתראה',
+    'ניפגש', 'נתראה', 'נתראה מחר', 'נתראה בקרוב', 'להתראות', 'ביי', 'ביי ביי', 'בי',
+    'לילה טוב', 'בוקר טוב', 'יום טוב', 'סופש נעים', 'סוף שבוע נעים', 'שבת שלום', 'שבוע טוב',
+    'חג שמח', 'גמר חתימה טובה', 'חתימה טובה', 'שנה טובה',
+    'כן בטח', 'כן תודה', 'אין בעיה', 'בשמחה', 'הכל טוב', 'תיהנו', 'דש לכולם', 'דש חם',
+    'היי הגענו', 'הגענו', 'אנחנו פה', 'בחוץ', 'תחבר', 'ok', 'okay', 'sure', 'thanks', 'thx',
+    'כן', 'לא', 'טוב', 'איזה כיף לשמוע', 'כיף לשמוע', 'גזע מיוחד', 'אתה בסדר גמור', 'אמרת לי מראש',
+    'אשלם מחר', 'אשלם באשראי', 'אשלם במזומן', 'אשלם לך באשראי או מזומן מחר', 'העברתי', 'שילמתי', 'שלחתי',
+    'אז מגיע מחר', 'מגיע אחר הצהריים', 'בנסיעה'
+  ];
+
+  for (const phrase of nonActionablePhrases) {
+    if (clean === phrase || clean.startsWith(phrase + ' ') || clean.endsWith(' ' + phrase)) {
+      if (!text.includes('?') && !text.includes('דחוף') && !text.includes('בעיה') && !text.includes('תקלה')) {
+        return false;
+      }
+    }
+  }
+
+  if ((clean.includes('@gmail') || clean.includes('@') || clean.includes('רחוב') || clean.includes('תלפיות')) && !text.includes('?')) {
+    return false;
+  }
+
+  if (clean.startsWith('חח') && (clean.includes('תפגשו') || clean.includes('תודה') || clean.includes('שמח') || clean.includes('נתראה'))) {
+    return false;
+  }
+
+  const words = clean.split(' ').filter(w => w.length > 0);
+  if (words.length <= 3) {
+    const isAck = words.every(w => [
+      'כן', 'לא', 'טוב', 'יופי', 'אחלה', 'סבבה', 'תודה', 'מעולה', 'מצוין',
+      'בסדר', 'ברור', 'הבנתי', 'אוקי', 'אוקיי', 'שלום', 'היי', 'הי', 'חח', 'חחח', 'בי', 'ביי',
+      'סגור', 'בשמחה', 'הכל', 'מחר', 'היום', 'בנסיעה', 'הגענו'
+    ].includes(w));
+    if (isAck) return false;
+  }
+
+  if (text.includes('?') || text.includes('؟')) {
+    if (clean === 'אכל הבוקר' || clean === 'אכלה הבוקר' || clean === 'איך הוא' || clean === 'איך היא') {
+      return false;
+    }
+    return true;
+  }
+
+  const actionableKeywords = [
+    'כמה עולה', 'כמה יעלה', 'מה המחיר', 'מה העלות', 'יש מקום', 'יש לכם מקום', 'פנוי בתאריכים',
+    'רוצה לשריין', 'רוצים לשריין', 'מעוניין לשריין', 'מעוניינת לשריין', 'מעוניין בפנסיון', 'מעוניינת בפנסיון',
+    'מעוניין באילוף', 'מעוניינת באילוף', 'רוצה הצעת מחיר',
+    'דחוף', 'חשוב', 'טעות', 'שגוי', 'תקלה', 'בעיה', 'הבטחתם', 'מאוכזב',
+    'לבטל את ההזמנה', 'לבטל הגעה', 'ביטול שריון', 'החזר כספי'
+  ];
+
+  for (const kw of actionableKeywords) {
+    if (clean.includes(kw)) return true;
+  }
+
+  return false;
 }
 
 async function fetchGreenApiChats(id, token, count = 80) {
@@ -151,9 +232,10 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     const phone = cleanPhoneNumber(c.id || '');
     const name = c.name || 'לקוח';
     const text = lastMsg.textMessage || lastMsg.extendedTextMessage?.text || '';
+    const hasBooking = activeBookings.some(b => cleanPhoneNumber(b.owner_phone || b.ownerPhone || '') === phone);
 
-    // Unanswered incoming message
-    if (lastMsg.type === 'incoming') {
+    // Unanswered incoming message (filtered: ignores banter, jokes, closures, and active booked customers)
+    if (lastMsg.type === 'incoming' && !hasBooking && isActionableIncomingMessage(text)) {
       const elapsedHours = Math.round((nowMs - lastMsgTime) / (1000 * 60 * 60));
       const quote = text.length > 55 ? text.slice(0, 55) + '...' : text;
       redLights.unansweredChats.push(`💬 *${name}* (📞 ${phone}) כתב/ה לפני ${elapsedHours} שעות: "${quote}" (ממתין למענה!)`);
@@ -169,16 +251,23 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     }
 
     // Complaint / problem keyword
-    const problemKeywords = ['טעות', 'שגוי', 'תקלה', 'בעיה', 'הבטחתם', 'מאוכזב', 'ביטול', 'החזר'];
+    const problemKeywords = ['טעות', 'שגוי', 'תקלה', 'בעיה', 'הבטחתם', 'מאוכזב', 'לבטל הגעה', 'ביטול שריון'];
     const foundKw = problemKeywords.find(k => text.includes(k));
     if (foundKw && lastMsg.type === 'incoming') {
       redLights.customerIssues.push(`⚠️ *${name}* (📞 ${phone}): אותרה מילת בעיה ("${foundKw}"): "${text.slice(0, 70)}"`);
     }
   });
 
-  // Open intake requests
+  // Open intake requests (exclude abandoned, rejected, or customers already booked in calendar)
   (intakes || []).filter(r => r.status === 'pending').forEach(r => {
-    redLights.unfilledIntakes.push(`📋 שאלון ממתין: *${r.dogName || r.dog_name}* (${r.ownerName || r.owner_name} - 📞 ${r.ownerPhone || r.owner_phone || 'ללא טלפון'}) | נשלח ל-${formatDateIL(r.startDate || r.start_date)}`);
+    const rPhone = cleanPhoneNumber(r.ownerPhone || r.owner_phone || '');
+    const hasActiveBooking = activeBookings.some(b => {
+      const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+      return bPhone && rPhone && (bPhone.slice(-7) === rPhone.slice(-7));
+    });
+    if (!hasActiveBooking) {
+      redLights.unfilledIntakes.push(`📋 שאלון ממתין: *${r.dogName || r.dog_name}* (${r.ownerName || r.owner_name} - 📞 ${r.ownerPhone || r.owner_phone || 'ללא טלפון'}) | נשלח ל-${formatDateIL(r.startDate || r.start_date)}`);
+    }
   });
 
   // Upcoming zero-deposit bookings
@@ -249,13 +338,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     ''
   ];
 
-  parts.push(`🟢 *אירועים ירוקים (${totalGreen} אירועים שסונכרנו בהצלחה ב-24 שעות):*`);
-  if (greenEvents.length === 0) {
-    parts.push(`• לא נרשמו אירועים חדשים ב-24 השעות האחרונות.`);
-  } else {
-    greenEvents.forEach(e => parts.push(e));
-  }
-  parts.push('');
+  parts.push(`🟢 *אירועים ירוקים (${totalGreen} אירועים שסונכרנו בהצלחה ב-24 שעות):*\n`);
 
   parts.push(`🚨 *אורות אדומים (${totalRed} נושאים לטיפול מיידי):*`);
   if (totalRed === 0) {
@@ -305,7 +388,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     }
   }
 
-  parts.push(`\n📱 *דוח זה הופק ונשלח ישירות למספרו האישי של שמוליק (${SHMULIK_PRIVATE_PHONE}) כהוראת ברזל.*`);
+  parts.push(`\n📱 *דוח זה הופק ונשלח ישירות למנהל (${MANAGER_PHONE}) כהוראת ברזל.*`);
 
   return {
     totalGreen,
@@ -343,13 +426,13 @@ export default async function handler(req, res) {
       todayStr
     );
 
-    // Send WhatsApp directly to Shmulik (0506336896)
+    // Send WhatsApp directly to Manager (0543200007)
     let sendResult = null;
     if (greenId && greenToken) {
       const sendRes = await fetch(`https://api.green-api.com/waInstance${greenId}/sendMessage/${greenToken}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: SHMULIK_CHAT_ID, message: reportText })
+        body: JSON.stringify({ chatId: MANAGER_CHAT_ID, message: reportText })
       });
       sendResult = await sendRes.json();
     }
@@ -373,7 +456,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       status: 'success',
-      sentTo: SHMULIK_CHAT_ID,
+      sentTo: MANAGER_CHAT_ID,
       timestamp: new Date().toISOString(),
       totalGreen,
       totalRed,

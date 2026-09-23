@@ -98,8 +98,9 @@ export function generatePaymentReminderMessage(booking: Booking, settings: Resor
   }
 
   const paymentLink = settings.growPaymentLink || settings.payboxLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
-  msg += `💳 *לתשלום מאובטח (כולל Bit, Apple Pay, Google Pay וכרטיסי אשראי):*\n`;
-  msg += `👉 ${paymentLink}\n`;
+  msg += `💳 *לתשלום מאובטח בלחיצה (כולל Bit, Apple Pay וכרטיסי אשראי):*\n`;
+  msg += `👉 ${paymentLink}\n\n`;
+  msg += `💡 *לתשלום ב-Bit:* לוחצים על הקישור ובוחרים באפשרות Bit בעמוד (אין צורך להעביר ידנית למספר טלפון או חשבון בנק).\n`;
 
   msg += `\nנשמח לעמוד לרשותכם לכל שאלה. נתראה בקרוב! 🐶❤️`;
 
@@ -161,3 +162,130 @@ export function openWhatsAppMessage(phone: string, text: string): void {
   const url = generateWhatsAppLink(phone, text);
   window.open(url, '_blank');
 }
+
+/**
+ * Smart classification: Does an incoming message truly require an urgent reply from Shmulik,
+ * or is it just a closing remark, daily regard/photo reply ("ד״ש", "איזה חמוד"), laughing/banter ("חחח", "תתפנק 😂"),
+ * gratitude, emoji, address info, or routine stay update?
+ */
+export function isActionableIncomingMessage(rawText: string | undefined | null): boolean {
+  if (!rawText) return false;
+  const text = String(rawText).trim();
+  if (text.length === 0) return false;
+
+  // 1. Immediate check for pure laughter, emojis or symbols
+  if (/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\s.,!?:;"'()\-–—~`_+=\[\]{}<>]+$/gu.test(text)) {
+    return false;
+  }
+
+  // Remove emojis, symbols, and punctuation for clean semantic analysis
+  const clean = text
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}]/gu, ' ')
+    .replace(/[.,!?:;"'()\-–—~`_+=\[\]{}<>/\\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  if (clean.length === 0) return false;
+
+  // 2. Laughing & Banter patterns (e.g. "חחחח", "חחח אין על דילן", "תתפנק", "lol", "haha", "xd")
+  if (/^(ח{2,}|ה{3,}|חה|חח|lol|haha|xd|\s)+$/i.test(clean)) return false;
+  if (clean.includes('חחח') || clean.includes('חחחח') || clean.includes('תתפנק') || clean.includes('אין על') || clean.includes('מלך אתה') || clean.includes('אתה אלוף') || clean.includes('אלופים')) return false;
+
+  // 3. Replies to Daily Updates / Regards / Photos ("ד״ש", תמונות, מחמאות לכלב)
+  const regardsAndComplimentsPhrases = [
+    'איזה חמוד', 'איזה חמודה', 'איזה מתוק', 'איזה מתוקה', 'איזה יופי', 'איזה יפה', 'איזה מותק',
+    'איזה נסיך', 'איזה נסיכה', 'איזה מושלם', 'איזה מושלמת', 'איזה כיף', 'איזה כיף לראות', 'איזה כיף לשמוע',
+    'תמונה מהממת', 'תמונות מהממות', 'תמונה יפה', 'תמונות יפות', 'סרטון מהמם', 'סרטון יפה',
+    'תודה על התמונות', 'תודה על התמונה', 'תודה על הסרטון', 'תודה על הסרטונים', 'תודה על העדכון',
+    'תודה שמוליק', 'תודה רבה שמוליק', 'המון תודה שמוליק', 'תודה רבה מותק', 'תודה רבה יקירי',
+    'חיים שלי', 'אהבה שלי', 'הלב שלי', 'אהוב שלי', 'מתגעגעים', 'געגועים', 'נשיקות', 'חיבוקים',
+    'שמור עליו', 'שמרי עליו', 'שמרו עליו', 'תמסור לו נשיקה', 'תמסור לה נשיקה', 'דש לכולם', 'דש חם',
+    'שמחים לשמוע', 'כיף לראות אותו', 'כיף לראות אותה', 'נראה מאושר', 'נראית מאושרת', 'נראה שהוא נהנה',
+    'נראה שהיא נהנית', 'הכל נראה מושלם', 'תודה על הטיפול המסור', 'תודה על הטיפול', 'אין עליך שמוליק'
+  ];
+
+  for (const phrase of regardsAndComplimentsPhrases) {
+    if (clean === phrase || clean.includes(phrase)) {
+      if (!text.includes('דחוף') && !text.includes('בעיה') && !text.includes('תקלה') && !text.includes('כמה עולה') && !text.includes('רוצה לשריין')) {
+        return false;
+      }
+    }
+  }
+
+  // 4. Polite Closings / Acknowledgements / Gratitude / Routine coordination
+  const nonActionablePhrases = [
+    'תודה', 'תודה רבה', 'המון תודה', 'תודה רבה שוב', 'תודה על הכל', 'תודה ענקית', 'תודה לכם', 'תודה אחי',
+    'סבבה', 'אחלה', 'מעולה', 'מצוין', 'יופי', 'בסדר גמור', 'בסדר', 'הבנתי', 'סגור', 'ברור',
+    'מעולה תודה', 'סבבה תודה', 'אחלה תודה', 'יופי תודה', 'תודה ניפגש', 'תודה נתראה',
+    'ניפגש', 'נתראה', 'נתראה מחר', 'נתראה בקרוב', 'להתראות', 'ביי', 'ביי ביי', 'בי',
+    'לילה טוב', 'בוקר טוב', 'יום טוב', 'סופש נעים', 'סוף שבוע נעים', 'שבת שלום', 'שבוע טוב',
+    'חג שמח', 'גמר חתימה טובה', 'חתימה טובה', 'שנה טובה',
+    'כן בטח', 'כן תודה', 'אין בעיה', 'בשמחה', 'הכל טוב', 'תיהנו',
+    'היי הגענו', 'הגענו', 'אנחנו פה', 'בחוץ', 'תחבר', 'ok', 'okay', 'sure', 'thanks', 'thx',
+    'כן', 'לא', 'טוב', 'גזע מיוחד', 'אתה בסדר גמור', 'אמרת לי מראש',
+    'אשלם מחר', 'אשלם באשראי', 'אשלם במזומן', 'אשלם לך באשראי או מזומן מחר', 'אעביר מחר',
+    'העברתי', 'שילמתי', 'שלחתי', 'אז מגיע מחר', 'מגיע אחר הצהריים', 'בנסיעה'
+  ];
+
+  for (const phrase of nonActionablePhrases) {
+    if (clean === phrase || clean.startsWith(phrase + ' ') || clean.endsWith(' ' + phrase)) {
+      // If it also does not contain an explicit urgent question
+      if (!text.includes('?') && !text.includes('דחוף') && !text.includes('בעיה') && !text.includes('תקלה')) {
+        return false;
+      }
+    }
+  }
+
+  // Address and contact details sent by client (e.g. "תלפיות 5 אור עקיבא נתראה מחר ותודה")
+  if ((clean.includes('@gmail') || clean.includes('@') || clean.includes('רחוב') || clean.includes('תלפיות')) && !text.includes('?')) {
+    return false;
+  }
+
+  // If starts with laughter / friendly remark and includes pleasantries
+  if (clean.startsWith('חח') && (clean.includes('תפגשו') || clean.includes('תודה') || clean.includes('שמח') || clean.includes('נתראה'))) {
+    return false;
+  }
+
+  // 5. Short acknowledgements (1-3 words of generic acknowledgements)
+  const words = clean.split(' ').filter(w => w.length > 0);
+  if (words.length <= 3) {
+    const isAck = words.every(w => [
+      'כן', 'לא', 'טוב', 'יופי', 'אחלה', 'סבבה', 'תודה', 'מעולה', 'מצוין',
+      'בסדר', 'ברור', 'הבנתי', 'אוקי', 'אוקיי', 'שלום', 'היי', 'הי', 'חח', 'חחח', 'בי', 'ביי',
+      'סגור', 'בשמחה', 'הכל', 'מחר', 'היום', 'בנסיעה', 'הגענו', 'חיים', 'אהבה', 'נסיך', 'נסיכה', 'מתוק', 'חמוד'
+    ].includes(w));
+    if (isAck) return false;
+  }
+
+  // 6. Explicit questions (contains '?' or inquiry keywords)
+  if (text.includes('?') || text.includes('؟')) {
+    // Exclude routine stay questions from already staying/checked-in dogs if just casual ("אכל הבוקר?")
+    if (
+      clean === 'אכל הבוקר' || clean === 'אכלה הבוקר' || clean === 'איך הוא' || clean === 'איך היא' ||
+      clean.includes('הכל בסדר איתו') || clean.includes('הכל בסדר איתה') || clean.includes('הוא בסדר') || clean.includes('היא בסדר')
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  // 7. Actionable keywords from potential leads/complaints
+  const actionableKeywords = [
+    'כמה עולה', 'כמה יעלה', 'מה המחיר', 'מה העלות', 'יש מקום', 'יש לכם מקום', 'פנוי בתאריכים',
+    'רוצה לשריין', 'רוצים לשריין', 'מעוניין לשריין', 'מעוניינת לשריין', 'מעוניין בפנסיון', 'מעוניינת בפנסיון',
+    'מעוניין באילוף', 'מעוניינת באילוף', 'רוצה הצעת מחיר',
+    'דחוף', 'חשוב', 'טעות', 'שגוי', 'תקלה', 'בעיה', 'הבטחתם', 'מאוכזב',
+    'לבטל את ההזמנה', 'לבטל הגעה', 'ביטול שריון', 'החזר כספי'
+  ];
+
+  for (const kw of actionableKeywords) {
+    if (clean.includes(kw)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+

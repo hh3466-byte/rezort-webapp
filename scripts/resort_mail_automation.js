@@ -200,31 +200,19 @@ function processResortEmails() {
           customerName = "לקוח Grow";
         }
 
-        // בדיקה האם התשלום שייך לריזורט
-        var isThisResort = isResort;
+        // בדיקה האם התשלום שייך לריזורט (ברירת מחדל: כל תשלום Grow שלא שייך במפורש לעסק אחר שייך לריזורט!)
+        var isThisResort = true;
         if (cleanText.indexOf("עבור שירות") !== -1) {
           var serviceMatch = cleanText.match(/עבור שירות\s*[:\-]?\s*([^.,<\n\r]{2,50})/i);
           if (serviceMatch) {
             var serviceText = serviceMatch[1].toLowerCase();
-            if (serviceText.indexOf("הריזורט") !== -1 || serviceText.indexOf("ריזורט") !== -1 || serviceText.indexOf("פנסיון") !== -1 || serviceText.indexOf("אילוף") !== -1 || serviceText.indexOf("כלב") !== -1) {
-              isThisResort = true;
-            } else {
-              isThisResort = false;
+            for (var obk2 = 0; obk2 < otherBusinessKeywords.length; obk2++) {
+              if (serviceText.indexOf(otherBusinessKeywords[obk2]) !== -1) {
+                isThisResort = false;
+                break;
+              }
             }
           }
-        }
-
-        if (!isThisResort && customerPhone && customerPhone.length >= 7) {
-          try {
-            var cleanP = customerPhone.slice(-7);
-            var bCheck = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings?owner_phone=ilike.*" + cleanP + "*&select=id", {
-              headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
-            });
-            if (bCheck.getResponseCode() === 200) {
-              var bRows = JSON.parse(bCheck.getContentText());
-              if (bRows && bRows.length > 0) isThisResort = true;
-            }
-          } catch (eB) {}
         }
 
         // אם אינו שייך לריזורט - לדלג מיד ולא לגעת!
@@ -274,51 +262,150 @@ function processResortEmails() {
           break;
         }
 
-        // בדיקת שיוך להזמנה קיימת ביומן
+        // בדיקת שיוך חכמה ומבוססת תאריכים להזמנה קיימת או עתידית ביומן
         var isLinkedToBooking = false;
         try {
           var cleanPhoneNum = customerPhone.replace(/\D/g, '').slice(-7);
-          var bSearchRes = null;
-          if (cleanPhoneNum.length >= 7) {
-            bSearchRes = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings?owner_phone=ilike.*" + cleanPhoneNum + "*&select=*&order=created_at.desc&limit=1", {
-              headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
-            });
-          }
-          if ((!bSearchRes || bSearchRes.getResponseCode() !== 200) && customerName && customerName !== "לקוח Grow") {
-            var fNameEnc = encodeURIComponent(customerName.split(" ")[0].trim());
-            bSearchRes = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings?owner_name=ilike.*" + fNameEnc + "*&select=*&order=created_at.desc&limit=1", {
-              headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
-            });
-          }
-          if (bSearchRes && bSearchRes.getResponseCode() === 200) {
-            var foundBookings = JSON.parse(bSearchRes.getContentText());
-            if (foundBookings && foundBookings.length > 0) {
-              var bk = foundBookings[0];
-              var currentDeposit = Number(bk.deposit_amount) || 0;
-              var newDeposit = currentDeposit + amount;
-              var totalPrice = Number(bk.total_price) || 0;
-              var newPaymentStatus = (newDeposit >= totalPrice && totalPrice > 0) ? "fully_paid" : "deposit_paid";
-              var bkData = bk.data || {};
-              bkData.depositAmount = newDeposit;
-              bkData.paymentStatus = newPaymentStatus;
-              bkData.stayStatus = "confirmed";
+          var todayDateStr = Utilities.formatDate(new Date(), "Asia/Jerusalem", "yyyy-MM-dd");
+          var foundBookings = [];
 
-              UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings?id=eq." + bk.id, {
-                method: "patch",
-                contentType: "application/json",
-                headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
-                payload: JSON.stringify({
-                  deposit_amount: newDeposit,
-                  payment_status: newPaymentStatus,
-                  stay_status: "confirmed",
-                  notes: (bk.notes || "") + " | שולם ₪" + amount + " (" + paymentMethod + " אסמכתא " + referenceId + ")",
-                  data: bkData
-                }),
-                muteHttpExceptions: true
-              });
-              isLinkedToBooking = true;
-              Logger.log("✓ תשלום שויך בהצלחה להזמנת " + bk.dog_name + " של " + bk.owner_name);
+          if (cleanPhoneNum.length >= 7) {
+            var bSearchRes = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings?owner_phone=ilike.*" + cleanPhoneNum + "*&select=*&order=start_date.desc&limit=5", {
+              headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+            });
+            if (bSearchRes.getResponseCode() === 200) {
+              foundBookings = JSON.parse(bSearchRes.getContentText()) || [];
             }
+          }
+
+          // חפש תחילה הזמנה פעילה או עתידית (תאריך סיום מהיום והלאה)
+          var activeBk = null;
+          for (var bki = 0; bki < foundBookings.length; bki++) {
+            var candidate = foundBookings[bki];
+            var candEnd = candidate.end_date || (candidate.data && candidate.data.endDate) || "";
+            if (candEnd >= todayDateStr) {
+              activeBk = candidate;
+              break;
+            }
+          }
+
+          // אם אין הזמנה עתידית, בדוק אם יש הזמנה מהעבר שעדיין בחוב
+          if (!activeBk) {
+            for (var bkj = 0; bkj < foundBookings.length; bkj++) {
+              var candPast = foundBookings[bkj];
+              var pastDeposit = Number(candPast.deposit_amount) || 0;
+              var pastTotal = Number(candPast.total_price) || 0;
+              if (pastTotal > 0 && pastDeposit < pastTotal) {
+                activeBk = candPast;
+                break;
+              }
+            }
+          }
+
+          if (activeBk) {
+            var currentDeposit = Number(activeBk.deposit_amount) || 0;
+            var newDeposit = currentDeposit + amount;
+            var totalPrice = Number(activeBk.total_price) || 0;
+            var newPaymentStatus = (newDeposit >= totalPrice && totalPrice > 0) ? "fully_paid" : "deposit_paid";
+            var bkData = activeBk.data || {};
+            bkData.depositAmount = newDeposit;
+            bkData.paymentStatus = newPaymentStatus;
+            bkData.stayStatus = "confirmed";
+
+            UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings?id=eq." + activeBk.id, {
+              method: "patch",
+              contentType: "application/json",
+              headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+              payload: JSON.stringify({
+                deposit_amount: newDeposit,
+                payment_status: newPaymentStatus,
+                stay_status: "confirmed",
+                notes: (activeBk.notes || "") + " | שולם ₪" + amount + " (" + paymentMethod + " אסמכתא " + referenceId + ")",
+                data: bkData
+              }),
+              muteHttpExceptions: true
+            });
+            isLinkedToBooking = true;
+            Logger.log("✓ תשלום שויך בהצלחה להזמנת " + activeBk.dog_name + " של " + activeBk.owner_name);
+          } else {
+            // לא נמצאה הזמנה מתאימה - בדוק אם קיים שאלון קליטה עתידי וצור הזמנה חדשה ביומן אוטומטית!
+            try {
+              var sRes = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/settings?select=*&limit=1", {
+                headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+              });
+              if (sRes.getResponseCode() === 200) {
+                var sRows = JSON.parse(sRes.getContentText());
+                var sData = (sRows && sRows[0] && sRows[0].data) || {};
+                var intakes = sData.intakeRequests || [];
+                var matchedIntake = null;
+                for (var inti = 0; inti < intakes.length; inti++) {
+                  var req = intakes[inti];
+                  var reqPhone = (req.ownerPhone || "").replace(/\D/g, "");
+                  var reqEnd = req.endDate || "";
+                  if (reqPhone.indexOf(cleanPhoneNum) !== -1 && reqEnd >= todayDateStr) {
+                    matchedIntake = req;
+                    break;
+                  }
+                }
+
+                if (matchedIntake) {
+                  var newBkId = "b-" + new Date().getTime();
+                  var newBkData = {
+                    id: newBkId,
+                    dogName: matchedIntake.dogName || "כלב",
+                    dogBreed: matchedIntake.dogBreed || "מעורב",
+                    dogGender: matchedIntake.dogGender || "unknown",
+                    dogAgeGroup: matchedIntake.dogAge || "adult",
+                    ownerName: customerName || matchedIntake.ownerName,
+                    ownerPhone: customerPhone || matchedIntake.ownerPhone,
+                    ownerEmail: customerEmail || matchedIntake.ownerEmail || "",
+                    serviceType: matchedIntake.serviceType || "boarding",
+                    startDate: matchedIntake.startDate || todayDateStr,
+                    endDate: matchedIntake.endDate || todayDateStr,
+                    dailyRate: 180,
+                    totalPrice: amount,
+                    depositAmount: amount,
+                    paymentStatus: "fully_paid",
+                    paymentMethod: paymentMethod.toLowerCase().indexOf("bit") !== -1 ? "bit" : "credit_card",
+                    stayStatus: "confirmed",
+                    pricingMode: "daily",
+                    isFreeStay: false,
+                    notes: "נוצר אוטומטית משאלון קליטה עם קליטת תשלום ₪" + amount + " (" + paymentMethod + " אסמכתא " + referenceId + ")",
+                    vaccinationValid: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                  };
+
+                  UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings", {
+                    method: "post",
+                    contentType: "application/json",
+                    headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+                    payload: JSON.stringify({
+                      id: newBkId,
+                      dog_name: newBkData.dogName,
+                      dog_breed: newBkData.dogBreed,
+                      owner_name: newBkData.ownerName,
+                      owner_phone: newBkData.ownerPhone,
+                      owner_email: newBkData.ownerEmail,
+                      service_type: newBkData.serviceType,
+                      start_date: newBkData.startDate,
+                      end_date: newBkData.endDate,
+                      total_price: amount,
+                      deposit_amount: amount,
+                      payment_status: "fully_paid",
+                      payment_method: newBkData.paymentMethod,
+                      stay_status: "confirmed",
+                      notes: newBkData.notes,
+                      vaccination_valid: true,
+                      data: newBkData
+                    }),
+                    muteHttpExceptions: true
+                  });
+                  isLinkedToBooking = true;
+                  Logger.log("✓ נוצרה הזמנה חדשה ביומן לשאלון קליטה קיים: " + newBkData.dogName + " (" + customerName + ")");
+                }
+              }
+            } catch (eAutoIntake) {}
           }
         } catch (eUpdBk) {}
 
@@ -2177,7 +2264,7 @@ function sendTomorrowOverviewToShmulikFromCloud() {
       }
     });
 
-    // שליפת הודעות וואטסאפ ללא מענה
+    // שליפת הודעות וואטסאפ ללא מענה (מסונן: מתעלם מסגירות שיחה, תודות, חחח, אימוג'ים)
     var unansweredChats = [];
     try {
       var chatsUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/getChats/" + GREEN_API_TOKEN;
@@ -2191,12 +2278,74 @@ function sendTomorrowOverviewToShmulikFromCloud() {
           if (cClean.indexOf("0506336896") !== -1 || cClean.indexOf("0543200007") !== -1 || cClean.indexOf("972506336896") !== -1 || cClean.indexOf("972543200007") !== -1) continue;
           var lMsg = ch.lastMessage;
           if (lMsg && lMsg.type === "incoming") {
-            var rawN = ch.name || "";
-            var cName = rawN && rawN.indexOf("@") === -1 ? rawN : "לקוח";
-            var cPhone = formatPhoneFormatted(cClean);
             var mTxt = (lMsg.textMessage || (lMsg.extendedTextMessage && lMsg.extendedTextMessage.text) || "").trim();
-            var shortTxt = mTxt.length > 35 ? mTxt.slice(0, 35) + "..." : mTxt;
-            unansweredChats.push({ name: cName, phone: cPhone, text: shortTxt });
+            
+            // בדיקה האם ההודעה באמת דורשת מענה משמוליק
+            var isActionable = false;
+            if (mTxt) {
+              var cleanTxt = mTxt
+                .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')
+                .replace(/[.,!?:;"'()\-–—~`_+=\[\]{}<>]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+
+              if (cleanTxt.length > 0) {
+                if (mTxt.indexOf("?") !== -1 || mTxt.indexOf("؟") !== -1) {
+                  isActionable = true;
+                } else {
+                  var actKeywords = [
+                    'כמה', 'מתי', 'איפה', 'איך', 'האם', 'למה', 'מדוע', 'מי',
+                    'אפשר', 'אפשרי', 'תוכל', 'תוכלו', 'תוכלי', 'יש מקום', 'יש לכם', 'פנוי',
+                    'מחיר', 'עלות', 'תעריף', 'תאריכים', 'שאלון', 'לינק', 'קישור', 'תשלום',
+                    'חיסון', 'חיסונים', 'כלוב', 'אוכל', 'תרופות', 'שעות', 'מתי לבוא', 'מתי להביא',
+                    'תחזרו', 'תחזור', 'דחוף', 'חשוב', 'טעות', 'שגוי', 'תקלה', 'בעיה', 'הבטחתם',
+                    'מאוכזב', 'לבטל', 'ביטול', 'לשנות', 'להקדים', 'לדחות', 'החזר'
+                  ];
+                  for (var ak = 0; ak < actKeywords.length; ak++) {
+                    if (cleanTxt.indexOf(actKeywords[ak]) !== -1) {
+                      isActionable = true;
+                      break;
+                    }
+                  }
+
+                  if (!isActionable) {
+                    var closings = [
+                      'תודה', 'תודה רבה', 'המון תודה', 'תודה רבה שוב', 'תודה על הכל', 'תודה ענקית', 'תודה לכם',
+                      'סבבה', 'אחלה', 'מעולה', 'מצוין', 'יופי', 'בסדר גמור', 'בסדר', 'הבנתי',
+                      'מעולה תודה', 'סבבה תודה', 'אחלה תודה', 'יופי תודה', 'תודה ניפגש', 'תודה נתראה',
+                      'ניפגש', 'נתראה', 'נתראה מחר', 'נתראה בקרוב', 'להתראות', 'ביי', 'ביי ביי',
+                      'לילה טוב', 'בוקר טוב', 'יום טוב', 'סופש נעים', 'סוף שבוע נעים', 'שבת שלום', 'שבוע טוב',
+                      'חג שמח', 'גמר חתימה טובה', 'חתימה טובה', 'שנה טובה',
+                      'כן בטח', 'כן תודה', 'אין בעיה', 'בשמחה', 'הכל טוב', 'תיהנו', 'דש לכולם', 'דש חם',
+                      'היי הגענו', 'הגענו', 'אנחנו פה', 'בחוץ', 'תחבר', 'ok', 'okay', 'sure', 'thanks', 'thx'
+                    ];
+                    var isClosing = false;
+                    for (var cl = 0; cl < closings.length; cl++) {
+                      if (cleanTxt === closings[cl]) {
+                        isClosing = true;
+                        break;
+                      }
+                    }
+                    if (!isClosing && cleanTxt.indexOf("חח") === 0) {
+                      isClosing = true;
+                    }
+                    var words = cleanTxt.split(" ").filter(function(w) { return w.length > 0; });
+                    if (!isClosing && words.length >= 4) {
+                      isActionable = true;
+                    }
+                  }
+                }
+              }
+            }
+
+            if (isActionable) {
+              var rawN = ch.name || "";
+              var cName = rawN && rawN.indexOf("@") === -1 ? rawN : "לקוח";
+              var cPhone = formatPhoneFormatted(cClean);
+              var shortTxt = mTxt.length > 35 ? mTxt.slice(0, 35) + "..." : mTxt;
+              unansweredChats.push({ name: cName, phone: cPhone, text: shortTxt });
+            }
           }
         }
       }
