@@ -1871,16 +1871,25 @@ export default function App() {
                 type="button"
                 onClick={() => setIsDailyDogUpdatesOpen(true)}
                 id="btn-daily-dog-updates-top"
-                className="bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 active:scale-95 border border-amber-300 text-amber-950 font-black px-3.5 py-1.5 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                className={`font-black px-3.5 py-1.5 rounded-xl text-xs sm:text-sm shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95 border ${
+                  settings?.eveningGreetingsSentDate === todayStr || (settings as any)?.evening_greetings_sent_date === todayStr
+                    ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-950 ring-1 ring-emerald-400/40'
+                    : 'bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border-amber-300 text-amber-950'
+                }`}
                 title="עדכון יומי לבעלי כלבים בשעה 20:00"
               >
                 <span className="text-base">👑🐶</span>
                 <span>עדכון 20:00</span>
-                {activeTonightCount > 0 && (
+                {settings?.eveningGreetingsSentDate === todayStr || (settings as any)?.evening_greetings_sent_date === todayStr ? (
+                  <span className="bg-emerald-600 text-white text-[10px] sm:text-[11px] font-black px-1.5 py-0.2 rounded-full shadow-2xs font-mono flex items-center gap-1">
+                    <span>✓ נשלח</span>
+                    <span>({activeTonightCount})</span>
+                  </span>
+                ) : activeTonightCount > 0 ? (
                   <span className="bg-amber-500 text-white text-[11px] font-black px-1.5 py-0.2 rounded-full shadow-2xs font-mono">
                     {activeTonightCount}
                   </span>
-                )}
+                ) : null}
               </button>
 
               {/* Tomorrow Overview (19:00 / 20:15) */}

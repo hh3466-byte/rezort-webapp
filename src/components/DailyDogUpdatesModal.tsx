@@ -118,9 +118,11 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
         isFemale
       );
 
-      // Check if already sent today in localStorage
+      // Check if already sent today in localStorage or Supabase settings
       const sentKey = `daily_dog_sent_${b.id}_${todayStr}`;
-      const isSent = localStorage.getItem(sentKey) === 'true';
+      const isSent = localStorage.getItem(sentKey) === 'true' || 
+        settings?.eveningGreetingsSentDate === todayStr || 
+        (settings as any)?.evening_greetings_sent_date === todayStr;
 
       return {
         booking: b,
