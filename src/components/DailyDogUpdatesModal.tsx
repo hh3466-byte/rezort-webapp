@@ -106,7 +106,8 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
         (intakeMatch?.dogGender as string) === 'female_intact' ||
         (b.notes && (b.notes.includes('נקבה') || b.notes.includes('מעוקרת'))) ||
         (b.behaviorNotes && (b.behaviorNotes.includes('נקבה') || b.behaviorNotes.includes('מעוקרת'))) ||
-        ['לונה', 'קירה', 'מימי', 'ניצה', 'גולי', 'ג\'ולי', 'נולי', 'שירלי', 'מיה', 'בלה', 'בל', 'רובי'].some(fn => b.dogName.includes(fn))
+        ['לונה', 'קירה', 'מימי', 'ניצה', 'גולי', 'ג\'ולי', 'נולי', 'שירלי', 'מיה', 'בלה', 'בל', 'רובי', 'ג\'סי', 'גסי', 'מרתה', 'לוסי', 'לולה', 'ג\'וזי'].some(fn => b.dogName.includes(fn)) ||
+        b.dogName.includes('ית')
       );
 
       const { template, formattedText } = pickDailyDogTemplate(
@@ -154,7 +155,8 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
         (item.intakeMatch?.dogGender as string) === 'female_intact' ||
         (item.booking.notes && (item.booking.notes.includes('נקבה') || item.booking.notes.includes('מעוקרת'))) ||
         (item.booking.behaviorNotes && (item.booking.behaviorNotes.includes('נקבה') || item.booking.behaviorNotes.includes('מעוקרת'))) ||
-        ['לונה', 'קירה', 'מימי', 'ניצה', 'גולי', 'ג\'ולי', 'נולי', 'שירלי', 'מיה', 'בלה', 'בל', 'רובי'].some(fn => item.booking.dogName.includes(fn))
+        ['לונה', 'קירה', 'מימי', 'ניצה', 'גולי', 'ג\'ולי', 'נולי', 'שירלי', 'מיה', 'בלה', 'בל', 'רובי', 'ג\'סי', 'גסי', 'מרתה', 'לוסי', 'לולה', 'ג\'וזי'].some(fn => item.booking.dogName.includes(fn)) ||
+        item.booking.dogName.includes('ית')
       );
 
       const { template, formattedText } = pickDailyDogTemplate(
