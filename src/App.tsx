@@ -3,7 +3,7 @@ import confetti from 'canvas-confetti';
 
 import { Booking, ResortSettings, AgentActionProposal, PaymentMethod, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus } from './types';
 import { initialBookings, defaultSettings } from './data/initialData';
-import { loadStoredBookings, loadStoredSettings } from './utils/storage';
+import { loadStoredBookings, loadStoredSettings, extractCustomers } from './utils/storage';
 import { 
   subscribeToBookings, 
   subscribeToSettings, 
@@ -19,7 +19,9 @@ import {
   saveSettingsToDb, 
   batchRestoreToDb, 
   clearAllBookingsFromDb,
-  updateVoucherStatusInDb
+  updateVoucherStatusInDb,
+  findDaycarePassByCode,
+  deductDayFromPassInDb
 } from './services/dbService';
 import { parseVoiceOrWhatsAppText } from './services/agentService';
 import { 
@@ -36,6 +38,7 @@ import {
 
 import { CalendarView } from './components/CalendarView';
 import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricModal';
+import { getPlacementDisplayName } from './utils/kennelUtils';
 import { OccupancyForecast } from './components/OccupancyForecast';
 import { BookingsList } from './components/BookingsList';
 import { CustomersView } from './components/CustomersView';
@@ -64,6 +67,7 @@ import { SendIntakeModal } from './components/SendIntakeModal';
 import { getDateShabbatOrHoliday, isCustomerMessagingRestrictedNow } from './utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './components/ShabbatHolidayGreetingModal';
 import { VoucherModal } from './components/VoucherModal';
+import { DaycarePassModal } from './components/DaycarePassModal';
 import { DailyDogUpdatesModal } from './components/DailyDogUpdatesModal';
 import { TomorrowOverviewModal } from './components/TomorrowOverviewModal';
 import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
@@ -135,6 +139,7 @@ export default function App() {
   const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
   const [isDailyDogUpdatesOpen, setIsDailyDogUpdatesOpen] = useState(false);
   const [isTomorrowOverviewModalOpen, setIsTomorrowOverviewModalOpen] = useState(false);
+  const [isDaycarePassModalOpen, setIsDaycarePassModalOpen] = useState(false);
   
   const newIntakeCount = intakeRequests.filter(r => isIntakeRequestNew(r, bookings)).length;
   const inProgressIntakeCount = intakeRequests.filter(r => isIntakeRequestInTreatment(r, bookings)).length;
@@ -238,7 +243,7 @@ export default function App() {
         // Structural comparison to avoid unnecessary React re-renders and flickering
         if (prev.length === incomingBookings.length) {
           const makeSig = (list: Booking[]) => list.map(b => 
-            `${b.id}_${b.dogName}_${b.ownerName}_${b.startDate}_${b.endDate}_${b.serviceType}_${b.paymentStatus}_${b.depositAmount}_${b.totalPrice}_${b.stayStatus}_${b.updatedAt}`
+            `${b.id}_${b.dogName}_${b.ownerName}_${b.startDate}_${b.endDate}_${b.serviceType}_${b.paymentStatus}_${b.depositAmount}_${b.totalPrice}_${b.stayStatus}_${b.kennelNumber}_${b.updatedAt}_${JSON.stringify(b.dailyFeedingsCompleted || {})}`
           ).join('|');
           if (makeSig(prev) === makeSig(incomingBookings)) return prev;
         }
@@ -261,10 +266,11 @@ export default function App() {
     const unsubFeedingReminders = initFeedingReminderScheduler(
       () => bookings,
       (event) => {
+        const placementText = event.kennelNumber ? ` (${getPlacementDisplayName(event.kennelNumber)})` : '';
         showToast(
           event.type === 'food'
-            ? `🥣 תזכורת האכלה: ${event.dogName} ${event.kennelNumber ? `(תא ${event.kennelNumber})` : ''} - ${event.details}`
-            : `💊 תזכורת תרופה: ${event.dogName} ${event.kennelNumber ? `(תא ${event.kennelNumber})` : ''} - ${event.details}`
+            ? `🥣 תזכורת האכלה: ${event.dogName}${placementText} - ${event.details}`
+            : `💊 תזכורת תרופה: ${event.dogName}${placementText} - ${event.details}`
         );
       }
     );
@@ -277,6 +283,9 @@ export default function App() {
       unsubFeedingReminders();
     };
   }, [bookings]);
+
+  // Customers derived from bookings
+  const customers = React.useMemo(() => extractCustomers(bookings), [bookings]);
 
   // Today stats calculations
   const todayStr = getTodayStr();
@@ -1846,6 +1855,21 @@ export default function App() {
                   מוגן 🛡️
                 </span>
               </button>
+
+              {/* Daycare Passes Button (כרטיסיות פעילות יומית) */}
+              <button
+                type="button"
+                onClick={() => setIsDaycarePassModalOpen(true)}
+                id="btn-daycare-passes-top"
+                className="font-black px-3 py-1.5 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0 active:scale-95 bg-white hover:bg-emerald-50 border border-emerald-300 text-emerald-950"
+                title="ניהול כרטיסיות שהייה ואילוף ביומיות (תוקף לחצי שנה)"
+              >
+                <span className="text-base">🎟️</span>
+                <span>כרטיסיות פעילות</span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded-full">
+                  6 חודשים
+                </span>
+              </button>
             </div>
 
             {/* Left Wing in RTL (משמאל): Daily Routine, Broadcasts & Pending Payments */}
@@ -2161,6 +2185,22 @@ export default function App() {
               setIntakeRequests(prev => prev.map(r => r.id === matchedIntakeId ? { ...r, status: 'approved' } : r));
             }
 
+            // If this booking came from a Daycare Pass, auto-deduct the punch day in DB
+            const passCodeToDeduct = newBooking.daycarePassCode || (bookingWizardOpen.initialData as any)?.daycarePassCode;
+            if (passCodeToDeduct) {
+              const deductRes = await deductDayFromPassInDb(
+                passCodeToDeduct,
+                newBooking.startDate,
+                newBooking.id,
+                'customer',
+                `קליטה ליומן משאלון דיגיטלי: ${newBooking.dogName} (${newBooking.ownerName})`
+              );
+              if (deductRes.success && deductRes.pass) {
+                const remaining = deductRes.pass.totalDays - deductRes.pass.usedDays;
+                showToast(`🎟️ יום קוזז מכרטיסייה ${passCodeToDeduct}! נותרו ${remaining} ימים`);
+              }
+            }
+
             // If this booking came from a Grow payment, mark the payment completed
             if (activeGrowPayment) {
               await updateGrowPaymentStatus(activeGrowPayment.id, 'completed');
@@ -2334,7 +2374,14 @@ export default function App() {
                 isolationRate: Number(settings?.defaultDailyRateIsolation) || 230
               }
             );
-            const isFree = req.isFreeStay ||
+            // Check for Daycare Pass code in request notes
+            const passMatch = (req.notes || '').match(/כרטיסיי?ה.*?:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i) ||
+                              (req.notes || '').match(/קוד כרטיסייה:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i);
+            const daycarePassCode = passMatch ? passMatch[1].trim() : undefined;
+            const matchedPass = daycarePassCode ? findDaycarePassByCode(daycarePassCode) : undefined;
+            const isDaycarePassBooking = Boolean(daycarePassCode || matchedPass);
+
+            const isFree = req.isFreeStay || isDaycarePassBooking ||
               (req.notes && (req.notes.includes('חינם') || req.notes.includes('ללא תשלום') || req.notes.includes('כלב נוסף'))) ||
               (req.internalNotes && (req.internalNotes.includes('חינם') || req.internalNotes.includes('ללא תשלום') || req.internalNotes.includes('כלב נוסף')));
 
@@ -2355,7 +2402,7 @@ export default function App() {
                   consolidatePayment: true
                 }
               : undefined;
-            const dailyRateVal = boardingRateInfo.dailyRate || Number(settings?.defaultDailyRateBoarding) || 180;
+            const dailyRateVal = isFree ? 0 : (boardingRateInfo.dailyRate || Number(settings?.defaultDailyRateBoarding) || 180);
 
             setBookingWizardOpen({
               isOpen: true,
@@ -2381,7 +2428,9 @@ export default function App() {
                 isFreeStay: isFree,
                 stayStatus: 'booked',
                 secondDog: secondDogData,
-                additionalDogs: req.additionalDogs
+                additionalDogs: req.additionalDogs,
+                daycarePassCode: daycarePassCode || matchedPass?.passCode,
+                daycarePassId: matchedPass?.id
               } as any
             });
 
@@ -2443,6 +2492,17 @@ export default function App() {
           settings={settings}
           bookings={bookings}
           onClose={() => setVoucherModalData(null)}
+        />
+      )}
+
+      {/* Daycare Passes Modal (כרטיסיות פעילות יומית) */}
+      {isDaycarePassModalOpen && (
+        <DaycarePassModal
+          settings={settings}
+          customers={customers}
+          bookings={bookings}
+          onClose={() => setIsDaycarePassModalOpen(false)}
+          onSaveBooking={handleSaveBookingForm}
         />
       )}
 

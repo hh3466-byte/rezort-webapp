@@ -367,6 +367,24 @@ function formatTomorrowOverviewReport(
 
   const actionBlocks = [];
 
+  // 0. Check for dogs staying tomorrow or today without kennel placement (חוק ברזל)
+  const unassignedKennelDogs = activeBookings.filter(b => {
+    const s = b.startDate || b.start_date;
+    const e = b.endDate || b.end_date;
+    const isStayingOrIncoming = (s <= tomorrowStr && e >= tomorrowStr) || s === tomorrowStr;
+    const k = b.kennelNumber !== undefined ? b.kennelNumber : b.kennel_number;
+    return isStayingOrIncoming && (!k && k !== 0);
+  });
+  if (unassignedKennelDogs.length > 0) {
+    const list = unassignedKennelDogs.map((b, idx) => {
+      const phone = formatPhoneFormatted(b.ownerPhone || b.owner_phone || '');
+      const s = b.startDate || b.start_date;
+      const e = b.endDate || b.end_date;
+      return `${idx + 1}. 🚨 *${b.dogName || b.dog_name}* (${b.ownerName || b.owner_name} - 📞 ${phone}) | שהייה: ${formatDateIL(s)}–${formatDateIL(e)} (חסר שיבוץ תא 1–11 או הלנה ביתית ודלי מזון!)`;
+    }).join('\n');
+    actionBlocks.push(`🏠 *כלבים ללא שיבוץ תא לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
+  }
+
   // 1. Unanswered WhatsApp messages
   if (unansweredChats && unansweredChats.length > 0) {
     const list = unansweredChats.map((uc, idx) => {

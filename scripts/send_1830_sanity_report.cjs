@@ -383,8 +383,13 @@ async function run1830Audit() {
     ''
   ];
 
-  // Green Events (Concise headline without long dog breakdown)
-  parts.push(`🟢 *אירועים ירוקים (${totalGreen} אירועים שסונכרנו בהצלחה ב-24 שעות):* נבדקו ותקינים ✅`);
+  // Green Events
+  parts.push(`🟢 *אירועים ירוקים (${totalGreen} אירועים שסונכרנו בהצלחה ב-24 שעות):*`);
+  if (totalGreen > 0) {
+    greenEvents.forEach(e => parts.push(e));
+  } else {
+    parts.push(`• לא נרשמו שינויי שריון חדשים ב-24 שעות האחרונות.`);
+  }
   parts.push('');
 
   // Red Lights

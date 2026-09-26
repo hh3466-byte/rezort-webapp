@@ -834,8 +834,10 @@ export function getNextAllowedCommunicationDate(targetDate: Date = new Date()): 
     const day = next.getDay();
     const hours = next.getHours();
 
-    // If restricted by Shabbat/Holiday OR outside business hours (before 9:00 or after 19:00)
-    if (check.isRestricted || day === 6 || (day === 5 && hours >= 13) || hours < 9 || hours >= 19) {
+    // If restricted by Shabbat/Holiday OR outside business hours (before 09:30 or after 18:30)
+    const isBeforeOpening = hours < 9 || (hours === 9 && next.getMinutes() < 30);
+    const isAfterClosing = hours > 18 || (hours === 18 && next.getMinutes() >= 30);
+    if (check.isRestricted || day === 6 || (day === 5 && hours >= 13) || isBeforeOpening || isAfterClosing) {
       // Advance to next day at 09:30 AM
       next.setDate(next.getDate() + 1);
       next.setHours(9, 30, 0, 0);

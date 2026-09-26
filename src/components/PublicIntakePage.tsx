@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { ResortSettings, ServiceType, IntakeRequest, AdditionalDogIntake, RESORT_BENEFIT_OPTIONS } from '../types';
 import { addDays, getTodayStr, calculateDaysCount, getDayNameHebrew, formatDateIL } from '../utils/dateUtils';
 import { cleanPhoneNumber, isValidIsraeliPhone, formatIsraeliPhoneDisplay } from '../utils/whatsappUtils';
-import { saveIntakeRequestToDb, findVoucherByCode, verifyCustomerByPhone, PhoneVerificationResult } from '../services/dbService';
+import { saveIntakeRequestToDb, findVoucherByCode, findDaycarePassByCode, verifyCustomerByPhone, PhoneVerificationResult } from '../services/dbService';
 import { sendResortEmailNotification, sendResortWhatsAppNotification, formatIntakeNotification } from '../services/notificationService';
 import { 
   CheckCircle2, 
@@ -34,7 +34,8 @@ import {
   Navigation,
   Loader2,
   Dog,
-  Trash2
+  Trash2,
+  Ticket
 } from 'lucide-react';
 import { SendIntakeModal } from './SendIntakeModal';
 import { getCurrentCoordinates, reverseGeocodeCoordinates } from '../utils/geolocationUtils';
@@ -81,7 +82,7 @@ const RESORT_BYLAWS_SECTIONS = [
     num: 7,
     title: '7. שעות פעילות',
     icon: '⏰',
-    content: 'שעות פעילות המתקן הן בימים א׳–ה׳ בין השעות 09:00–17:00, ובימי שישי עד השעה 14:00. בשבתות המתקן סגור למעט מקרה חירום. מסירה או איסוף של הכלב מחוץ לשעות אלה, ככל שתואמו מראש, יחויבו בתשלום נוסף.'
+    content: 'שעות פעילות המתקן הן בימים א׳–ה׳ בין השעות 09:30–18:30, ובימי שישי עד השעה 14:00. בשבתות המתקן סגור למעט מקרה חירום. מסירה או איסוף של הכלב מחוץ לשעות אלה, ככל שתואמו מראש, יחויבו בתשלום נוסף.'
   }
 ];
 
@@ -190,6 +191,33 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
     if (!voucherCode.trim()) return null;
     return findVoucherByCode(voucherCode.trim());
   }, [voucherCode]);
+
+  // Daycare Pass (כרטיסיית פעילות יומית) State & Auto-Matching
+  const [daycarePassCode, setDaycarePassCode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const p = (params.get('pass') || params.get('daycare_pass') || params.get('card') || '').trim();
+      if (p) return p;
+    }
+    return '';
+  });
+
+  const matchedDaycarePass = useMemo(() => {
+    if (!daycarePassCode.trim()) return null;
+    return findDaycarePassByCode(daycarePassCode.trim());
+  }, [daycarePassCode]);
+
+  // Auto-fill form fields when Daycare Pass is detected
+  useEffect(() => {
+    if (matchedDaycarePass) {
+      if (matchedDaycarePass.dogName && !dogName) setDogName(matchedDaycarePass.dogName);
+      if (matchedDaycarePass.dogBreed && !dogBreed) setDogBreed(matchedDaycarePass.dogBreed);
+      if (matchedDaycarePass.ownerName && !ownerName) setOwnerName(matchedDaycarePass.ownerName);
+      if (matchedDaycarePass.ownerPhone && !ownerPhone) setOwnerPhone(matchedDaycarePass.ownerPhone);
+      if (matchedDaycarePass.serviceType) setServiceType(matchedDaycarePass.serviceType);
+      setEndDate(startDate); // Daycare is single-day arrival
+    }
+  }, [matchedDaycarePass, startDate]);
 
   // Mandatory Vetting Questions State
   const [isFriendlyWithDogs, setIsFriendlyWithDogs] = useState<'yes' | 'no' | 'depends'>('yes');
@@ -360,7 +388,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
     if (d.getDay() === 6 && serviceType === 'boarding') {
       const sun = addDays(val, 1);
       setEndDate(sun);
-      setSaturdayWarning('⚠️ היציאה אינה יכולה להיות ביום שבת (אין שחרורים בשבת). תאריך היציאה עודכן ליום ראשון בשעה 09:00.');
+      setSaturdayWarning('⚠️ היציאה אינה יכולה להיות ביום שבת (אין שחרורים בשבת). תאריך היציאה עודכן ליום ראשון בשעה 09:30.');
     } else {
       setEndDate(val);
       setSaturdayWarning(null);
@@ -464,7 +492,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       if (serviceType === 'boarding') {
         const endD = new Date(endDate + 'T00:00:00');
         if (endD.getDay() === 6) {
-          setErrorMessage('היציאה לא יכולה להיות ביום שבת (אין שחרורים בשבת). היציאה מסופ״ש הינה ביום ראשון בשעה 09:00.');
+          setErrorMessage('היציאה לא יכולה להיות ביום שבת (אין שחרורים בשבת). היציאה מסופ״ש הינה ביום ראשון בשעה 09:30.');
           return false;
         }
       }
@@ -556,8 +584,15 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
         startDate: ad.sameDatesAsPrimary ? startDate : (ad.startDate || startDate),
         endDate: ad.sameDatesAsPrimary ? finalEndDate : (ad.endDate || finalEndDate)
       })) : undefined,
+      depositRequested: (matchedDaycarePass || daycarePassCode.trim()) ? 0 : undefined,
+      calculatedPrice: (matchedDaycarePass || daycarePassCode.trim()) ? 0 : undefined,
       notes: [
         isCallbackOnly ? '[בקשת שיחה חוזרת טלפונית]' : '',
+        matchedDaycarePass 
+          ? `[🎟️ שריון מתוך כרטיסייה: ${matchedDaycarePass.passCode} (קוד כרטיסייה: ${matchedDaycarePass.passCode} - יום ${matchedDaycarePass.usedDays + 1}/${matchedDaycarePass.totalDays}) | ללא תשלום]` 
+          : daycarePassCode.trim() 
+          ? `[🎟️ שריון מתוך כרטיסייה: ${daycarePassCode.trim()} (קוד כרטיסייה: ${daycarePassCode.trim()}) | ללא תשלום]` 
+          : '',
         isFlexibleDates ? '[תאריכים גמישים / בירור זמינות כללי]' : '',
         additionalDogs.length > 0 ? `[🐾 ${additionalDogs.length + 1} אורחים בטופס: ${dogName} + ${additionalDogs.map(d => `${d.dogName} (${d.dogBreed})`).join(', ')}]` : '',
         phoneCheckResult?.isKnown ? `[💎 לקוח חוזר מוכר: ${phoneCheckResult.name || ownerName} (${phoneCheckResult.totalVisits} ביקורים)]` : '[🐶 לקוח חדש]',
@@ -777,6 +812,45 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
           }} 
           className="bg-white rounded-3xl border border-slate-200/90 shadow-md p-5 sm:p-7 space-y-6"
         >
+          {/* Daycare Pass Active Banner (כרטיסיית פעילות יומית ששולמה מראש) */}
+          {matchedDaycarePass && (
+            <div className="bg-gradient-to-r from-emerald-700 via-teal-800 to-slate-900 text-white rounded-3xl p-5 shadow-lg border-2 border-emerald-400/80 space-y-3 animate-in zoom-in-95">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-2xl shadow-inner backdrop-blur-md">
+                    🎟️
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs bg-emerald-400 text-slate-950 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                        כרטיסיית ימים פעילה
+                      </span>
+                      <span className="text-xs text-emerald-200 font-mono">
+                        מספר {matchedDaycarePass.passCode}
+                      </span>
+                    </div>
+                    <h3 className="text-base sm:text-lg font-black mt-1">
+                      שריון יום הגעה עבור {matchedDaycarePass.dogName} ({matchedDaycarePass.ownerName})
+                    </h3>
+                  </div>
+                </div>
+
+                <div className="text-left bg-white/10 px-3.5 py-1.5 rounded-xl backdrop-blur-md border border-white/20">
+                  <span className="text-xs font-black text-emerald-200 block">
+                    נותרו {matchedDaycarePass.totalDays - matchedDaycarePass.usedDays} מתוך {matchedDaycarePass.totalDays} ימים
+                  </span>
+                  <span className="text-[10px] text-emerald-100/70">
+                    תוקף עד: {formatDateIL(matchedDaycarePass.validUntil)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-white/10 flex items-center justify-between text-xs text-emerald-100">
+                <span>✨ <strong>שריון ללא תשלום נוסף:</strong> יום אחד יקוזז מיתרת הכרטיסייה שלך.</span>
+                <span className="font-bold bg-emerald-500/20 px-2 py-0.5 rounded-md">₪0 לתשלום</span>
+              </div>
+            </div>
+          )}
           
           {/* Section 0: Phone Identification & VIP Club Benefits */}
           <div className="bg-gradient-to-br from-emerald-50/80 via-slate-50 to-amber-50/60 border-2 border-emerald-200/90 rounded-3xl p-4 sm:p-6 space-y-4 shadow-sm">
@@ -855,7 +929,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   {phoneCheckResult.isVip && (
                     <div className="pt-1.5 border-t border-emerald-200/80 text-[11px] font-black text-amber-950 flex items-center gap-1.5">
                       <span>🌟</span>
-                      <span>זכאות VIP: עומדת לרשותכם גם הטבת יום כיף VIP מלא במתחם הדשא (09:00-19:00) מתנה!</span>
+                      <span>זכאות VIP: עומדת לרשותכם גם הטבת יום כיף VIP מלא במתחם הדשא (09:30-18:30) מתנה!</span>
                     </div>
                   )}
                 </div>
@@ -990,6 +1064,42 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                       </div>
                     )
                   )}
+                </div>
+
+                {/* Daycare Pass Code Input (כרטיסיית פעילות יומית) */}
+                <div className="pt-2 border-t border-slate-200/80">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                      <Ticket className="w-4 h-4 text-emerald-600" />
+                      <span>יש לכם כרטיסיית פעילות יומית? הזינו מספר כרטיסייה:</span>
+                    </label>
+                    {daycarePassCode && matchedDaycarePass && (
+                      <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>כרטיסייה זוהתה בהצלחה</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={daycarePassCode}
+                      onChange={(e) => setDaycarePassCode(e.target.value.trim())}
+                      placeholder="הזינו מספר כרטיסייה (למשל: 8492)"
+                      className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-black text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none tracking-wider font-mono placeholder:font-sans placeholder:font-normal shadow-2xs"
+                      dir="auto"
+                    />
+                    {daycarePassCode && (
+                      <button
+                        type="button"
+                        onClick={() => setDaycarePassCode('')}
+                        className="px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 bg-white border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
+                      >
+                        נקה
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -1343,7 +1453,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                     ☀️ בחר את תאריך יום הכיף המבוקש *
                   </label>
                   <span className="text-[11px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
-                    שעות פעילות: 09:00 - 19:00
+                    שעות פעילות: 09:30 - 18:30
                   </span>
                 </div>
 
@@ -1565,7 +1675,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                         id: 'weekend', 
                         icon: '🌟', 
                         title: 'סופ״ש הקרוב', 
-                        subtitle: 'שישי 14:00 ➔ ראשון 09:00', 
+                        subtitle: 'שישי 14:00 ➔ ראשון 09:30', 
                         detail: '2 לילות',
                         matches: nightsCount === 2 && getDayNameHebrew(startDate) === 'שישי' && getDayNameHebrew(endDate) === 'ראשון'
                       },
@@ -1664,15 +1774,15 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                 <div className="bg-amber-50/95 border-2 border-amber-300/90 rounded-2xl p-3.5 sm:p-4 text-xs text-amber-950 space-y-2.5 shadow-2xs">
                   <div className="font-black text-amber-950 flex items-center gap-2 text-xs sm:text-sm">
                     <span className="text-base">⏰</span>
-                    <span>שעות פעילות הריזורט לכלב בימים א-ה הן 09:00 - 19:00</span>
+                    <span>שעות פעילות הריזורט לכלב בימים א-ה הן 09:30 - 18:30</span>
                   </div>
                   <div className="space-y-2 font-bold leading-relaxed pr-1">
                     <p>
-                      • <strong>בשישי וערב חג:</strong> עד שעה <strong>14:00</strong>, ובצאת השבת / החג (למחרת השבת / חג) משעה <strong>09:00</strong>.
+                      • <strong>בשישי וערב חג:</strong> עד שעה <strong>14:00</strong>, ובצאת השבת / החג (למחרת השבת / חג) משעה <strong>09:30</strong>.
                     </p>
                     <div className="text-amber-950 bg-amber-100/90 p-2.5 sm:p-3 rounded-xl border border-amber-300/90 font-black leading-relaxed space-y-1 mt-1">
                       <p className="text-[11px] sm:text-xs">
-                        מעבר לשעות הפעילות (לפני 09:00 ואחרי 19:00), ובסופי שבוע וחגים על הבעלים להתגבר ולהתאפק! בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐾
+                        מעבר לשעות הפעילות (לפני 09:30 ואחרי 18:30), ובסופי שבוע וחגים על הבעלים להתגבר ולהתאפק! בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐾
                       </p>
                     </div>
                   </div>

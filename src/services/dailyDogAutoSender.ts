@@ -1,5 +1,5 @@
 import { Booking, ResortSettings, IntakeRequest } from '../types';
-import { getTodayStr } from '../utils/dateUtils';
+import { getTodayStr, addDays } from '../utils/dateUtils';
 import { cleanPhoneNumber } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from './notificationService';
 import { saveBookingToDb } from './dbService';
@@ -12,6 +12,59 @@ import { isCustomerMessagingRestrictedNow } from '../utils/jewishCalendar';
 
 let autoSenderInterval: any = null;
 let isSendingInProgress = false;
+
+/**
+ * Builds the comprehensive end-of-evening summary report for the Manager (054-3200007),
+ * combining the 20:00 Dog Regards delivery status with the 19:00 VIP Review & Voucher dispatch details.
+ */
+function buildEveningManagerSummaryMessage(
+  sentRegardsCount: number,
+  regardsErrors: string[],
+  bookings: Booking[],
+  todayStr: string
+): string {
+  const regardsStatus = regardsErrors.length === 0 ? 'אין כשל' : `יש כשל (${regardsErrors.length} שגיאות)`;
+  const regardsLine = `• *עדכוני ד"ש (20:00):* נשלחו ד"ש לכול בעלי הכלבים סה"כ ${sentRegardsCount} הודעות כולם קיבלו. ${regardsStatus}`;
+
+  // Analyze 19:00 VIP Review Requests & Vouchers
+  const yesterdayStr = addDays(todayStr, -1);
+  const fourDaysAgoStr = addDays(todayStr, -4);
+
+  const recentDepartures = bookings.filter(b => {
+    if (b.stayStatus === 'cancelled') return false;
+    const end = b.endDate;
+    return end >= fourDaysAgoStr && end <= todayStr;
+  });
+
+  const sentReviews = recentDepartures.filter(b => {
+    const notes = b.notes || '';
+    const localVal = typeof window !== 'undefined' ? localStorage.getItem(`review_request_sent_${b.id}`) : null;
+    return notes.includes('[סקר_נשלח]') || localVal === 'already_sent' || (typeof localVal === 'string' && localVal.includes(todayStr));
+  });
+
+  const skippedReviews = recentDepartures.filter(b => {
+    const notes = b.notes || '';
+    return b.skipReviewRequest === true || notes.includes('ללא_סקר') || notes.includes('[ללא_סקר]');
+  });
+
+  let reviewLine = '';
+  if (sentReviews.length > 0) {
+    const clientList = sentReviews.map(b => `${b.dogName || 'כלב'} (${b.ownerName || 'בעלים'})`).join(', ');
+    reviewLine = `• *בקשות חוות דעת ומועדון VIP (19:00):* נשלחו בקשות חוות דעת ומועדון VIP סה"כ ${sentReviews.length} הודעות והאירוע הסתיים בהצלחה (${clientList}). אין כשל`;
+  } else {
+    reviewLine = `• *בקשות חוות דעת ומועדון VIP (19:00):* נשלחו סה"כ 0 הודעות (לא היו שחרורים מתאימים היום) והאירוע הסתיים בהצלחה. אין כשל`;
+  }
+
+  let skippedLine = '';
+  if (skippedReviews.length > 0) {
+    const skipList = skippedReviews.map(b => `${b.dogName || 'כלב'} (${b.ownerName || 'בעלים'})`).join(', ');
+    skippedLine = `\n(בוטלה שליחה יזומה ל-${skippedReviews.length} לקוחות לפי סימון שמוליק: ${skipList})`;
+  }
+
+  const errorsSection = regardsErrors.length > 0 ? `\n\n⚠️ פירוט תקלות:\n• ${regardsErrors.join('\n• ')}` : '';
+
+  return `🐾 *עדכון סיכום משלוחי ערב – הריזורט לכלב*\n\n${regardsLine}\n${reviewLine}${skippedLine}${errorsSection}`;
+}
 
 /**
  * Checks if current time in Israel is eligible for evening updates / weekend greetings:
@@ -181,6 +234,24 @@ export async function runAutoDailyDogUpdates(
   }
 
   isSendingInProgress = false;
+
+  // Send summary confirmation to Manager (054-3200007)
+  const adminPhone = '0543200007';
+  const adminKey = `daily_dog_admin_notified_${todayStr}`;
+  const alreadyNotifiedAdmin = typeof window !== 'undefined' && localStorage.getItem(adminKey) === 'true';
+
+  if (sentCount > 0 && !alreadyNotifiedAdmin) {
+    const adminSummaryMsg = buildEveningManagerSummaryMessage(sentCount, errors, bookings, todayStr);
+    try {
+      await sendGreenApiDirectMessage(adminPhone, adminSummaryMsg, greenApiId, greenApiToken, { skipHolidayCheck: true });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(adminKey, 'true');
+      }
+      console.log(`[AutoSender 20:00] אישור נשלח בהצלחה למנהל (${adminPhone})`);
+    } catch (errAdmin) {
+      console.warn('[AutoSender 20:00] שגיאה בשליחת עדכון למנהל:', errAdmin);
+    }
+  }
 
   if (sentCount > 0 && showToast) {
     showToast(`🚀 שליחה אוטומטית (20:00): נשלחו ${sentCount} עדכוני ערב יומיים לכלבים השוהים! 🐾✨`);

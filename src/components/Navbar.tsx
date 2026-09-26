@@ -26,6 +26,7 @@ interface NavbarProps {
   onOpenSettings: () => void;
   onOpenGuide: () => void;
   onOpenDailyDogUpdates?: () => void;
+  onOpenDaycarePassModal?: () => void;
   activeTonightCount?: number;
   isSidebarOpen?: boolean;
   onToggleSidebar?: () => void;
@@ -40,6 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSettings,
   onOpenGuide,
   onOpenDailyDogUpdates,
+  onOpenDaycarePassModal,
   activeTonightCount = 0,
   isSidebarOpen = false,
   onToggleSidebar,
@@ -212,6 +214,24 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             )}
           </button>
+
+          {onOpenDaycarePassModal && (
+            <button
+              onClick={() => {
+                onOpenDaycarePassModal();
+                if (onToggleSidebar) onToggleSidebar();
+              }}
+              className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 rounded-xl font-bold text-sm transition-all cursor-pointer shadow-sm"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-lg">🎟️</span>
+                <span>כרטיסיות פעילות יומית</span>
+              </div>
+              <span className="text-[10px] bg-emerald-400/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
+                6 חודשים
+              </span>
+            </button>
+          )}
 
           <button
             onClick={() => {

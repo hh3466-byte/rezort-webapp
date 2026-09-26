@@ -536,21 +536,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span className="text-[10px] text-purple-800 font-semibold mt-1 block">מחיר ליום אילוף (הגעה בבוקר וחזרה)</span>
                 </div>
 
-                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                  <label className="text-xs text-green-700 font-bold block mb-1">
-                    ✂️ יום כיף / שהות יומית
+                <div className="bg-sky-50/70 p-3.5 rounded-xl border border-sky-200">
+                  <label className="text-xs text-sky-900 font-bold block mb-1">
+                    🐾 שהייה יומית בריזורט (מעון יום)
                   </label>
                   <div className="flex items-center gap-1">
-                    <span className="text-sm font-bold text-slate-500">₪</span>
+                    <span className="text-sm font-bold text-sky-600">₪</span>
                     <input
                       type="number"
                       min="0"
-                      value={formData.defaultDailyRateDaycare}
+                      value={formData.defaultDailyRateDaycare || 90}
                       onChange={(e) => setFormData({ ...formData, defaultDailyRateDaycare: Number(e.target.value) })}
-                      className="w-full bg-white text-slate-900 font-black text-sm p-2 rounded-lg border border-slate-200"
+                      className="w-full bg-white text-slate-900 font-black text-sm p-2 rounded-lg border border-sky-300 focus:border-sky-500"
                     />
                   </div>
-                  <span className="text-[10px] text-slate-400 mt-1 block">מחיר ליום ללא לינה</span>
+                  <span className="text-[10px] text-sky-800 font-semibold mt-1 block">מחיר ליום שהייה ומשחקים ללא לינה (ברירת מחדל ₪90)</span>
                 </div>
               </div>
             </div>

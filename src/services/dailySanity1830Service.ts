@@ -222,7 +222,7 @@ export function run1830SanityAudit(
   // 7. Check for unassigned kennel placement (חוק ברזל: חובת שיבוץ מיקום לינה)
   activeBookings.filter(b => b.startDate <= todayStr && b.endDate >= todayStr).forEach(b => {
     if (!b.kennelNumber && b.kennelNumber !== 0) {
-      redLights.unassignedKennels.push(`🏠 *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone || 'ללא טלפון'}) | שוהה כעת בריזורט ללא שיבוץ תא (1–11) או הלנה ביתית ודלי מזון!`);
+      redLights.unassignedKennels.push(`🏠 *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone || 'ללא טלפון'}) | שוהה כעת בריזורט ללא שיבוץ חדר/סוויטה/שביל או הלנה ביתית ודלי מזון!`);
     }
   });
 
@@ -252,8 +252,14 @@ export function run1830SanityAudit(
     ''
   ];
 
-  // Green Events Section (Headline count only for compact overview)
-  parts.push(`🟢 *אירועים ירוקים (${totalGreen} אירועים שסונכרנו בהצלחה ב-24 שעות):*\n`);
+  // Green Events Section
+  parts.push(`🟢 *אירועים ירוקים (${totalGreen} אירועים שסונכרנו בהצלחה ב-24 שעות):*`);
+  if (totalGreen > 0) {
+    greenEvents.forEach(e => parts.push(e));
+  } else {
+    parts.push(`• לא נרשמו שינויי שריון חדשים ב-24 שעות האחרונות.`);
+  }
+  parts.push('');
 
   // Red Lights Section
   parts.push(`🚨 *אורות אדומים:*`);

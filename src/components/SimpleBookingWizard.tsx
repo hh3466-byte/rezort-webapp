@@ -58,6 +58,7 @@ import {
 import { calculateBoardingRate } from '../utils/pricingUtils';
 import { parseVoiceOrWhatsAppText } from '../services/agentService';
 import { TimeSchedulePicker } from './TimeSchedulePicker';
+import { normalizePlacementKey, getPlacementDisplayName } from '../utils/kennelUtils';
 
 interface SimpleBookingWizardProps {
   isOpen: boolean;
@@ -120,7 +121,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const [medications, setMedications] = useState(initialData?.medications || '');
   const [notes, setNotes] = useState(initialData?.notes || '');
   const [placementNotes, setPlacementNotes] = useState(initialData?.placementNotes || '');
-  const [kennelPlacement, setKennelPlacement] = useState<number | 'home' | ''>(
+  const [kennelPlacement, setKennelPlacement] = useState<string | number | ''>(
     initialData?.kennelNumber !== undefined ? initialData.kennelNumber : ''
   );
   const [feedingSchedule, setFeedingSchedule] = useState(initialData?.feedingSchedule || '');
@@ -161,8 +162,8 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const [pricingMode, setPricingMode] = useState<'daily' | 'period'>('daily');
   const [startDate, setStartDate] = useState(initialData?.startDate || todayStr);
   const [endDate, setEndDate] = useState(initialData?.endDate || addDays(todayStr, 3));
-  const [arrivalTime, setArrivalTime] = useState(initialData?.arrivalTime || '09:00 - 11:00');
-  const [pickupTime, setPickupTime] = useState(initialData?.pickupTime || '17:00 - 19:00');
+  const [arrivalTime, setArrivalTime] = useState(initialData?.arrivalTime || '09:30 - 11:00');
+  const [pickupTime, setPickupTime] = useState(initialData?.pickupTime || '17:00 - 18:30');
   
   // Daily rate
   const [dailyRate, setDailyRate] = useState<number>(() => {
@@ -591,12 +592,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
   // Final submission
   const handleFinalSave = () => {
-    if ((kennelPlacement === '' || kennelPlacement === undefined) && !isFreeStay) {
-      alert('חובה לבחור תא 1–11 או הלנה ביתית לקליטת הכלב!');
-      setCurrentStep(2);
-      setPlacementError('חובה לבחור תא 1–11 או הלנה ביתית לקליטת הכלב!');
-      return;
-    }
+    // Placement is optional - can be assigned later
     setPlacementError('');
 
     const finalPaymentStatus: PaymentStatus = isFreeStay 
@@ -666,6 +662,8 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       signatureDataUrl,
       pricingMode,
       dailyRate: isFreeStay ? 0 : dailyRate,
+      daycarePassCode: initialData?.daycarePassCode,
+      daycarePassId: initialData?.daycarePassId,
       createdAt: initialData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1216,10 +1214,10 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-base">✂️</span>
-                      <span className="text-[10px] text-slate-500 font-bold">₪{settings.defaultDailyRateDaycare}/יום</span>
+                      <span className="text-base">🐾</span>
+                      <span className="text-[10px] text-slate-500 font-bold">₪{settings.defaultDailyRateDaycare || 90}/יום</span>
                     </div>
-                    <div className="text-xs font-bold mt-1">שהות יומית</div>
+                    <div className="text-xs font-bold mt-1">שהייה יומית בריזורט</div>
                   </button>
                 </div>
               </div>
@@ -2229,63 +2227,146 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 />
               </div>
 
-              {/* 🏠 Mandatory Placement (תא 1-11 או הלנה ביתית) & Feeding System */}
+              {/* 🏠 Placement (חדר 1-7, סוויטה 1-4, שבילים, חצר מרכזית או הלנה ביתית) & Feeding System */}
               <div className={`p-4 rounded-2xl border-2 space-y-3 transition-all ${
                 placementError ? 'border-red-500 bg-red-50/50' : 'border-indigo-200 bg-indigo-50/40'
               }`}>
                 <div className="flex items-center justify-between">
                   <label className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
-                    <span>🏠 מיקום לינה ושיבוץ תא:</span>
-                    <span className="text-red-500 font-black">* (שדה חובה)</span>
+                    <span>🏠 שיבוץ מיקום לינה ודלי מזון:</span>
+                    <span className="text-xs font-normal text-slate-500">(ניתן לקלוט ללא שיבוץ ולשבץ מאוחר יותר)</span>
                   </label>
-                  {placementError && (
-                    <span className="text-xs text-red-600 font-bold animate-pulse">
-                      {placementError}
+                  {kennelPlacement ? (
+                    <span className="text-xs font-black text-indigo-700 bg-indigo-100/80 px-2.5 py-0.5 rounded-lg border border-indigo-200">
+                      {getPlacementDisplayName(kennelPlacement)}
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
+                      ⚪ טרם שובץ
                     </span>
                   )}
                 </div>
 
-                {/* Placement Buttons: 1..11 and Home */}
-                <div className="space-y-2">
-                  <div className="grid grid-cols-6 sm:grid-cols-11 gap-1.5">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(num => (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() => {
-                          setKennelPlacement(num);
-                          setPlacementError('');
-                        }}
-                        className={`py-2 rounded-xl border text-center transition-all cursor-pointer font-black text-xs ${
-                          kennelPlacement === num
-                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs scale-105'
-                            : 'bg-white border-slate-200 hover:border-indigo-300 text-slate-800'
-                        }`}
-                      >
-                        תא {num}
-                      </button>
-                    ))}
+                {/* Categorized Placement Buttons */}
+                <div className="space-y-3">
+                  {/* 1. Rooms 1-7 */}
+                  <div>
+                    <div className="text-[11px] font-black text-blue-900 mb-1 flex items-center gap-1">
+                      <span>🚪</span>
+                      <span>חדרי אירוח (1–7):</span>
+                    </div>
+                    <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
+                      {[1, 2, 3, 4, 5, 6, 7].map(num => {
+                        const slotKey = `room_${num}`;
+                        const isSelected = normalizePlacementKey(kennelPlacement) === slotKey;
+                        return (
+                          <button
+                            key={slotKey}
+                            type="button"
+                            onClick={() => setKennelPlacement(slotKey)}
+                            className={`py-2 px-1 rounded-xl border text-center transition-all cursor-pointer font-black text-xs ${
+                              isSelected
+                                ? 'bg-blue-600 border-blue-600 text-white shadow-xs scale-105'
+                                : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-800'
+                            }`}
+                          >
+                            חדר {num}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  {/* Home Boarding Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setKennelPlacement('home');
-                      setPlacementError('');
-                    }}
-                    className={`w-full p-2.5 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between text-xs font-bold ${
-                      kennelPlacement === 'home'
-                        ? 'bg-amber-500 border-amber-600 text-white shadow-xs'
-                        : 'bg-amber-50/80 border-amber-300 hover:bg-amber-100 text-amber-950'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span>🏡</span>
-                      <span>הלנה ביתית (בבית של שמוליק) | 🪣 דלי הלנה ביתית</span>
+                  {/* 2. Suites 1-4 */}
+                  <div>
+                    <div className="text-[11px] font-black text-purple-900 mb-1 flex items-center gap-1">
+                      <span>⭐</span>
+                      <span>סוויטות אירוח (1–4):</span>
                     </div>
-                    {kennelPlacement === 'home' && <span>✓ נבחר</span>}
-                  </button>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                      {[1, 2, 3, 4].map(num => {
+                        const slotKey = `suite_${num}`;
+                        const isSelected = normalizePlacementKey(kennelPlacement) === slotKey;
+                        return (
+                          <button
+                            key={slotKey}
+                            type="button"
+                            onClick={() => setKennelPlacement(slotKey)}
+                            className={`py-2 px-1 rounded-xl border text-center transition-all cursor-pointer font-black text-xs ${
+                              isSelected
+                                ? 'bg-purple-600 border-purple-600 text-white shadow-xs scale-105'
+                                : 'bg-white border-purple-200 hover:border-purple-400 hover:bg-purple-50 text-purple-900'
+                            }`}
+                          >
+                            סוויטה {num}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 3. Outdoor Trails & Central Yard */}
+                  <div>
+                    <div className="text-[11px] font-black text-emerald-900 mb-1 flex items-center gap-1">
+                      <span>🌿</span>
+                      <span>שבילים וחצר מרכזית:</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[
+                        { id: 'trail_east', label: 'שביל מזרחי', icon: '🌲' },
+                        { id: 'trail_west', label: 'שביל מערבי', icon: '🌿' },
+                        { id: 'yard_central', label: 'חצר מרכזית', icon: '🌳' },
+                      ].map(item => {
+                        const isSelected = normalizePlacementKey(kennelPlacement) === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setKennelPlacement(item.id)}
+                            className={`py-2 px-1.5 rounded-xl border text-center transition-all cursor-pointer font-black text-xs flex items-center justify-center gap-1.5 ${
+                              isSelected
+                                ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                                : 'bg-white border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 text-emerald-950'
+                            }`}
+                          >
+                            <span>{item.icon}</span>
+                            <span>{item.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 4. Home Boarding & Clear Option */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setKennelPlacement('home')}
+                      className={`p-2.5 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between text-xs font-bold ${
+                        normalizePlacementKey(kennelPlacement) === 'home'
+                          ? 'bg-amber-500 border-amber-600 text-white shadow-xs'
+                          : 'bg-amber-50/80 border-amber-300 hover:bg-amber-100 text-amber-950'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span>🏡</span>
+                        <span>הלנה ביתית (בבית של שמוליק)</span>
+                      </div>
+                      {normalizePlacementKey(kennelPlacement) === 'home' && <span>✓</span>}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setKennelPlacement('')}
+                      className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-center gap-1.5 text-xs font-bold ${
+                        !kennelPlacement
+                          ? 'bg-slate-700 border-slate-700 text-white shadow-xs'
+                          : 'bg-white border-slate-300 hover:bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      <span>⚪ טרם שובץ (שבץ בהמשך)</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Feeding Schedule & Food Details */}
@@ -2528,7 +2609,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       <span className="text-[10px] text-purple-700 font-bold">₪{settings.defaultDailyRateDayTraining || 250}/יום</span>
                     </div>
                     <div className="text-xs font-bold mt-1">אילוף ביומיות</div>
-                    <div className="text-[10px] text-slate-500 font-normal">אילוף יומי ללא לינה</div>
+                    <div className="text-[10px] text-slate-500 font-normal">פעילות יומית ללא לינה</div>
                   </button>
 
                   <button
@@ -2541,11 +2622,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-lg">✂️</span>
-                      <span className="text-[10px] text-slate-500 font-bold">₪{settings.defaultDailyRateDaycare}/יום</span>
+                      <span className="text-lg">🐾</span>
+                      <span className="text-[10px] text-slate-500 font-bold">₪{settings.defaultDailyRateDaycare || 90}/יום</span>
                     </div>
-                    <div className="text-xs font-bold mt-1">יום כיף / שהות יומית</div>
-                    <div className="text-[10px] text-slate-500 font-normal">ללא לינת לילה</div>
+                    <div className="text-xs font-bold mt-1">שהייה יומית בריזורט</div>
+                    <div className="text-[10px] text-slate-500 font-normal">ברירת מחדל ₪90 ליום</div>
                   </button>
                 </div>
               </div>
@@ -2666,11 +2747,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     onChange={(e) => setArrivalTime(e.target.value)}
                     className="w-full bg-slate-50 text-xs font-medium text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none cursor-pointer"
                   >
-                    <option value="09:00 - 11:00">09:00 - 11:00 (בוקר)</option>
+                    <option value="09:30 - 11:00">09:30 - 11:00 (בוקר)</option>
                     <option value="11:00 - 13:00">11:00 - 13:00 (צהריים מוקדמים)</option>
                     <option value="13:00 - 15:00">13:00 - 15:00 (צהריים)</option>
                     <option value="15:00 - 17:00">15:00 - 17:00 (אחר הצהריים)</option>
-                    <option value="17:00 - 19:00">17:00 - 19:00 (ערב)</option>
+                    <option value="17:00 - 18:30">17:00 - 18:30 (ערב)</option>
                   </select>
                 </div>
 
@@ -2683,11 +2764,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     onChange={(e) => setPickupTime(e.target.value)}
                     className="w-full bg-slate-50 text-xs font-medium text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none cursor-pointer"
                   >
-                    <option value="09:00 - 11:00">09:00 - 11:00 (בוקר)</option>
+                    <option value="09:30 - 11:00">09:30 - 11:00 (בוקר)</option>
                     <option value="11:00 - 13:00">11:00 - 13:00 (צהריים מוקדמים)</option>
                     <option value="13:00 - 15:00">13:00 - 15:00 (צהריים)</option>
                     <option value="15:00 - 17:00">15:00 - 17:00 (אחר הצהריים)</option>
-                    <option value="17:00 - 19:00">17:00 - 19:00 (ערב)</option>
+                    <option value="17:00 - 18:30">17:00 - 18:30 (ערב)</option>
                   </select>
                 </div>
               </div>

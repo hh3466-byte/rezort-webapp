@@ -951,10 +951,10 @@ function sendDayAfterDepartureReviewRequests() {
         + "💎 מעכשיו אתם רשמית חלק ממועדון ה-VIP של הריזורט לכלב!\n"
         + "באירוח הבא שלכם (3 ימים ומעלה), יחכה לכם פינוק VIP מתנה לבחירתכם:\n"
         + "✨ 100 ₪ הנחה ישירה\n"
-        + "✨ יום כיף ושהות יומית VIP מתנה (09:00–19:00)\n"
+        + "✨ יום כיף ושהות יומית VIP מתנה (09:30–18:30)\n"
         + "✨ סשן משחקי חשיבה והעשרה מנטלית (Brain Games)\n"
         + "✨ ספא חפיפה, פתיחת קשרים ובישום יוקרתי\n"
-        + "✨ צ'ק אאוט מאוחר מוארך עד 19:00\n"
+        + "✨ צ'ק אאוט מאוחר מוארך עד 18:30\n"
         + "✨ מארז שף גורמה: עצם לעיסה טבעית מעושנת ומעדני בריאות\n"
         + "(בהזמנה הבאה שלכם, פשוט מזינים את מספר הנייד בטופס והתפריט נפתח אוטומטית לבחירתכם!)\n\n"
         + "🤝 רוצים לפנק חברים עם כלב?\n"
@@ -2352,6 +2352,26 @@ function sendTomorrowOverviewToShmulikFromCloud() {
     } catch (eChats) {}
 
     var actionBlocks = [];
+
+    // בדיקת שיבוץ תאי לינה ודלי מזון (חוק ברזל)
+    var unassignedKennelDogs = allBookings.filter(function(b) {
+      var s = b.start_date || b.startDate;
+      var e = b.end_date || b.endDate;
+      var isStayingOrIncoming = (s <= tomorrowStr && e >= tomorrowStr) || s === tomorrowStr;
+      var k = b.kennel_number !== undefined ? b.kennel_number : b.kennelNumber;
+      return isStayingOrIncoming && (!k && k !== 0);
+    });
+    if (unassignedKennelDogs.length > 0) {
+      var kList = unassignedKennelDogs.map(function(b, idx) {
+        var phone = formatPhoneFormatted(b.owner_phone || b.ownerPhone || "");
+        var s = b.start_date || b.startDate;
+        var e = b.end_date || b.endDate;
+        var sFormatted = s ? s.split("-")[2] + "." + s.split("-")[1] : "";
+        var eFormatted = e ? e.split("-")[2] + "." + e.split("-")[1] : "";
+        return (idx + 1) + ". 🚨 *" + (b.dog_name || b.dogName || "כלב") + "* (" + (b.owner_name || b.ownerName || "בעלים") + " - 📞 " + phone + ") | שהייה: " + sFormatted + "–" + eFormatted + " (חסר שיבוץ תא 1–11 או הלנה ביתית ודלי מזון!)";
+      }).join("\n");
+      actionBlocks.push("🏠 *כלבים ללא שיבוץ תא לינה ודלי מזון (" + unassignedKennelDogs.length + "):*\n" + kList);
+    }
 
     if (unansweredChats.length > 0) {
       var uList = unansweredChats.map(function(uc, idx) {

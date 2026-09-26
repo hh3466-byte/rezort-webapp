@@ -1,5 +1,5 @@
 import { supabase } from '../utils/supabase';
-import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus, DigitalVoucher, VoucherStatus } from '../types';
+import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus, DigitalVoucher, VoucherStatus, DaycarePass } from '../types';
 import { initialBookings, defaultSettings } from '../data/initialData';
 import { extractCustomers } from '../utils/storage';
 import { sanitizePhone } from '../utils/whatsappUtils';
@@ -12,6 +12,8 @@ const INTAKE_REQUESTS_TABLE = 'intake_requests';
 const LOCAL_INTAKE_REQUESTS_KEY = 'dog_resort_intake_requests';
 const VOUCHERS_TABLE = 'vouchers';
 const LOCAL_VOUCHERS_KEY = 'dog_resort_vouchers';
+const DAYCARE_PASSES_TABLE = 'daycare_passes';
+const LOCAL_DAYCARE_PASSES_KEY = 'dog_resort_daycare_passes';
 const SETTINGS_DOC_ID = 'resort_config';
 const DELETED_BOOKINGS_KEY = 'shmulik_dog_resort_deleted_ids';
 
@@ -127,6 +129,14 @@ export const syncAllDataToSupabase = async (): Promise<{ bookingsSynced: number;
 
   try {
     // 1. Sync Settings
+    const { data: existingRemoteSettings } = await supabase
+      .from(SETTINGS_TABLE)
+      .select('data')
+      .eq('id', SETTINGS_DOC_ID)
+      .maybeSingle();
+
+    const remoteData = (existingRemoteSettings && existingRemoteSettings.data) ? existingRemoteSettings.data : {};
+
     const sanitizeResortPhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.managerPhone : ph;
     const sanitizeNotificationPhone = (ph?: string) => (!ph || ph.includes('8889900')) ? defaultSettings.whatsappNotificationPhone : ph;
     const effectiveResortPhone = sanitizeResortPhone(settings.managerPhone);
@@ -146,6 +156,7 @@ export const syncAllDataToSupabase = async (): Promise<{ bookingsSynced: number;
       bank_details: settings.bankDetails,
       auto_check_vaccination: settings.autoCheckVaccination,
       data: {
+        ...remoteData,
         ...settings,
         managerPhone: effectiveResortPhone,
         whatsappNotificationPhone: effectiveNotificationPhone,
@@ -369,6 +380,16 @@ export const subscribeToBookings = (
           s: b.stayStatus,
           sd: b.startDate,
           ed: b.endDate,
+          k: b.kennelNumber,
+          u: b.updatedAt,
+          df: b.dailyFeedingsCompleted,
+          n: b.notes,
+          name: b.dogName,
+          on: b.ownerName,
+          st: b.serviceType,
+          med: b.medicationSchedule || b.medications,
+          fs: b.feedingSchedule,
+          fp: b.foodPortion,
         })));
 
         if (currentSignature === lastBookingsSignature && !isInitial) {
@@ -1424,6 +1445,211 @@ export const subscribeToVouchers = (callback: (vouchers: DigitalVoucher[]) => vo
     .channel('public:vouchers_all')
     .on('postgres_changes', { event: '*', schema: 'public', table: VOUCHERS_TABLE }, () => fetchVouchers())
     .on('postgres_changes', { event: '*', schema: 'public', table: SETTINGS_TABLE }, () => fetchVouchers())
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
+// ==================== Daycare Passes (כרטיסיות פעילות יומית) Persistence ====================
+
+export const loadStoredDaycarePasses = (): DaycarePass[] => {
+  try {
+    const raw = localStorage.getItem(LOCAL_DAYCARE_PASSES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const findDaycarePassByCode = (code: string): DaycarePass | null => {
+  const clean = (code || '').trim().toUpperCase();
+  if (!clean) return null;
+  const list = loadStoredDaycarePasses();
+  return list.find(p => p.passCode.trim().toUpperCase() === clean || p.id === clean) || null;
+};
+
+export const saveDaycarePassToDb = async (pass: DaycarePass): Promise<void> => {
+  try {
+    // 1. Update local storage
+    const current = loadStoredDaycarePasses();
+    const updated = [pass, ...current.filter(p => p.id !== pass.id && p.passCode.toUpperCase() !== pass.passCode.toUpperCase())];
+    localStorage.setItem(LOCAL_DAYCARE_PASSES_KEY, JSON.stringify(updated));
+
+    // 2. Upsert to Supabase daycare_passes table (or fallback to settings.data.daycare_passes)
+    try {
+      const { error: upsertErr } = await supabase
+        .from(DAYCARE_PASSES_TABLE)
+        .upsert({
+          id: pass.id,
+          pass_code: pass.passCode,
+          dog_name: pass.dogName,
+          dog_breed: pass.dogBreed || null,
+          owner_name: pass.ownerName,
+          owner_phone: pass.ownerPhone,
+          owner_email: pass.ownerEmail || null,
+          service_type: pass.serviceType,
+          total_days: pass.totalDays,
+          used_days: pass.usedDays,
+          price_paid: pass.pricePaid,
+          daily_rate: pass.dailyRate,
+          payment_status: pass.paymentStatus,
+          payment_method: pass.paymentMethod || null,
+          notes: pass.notes || null,
+          valid_from: pass.validFrom,
+          valid_until: pass.validUntil,
+          status: pass.status,
+          usage_history: pass.usageHistory || [],
+          data: pass,
+          updated_at: new Date().toISOString()
+        });
+
+      if (upsertErr) {
+        throw upsertErr;
+      }
+    } catch (errSupabase) {
+      // Fallback: persist inside settings table
+      try {
+        const { data: sData } = await supabase.from(SETTINGS_TABLE).select('data').eq('id', SETTINGS_DOC_ID).single();
+        const settingsObj = sData?.data || {};
+        const pList = settingsObj.daycare_passes || [];
+        const newPList = [pass, ...pList.filter((p: any) => p.id !== pass.id && p.passCode !== pass.passCode)];
+        await supabase.from(SETTINGS_TABLE).upsert({ id: SETTINGS_DOC_ID, data: { ...settingsObj, daycare_passes: newPList } });
+      } catch (errFallback) {}
+    }
+  } catch (e) {
+    console.warn('saveDaycarePassToDb error:', e);
+  }
+};
+
+export const deductDayFromPassInDb = async (
+  passIdOrCode: string,
+  bookingDate: string,
+  bookingId?: string,
+  addedBy: 'customer' | 'shmulik' = 'shmulik',
+  notes?: string
+): Promise<{ success: boolean; pass?: DaycarePass; error?: string }> => {
+  try {
+    const clean = (passIdOrCode || '').trim().toUpperCase();
+    const current = loadStoredDaycarePasses();
+    const match = current.find(p => p.id === passIdOrCode || p.passCode.toUpperCase() === clean);
+
+    if (!match) {
+      return { success: false, error: 'כרטיסייה לא נמצאה' };
+    }
+
+    if (match.status !== 'active') {
+      return { success: false, error: `הכרטיסייה אינה פעילה (סטטוס: ${match.status})` };
+    }
+
+    if (match.usedDays >= match.totalDays) {
+      return { success: false, error: 'כל הימים בכרטיסייה כבר נוצלו במלואם' };
+    }
+
+    // Check expiry
+    const today = new Date().toISOString().split('T')[0];
+    if (match.validUntil && match.validUntil < today) {
+      const expiredPass: DaycarePass = { ...match, status: 'expired', updatedAt: new Date().toISOString() };
+      await saveDaycarePassToDb(expiredPass);
+      return { success: false, error: `תוקף הכרטיסייה פג ב-${match.validUntil}` };
+    }
+
+    const newUsedDays = match.usedDays + 1;
+    const isCompleted = newUsedDays >= match.totalDays;
+
+    const newUsageEntry = {
+      date: bookingDate,
+      bookingId: bookingId || '',
+      addedBy,
+      notes: notes || '',
+      timestamp: new Date().toISOString()
+    };
+
+    const updatedPass: DaycarePass = {
+      ...match,
+      usedDays: newUsedDays,
+      status: isCompleted ? 'completed' : 'active',
+      usageHistory: [...(match.usageHistory || []), newUsageEntry],
+      updatedAt: new Date().toISOString()
+    };
+
+    await saveDaycarePassToDb(updatedPass);
+    return { success: true, pass: updatedPass };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'שגיאה בעדכון יתרה בכרטיסייה' };
+  }
+};
+
+export const subscribeToDaycarePasses = (callback: (passes: DaycarePass[]) => void): Unsubscribe => {
+  callback(loadStoredDaycarePasses());
+
+  const fetchPasses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from(DAYCARE_PASSES_TABLE)
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        // Fallback to settings.data.daycare_passes
+        try {
+          const { data: sData } = await supabase.from(SETTINGS_TABLE).select('data').eq('id', SETTINGS_DOC_ID).single();
+          if (sData?.data?.daycare_passes && Array.isArray(sData.data.daycare_passes)) {
+            localStorage.setItem(LOCAL_DAYCARE_PASSES_KEY, JSON.stringify(sData.data.daycare_passes));
+            callback(sData.data.daycare_passes);
+            return;
+          }
+        } catch (e2) {}
+        callback(loadStoredDaycarePasses());
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const mapped: DaycarePass[] = data.map((row: any) => {
+          if (row.data && typeof row.data === 'object') {
+            return { ...row.data, id: row.id, status: row.status || row.data.status };
+          }
+          return {
+            id: row.id,
+            passCode: row.pass_code || '',
+            dogName: row.dog_name || '',
+            dogBreed: row.dog_breed || '',
+            ownerName: row.owner_name || '',
+            ownerPhone: row.owner_phone || '',
+            ownerEmail: row.owner_email || '',
+            serviceType: row.service_type || 'daycare',
+            totalDays: Number(row.total_days) || 10,
+            usedDays: Number(row.used_days) || 0,
+            pricePaid: Number(row.price_paid) || 900,
+            dailyRate: Number(row.daily_rate) || 90,
+            paymentStatus: row.payment_status || 'fully_paid',
+            paymentMethod: row.payment_method || 'bit',
+            notes: row.notes || '',
+            validFrom: row.valid_from || '',
+            validUntil: row.valid_until || '',
+            status: row.status || 'active',
+            usageHistory: row.usage_history || [],
+            createdAt: row.created_at || new Date().toISOString(),
+            updatedAt: row.updated_at || new Date().toISOString()
+          };
+        });
+        localStorage.setItem(LOCAL_DAYCARE_PASSES_KEY, JSON.stringify(mapped));
+        callback(mapped);
+      } else {
+        callback(loadStoredDaycarePasses());
+      }
+    } catch (e) {
+      callback(loadStoredDaycarePasses());
+    }
+  };
+
+  fetchPasses();
+
+  const channel = supabase
+    .channel('public:daycare_passes_all')
+    .on('postgres_changes', { event: '*', schema: 'public', table: DAYCARE_PASSES_TABLE }, () => fetchPasses())
+    .on('postgres_changes', { event: '*', schema: 'public', table: SETTINGS_TABLE }, () => fetchPasses())
     .subscribe();
 
   return () => {

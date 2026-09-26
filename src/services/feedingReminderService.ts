@@ -1,6 +1,7 @@
 import { Booking } from '../types';
 import { getTodayStr } from '../utils/dateUtils';
 import { playNotificationChime } from '../utils/soundUtils';
+import { getPlacementDisplayName } from '../utils/kennelUtils';
 
 export interface FeedingReminderEvent {
   dogName: string;
@@ -126,9 +127,10 @@ export function initFeedingReminderScheduler(
 
         // Browser Desktop Notification
         if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          const placementText = r.kennelNumber ? ` (${getPlacementDisplayName(r.kennelNumber)})` : '';
           const title = r.type === 'food'
-            ? `🥣 תזכורת האכלה: ${r.dogName} ${r.kennelNumber ? `(תא ${r.kennelNumber})` : ''}`
-            : `💊 תזכורת תרופה: ${r.dogName} ${r.kennelNumber ? `(תא ${r.kennelNumber})` : ''}`;
+            ? `🥣 תזכורת האכלה: ${r.dogName}${placementText}`
+            : `💊 תזכורת תרופה: ${r.dogName}${placementText}`;
           const body = `השעה ${r.timeStr}! הנחיה: ${r.details}`;
           try {
             new Notification(title, {

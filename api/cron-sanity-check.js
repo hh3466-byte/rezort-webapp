@@ -327,7 +327,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
       const dog = b.dog_name || b.dogName || 'כלב';
       const owner = b.owner_name || b.ownerName || 'בעלים';
       const phone = b.owner_phone || b.ownerPhone || 'ללא טלפון';
-      unassignedKennels.push(`🏠 *${dog}* (${owner} - 📞 ${phone}) | שוהה כעת בריזורט ללא שיבוץ תא (1–11) או הלנה ביתית ודלי מזון!`);
+      unassignedKennels.push(`🏠 *${dog}* (${owner} - 📞 ${phone}) | שוהה כעת בריזורט ללא שיבוץ חדר/סוויטה/שביל או הלנה ביתית ודלי מזון!`);
     }
   });
 
@@ -355,7 +355,13 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     ''
   ];
 
-  parts.push(`🟢 *אירועים ירוקים (${totalGreen} אירועים שסונכרנו בהצלחה ב-24 שעות):*\n`);
+  parts.push(`🟢 *אירועים ירוקים (${totalGreen} אירועים שסונכרנו בהצלחה ב-24 שעות):*`);
+  if (totalGreen > 0) {
+    greenEvents.forEach(e => parts.push(e));
+  } else {
+    parts.push(`• לא נרשמו שינויי שריון חדשים ב-24 שעות האחרונות.`);
+  }
+  parts.push('');
 
   parts.push(`🚨 *אורות אדומים (${totalRed} נושאים לטיפול מיידי):*`);
   if (totalRed === 0) {
@@ -434,8 +440,42 @@ export default async function handler(req, res) {
     const sRow = settingsRows?.[0] || {};
     const settings = { ...sRow, ...(sRow.data || {}) };
 
+    if (!isForced && settings.last1830SanitySentDate === todayStr) {
+      return res.status(200).json({ status: 'already_sent', date: todayStr });
+    }
+
     const greenId = settings.greenApiIdInstance;
     const greenToken = settings.greenApiToken;
+
+    // Additional Ironclad Guard: Check directly in Green-API manager chat history
+    if (!isForced && greenId && greenToken) {
+      try {
+        const histResp = await fetch(`https://api.green-api.com/waInstance${greenId}/getChatHistory/${greenToken}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId: MANAGER_CHAT_ID, count: 12 })
+        });
+        if (histResp.ok) {
+          const hist = await histResp.json();
+          if (Array.isArray(hist)) {
+            const now = new Date();
+            const startOfDayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            const alreadySentInChat = hist.some(m => {
+              if (m.type !== 'outgoing') return false;
+              const msgTime = (m.timestamp || 0) * 1000;
+              if (msgTime < startOfDayMs) return false;
+              const text = m.textMessage || m.extendedTextMessage?.text || '';
+              return text.includes('דוח בדיקת שפיות יומית');
+            });
+            if (alreadySentInChat) {
+              return res.status(200).json({ status: 'already_sent_in_chat', date: todayStr });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Chat history audit check error:', e);
+      }
+    }
 
     const chats = await fetchGreenApiChats(greenId, greenToken, 80);
 

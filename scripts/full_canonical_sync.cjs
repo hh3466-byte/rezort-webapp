@@ -81,7 +81,8 @@ async function syncAll() {
     '514721903': 'b-1788685190273',   // Eyal Shekel
     '515223561': 'b-1788861047172',   // Benny Green
     '174291549': 'b-1789110721502',   // Tali Nisan
-    '516299998': 'b-1789123671100'    // Dorin Lucas
+    '516299998': 'b-1789123671100',   // Dorin Lucas
+    '173090500': 'b-grow-173090500'   // Eli Kobi (Venus)
   };
 
   for (const [ref, knownId] of Object.entries(septKnown)) {

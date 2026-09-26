@@ -23,10 +23,10 @@ export function buildReviewAndVoucherMessage(ownerName: string, dogName: string)
 💎 מעכשיו אתם רשמית חלק ממועדון ה-VIP של הריזורט לכלב!
 באירוח הבא שלכם (3 ימים ומעלה), יחכה לכם פינוק VIP מתנה לבחירתכם:
 ✨ 100 ₪ הנחה ישירה
-✨ יום כיף ושהות יומית VIP מתנה (09:00–19:00)
+✨ יום כיף ושהות יומית VIP מתנה (09:30–18:30)
 ✨ סשן משחקי חשיבה והעשרה מנטלית (Brain Games)
 ✨ ספא חפיפה, פתיחת קשרים ובישום יוקרתי
-✨ צ'ק אאוט מאוחר מוארך עד 19:00
+✨ צ'ק אאוט מאוחר מוארך עד 18:30
 ✨ מארז שף גורמה: עצם לעיסה טבעית מעושנת ומעדני בריאות
 (בהזמנה הבאה שלכם, פשוט מזינים את מספר הנייד בטופס והתפריט נפתח אוטומטית לבחירתכם!)
 
@@ -68,19 +68,34 @@ export function isReviewSendEligibleNow(): { eligible: boolean; reason?: string 
   const parts = dtf.formatToParts(now);
   let hour = 0;
   let weekday = '';
+  let minute = 0;
   for (const p of parts) {
     if (p.type === 'hour') hour = parseInt(p.value, 10);
+    if (p.type === 'minute') minute = parseInt(p.value, 10);
     if (p.type === 'weekday') weekday = p.value.toLowerCase();
   }
 
-  // Not on Friday / Saturday
-  if (weekday.includes('fri') || weekday.includes('sat')) {
-    return { eligible: false, reason: 'סוף שבוע (שישי/שבת) – שקט מוחלט' };
+  // Strictly forbidden on Friday
+  if (weekday.includes('fri')) {
+    return { eligible: false, reason: 'ערב שבת – שקט מוחלט' };
   }
 
-  // Eligible hours: 10:00 to 19:30
-  if (hour < 10 || hour >= 20) {
-    return { eligible: false, reason: `מחוץ לשעות השליחה (השעה הנוכחית: ${hour}:00, שעות מורשות: 10:00-20:00)` };
+  // On Saturday (Shabbat): Allowed ONLY in Motzei Shabbat (after 20:15)
+  if (weekday.includes('sat')) {
+    const isMotzeiShabbat = hour > 20 || (hour === 20 && minute >= 15);
+    if (!isMotzeiShabbat) {
+      return { eligible: false, reason: 'במהלך השבת – שקט מוחלט (ממתין למוצאי שבת סביב 20:15)' };
+    }
+    // Motzei Shabbat window: 20:15 to 22:00
+    if (hour >= 22) {
+      return { eligible: false, reason: 'מוצאי שבת מאוחר (אחרי 22:00)' };
+    }
+    return { eligible: true };
+  }
+
+  // Weekdays (Sunday-Thursday): Eligible hours 10:00 to 20:30
+  if (hour < 10 || hour >= 21) {
+    return { eligible: false, reason: `מחוץ לשעות השליחה (השעה הנוכחית: ${hour}:${String(minute).padStart(2, '0')}, שעות מורשות בימי חול: 10:00-20:30)` };
   }
 
   return { eligible: true };

@@ -27,7 +27,7 @@ export interface Booking {
   medications?: string;
   behaviorNotes?: string;
   placementNotes?: string; // דגשי שיבוץ והוראות מיוחדות (למשל: לשים רק עם ג'נגו / תוקפת דרך גדר)
-  kennelNumber?: number | 'home'; // תא 1 עד 11, או 'home' להלנה ביתית בבית של שמוליק
+  kennelNumber?: number | string; // חדר 1-7, סוויטה 1-4, שביל מזרחי/מערבי, חצר מרכזית, או 'home' להלנה ביתית
   feedingSchedule?: string; // שעות האכלה (למשל: "08:00, 18:00")
   foodPortion?: string; // כמות מנה והנחיית הגשה (למשל: "1 כוס בוקר וערב, להרטיב במים")
   medicationSchedule?: string; // הנחיות תרופות ומינון (למשל: "אפוקוול חצי כדור בבוקר")
@@ -54,6 +54,8 @@ export interface Booking {
   linkedDogName?: string;
   intakeRequestId?: string;
   lastDailyDogUpdateSent?: string;
+  daycarePassId?: string; // מזהה כרטיסיית פעילות יומית (Daycare Pass) שממנה קוזז היום
+  daycarePassCode?: string; // קוד השובר של הכרטיסייה (למשל PASS-8492)
   refundAmount?: number;
   refundDate?: string;
   refundNotes?: string;
@@ -129,7 +131,7 @@ export interface IntakeRequest {
   feedingSchedule?: string;
   foodPortion?: string;
   medicationSchedule?: string;
-  kennelNumber?: number | 'home';
+  kennelNumber?: number | string;
   complexitySurcharge?: number;
   complexityReason?: string;
   notes?: string;
@@ -168,7 +170,7 @@ export interface AdditionalDogIntake {
   feedingSchedule?: string;
   foodPortion?: string;
   medicationSchedule?: string;
-  kennelNumber?: number | 'home';
+  kennelNumber?: number | string;
   complexitySurcharge?: number;
   complexityReason?: string;
   notes?: string;
@@ -200,6 +202,7 @@ export interface ResortSettings {
   whatsappPaymentReminderTemplate?: string;
   lastTomorrowOverviewSentDate?: string;
   lastTomorrowOverviewSentTimestamp?: string;
+  eveningGreetingsSentDate?: string;
 }
 
 export type AgentIntent = 
@@ -264,8 +267,8 @@ export const RESORT_BENEFIT_OPTIONS: BenefitOption[] = [
   },
   {
     id: 'daycare_free',
-    title: 'יום כיף ושהות יומית VIP במתחם הדשא (09:00-19:00)',
-    badge: '10 שעות גן עדן לכלב',
+    title: 'יום כיף ושהות יומית VIP במתחם הדשא (09:30-18:30)',
+    badge: 'יום שלם של גן עדן לכלב',
     description: 'יום שלם של מרחבים ירוקים, מתקני מים, משחקים חברתיים מפוקחים ומנוחה מפנקת ומוצלת – מתנה לכלב מאושר!',
     icon: '☀️'
   },
@@ -310,6 +313,40 @@ export interface DigitalVoucher {
   redeemedByDog?: string;
   redeemedBookingId?: string;
   notes?: string;
+}
+
+export type PassStatus = 'active' | 'completed' | 'expired' | 'cancelled';
+
+export interface PassUsageEntry {
+  date: string; // YYYY-MM-DD
+  bookingId?: string;
+  addedBy: 'customer' | 'shmulik';
+  notes?: string;
+  timestamp: string;
+}
+
+export interface DaycarePass {
+  id: string; // e.g. "pass-1790245000000"
+  passCode: string; // e.g. "PASS-8492"
+  dogName: string;
+  dogBreed?: string;
+  ownerName: string;
+  ownerPhone: string;
+  ownerEmail?: string;
+  serviceType: 'daycare' | 'day_training'; // שהייה יומית בריזורט (₪90) או אילוף ביומיות (₪250)
+  totalDays: number; // e.g. 10
+  usedDays: number; // e.g. 2
+  pricePaid: number; // e.g. 900 (ניתן לעריכה חופשית ע"י שמוליק)
+  dailyRate: number; // e.g. 90
+  paymentStatus: PaymentStatus;
+  paymentMethod?: PaymentMethod;
+  notes?: string;
+  validFrom: string; // YYYY-MM-DD
+  validUntil: string; // YYYY-MM-DD (6 חודשים / חצי שנה מתאריך ההנפקה)
+  status: PassStatus;
+  usageHistory: PassUsageEntry[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type TrainerStageType = '1/3' | '2/3' | '3/3' | 'custom';

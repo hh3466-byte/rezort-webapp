@@ -27,6 +27,7 @@ import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr } fr
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage, cleanPhoneNumber } from '../utils/whatsappUtils';
 import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
+import { getPlacementDisplayName, normalizePlacementKey } from '../utils/kennelUtils';
 
 interface DayDetailsModalProps {
   dateStr: string | null;
@@ -385,11 +386,11 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             </span>
             {booking.kennelNumber && (
               <span className={`text-xs px-2.5 py-0.5 rounded-full font-black border ${
-                booking.kennelNumber === 'home'
+                normalizePlacementKey(booking.kennelNumber) === 'home'
                   ? 'bg-amber-100 text-amber-950 border-amber-300'
                   : 'bg-indigo-50 text-indigo-700 border-indigo-200'
               }`}>
-                {booking.kennelNumber === 'home' ? '🏡 הלנה ביתית (בבית של שמוליק)' : `🏠 תא ${booking.kennelNumber} (דלי מס' ${booking.kennelNumber})`}
+                📍 {getPlacementDisplayName(booking.kennelNumber)}
               </span>
             )}
             {isEnded && (

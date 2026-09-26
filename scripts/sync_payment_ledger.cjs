@@ -42,7 +42,7 @@ const ledgerData = [
   { ref: '510777745', paid: 1740, phone: '0524577752', email: 'ziviisme@gmail.com', name: 'זיו זיסו', date: '2026-08-23', month: 'אוגוסט', dog: 'זיסו' },
   { ref: '510771399', paid: 270, phone: '0502244873', email: '', name: 'אופיר נידרי', date: '2026-08-23', month: 'אוגוסט', dog: 'נידרי' },
   { ref: '172804032', paid: 540, phone: '0524399271', email: 'omerlotem12@gmail.com', name: 'עומר לוטם', date: '2026-08-27', month: 'אוגוסט', dog: 'לוטם' },
-  { ref: '173090500', paid: 1350, phone: '0546160220', email: 'elikobi@gmail.com', name: 'אלי קובי', date: '2026-08-30', month: 'אוגוסט', dog: 'ונוס' },
+  { ref: '173090500', paid: 1350, phone: '0546160220', email: 'elikobi@gmail.com', name: 'אלי קובי', date: '2026-08-30', month: 'ספטמבר', dog: 'ונוס', startDate: '2026-09-18', endDate: '2026-09-27' },
   { ref: '512844224', paid: 180, phone: '0505642501', email: 'dintex@netvision.net.il', name: 'ישראל מנדל', date: '2026-08-30', month: 'אוגוסט', dog: 'קירה' }
 ];
 
@@ -256,6 +256,47 @@ async function run() {
       notes: 'עסקת Grow (אסמכתא: 516299998) - תשלום ראשון 675 ₪ מתוך 4',
       createdAt: '2026-09-11T10:14:04.000Z',
       updatedAt: '2026-09-11T10:14:04.000Z'
+    }
+  }, { onConflict: 'id' });
+
+  // 4. Venus (Eli Kobi): 1350
+  await supabase.from('bookings').upsert({
+    id: 'b-grow-173090500',
+    dog_name: 'ונוס',
+    dog_breed: 'מעורב',
+    owner_name: 'אלי קובי',
+    owner_phone: '0546160220',
+    owner_email: 'elikobi@gmail.com',
+    service_type: 'boarding',
+    start_date: '2026-09-18',
+    end_date: '2026-09-27',
+    total_price: 1350,
+    deposit_amount: 1350,
+    payment_status: 'fully_paid',
+    payment_method: 'bit',
+    stay_status: 'checked_in',
+    notes: 'תשלום סולק Grow (אסמכתא: 173090500) | תאריכי שהות: 18/09/2026 עד 27/09/2026 (איש קשר נוסף: יפעת 054-4998242)',
+    vaccination_valid: true,
+    created_at: '2026-08-30T10:00:00.000Z',
+    updated_at: new Date().toISOString(),
+    data: {
+      id: 'b-grow-173090500',
+      dogName: 'ונוס',
+      dogBreed: 'מעורב',
+      ownerName: 'אלי קובי',
+      ownerPhone: '0546160220',
+      ownerEmail: 'elikobi@gmail.com',
+      serviceType: 'boarding',
+      startDate: '2026-09-18',
+      endDate: '2026-09-27',
+      totalPrice: 1350,
+      depositAmount: 1350,
+      paymentStatus: 'fully_paid',
+      paymentMethod: 'bit',
+      stayStatus: 'checked_in',
+      notes: 'תשלום סולק Grow (אסמכתא: 173090500) | תאריכי שהות: 18/09/2026 עד 27/09/2026 (איש קשר נוסף: יפעת 054-4998242)',
+      vaccinationValid: true,
+      updatedAt: new Date().toISOString()
     }
   }, { onConflict: 'id' });
 

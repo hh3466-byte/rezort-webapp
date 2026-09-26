@@ -1462,7 +1462,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\nזמני הגעה ואיסוף בריזורט לכלב:\n• ימים א׳–ה׳: 09:00 עד 19:00\n• ימי שישי וערבי חג: 09:00 עד 14:00 בדיוק\n• שבתות וחגים: הריזורט סגור לקבלת/שחרור קהל.\nבאיזו שעה משוערת תרצו להגיע? נערך לקראתכם! 🐕`;
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\nזמני הגעה ואיסוף בריזורט לכלב:\n• ימים א׳–ה׳: 09:30 עד 18:30\n• ימי שישי וערבי חג: 09:30 עד 14:00 בדיוק\n• שבתות וחגים: הריזורט סגור לקבלת/שחרור קהל.\nבאיזו שעה משוערת תרצו להגיע? נערך לקראתכם! 🐕`;
                     setMessageInput(text);
                   }}
                   className="bg-sky-50 hover:bg-sky-100 text-sky-950 border border-sky-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
@@ -1588,7 +1588,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾 להגעה ל${settings.resortName}:\n📍 מיקום וניווט ב-Waze / Google Maps:\nhttps://maps.app.goo.gl/8bm2Rdt7DtHeUS5J9\n\nשעות פעילות:\n• ימים א׳–ה׳: 09:00–19:00\n• שישי וערבי חג: עד 14:00\nמחכים לכם! צוות הריזורט 🐾 (${settings.managerPhone || '050-6336896'})`;
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾 להגעה ל${settings.resortName}:\n📍 מיקום וניווט ב-Waze / Google Maps:\nhttps://maps.app.goo.gl/8bm2Rdt7DtHeUS5J9\n\nשעות פעילות:\n• ימים א׳–ה׳: 09:30–18:30\n• שישי וערבי חג: עד 14:00\nמחכים לכם! צוות הריזורט 🐾 (${settings.managerPhone || '050-6336896'})`;
                     setMessageInput(text);
                   }}
                   className="bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"

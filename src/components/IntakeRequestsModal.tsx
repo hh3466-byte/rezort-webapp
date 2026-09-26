@@ -36,7 +36,8 @@ import {
   Bell,
   MapPin,
   Archive,
-  Ban
+  Ban,
+  Ticket
 } from 'lucide-react';
 import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import { calculateDaysCount, addDays, formatDateIL, getDayNameHebrew, getBookingsForDate } from '../utils/dateUtils';
@@ -1052,6 +1053,14 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                           {req.additionalDogs && req.additionalDogs.length > 0 && (
                             <span className="bg-gradient-to-r from-orange-500 to-amber-500 text-white text-[11px] font-black px-2.5 py-0.5 rounded-lg shadow-xs border border-orange-300 animate-pulse">
                               🐾🐾 {1 + req.additionalDogs.length} כלבים בטופס!
+                            </span>
+                          )}
+
+                          {/* Daycare Pass (כרטיסיית פעילות יומית) Badge */}
+                          {((req.notes || '').includes('כרטיסייה') || (req.notes || '').includes('כרטיסיית') || (req.notes || '').includes('קוד כרטיסייה')) && (
+                            <span className="bg-emerald-100 text-emerald-950 border-2 border-emerald-400 font-black text-[11px] px-2.5 py-0.5 rounded-lg shadow-2xs flex items-center gap-1">
+                              <Ticket className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                              <span>🎟️ כרטיסיית פעילות יומית (ללא תשלום)</span>
                             </span>
                           )}
                           
