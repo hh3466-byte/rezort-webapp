@@ -197,9 +197,9 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
       const phone = formatPhoneFormatted(b.owner_phone || b.ownerPhone || '');
       const s = b.start_date || b.startDate;
       const e = b.end_date || b.endDate;
-      return `${idx + 1}. 🚨 *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${phone}) | שהייה: ${formatDateIL(s)}–${formatDateIL(e)} (חסר שיבוץ חדר/סוויטה/שביל או הלנה ביתית ודלי מזון!)`;
+      return `${idx + 1}. 📋 *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${phone}) | שהייה: ${formatDateIL(s)}–${formatDateIL(e)} (ממתין לשיבוץ חדר 1–7, סוויטה 1–4, שביל או הלנה ביתית ודלי מזון)`;
     }).join('\n');
-    actionBlocks.push(`🏠 *כלבים ללא שיבוץ מיקום לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
+    actionBlocks.push(`🏠 *כלבים הממתינים לשיבוץ מיקום לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
   }
 
   // 2. Pending intakes

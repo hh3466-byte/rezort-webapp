@@ -315,7 +315,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     }
   }
 
-  // 7. Unassigned kennel placement check (חוק ברזל: חובת שיבוץ מיקום לינה)
+  // 7. Check for unassigned dogs (Informational only - per AGENTS.md rule 4, assignment can be done later via top drawer)
   const unassignedKennels = [];
   activeBookings.filter(b => {
     const s = b.start_date || b.startDate;
@@ -326,14 +326,12 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     if (!k && k !== 0) {
       const dog = b.dog_name || b.dogName || 'כלב';
       const owner = b.owner_name || b.ownerName || 'בעלים';
-      const phone = b.owner_phone || b.ownerPhone || 'ללא טלפון';
-      unassignedKennels.push(`🏠 *${dog}* (${owner} - 📞 ${phone}) | שוהה כעת בריזורט ללא שיבוץ חדר/סוויטה/שביל או הלנה ביתית ודלי מזון!`);
+      unassignedKennels.push(`🏠 *${dog}* (${owner}) | ממתין לשיבוץ מהיר בלוח החדרים`);
     }
   });
 
   const totalGreen = greenEvents.length;
   const totalRed =
-    unassignedKennels.length +
     redLights.unansweredChats.length +
     redLights.unpaidLinks.length +
     redLights.unfilledIntakes.length +
