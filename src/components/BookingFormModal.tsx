@@ -1592,7 +1592,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
             <div className="space-y-3">
               {/* 1. Rooms 1-7 */}
               <div>
-                <div className="text-[11px] font-black text-blue-900 mb-1 flex items-center gap-1">
+                <div className="text-[11px] font-black text-sky-950 mb-1 flex items-center gap-1">
                   <span>🚪</span>
                   <span>חדרי אירוח (1–7):</span>
                 </div>
@@ -1607,8 +1607,8 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                         onClick={() => setKennelPlacement(slotKey)}
                         className={`py-2 px-1 rounded-xl border text-center transition-all cursor-pointer font-black text-xs ${
                           isSelected
-                            ? 'bg-blue-600 border-blue-600 text-white shadow-xs scale-105'
-                            : 'bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-800'
+                            ? 'bg-sky-600 border-sky-600 text-white shadow-xs scale-105'
+                            : 'bg-sky-50/70 border-sky-200 hover:border-sky-400 hover:bg-sky-100 text-sky-950'
                         }`}
                       >
                         חדר {num}
@@ -1620,9 +1620,9 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
 
               {/* 2. Suites 1-4 */}
               <div>
-                <div className="text-[11px] font-black text-purple-900 mb-1 flex items-center gap-1">
+                <div className="text-[11px] font-black text-purple-950 mb-1 flex items-center gap-1">
                   <span>⭐</span>
-                  <span>סוויטות אירוח (1–4):</span>
+                  <span>סוויטות אירוח VIP (1–4):</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {[1, 2, 3, 4].map(num => {
@@ -1635,11 +1635,11 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                         onClick={() => setKennelPlacement(slotKey)}
                         className={`py-2 px-1 rounded-xl border text-center transition-all cursor-pointer font-black text-xs ${
                           isSelected
-                            ? 'bg-purple-600 border-purple-600 text-white shadow-xs scale-105'
-                            : 'bg-white border-purple-200 hover:border-purple-400 hover:bg-purple-50 text-purple-900'
+                            ? 'bg-purple-700 border-purple-700 text-white shadow-xs scale-105 ring-1 ring-purple-400'
+                            : 'bg-purple-50/70 border-purple-200 hover:border-purple-400 hover:bg-purple-100 text-purple-950'
                         }`}
                       >
-                        סוויטה {num}
+                        סוויטה {num} 👑
                       </button>
                     );
                   })}
@@ -1648,7 +1648,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
 
               {/* 3. Outdoor Trails & Central Yard */}
               <div>
-                <div className="text-[11px] font-black text-emerald-900 mb-1 flex items-center gap-1">
+                <div className="text-[11px] font-black text-emerald-950 mb-1 flex items-center gap-1">
                   <span>🌿</span>
                   <span>שבילים וחצר מרכזית:</span>
                 </div>
@@ -1666,8 +1666,8 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                         onClick={() => setKennelPlacement(item.id)}
                         className={`py-2 px-1.5 rounded-xl border text-center transition-all cursor-pointer font-black text-xs flex items-center justify-center gap-1.5 ${
                           isSelected
-                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
-                            : 'bg-white border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 text-emerald-950'
+                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs scale-105'
+                            : 'bg-emerald-50/70 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-100 text-emerald-950'
                         }`}
                       >
                         <span>{item.icon}</span>

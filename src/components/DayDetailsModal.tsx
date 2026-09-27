@@ -384,15 +384,19 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium border border-slate-200">
               {getServiceTypeHebrew(booking.serviceType)}
             </span>
-            {booking.kennelNumber && (
-              <span className={`text-xs px-2.5 py-0.5 rounded-full font-black border ${
-                normalizePlacementKey(booking.kennelNumber) === 'home'
-                  ? 'bg-amber-100 text-amber-950 border-amber-300'
-                  : 'bg-indigo-50 text-indigo-700 border-indigo-200'
-              }`}>
-                📍 {getPlacementDisplayName(booking.kennelNumber)}
-              </span>
-            )}
+            {booking.kennelNumber && (() => {
+              const norm = normalizePlacementKey(booking.kennelNumber);
+              let badgeColor = 'bg-slate-100 text-slate-800 border-slate-200';
+              if (norm === 'home') badgeColor = 'bg-amber-100 text-amber-950 border-amber-300';
+              else if (norm && norm.startsWith('room_')) badgeColor = 'bg-sky-100 text-sky-950 border-sky-300';
+              else if (norm && norm.startsWith('suite_')) badgeColor = 'bg-purple-100 text-purple-950 border-purple-300';
+              else if (norm) badgeColor = 'bg-emerald-100 text-emerald-950 border-emerald-300';
+              return (
+                <span className={`text-xs px-2.5 py-0.5 rounded-full font-black border shadow-2xs ${badgeColor}`}>
+                  📍 {getPlacementDisplayName(booking.kennelNumber)}
+                </span>
+              );
+            })()}
             {isEnded && (
               <span className="text-[10px] bg-slate-200/80 text-slate-600 px-2 py-0.5 rounded-full font-bold">
                 הסתיים

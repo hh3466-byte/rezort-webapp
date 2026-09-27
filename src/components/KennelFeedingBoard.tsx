@@ -370,15 +370,27 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
         </div>
       </div>
 
-      {/* 2. Rooms 1-7 Section */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
-            <span>🚪 חדרי אירוח (חדר 1–7)</span>
-            <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full">
-              {occupiedRoomsCount} / 7 חדרים מאוכלסים
-            </span>
-          </h3>
+      {/* 2. Rooms 1-7 Section (Sky Blue Theme) */}
+      <div className="bg-gradient-to-r from-sky-50/70 via-blue-50/50 to-sky-50/70 border-2 border-sky-300 rounded-3xl p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-sky-200">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-sky-500 text-white flex items-center justify-center font-black text-xl shadow-xs shrink-0">
+              🚪
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-black text-sky-950">
+                  חדרי אירוח (חדר 1–7)
+                </h3>
+                <span className="text-xs font-black text-sky-900 bg-sky-200/90 border border-sky-300 px-3 py-0.5 rounded-full shadow-2xs">
+                  {occupiedRoomsCount} / 7 חדרים מאוכלסים
+                </span>
+              </div>
+              <p className="text-xs text-sky-800 mt-0.5">
+                מתחם חדרים מרכזי – דלי מזון אישי, שקיות האכלה והשגחה אישית 🪣
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -396,15 +408,28 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
         </div>
       </div>
 
-      {/* 3. Suites 1-4 Section */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
-            <span>⭐ סוויטות אירוח (סוויטה 1–4)</span>
-            <span className="text-xs font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-0.5 rounded-full">
-              {occupiedSuitesCount} / 4 סוויטות מאוכלסות
-            </span>
-          </h3>
+      {/* 3. Suites 1-4 Section (Royal Purple VIP Theme) */}
+      <div className="bg-gradient-to-r from-purple-50/80 via-indigo-50/50 to-purple-50/80 border-2 border-purple-300 rounded-3xl p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-purple-200">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 via-indigo-600 to-purple-800 text-amber-300 flex items-center justify-center font-black text-xl shadow-xs ring-1 ring-purple-400 shrink-0">
+              ⭐
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-black text-purple-950 flex items-center gap-1.5">
+                  <span>סוויטות אירוח VIP (סוויטה 1–4)</span>
+                  <span className="text-[11px] text-amber-600 bg-amber-100 border border-amber-300 px-2 py-0.2 rounded-md font-extrabold">👑 VIP</span>
+                </h3>
+                <span className="text-xs font-black text-purple-950 bg-purple-200/90 border border-purple-300 px-3 py-0.5 rounded-full shadow-2xs">
+                  {occupiedSuitesCount} / 4 סוויטות מאוכלסות
+                </span>
+              </div>
+              <p className="text-xs text-purple-800 mt-0.5">
+                סוויטות פרימיום מרווחות ומפנקות – שקיות מזון, יחס אישי והשגחה VIP ✨
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -422,15 +447,27 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
         </div>
       </div>
 
-      {/* 4. Outdoor Trails & Central Yard Section */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base sm:text-lg font-black text-slate-900 flex items-center gap-2">
-            <span>🌿 שבילים וחצר מרכזית (שביל מזרחי, שביל מערבי, חצר מרכזית)</span>
-            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-              {occupiedOutdoorsCount} / 3 מתחמים פעילים
-            </span>
-          </h3>
+      {/* 4. Outdoor Trails & Central Yard Section (Fresh Emerald Theme) */}
+      <div className="bg-gradient-to-r from-emerald-50/70 via-teal-50/40 to-emerald-50/70 border-2 border-emerald-300 rounded-3xl p-4 sm:p-5 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-emerald-200">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex items-center justify-center font-black text-xl shadow-xs shrink-0">
+              🌿
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-black text-emerald-950">
+                  מתחמי שבילים וחצר (שביל מזרחי, שביל מערבי, חצר מרכזית)
+                </h3>
+                <span className="text-xs font-black text-emerald-950 bg-emerald-200/90 border border-emerald-300 px-3 py-0.5 rounded-full shadow-2xs">
+                  {occupiedOutdoorsCount} / 3 מתחמים פעילים
+                </span>
+              </div>
+              <p className="text-xs text-emerald-800 mt-0.5">
+                מתחמי חוץ ודשא מרווחים – להוצאה, אירוח פעיל ומשחקים 🌳
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -489,24 +526,26 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
                   onClick={() => handleAssignPlacement(assigningDog, 'home')}
                   className={`w-full p-3 rounded-2xl border-2 text-right transition-all cursor-pointer flex items-center justify-between ${
                     normalizePlacementKey(assigningDog.kennelNumber) === 'home'
-                      ? 'border-amber-500 bg-amber-50 text-amber-950 font-black'
-                      : 'border-amber-200 hover:border-amber-400 bg-amber-50/40 text-amber-900'
+                      ? 'border-amber-500 bg-amber-500 text-white font-black shadow-xs'
+                      : 'border-amber-300 hover:border-amber-500 bg-amber-50 text-amber-950 font-bold'
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-lg">🏡</span>
                     <div>
                       <div className="font-black text-xs sm:text-sm">הלנה ביתית (בבית של שמוליק)</div>
-                      <div className="text-[11px] text-amber-800 font-normal">דלי הלנה ביתית בתוך הבית</div>
+                      <div className={`text-[11px] font-normal ${normalizePlacementKey(assigningDog.kennelNumber) === 'home' ? 'text-amber-100' : 'text-amber-800'}`}>
+                        דלי הלנה ביתית בתוך הבית
+                      </div>
                     </div>
                   </div>
-                  {normalizePlacementKey(assigningDog.kennelNumber) === 'home' && <Check className="w-4 h-4 text-amber-600" />}
+                  {normalizePlacementKey(assigningDog.kennelNumber) === 'home' && <Check className="w-4 h-4 text-white stroke-[3]" />}
                 </button>
               </div>
 
-              {/* Option 2: Rooms 1-7 */}
+              {/* Option 2: Rooms 1-7 (Sky Blue Theme) */}
               <div>
-                <div className="text-xs font-black text-blue-900 mb-1.5 flex items-center gap-1.5">
+                <div className="text-xs font-black text-sky-950 mb-1.5 flex items-center gap-1.5">
                   <span>🚪</span>
                   <span>חדרי אירוח (1–7)</span>
                 </div>
@@ -520,8 +559,8 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
                         onClick={() => handleAssignPlacement(assigningDog, slotKey)}
                         className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer font-black text-xs ${
                           isSelected
-                            ? 'border-blue-600 bg-blue-600 text-white shadow-xs'
-                            : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-800'
+                            ? 'border-sky-600 bg-sky-600 text-white shadow-xs scale-105'
+                            : 'border-sky-200 hover:border-sky-400 bg-sky-50/80 hover:bg-sky-100 text-sky-950'
                         }`}
                       >
                         חדר {num}
@@ -531,11 +570,11 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
                 </div>
               </div>
 
-              {/* Option 3: Suites 1-4 */}
+              {/* Option 3: Suites 1-4 (Royal Purple VIP Theme) */}
               <div>
-                <div className="text-xs font-black text-purple-900 mb-1.5 flex items-center gap-1.5">
+                <div className="text-xs font-black text-purple-950 mb-1.5 flex items-center gap-1.5">
                   <span>⭐</span>
-                  <span>סוויטות אירוח (1–4)</span>
+                  <span>סוויטות אירוח VIP (1–4)</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {[1, 2, 3, 4].map(num => {
@@ -547,20 +586,20 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
                         onClick={() => handleAssignPlacement(assigningDog, slotKey)}
                         className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer font-black text-xs ${
                           isSelected
-                            ? 'border-purple-600 bg-purple-600 text-white shadow-xs'
-                            : 'border-purple-200 hover:border-purple-400 hover:bg-purple-50 text-purple-900'
+                            ? 'border-purple-700 bg-purple-700 text-white shadow-xs scale-105 ring-1 ring-purple-400'
+                            : 'border-purple-200 hover:border-purple-400 bg-purple-50/80 hover:bg-purple-100 text-purple-950'
                         }`}
                       >
-                        סוויטה {num}
+                        סוויטה {num} 👑
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Option 4: Outdoor Trails & Central Yard */}
+              {/* Option 4: Outdoor Trails & Central Yard (Emerald Theme) */}
               <div>
-                <div className="text-xs font-black text-emerald-900 mb-1.5 flex items-center gap-1.5">
+                <div className="text-xs font-black text-emerald-950 mb-1.5 flex items-center gap-1.5">
                   <span>🌿</span>
                   <span>שבילים וחצר מרכזית</span>
                 </div>
@@ -577,8 +616,8 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
                         onClick={() => handleAssignPlacement(assigningDog, item.id)}
                         className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer font-black text-xs flex flex-col items-center gap-1 ${
                           isSelected
-                            ? 'border-emerald-600 bg-emerald-600 text-white shadow-xs'
-                            : 'border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 text-emerald-950'
+                            ? 'border-emerald-600 bg-emerald-600 text-white shadow-xs scale-105'
+                            : 'border-emerald-200 hover:border-emerald-400 bg-emerald-50/80 hover:bg-emerald-100 text-emerald-950'
                         }`}
                       >
                         <span className="text-base">{item.icon}</span>
@@ -685,34 +724,68 @@ const SlotCard: React.FC<SlotCardProps> = ({
 }) => {
   const isOccupied = slot.dogs.length > 0;
 
-  let categoryBadgeClass = 'bg-blue-50 text-blue-700 border-blue-200';
-  if (slot.category === 'suite') categoryBadgeClass = 'bg-purple-50 text-purple-700 border-purple-200';
-  if (slot.category === 'outdoor') categoryBadgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  // Distinct category-specific color tokens
+  let cardClasses = 'border-slate-200 bg-slate-50/40 opacity-90';
+  let iconBgClass = 'bg-slate-200 text-slate-600';
+  let titleColorClass = 'text-slate-900';
+  let bucketColorClass = 'text-slate-500';
+  let badgeClasses = 'bg-slate-100 text-slate-500 border-slate-200';
+  let actionBtnClass = 'text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border-indigo-200';
+  let dogCardBorder = 'border-slate-200 hover:border-indigo-400';
+
+  if (slot.category === 'room') {
+    titleColorClass = 'text-sky-950 font-black';
+    bucketColorClass = 'text-sky-700 font-bold';
+    actionBtnClass = 'text-sky-700 hover:text-sky-950 bg-sky-50 hover:bg-sky-100 border-sky-200';
+    dogCardBorder = 'border-sky-200 hover:border-sky-400';
+    if (isOccupied) {
+      cardClasses = 'border-sky-300 ring-2 ring-sky-100 bg-sky-50/20 shadow-sm';
+      iconBgClass = 'bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-xs';
+      badgeClasses = 'bg-sky-100 text-sky-900 border-sky-300 font-extrabold';
+    } else {
+      cardClasses = 'border-sky-200/70 bg-sky-50/30 opacity-95';
+      iconBgClass = 'bg-sky-100 text-sky-700 border border-sky-200';
+    }
+  } else if (slot.category === 'suite') {
+    titleColorClass = 'text-purple-950 font-black';
+    bucketColorClass = 'text-purple-700 font-bold';
+    actionBtnClass = 'text-purple-700 hover:text-purple-950 bg-purple-50 hover:bg-purple-100 border-purple-200';
+    dogCardBorder = 'border-purple-200 hover:border-purple-400';
+    if (isOccupied) {
+      cardClasses = 'border-purple-300 ring-2 ring-purple-100 bg-purple-50/25 shadow-sm';
+      iconBgClass = 'bg-gradient-to-br from-purple-600 via-indigo-600 to-purple-800 text-amber-300 shadow-xs ring-1 ring-purple-400';
+      badgeClasses = 'bg-purple-100 text-purple-950 border-purple-300 font-extrabold shadow-2xs';
+    } else {
+      cardClasses = 'border-purple-200/70 bg-purple-50/30 opacity-95';
+      iconBgClass = 'bg-purple-100 text-purple-700 border border-purple-200';
+    }
+  } else if (slot.category === 'outdoor') {
+    titleColorClass = 'text-emerald-950 font-black';
+    bucketColorClass = 'text-emerald-700 font-bold';
+    actionBtnClass = 'text-emerald-700 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border-emerald-200';
+    dogCardBorder = 'border-emerald-200 hover:border-emerald-400';
+    if (isOccupied) {
+      cardClasses = 'border-emerald-300 ring-2 ring-emerald-100 bg-emerald-50/20 shadow-sm';
+      iconBgClass = 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-xs';
+      badgeClasses = 'bg-emerald-100 text-emerald-950 border-emerald-300 font-extrabold';
+    } else {
+      cardClasses = 'border-emerald-200/70 bg-emerald-50/30 opacity-95';
+      iconBgClass = 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+    }
+  }
 
   return (
-    <div
-      className={`bg-white border rounded-3xl p-4 shadow-sm flex flex-col justify-between transition-all ${
-        isOccupied
-          ? 'border-indigo-300 ring-2 ring-indigo-100'
-          : 'border-slate-200 bg-slate-50/40 opacity-90'
-      }`}
-    >
+    <div className={`bg-white border rounded-3xl p-4 shadow-sm flex flex-col justify-between transition-all ${cardClasses}`}>
       {/* Card Header */}
-      <div className="pb-3 border-b border-slate-100 flex items-start justify-between gap-2">
+      <div className="pb-3 border-b border-slate-100/80 flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <div
-            className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-base shrink-0 ${
-              isOccupied
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-200 text-slate-600'
-            }`}
-          >
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-base shrink-0 ${iconBgClass}`}>
             {slot.icon}
           </div>
           <div>
-            <div className="font-black text-sm text-slate-900 flex items-center gap-1.5">
+            <div className={`font-black text-sm flex items-center gap-1.5 ${titleColorClass}`}>
               <span>{slot.name}</span>
-              <span className="text-[11px] font-bold text-slate-500">| 🪣 {slot.bucketName}</span>
+              <span className={`text-[11px] ${bucketColorClass}`}>| 🪣 {slot.bucketName}</span>
             </div>
             <div className="text-[11px] font-medium text-slate-500">
               {!isOccupied
@@ -724,13 +797,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
           </div>
         </div>
 
-        <span
-          className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-            isOccupied
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-              : 'bg-slate-100 text-slate-500 border-slate-200'
-          }`}
-        >
+        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${badgeClasses}`}>
           {isOccupied ? `🟢 ${slot.dogs.length} כלבים` : '⚪ פנוי'}
         </span>
       </div>
@@ -747,6 +814,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
               key={dog.id}
               dog={dog}
               dateStr={selectedDate}
+              customBorderClass={dogCardBorder}
               onSelect={() => onSelectBooking(dog)}
               onToggleDailyFeeding={handleToggleDailyFeeding}
               onChangePlacement={() => setAssigningDog(dog)}
@@ -771,7 +839,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
               });
             }
           }}
-          className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+          className={`text-[11px] font-bold flex items-center gap-1 px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${actionBtnClass}`}
         >
           <Plus className="w-3 h-3" />
           <span>קלוט ל{slot.shortName}</span>
@@ -784,6 +852,7 @@ const SlotCard: React.FC<SlotCardProps> = ({
 interface DogKennelCardProps {
   dog: Booking;
   dateStr: string;
+  customBorderClass?: string;
   onSelect: () => void;
   onToggleDailyFeeding: (booking: Booking, type: 'morning' | 'evening' | 'meds', e: React.MouseEvent) => void;
   onChangePlacement: () => void;
@@ -792,6 +861,7 @@ interface DogKennelCardProps {
 const DogKennelCard: React.FC<DogKennelCardProps> = ({
   dog,
   dateStr,
+  customBorderClass,
   onSelect,
   onToggleDailyFeeding,
   onChangePlacement,
@@ -804,7 +874,7 @@ const DogKennelCard: React.FC<DogKennelCardProps> = ({
   return (
     <div
       onClick={onSelect}
-      className="bg-white border border-slate-200 hover:border-indigo-400 p-3 rounded-2xl shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2 group"
+      className={`bg-white border p-3 rounded-2xl shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2 group ${customBorderClass || 'border-slate-200 hover:border-indigo-400'}`}
     >
       {/* Dog Top Info */}
       <div className="flex items-start justify-between gap-1.5">
