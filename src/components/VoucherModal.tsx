@@ -133,10 +133,10 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
   const [voucherCode, setVoucherCode] = useState(() => generateInitialCode('loyalty', initialDogName));
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   
-  // Expiry date (default: 6 months from now)
+  // Expiry date (default: 3 months from now)
   const defaultExpiry = () => {
     const d = new Date();
-    d.setMonth(d.getMonth() + 6);
+    d.setMonth(d.getMonth() + 3);
     return d.toISOString().split('T')[0];
   };
   const [expiryDate, setExpiryDate] = useState(defaultExpiry);
@@ -194,12 +194,13 @@ export const VoucherModal: React.FC<VoucherModalProps> = ({
 *(שווי ההטבה: ₪90–120 – עבורכם ב-₪0 מלאים!)*
 
 🏷️ *קוד שובר אישי:* ${voucherCode}
-📅 *תוקף:* עד ${formatDateIL(expiryDate)}
+⏰ *תוקף מוגבל:* ל-3 חודשים בלבד (עד ${formatDateIL(expiryDate)})
+📌 *תנאי השובר:* בתיאום מראש | בתוקף ל-3 חודשים | אין כפל הטבות ומבצעים.
 
 לשריון יום הכיף המושלם של ${displayDog} ביומן:
 👉 ${intakeUrl}
 
-🎁 *הטבה כפולה:* בנוסף, עומדת לרשותכם תוכנית "חבר מביא חבר" – ספרו לחברים עם כלב, הם ייהנו מהטבת הצטרפות, ואתם תצברו 100 ₪ זיכוי לחופשה הבאה!
+🎁 *הטבה כפולה:* בנוסף, עומדת לרשותכם תוכנית "חבר מביא חבר" – ספרו לחברים עם כלב, הם ייהנו מ-100 ₪ הנחה לשהות ראשונה (תוקף 3 חודשים), ואתם תצברו 100 ₪ זיכוי לחופשה הבאה!
 
 מחכים לפנק ולחבק את ${displayDog}! 🐾🤍
 ${settings.managerName || 'שמוליק'} וצוות ${settings.resortName || 'הריזורט לכלב'} 🐾`;
@@ -221,8 +222,8 @@ ${settings.managerName || 'שמוליק'} וצוות ${settings.resortName || '�
  • 🧠 *סשן משחקי חשיבה, רחרוח והעשרה (Brain Games)* – מוענק ע״י צוות הריזורט
 
 🏷️ *קוד שובר אישי:* ${voucherCode}
-📅 *תוקף:* עד ${formatDateIL(expiryDate)}
-📌 *תנאי השובר:* לבחירת הטבה אחת | בשהות של 3 ימים ומעלה (סופ"ש ארוך) | אין כפל הטבות ומבצעים.
+⏰ *תוקף מוגבל:* ל-3 חודשים בלבד (עד ${formatDateIL(expiryDate)})
+📌 *תנאי השובר:* לבחירת הטבה אחת | בשהות של 3 ימים ומעלה (סופ"ש ארוך) | בתוקף ל-3 חודשים בלבד | אין כפל הטבות ומבצעים.
 
 לבחירת הפינוק שלכם ושריון מקום ביומן:
 👉 ${intakeUrl}
@@ -237,8 +238,8 @@ ${settings.managerName || 'שמוליק'} וצוות ${settings.resortName || '�
 כדי לפנק אתכם לקראת הפעם הבאה, הכנו עבורכם שובר הטבה אישי:
 🎁 *פינוק בלעדי:* ${currentBenefit}
 🏷️ *קוד שובר אישי:* ${voucherCode}
-📅 *תוקף:* עד ${formatDateIL(expiryDate)}
-📌 *תנאי השובר:* תקף בהזמנת שהות של 3 ימים ומעלה (סופ"ש ארוך) | אין כפל הטבות ומבצעים.
+⏰ *תוקף מוגבל:* ל-3 חודשים בלבד (עד ${formatDateIL(expiryDate)})
+📌 *תנאי השובר:* תקף בהזמנת שהות של 3 ימים ומעלה (סופ"ש ארוך) | בתוקף ל-3 חודשים בלבד | אין כפל הטבות ומבצעים.
 
 לשריון מקום ישיר ביומן:
 👉 ${intakeUrl}
@@ -267,7 +268,8 @@ ${greetingIntro}
  • 🧠 סשן משחקי חשיבה, רחרוח והעשרה מנטלית (Brain Games) – ע״י צוות הריזורט
 
 🏷️ קוד שובר אישי להזמנה: *${voucherCode}*
-📌 תנאי השובר: לבחירת הטבה אחת | תקף בהזמנת שהות ראשונה של 3 ימים ומעלה (סופ"ש ארוך) | אין כפל הטבות ומבצעים.
+⏰ *תוקף מוגבל:* ל-3 חודשים בלבד (עד ${formatDateIL(expiryDate)})
+📌 תנאי השובר: לבחירת הטבה אחת | תקף בהזמנת שהות ראשונה של 3 ימים ומעלה (סופ"ש ארוך) | בתוקף ל-3 חודשים בלבד | אין כפל הטבות ומבצעים.
 
 להתרשמות, בחירת המתנה שלכם ושריון מקום בקליק:
 👉 ${intakeUrl}
@@ -430,7 +432,7 @@ ${settings.managerName || 'שמוליק'} - ${settings.resortName || 'הריזו
 
       ctx.font = 'bold 21px system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
       ctx.fillStyle = '#6ee7b7';
-      ctx.fillText(`📅  בתוקף ל-6 חודשים עד: ${formatDateIL(expiryDate)}`, 600, 485);
+      ctx.fillText(`📅  בתוקף ל-3 חודשים בלבד עד: ${formatDateIL(expiryDate)}`, 600, 485);
 
       // Terms & Conditions
       ctx.font = '500 18px system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
