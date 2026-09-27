@@ -243,7 +243,7 @@ export default function App() {
         // Structural comparison to avoid unnecessary React re-renders and flickering
         if (prev.length === incomingBookings.length) {
           const makeSig = (list: Booking[]) => list.map(b => 
-            `${b.id}_${b.dogName}_${b.ownerName}_${b.startDate}_${b.endDate}_${b.serviceType}_${b.paymentStatus}_${b.depositAmount}_${b.totalPrice}_${b.stayStatus}_${b.kennelNumber}_${b.updatedAt}_${JSON.stringify(b.dailyFeedingsCompleted || {})}`
+            `${b.id}_${b.dogName}_${b.ownerName}_${b.startDate}_${b.endDate}_${b.serviceType}_${b.paymentStatus}_${b.depositAmount}_${b.totalPrice}_${b.refundAmount || 0}_${b.refundDate || ''}_${b.refundReason || ''}_${b.stayStatus}_${b.kennelNumber}_${b.updatedAt}_${JSON.stringify(b.dailyFeedingsCompleted || {})}`
           ).join('|');
           if (makeSig(prev) === makeSig(incomingBookings)) return prev;
         }

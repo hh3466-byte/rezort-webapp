@@ -345,13 +345,15 @@ export const subscribeToBookings = (
             continue;
           }
 
-          if (b.stayStatus === 'cancelled') {
+          if (b.stayStatus === 'cancelled' || (b.refundAmount && b.refundAmount > 0)) {
             dedupMap.set(b.id, b);
             continue;
           }
 
           const normDog = (b.dogName || '').trim().toLowerCase();
           const normOwner = (b.ownerName || '').trim().toLowerCase();
+          const dedupKey = `${normDog}_${normOwner}_${b.startDate}_${b.endDate}`;
+
           if (!dedupMap.has(dedupKey)) {
             dedupMap.set(dedupKey, b);
           } else {
@@ -372,6 +374,9 @@ export const subscribeToBookings = (
           p: b.paymentStatus,
           d: b.depositAmount,
           t: b.totalPrice,
+          refAmt: b.refundAmount,
+          refDate: b.refundDate,
+          refReason: b.refundReason,
           s: b.stayStatus,
           sd: b.startDate,
           ed: b.endDate,
