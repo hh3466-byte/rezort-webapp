@@ -183,7 +183,75 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
   // Action items / Red lights for tomorrow
   const actionBlocks = [];
 
-  // 1. Unassigned kennel placement check (חוק ברזל: חובת שיבוץ מיקום לינה)
+  // 1. Unhandled Intakes (Pending, In Progress, Payment Requested) - FIRST PRIORITY
+  const unhandledIntakes = (intakes || []).filter(r => {
+    const st = r.status;
+    if (st === 'approved' || st === 'rejected' || st === 'archived') return false;
+    const rDog = (r.dogName || r.dog_name || '').trim().toLowerCase();
+    const rPhone = cleanPhoneNumber(r.ownerPhone || r.owner_phone || '');
+    const hasBooking = activeBookings.some(b => {
+      const bDog = (b.dog_name || b.dogName || '').trim().toLowerCase();
+      const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+      return (rDog && bDog && rDog === bDog && (bPhone.slice(-7) === rPhone.slice(-7) || !rPhone));
+    });
+    return !hasBooking;
+  });
+
+  if (unhandledIntakes.length > 0) {
+    const pList = unhandledIntakes.map((pi, idx) => {
+      const dog = pi.dogName || pi.dog_name || 'כלב';
+      const owner = pi.ownerName || pi.owner_name || 'בעלים';
+      const phone = formatPhoneFormatted(pi.ownerPhone || pi.owner_phone || '');
+      const sDate = formatDateIL(pi.startDate || pi.start_date);
+      const eDate = formatDateIL(pi.endDate || pi.end_date);
+      let statusBadge = '🔴 לבדיקה';
+      if (pi.status === 'in_progress') statusBadge = '🟡 בתהליך';
+      else if (pi.status === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
+      return `${idx + 1}. ${statusBadge}: *${dog}* (${owner} - 📞 ${phone}) | מיועד: ${sDate} עד ${eDate}`;
+    }).join('\n');
+    actionBlocks.push(`📋 *שאלוני קליטה לבדיקה / בתהליך שממתינים לטיפול וסגירה (${unhandledIntakes.length}):*\n${pList}\n👉 *שמוליק, אנא היכנס למסך שאלוני קליטה כדי לאשר, לקלוט ליומן או לסגור טיפול.*`);
+  }
+
+  // 2. Unanswered WhatsApp messages
+  if (Array.isArray(unansweredChats) && unansweredChats.length > 0) {
+    const list = unansweredChats.map((uc, idx) => {
+      const name = uc.name || 'לקוח';
+      const phone = formatPhoneFormatted(uc.phone || '');
+      const text = uc.text ? ` ("${uc.text}")` : '';
+      return `${idx + 1}. 👤 ${name} (📞 ${phone}) שלח הודעה ולא ענית${text}`;
+    }).join('\n');
+    actionBlocks.push(`💬 *הודעות וואטסאפ ללא מענה (${unansweredChats.length}):*\n${list}`);
+  }
+
+  // 3. Approved intakes without calendar booking
+  const approvedIntakesWithoutBooking = (intakes || []).filter(ai => {
+    if (ai.status !== 'approved') return false;
+    const aiDog = (ai.dogName || ai.dog_name || '').trim().toLowerCase();
+    const aiPhone = cleanPhoneNumber(ai.ownerPhone || ai.owner_phone || '');
+    return !activeBookings.some(b => {
+      const bDog = (b.dog_name || b.dogName || '').trim().toLowerCase();
+      const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+      const bStart = b.start_date || b.startDate;
+      const bEnd = b.end_date || b.endDate;
+      const sameDog = bDog === aiDog;
+      const samePhone = (aiPhone && bPhone && aiPhone === bPhone);
+      const sameDates = ((ai.startDate || ai.start_date) && bStart === (ai.startDate || ai.start_date) && (ai.endDate || ai.end_date) && bEnd === (ai.endDate || ai.end_date));
+      return (sameDog && samePhone) || (sameDog && sameDates);
+    });
+  });
+
+  if (approvedIntakesWithoutBooking.length > 0) {
+    const list = approvedIntakesWithoutBooking.map((ai, idx) => {
+      const dog = ai.dogName || ai.dog_name || 'כלב';
+      const owner = ai.ownerName || ai.owner_name || 'בעלים';
+      const phone = formatPhoneFormatted(ai.ownerPhone || ai.owner_phone || '');
+      const dates = `${formatDateIL(ai.startDate || ai.start_date)} עד ${formatDateIL(ai.endDate || ai.end_date)}`;
+      return `${idx + 1}. ⚠️ *${dog}* (${owner} - 📞 ${phone}) | ${dates}`;
+    }).join('\n');
+    actionBlocks.push(`⚠️ *שאלונים שאושרו אך טרם שוריינו ביומן (${approvedIntakesWithoutBooking.length}):*\n${list}`);
+  }
+
+  // 4. Unassigned kennel placement check (חוק ברזל: חובת שיבוץ מיקום לינה)
   const unassignedKennelDogs = activeBookings.filter(b => {
     const s = b.start_date || b.startDate;
     const e = b.end_date || b.endDate;
@@ -200,20 +268,6 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
       return `${idx + 1}. 📋 *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${phone}) | שהייה: ${formatDateIL(s)}–${formatDateIL(e)} (ממתין לשיבוץ חדר 1–7, סוויטה 1–4, שביל או הלנה ביתית ודלי מזון)`;
     }).join('\n');
     actionBlocks.push(`🏠 *כלבים הממתינים לשיבוץ מיקום לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
-  }
-
-  // 2. Pending intakes
-  const pendingIntakes = (intakes || []).filter(r => r.status === 'pending');
-  if (pendingIntakes.length > 0) {
-    const pList = pendingIntakes.map((pi, idx) => {
-      const dog = pi.dogName || pi.dog_name || 'כלב';
-      const owner = pi.ownerName || pi.owner_name || 'בעלים';
-      const phone = formatPhoneFormatted(pi.ownerPhone || pi.owner_phone || '');
-      const sDate = formatDateIL(pi.startDate || pi.start_date);
-      const eDate = formatDateIL(pi.endDate || pi.end_date);
-      return `${idx + 1}. 🐕 ${dog} (${owner} - 📞 ${phone}) | ${sDate} עד ${eDate}`;
-    }).join('\n');
-    actionBlocks.push(`📥 *שאלוני קליטה שממתינים לטיפול (${pendingIntakes.length}):*\n${pList}`);
   }
 
   let extraActionSections = '';
@@ -308,8 +362,18 @@ export default async function handler(req, res) {
     }
 
     const { data: bookings } = await supabase.from('bookings').select('*');
-    const { data: intakes } = await supabase.from('intake_requests').select('*');
+    const { data: intakesRows } = await supabase.from('intake_requests').select('*');
     const { data: payments } = await supabase.from('grow_incoming_payments').select('*');
+
+    // Merge intakes from intake_requests table and settings.data.intakeRequests
+    const rawFromSettings = (sRow && sRow.data && Array.isArray(sRow.data.intakeRequests)) ? sRow.data.intakeRequests : [];
+    const intakeMap = new Map();
+    [...rawFromSettings, ...(intakesRows || [])].forEach(item => {
+      if (item && item.id) {
+        intakeMap.set(item.id, item);
+      }
+    });
+    const intakes = Array.from(intakeMap.values());
 
     const greenId = settings.greenApiIdInstance;
     const greenToken = settings.greenApiToken;

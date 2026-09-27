@@ -217,12 +217,14 @@ export function formatTomorrowOverviewReport(
     });
   });
 
-  const pendingIntakes = safeIntakes.filter(r => {
-    if (r.status !== 'pending') return false;
+  const unhandledIntakes = safeIntakes.filter(r => {
+    if (r.status === 'approved' || r.status === 'rejected' || r.status === 'archived') return false;
+    const rDog = (r.dogName || '').trim().toLowerCase();
     const rPhone = cleanPhoneNumber(r.ownerPhone || '');
     const hasBooking = activeBookings.some(b => {
+      const bDog = (b.dogName || '').trim().toLowerCase();
       const bPhone = cleanPhoneNumber(b.ownerPhone || '');
-      return bPhone && rPhone && (bPhone.slice(-7) === rPhone.slice(-7));
+      return (rDog && bDog && rDog === bDog && (bPhone.slice(-7) === rPhone.slice(-7) || !rPhone));
     });
     return !hasBooking;
   });
@@ -260,19 +262,23 @@ export function formatTomorrowOverviewReport(
 
   const actionBlocks: string[] = [];
 
-  // 0. Check for dogs staying tomorrow or today without kennel placement (חוק ברזל)
-  const unassignedKennelDogs = activeBookings.filter(b => {
-    const isStayingOrIncoming = (b.startDate <= tomorrowStr && b.endDate >= tomorrowStr) || b.startDate === tomorrowStr;
-    return isStayingOrIncoming && !b.kennelNumber && b.kennelNumber !== 0;
-  });
-  if (unassignedKennelDogs.length > 0) {
-    const list = unassignedKennelDogs.map((b, idx) => {
-      const phone = formatPhoneFormatted(b.ownerPhone || '');
-      return `${idx + 1}. 📋 *${b.dogName}* (${b.ownerName} - 📞 ${phone}) | שהייה: ${formatDateIL(b.startDate)}–${formatDateIL(b.endDate)} (ממתין לשיבוץ חדר 1–7, סוויטה 1–4, שביל או הלנה ביתית ודלי מזון)`;
+  // 1. Unhandled Intakes (Pending, In Progress, Payment Requested) - FIRST PRIORITY
+  if (unhandledIntakes.length > 0) {
+    const list = unhandledIntakes.map((pi, idx) => {
+      const dog = pi.dogName || 'כלב';
+      const owner = pi.ownerName || 'בעלים';
+      const rawPhone = pi.ownerPhone || '';
+      const phone = formatPhoneFormatted(rawPhone);
+      const dates = `${formatDateIL(pi.startDate)} עד ${formatDateIL(pi.endDate)}`;
+      let statusBadge = '🔴 לבדיקה';
+      if (pi.status === 'in_progress') statusBadge = '🟡 בתהליך';
+      else if (pi.status === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
+      return `${idx + 1}. ${statusBadge}: *${dog}* (${owner} - 📞 ${phone}) | מיועד: ${dates}`;
     }).join('\n');
-    actionBlocks.push(`🏠 *כלבים הממתינים לשיבוץ מיקום לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
+    actionBlocks.push(`📋 *שאלוני קליטה לבדיקה / בתהליך שממתינים לטיפול וסגירה (${unhandledIntakes.length}):*\n${list}\n👉 *שמוליק, אנא היכנס למסך שאלוני קליטה כדי לאשר, לקלוט ליומן או לסגור טיפול.*`);
   }
 
+  // 2. Unanswered WhatsApp messages
   if (Array.isArray(unansweredChats) && unansweredChats.length > 0) {
     const list = unansweredChats.map((uc, idx) => {
       const name = uc.name || 'לקוח';
@@ -285,6 +291,7 @@ export function formatTomorrowOverviewReport(
     actionBlocks.push(`💬 *הודעות וואטסאפ ללא מענה:* ${unansweredChats} שיחות ממתינות לתשובה`);
   }
 
+  // 3. Approved intakes without calendar booking
   if (approvedIntakesWithoutBooking.length > 0) {
     const list = approvedIntakesWithoutBooking.map((ai, idx) => {
       const dog = ai.dogName || 'כלב';
@@ -292,21 +299,22 @@ export function formatTomorrowOverviewReport(
       const rawPhone = ai.ownerPhone || '';
       const phone = formatPhoneFormatted(rawPhone);
       const dates = `${formatDateIL(ai.startDate)} עד ${formatDateIL(ai.endDate)}`;
-      return `${idx + 1}. 🐕 ${dog} (${owner} - 📞 ${phone}) | ${dates}`;
+      return `${idx + 1}. ⚠️ *${dog}* (${owner} - 📞 ${phone}) | ${dates}`;
     }).join('\n');
     actionBlocks.push(`⚠️ *שאלונים שאושרו אך טרם שוריינו ביומן (${approvedIntakesWithoutBooking.length}):*\n${list}`);
   }
 
-  if (pendingIntakes.length > 0) {
-    const list = pendingIntakes.map((pi, idx) => {
-      const dog = pi.dogName || 'כלב';
-      const owner = pi.ownerName || 'בעלים';
-      const rawPhone = pi.ownerPhone || '';
-      const phone = formatPhoneFormatted(rawPhone);
-      const dates = `${formatDateIL(pi.startDate)} עד ${formatDateIL(pi.endDate)}`;
-      return `${idx + 1}. 🐕 ${dog} (${owner} - 📞 ${phone}) | ${dates}`;
+  // 4. Unassigned kennel placement
+  const unassignedKennelDogs = activeBookings.filter(b => {
+    const isStayingOrIncoming = (b.startDate <= tomorrowStr && b.endDate >= tomorrowStr) || b.startDate === tomorrowStr;
+    return isStayingOrIncoming && !b.kennelNumber && b.kennelNumber !== 0;
+  });
+  if (unassignedKennelDogs.length > 0) {
+    const list = unassignedKennelDogs.map((b, idx) => {
+      const phone = formatPhoneFormatted(b.ownerPhone || '');
+      return `${idx + 1}. 📋 *${b.dogName}* (${b.ownerName} - 📞 ${phone}) | שהייה: ${formatDateIL(b.startDate)}–${formatDateIL(b.endDate)} (ממתין לשיבוץ חדר 1–7, סוויטה 1–4, שביל או הלנה ביתית ודלי מזון)`;
     }).join('\n');
-    actionBlocks.push(`📥 *שאלוני קליטה שממתינים לטיפול (${pendingIntakes.length}):*\n${list}`);
+    actionBlocks.push(`🏠 *כלבים הממתינים לשיבוץ מיקום לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
   }
 
   if (phoneAndDateIssues.length > 0) {
