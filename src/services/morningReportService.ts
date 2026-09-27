@@ -203,6 +203,11 @@ export function formatTomorrowOverviewReport(
 
   const approvedIntakesWithoutBooking = safeIntakes.filter(ai => {
     if (ai.status !== 'approved') return false;
+    const aiStart = ai.startDate || '';
+    const aiEnd = ai.endDate || '';
+    // Auto-archive rule: if dates have already passed without a booking, ignore from report
+    if ((aiEnd && aiEnd < todayStr) || (aiStart && aiStart < todayStr)) return false;
+
     const aiDog = (ai.dogName || '').trim().toLowerCase();
     const aiPhone = cleanPhoneNumber(ai.ownerPhone || '');
     return !activeBookings.some(b => {
@@ -219,6 +224,11 @@ export function formatTomorrowOverviewReport(
 
   const unhandledIntakes = safeIntakes.filter(r => {
     if (r.status === 'approved' || r.status === 'rejected' || r.status === 'archived') return false;
+    const rStart = r.startDate || '';
+    const rEnd = r.endDate || '';
+    // Auto-archive rule: if dates have already passed without a booking, ignore from report
+    if ((rEnd && rEnd < todayStr) || (rStart && rStart < todayStr)) return false;
+
     const rDog = (r.dogName || '').trim().toLowerCase();
     const rPhone = cleanPhoneNumber(r.ownerPhone || '');
     const hasBooking = activeBookings.some(b => {

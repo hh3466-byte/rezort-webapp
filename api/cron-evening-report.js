@@ -187,6 +187,11 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
   const unhandledIntakes = (intakes || []).filter(r => {
     const st = r.status;
     if (st === 'approved' || st === 'rejected' || st === 'archived') return false;
+    const rStart = r.startDate || r.start_date || '';
+    const rEnd = r.endDate || r.end_date || '';
+    // Auto-archive rule: if dates have already passed without a booking, ignore from report
+    if ((rEnd && rEnd < todayStr) || (rStart && rStart < todayStr)) return false;
+
     const rDog = (r.dogName || r.dog_name || '').trim().toLowerCase();
     const rPhone = cleanPhoneNumber(r.ownerPhone || r.owner_phone || '');
     const hasBooking = activeBookings.some(b => {
@@ -226,6 +231,11 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
   // 3. Approved intakes without calendar booking
   const approvedIntakesWithoutBooking = (intakes || []).filter(ai => {
     if (ai.status !== 'approved') return false;
+    const aiStart = ai.startDate || ai.start_date || '';
+    const aiEnd = ai.endDate || ai.end_date || '';
+    // Auto-archive rule: if dates have already passed without a booking, ignore from report
+    if ((aiEnd && aiEnd < todayStr) || (aiStart && aiStart < todayStr)) return false;
+
     const aiDog = (ai.dogName || ai.dog_name || '').trim().toLowerCase();
     const aiPhone = cleanPhoneNumber(ai.ownerPhone || ai.owner_phone || '');
     return !activeBookings.some(b => {

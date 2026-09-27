@@ -258,8 +258,14 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     }
   });
 
-  // Open intake requests (exclude abandoned, rejected, or customers already booked in calendar)
-  (intakes || []).filter(r => r.status === 'pending').forEach(r => {
+  // Open intake requests (exclude abandoned, rejected, expired past dates, or customers already booked in calendar)
+  (intakes || []).filter(r => {
+    if (r.status !== 'pending') return false;
+    const sDate = r.startDate || r.start_date || '';
+    const eDate = r.endDate || r.end_date || '';
+    if ((eDate && eDate < todayStr) || (sDate && sDate < todayStr)) return false;
+    return true;
+  }).forEach(r => {
     const rPhone = cleanPhoneNumber(r.ownerPhone || r.owner_phone || '');
     const hasActiveBooking = activeBookings.some(b => {
       const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');

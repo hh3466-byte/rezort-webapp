@@ -177,8 +177,14 @@ export function run1830SanityAudit(
     }
   });
 
-  // 4. Check unhandled / open intake questionnaires (only pending and active, excluding abandoned / booked)
-  const pendingIntakes = intakeRequests.filter(r => r.status === 'pending');
+  // 4. Check unhandled / open intake questionnaires (only future pending and active, excluding abandoned / booked / expired)
+  const pendingIntakes = intakeRequests.filter(r => {
+    if (r.status !== 'pending') return false;
+    const sDate = r.startDate || '';
+    const eDate = r.endDate || '';
+    if ((eDate && eDate < todayStr) || (sDate && sDate < todayStr)) return false;
+    return true;
+  });
   pendingIntakes.forEach(r => {
     redLights.unfilledIntakes.push(`📋 שאלון ממתין: *${r.dogName}* (${r.ownerName} - 📞 ${r.ownerPhone || 'ללא טלפון'}) | נשלח לתאריכים ${formatDateIL(r.startDate)}-${formatDateIL(r.endDate)}`);
   });
