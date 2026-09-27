@@ -319,10 +319,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 
   const newCount = requests.filter(isReqNew).length;
   const inTreatmentCount = requests.filter(isReqInTreatment).length;
-  const pendingCount = requests.filter(r => getEffectiveStatus(r) === 'pending' && !isUnansweredRequest(r)).length;
-  const paymentRequestedCount = requests.filter(r => getEffectiveStatus(r) === 'payment_requested' && !isUnansweredRequest(r)).length;
+  const pendingCount = requests.filter(r => getEffectiveStatus(r) === 'pending' && r.status !== 'abandoned').length;
+  const paymentRequestedCount = requests.filter(r => getEffectiveStatus(r) === 'payment_requested' && r.status !== 'abandoned').length;
   const approvedCount = requests.filter(r => getEffectiveStatus(r) === 'approved').length;
-  const unansweredCount = requests.filter(isUnansweredRequest).length;
   const abandonedCount = requests.filter(r => r.status === 'abandoned').length;
 
   const filteredRequests = requests.filter(r => {
@@ -354,25 +353,24 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     const effectiveStatus = getEffectiveStatus(r);
     if (filter === 'new' && !isReqNew(r)) return false;
     if (filter === 'in_progress' && !isReqInTreatment(r)) return false;
-    if (filter === 'pending' && (effectiveStatus !== 'pending' || isUnansweredRequest(r))) return false;
-    if (filter === 'payment_requested' && (effectiveStatus !== 'payment_requested' || isUnansweredRequest(r))) return false;
+    if (filter === 'pending' && effectiveStatus !== 'pending') return false;
+    if (filter === 'payment_requested' && effectiveStatus !== 'payment_requested') return false;
     if (filter === 'approved' && effectiveStatus !== 'approved') return false;
     if (filter === 'abandoned' && effectiveStatus !== 'abandoned') return false;
     if (filter === 'rejected' && effectiveStatus !== 'rejected') return false;
-    if (filter === 'archived_48h' && !isUnansweredRequest(r)) return false;
     if (filter !== 'abandoned' && filter !== 'all' && effectiveStatus === 'abandoned') return false;
     return true;
   });
 
   const handleAbandonIntake = async (req: IntakeRequest) => {
-    const confirmMsg = `האם לנטוש את תהליך הקליטה של ${req.dogName} (${req.ownerName})?\nהשאלון יועבר לארכיון ויוסר מהמעקב ומדוחות האורות האדומים. במידה והלקוח יצור קשר שוב, המערכת תשלוף אותו מהארכיון ותציג את ההיסטוריה.`;
+    const confirmMsg = `האם להעביר את שאלון הקליטה של ${req.dogName} (${req.ownerName}) לארכיון?\nהשאלון יישמר בלשונית "ארכיון" וניתן יהיה לשחזרו בכל עת לטיפול פעיל.`;
     if (!window.confirm(confirmMsg)) return;
 
     try {
       const now = new Date();
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
-      const noteAppend = `\n[תהליך קליטה ננטש והועבר לארכיון ע"י שמוליק ב-${dateStr} ${timeStr}]`;
+      const noteAppend = `\n[הועבר לארכיון ע"י שמוליק ב-${dateStr} ${timeStr}]`;
       const updatedNotes = (req.internalNotes || '') + noteAppend;
 
       const updated: IntakeRequest = {
@@ -389,8 +387,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
       setSavedNoteSuccess(prev => ({ ...prev, [req.id]: true }));
       setTimeout(() => setSavedNoteSuccess(prev => ({ ...prev, [req.id]: false })), 3500);
     } catch (err) {
-      console.warn('Error abandoning intake:', err);
-      alert('אירעה שגיאה בנטילת תהליך הקליטה.');
+      console.warn('Error archiving intake:', err);
+      alert('אירעה שגיאה בהעברה לארכיון.');
     }
   };
 
@@ -845,10 +843,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               { id: 'in_progress', label: '🟡 שאלונים בתהליך', count: inTreatmentCount, isHot: false },
               { id: 'payment_requested', label: '💳 נשלח קישור לתשלום', count: paymentRequestedCount, isHot: false },
               { id: 'approved', label: '🟢 נקלטו ביומן', count: approvedCount, isHot: false },
-              { id: 'archived_48h', label: '⌛ לא ענו / מעל 24 שעות', count: unansweredCount, isHot: false },
-              { id: 'abandoned', label: '📦 ארכיון / ננטשו', count: abandonedCount, isHot: false },
-              { id: 'rejected', label: 'נדחו', count: requests.filter(r => r.status === 'rejected').length, isHot: false },
-              { id: 'all', label: 'הכול', count: requests.length, isHot: false },
+              { id: 'abandoned', label: '📦 ארכיון', count: abandonedCount, isHot: false },
+              { id: 'rejected', label: '❌ נדחו', count: requests.filter(r => r.status === 'rejected').length, isHot: false },
+              { id: 'all', label: '📋 הכול', count: requests.length, isHot: false },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -1725,15 +1722,15 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         </div>
                       ) : (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Abandon Intake Button */}
+                          {/* Archive Button */}
                           <button
                             type="button"
                             onClick={() => handleAbandonIntake(req)}
-                            className="bg-amber-50 hover:bg-amber-100 active:scale-98 text-amber-900 border border-amber-300 font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                            title="נטוש תהליך קליטה והעבר לארכיון (מסיר את השאלון מכל מעקב ומדוחות האורות האדומים)"
+                            className="bg-amber-50 hover:bg-amber-100 active:scale-98 text-amber-900 border border-amber-300 font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                            title="העבר שאלון זה לארכיון (ניתן לשחזר בכל עת מלשונית ארכיון)"
                           >
                             <Archive className="w-3.5 h-3.5 text-amber-700" />
-                            <span>נטוש תהליך קליטה 📦</span>
+                            <span>📦 העבר לארכיון</span>
                           </button>
 
                           {/* Reject / Dismiss */}
