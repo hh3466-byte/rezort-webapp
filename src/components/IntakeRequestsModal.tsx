@@ -835,9 +835,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
         </div>
 
         {/* Filters & Search Toolbar */}
-        <div className="p-3 sm:p-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          {/* Status Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
+        <div className="p-3.5 sm:p-4 border-b border-slate-100 bg-white space-y-3">
+          {/* Status Tabs - Full Width Wrapping Layout so NO button is ever hidden */}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             {[
               { id: 'new', label: '🔴 שאלונים לבדיקה', count: newCount, isHot: newCount > 0 },
               { id: 'in_progress', label: '🟡 שאלונים בתהליך', count: inTreatmentCount, isHot: false },
@@ -851,9 +851,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setFilter(tab.id as any)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                className={`px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                   filter === tab.id
-                    ? 'bg-[#065f46] text-white shadow-xs'
+                    ? 'bg-[#065f46] text-white shadow-xs scale-100 ring-2 ring-[#065f46]/30'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
               >
@@ -873,23 +873,19 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
             ))}
           </div>
 
-          {/* Search Bar & Bulk Actions */}
-          <div className="flex items-center gap-2 flex-1 sm:max-w-xs w-full">
-            <div className="relative flex-1 flex items-center">
+          {/* Search Bar & Bulk Actions - Dedicated Full Width Row */}
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <div className="relative flex-1">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="חפש בקשה (שם, כלב, טלפון)..."
+                placeholder="חפש בקשה לפי שם לקוח, שם כלב, טלפון, גזע או הערה..."
                 className="w-full bg-slate-50 focus:bg-white text-slate-900 text-xs sm:text-sm pl-8 pr-9 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all shadow-2xs"
               />
-              <button
-                type="button"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-600 cursor-pointer p-0.5"
-                title="חפש"
-              >
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                 <Search className="w-4 h-4" />
-              </button>
+              </div>
               {searchQuery && (
                 <button
                   type="button"
@@ -912,24 +908,13 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     }
                   }
                 }}
-                className="bg-red-50 hover:bg-red-100 active:scale-98 text-red-700 border border-red-200 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs whitespace-nowrap"
-                title="מחיקה סופית של כל הבקשות שנדחו מהמערכת"
+                className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-2xs"
+                title="מחק לצמיתות את כל הבקשות שנדחו"
               >
-                <Trash2 className="w-3.5 h-3.5 text-red-600" />
-                <span>מחק הכל ({filteredRequests.length})</span>
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>מחק הכול 🗑️</span>
               </button>
             )}
-
-            <div className="relative min-w-[200px]">
-              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="חיפוש לפי שם, כלב או טלפון..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl pr-9 pl-3 py-1.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:outline-none"
-              />
-            </div>
           </div>
         </div>
 

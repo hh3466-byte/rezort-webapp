@@ -310,6 +310,10 @@ export const subscribeToBookings = (
             endDate: row.end_date || rowData.endDate || '',
             totalPrice: Number(row.total_price ?? rowData.totalPrice ?? 0),
             depositAmount: Number(row.deposit_amount ?? rowData.depositAmount ?? 0),
+            refundAmount: Number(row.refund_amount ?? rowData.refundAmount ?? 0),
+            refundDate: row.refund_date || rowData.refundDate || undefined,
+            refundReason: row.refund_reason || rowData.refundReason || undefined,
+            refundNotes: row.refund_notes || rowData.refundNotes || undefined,
             paymentStatus: row.payment_status || rowData.paymentStatus || 'unpaid',
             paymentMethod: row.payment_method || rowData.paymentMethod || 'bit',
             stayStatus: row.stay_status || rowData.stayStatus || 'booked',
@@ -332,37 +336,31 @@ export const subscribeToBookings = (
           return b;
         });
 
-        // 1. Active bookings from Supabase (Central source of truth across all devices)
-        const activeBookings = rawBookings.filter(b => {
-          if (b.stayStatus === 'cancelled') {
-            return false;
-          }
-          return true;
-        });
-
-        // 2. In-memory Deduplication Guard for clean display (NO destructive background deletes)
+        // In-memory Deduplication Guard for clean display (Preserves all active & cancelled bookings with refunds)
         const dedupMap = new Map<string, Booking>();
 
-        for (const b of activeBookings) {
+        for (const b of rawBookings) {
           if (b.id.startsWith('b-grow-') || b.id.startsWith('b-aug-') || b.id.startsWith('b-tx-') || b.id.startsWith('b-pay-') || b.id === 'b-173783725') {
+            dedupMap.set(b.id, b);
+            continue;
+          }
+
+          if (b.stayStatus === 'cancelled') {
             dedupMap.set(b.id, b);
             continue;
           }
 
           const normDog = (b.dogName || '').trim().toLowerCase();
           const normOwner = (b.ownerName || '').trim().toLowerCase();
-          const dedupKey = `${normDog}___${normOwner}___${b.startDate}___${b.endDate}`;
-
-          if (dedupMap.has(dedupKey)) {
+          if (!dedupMap.has(dedupKey)) {
+            dedupMap.set(dedupKey, b);
+          } else {
             const existing = dedupMap.get(dedupKey)!;
-            const existingPaid = existing.paymentStatus === 'fully_paid' || existing.paymentStatus === 'deposit_paid';
-            const currentPaid = b.paymentStatus === 'fully_paid' || b.paymentStatus === 'deposit_paid';
-
-            if (currentPaid && !existingPaid) {
+            const existingIsPaid = existing.paymentStatus === 'fully_paid' || existing.paymentStatus === 'deposit_paid';
+            const bIsPaid = b.paymentStatus === 'fully_paid' || b.paymentStatus === 'deposit_paid';
+            if (!existingIsPaid && bIsPaid) {
               dedupMap.set(dedupKey, b);
             }
-          } else {
-            dedupMap.set(dedupKey, b);
           }
         }
 

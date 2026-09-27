@@ -2281,9 +2281,9 @@ export default function App() {
         <MonthlyRefundsModal
           isOpen={isMonthlyRefundsModalOpen}
           monthKey={currentMonthKey}
-          refundBookings={bookings.filter(b => (Number(b.refundAmount) || 0) > 0)}
-          monthGrossCollected={0}
-          monthNetCollected={0}
+          refundBookings={monthRefundsList}
+          monthGrossCollected={monthTotalCollected}
+          monthNetCollected={monthNetCollected}
           onClose={() => setIsMonthlyRefundsModalOpen(false)}
           onUpdateBookingRefund={(bookingId, updatedData) => {
             handleUpdateBookingRefund(
