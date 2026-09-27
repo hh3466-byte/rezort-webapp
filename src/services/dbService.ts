@@ -332,12 +332,9 @@ export const subscribeToBookings = (
           return b;
         });
 
-        // 1. Filter out any bookings known to be deleted (never delete ledger transactions)
+        // 1. Active bookings from Supabase (Central source of truth across all devices)
         const activeBookings = rawBookings.filter(b => {
-          if (b.id.startsWith('b-grow-') || b.id.startsWith('b-aug-') || b.id.startsWith('b-tx-') || b.id.startsWith('b-pay-') || b.id === 'b-173783725') {
-            return true;
-          }
-          if (localDeletedIds.has(b.id)) {
+          if (b.stayStatus === 'cancelled') {
             return false;
           }
           return true;
