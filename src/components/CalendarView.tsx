@@ -54,12 +54,24 @@ interface CalendarViewProps {
 }
 
 // Helper function to get high-contrast unified colors for dogs and owners according to stay status:
-// 1. Released (checked_out / ended) -> Light gray (text-slate-400) for both dog and owner
-// 2. Checked in (active stay) -> Deep dark green (text-[#065f46]) for both dog and owner (high sunlight visibility)
-// 3. Booked (reserved, not checked in yet) -> Strong vibrant purple (text-[#581c87]) for both dog and owner (high sunlight visibility)
-export function getStayStatusColors(stayStatus: Booking['stayStatus'], endDate: string, todayStr: string) {
-  const isEnded = stayStatus === 'checked_out' || (endDate < todayStr);
-  const isCheckedIn = stayStatus === 'checked_in' && !isEnded;
+// 1. Released (checked_out / completed / cancelled / ended date) -> Light gray (text-slate-400) for both dog and owner
+// 2. Checked in (active stay / inside resort today) -> Deep dark green (text-[#065f46]) for both dog and owner (high sunlight visibility)
+// 3. Booked (reserved for future, not checked in yet) -> Strong vibrant purple (text-[#581c87]) for both dog and owner (high sunlight visibility)
+export function getStayStatusColors(
+  stayStatus: Booking['stayStatus'] | string | undefined, 
+  endDate: string, 
+  todayStr: string,
+  startDate?: string
+) {
+  const isEnded = stayStatus === 'checked_out' || 
+                  (stayStatus as any) === 'completed' || 
+                  stayStatus === 'cancelled' || 
+                  (Boolean(endDate) && endDate < todayStr);
+
+  const isCheckedIn = !isEnded && (
+    stayStatus === 'checked_in' || 
+    (Boolean(startDate) && startDate! <= todayStr && (!endDate || endDate >= todayStr))
+  );
 
   if (isEnded) {
     return {
@@ -89,7 +101,7 @@ export function getStayStatusColors(stayStatus: Booking['stayStatus'], endDate: 
     };
   }
 
-  // Booked / Reserved (not checked in yet)
+  // Booked / Reserved (not checked in yet, future)
   return {
     isEnded: false,
     isCheckedIn: false,
@@ -790,7 +802,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         const isDeposit = b.paymentStatus === 'deposit_paid';
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr);
+                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate);
 
                         return (
                           <div
@@ -934,7 +946,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       const isDeposit = b.paymentStatus === 'deposit_paid';
                       const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                       const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                      const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr);
+                      const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate);
 
                       let chipStyle = stayColors.monthChipBg;
                       if (isMatch) {
@@ -1107,7 +1119,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr);
+                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate);
 
                         return (
                           <div
@@ -1270,7 +1282,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                   const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === booking.id));
                   const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                  const stayColors = getStayStatusColors(booking.stayStatus, booking.endDate, todayStr);
+                  const stayColors = getStayStatusColors(booking.stayStatus, booking.endDate, todayStr, booking.startDate);
 
                   return (
                     <div

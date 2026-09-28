@@ -327,7 +327,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   const remainingDebt = Math.max(0, Math.round(booking.totalPrice - booking.depositAmount));
   const roundedTotal = Math.round(booking.totalPrice || 0);
   const roundedDeposit = Math.round(booking.depositAmount || 0);
-  const stayColors = getStayStatusColors(booking.stayStatus, booking.endDate, todayStr);
+  const stayColors = getStayStatusColors(booking.stayStatus, booking.endDate, todayStr, booking.startDate);
 
   // Status color styles matching design
   let paymentBorder = isEnded 
