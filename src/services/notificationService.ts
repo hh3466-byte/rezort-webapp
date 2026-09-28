@@ -304,32 +304,50 @@ export async function sendGreenApiDirectMessage(
     intlPhone = '972' + intlPhone;
   }
 
-  const greenApiUrl = `https://api.green-api.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
+  const primaryUrl = clusterPrefix 
+    ? `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/sendMessage/${cleanTok}`
+    : `https://api.green-api.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
+  const fallbackUrl = `https://api.green-api.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
   const chatId = `${intlPhone}@c.us`;
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+  async function trySend(url: string, timeoutMs = 25000): Promise<{ success: boolean; error?: string }> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    const res = await fetch(greenApiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, message }),
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, message }),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
 
-    if (res.ok) {
-      return { success: true };
+      if (res.ok) {
+        return { success: true };
+      }
+      const errText = await res.text();
+      return { success: false, error: `שגיאה מ-Green-API (${res.status}): ${errText}` };
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return { success: false, error: 'זמן ההמתנה לשרת אזל (Timeout)' };
+      }
+      return { success: false, error: err.message || String(err) };
     }
-    const errText = await res.text();
-    return { success: false, error: `שגיאה מ-Green-API (${res.status}): ${errText}` };
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
-      return { success: false, error: 'זמן ההמתנה לשרת אזל (Timeout)' };
-    }
-    return { success: false, error: err.message || String(err) };
   }
+
+  // Try primary cluster host first
+  const firstAttempt = await trySend(primaryUrl, 25000);
+  if (firstAttempt.success) return firstAttempt;
+
+  // If primary timed out / failed, try fallback gateway
+  if (primaryUrl !== fallbackUrl) {
+    const fallbackAttempt = await trySend(fallbackUrl, 25000);
+    if (fallbackAttempt.success) return fallbackAttempt;
+  }
+
+  return firstAttempt;
 }
 
 /**

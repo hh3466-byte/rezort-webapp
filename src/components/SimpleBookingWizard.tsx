@@ -3022,7 +3022,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setDepositAmount(depositAmount > 0 ? depositAmount : Math.round(totalPrice / 2) || 150)}
+                    onClick={() => setDepositAmount(depositAmount > 0 ? depositAmount : 0)}
                     className={`p-2 text-center rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                       depositAmount > 0 && depositAmount < totalPrice
                         ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
