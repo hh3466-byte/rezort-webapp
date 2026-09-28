@@ -400,3 +400,56 @@ export async function testGreenApiConnection(
     return { success: false, message: 'שגיאת תקשורת: ' + (err.message || String(err)) };
   }
 }
+
+export const RESORT_COMMUNITY_GROUP_ID = '120363412850948636@g.us';
+
+/**
+ * Adds a participant directly to a WhatsApp Group via Green-API
+ */
+export async function addGreenApiGroupParticipant(
+  groupId: string,
+  phoneNumber: string,
+  idInstance: string,
+  apiToken: string
+): Promise<{ success: boolean; error?: string }> {
+  const cleanId = (idInstance || '').trim();
+  const cleanTok = (apiToken || '').trim();
+  if (!cleanId || !cleanTok) {
+    return { success: false, error: 'Missing Green-API credentials' };
+  }
+
+  const cleanP = cleanPhoneNumber(phoneNumber);
+  if (!cleanP) return { success: false, error: 'Invalid phone number' };
+
+  let intlPhone = cleanP;
+  if (intlPhone.startsWith('0')) {
+    intlPhone = '972' + intlPhone.substring(1);
+  } else if (intlPhone.startsWith('5') && intlPhone.length === 9) {
+    intlPhone = '972' + intlPhone;
+  }
+  const participantChatId = `${intlPhone}@c.us`;
+
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
+  const url = clusterPrefix 
+    ? `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/addGroupParticipant/${cleanTok}`
+    : `https://api.green-api.com/waInstance${cleanId}/addGroupParticipant/${cleanTok}`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        groupId: groupId || RESORT_COMMUNITY_GROUP_ID,
+        participantChatId
+      })
+    });
+    if (res.ok) {
+      return { success: true };
+    }
+    const errText = await res.text();
+    return { success: false, error: `Failed to add to group (${res.status}): ${errText}` };
+  } catch (err: any) {
+    return { success: false, error: err.message || String(err) };
+  }
+}
+

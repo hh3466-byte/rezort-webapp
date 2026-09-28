@@ -1,7 +1,7 @@
 import { Booking, ResortSettings } from '../types';
 import { getTodayStr, addDays } from '../utils/dateUtils';
 import { cleanPhoneNumber } from '../utils/whatsappUtils';
-import { sendGreenApiDirectMessage } from './notificationService';
+import { sendGreenApiDirectMessage, addGreenApiGroupParticipant, RESORT_COMMUNITY_GROUP_ID } from './notificationService';
 import { saveBookingToDb } from './dbService';
 import { isCustomerMessagingRestrictedNow } from '../utils/jewishCalendar';
 import { supabase } from '../utils/supabase';
@@ -31,6 +31,10 @@ export function buildReviewAndVoucherMessage(ownerName: string, dogName: string)
 (בהזמנה הבאה שלכם, פשוט מזינים את מספר הנייד בטופס והתפריט נפתח אוטומטית לבחירתכם!)
 
 ⏰ *שימו לב: תוקף שובר ה-VIP הינו ל-3 חודשים בלבד מיום השחרור!*
+
+🐾 *צירפנו אתכם ישירות לקהילת ה-VIP הרשמית של הריזורט לכלב בוואטסאפ:*
+שם נשתף טיפים מאלפים, הטבות בלעדיות, עדיפות ראשונה בהזמנת מקום לחגים וסופ"שים, ורגעים יפים של הכלבים בריזורט.
+*(ההצטרפות אוטומטית כחלק מחברי המועדון, ומי שפחות מתאים לו – כמובן יכול לפרוש בכל עת).*
 
 🤝 רוצים לפנק חברים עם כלב?
 שתפו אותם בהודעה הזו – הם ייהנו מ-100 ₪ הנחה לשהות ראשונה (תוקף ל-3 חודשים בלבד), ואתם תצברו 100 ₪ הנחה לשהות הבאה שלכם!
@@ -194,6 +198,18 @@ export async function runAutoReviewAndVoucherSender(
         { skipHolidayCheck: false }
       );
 
+      // Automatically add client directly to the VIP Community group
+      try {
+        await addGreenApiGroupParticipant(
+          RESORT_COMMUNITY_GROUP_ID,
+          phone,
+          greenApiId,
+          greenApiToken
+        );
+      } catch (groupErr) {
+        console.warn(`[ReviewSender] Could not add ${phone} to community group:`, groupErr);
+      }
+
       if (res.success) {
         sentCount++;
         const nowIso = new Date().toISOString();
@@ -215,7 +231,7 @@ export async function runAutoReviewAndVoucherSender(
           console.warn('[ReviewSender] Could not update booking notes in DB:', dbErr);
         }
 
-        showToast?.(`⭐ נשלחה אוטומטית בקשת חוות דעת ושובר VIP ל-${ownerName} (${dogName}) 🐾`);
+        showToast?.(`⭐ נשלחה בקשת חוות דעת וצורף/ה לקהילת ה-VIP: ${ownerName} (${dogName}) 🐾`);
       } else {
         errors.push(`שגיאה בשליחה ל-${ownerName}: ${res.error || 'נכשלה'}`);
       }

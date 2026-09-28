@@ -1,49 +1,43 @@
-const https = require('https');
+const fs = require('fs');
+const { createClient } = require('@supabase/supabase-js');
 
-const GREEN_API_ID = '710722735421';
-const GREEN_API_TOKEN = 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b';
-const RAZ_CHAT_ID = '972543180407@c.us';
-
-function getChatHistory() {
-  return new Promise((resolve, reject) => {
-    const postData = JSON.stringify({
-      chatId: RAZ_CHAT_ID,
-      count: 20
-    });
-
-    const options = {
-      hostname: 'api.green-api.com',
-      port: 443,
-      path: `/waInstance${GREEN_API_ID}/getChatHistory/${GREEN_API_TOKEN}`,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData)
+async function checkRazChat() {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  const env = {};
+  envContent.split('\n').forEach(line => {
+    const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+    if (match) {
+      let val = (match[2] || '').trim();
+      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+        val = val.slice(1, -1);
       }
-    };
-
-    const req = https.request(options, (res) => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(body));
-        } catch (e) {
-          resolve({ raw: body });
-        }
-      });
-    });
-
-    req.on('error', reject);
-    req.write(postData);
-    req.end();
+      env[match[1]] = val;
+    }
   });
+
+  const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
+  const { data: rows } = await supabase.from('settings').select('*').limit(1);
+  const s = rows?.[0]?.data || {};
+  const id = s.greenApiIdInstance;
+  const token = s.greenApiToken;
+  const chatId = '972543180407@c.us';
+
+  console.log('Fetching chat history for Raz:', chatId);
+  const res = await fetch(`https://api.green-api.com/waInstance${id}/getChatHistory/${token}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chatId, count: 10 })
+  });
+  const hist = await res.json();
+  if (Array.isArray(hist)) {
+    hist.forEach(m => {
+      const time = new Date((m.timestamp || 0) * 1000).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
+      const text = m.textMessage || m.extendedTextMessage?.text || m.caption || '[מדיה/קובץ]';
+      console.log(`[${time}] ${m.type.toUpperCase()}: ${text}\n`);
+    });
+  } else {
+    console.log('Response:', hist);
+  }
 }
 
-async function main() {
-  const history = await getChatHistory();
-  console.log('Chat history with Raz count:', Array.isArray(history) ? history.length : 0);
-  console.log(JSON.stringify(history, null, 2));
-}
-
-main().catch(console.error);
+checkRazChat();
