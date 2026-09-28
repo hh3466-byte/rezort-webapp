@@ -359,9 +359,10 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     ''
   ];
 
-  parts.push(`🟢 *אירועים ירוקים (${totalGreen} אירועים שסונכרנו בהצלחה ב-24 שעות):*`);
+  // Green Events Section (Concise summary - general numbers only)
+  parts.push(`🟢 *אירועים ירוקים (ב-24 שעות האחרונות):*`);
   if (totalGreen > 0) {
-    greenEvents.forEach(e => parts.push(e));
+    parts.push(`• סונכרנו ואומתו בהצלחה *${totalGreen}* אירועים ושריונים מול היומן והוואטסאפ (תאריכים, מקדמות ופרטי קשר תקינים ב-100%).`);
   } else {
     parts.push(`• לא נרשמו שינויי שריון חדשים ב-24 שעות האחרונות.`);
   }

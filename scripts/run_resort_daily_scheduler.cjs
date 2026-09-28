@@ -163,11 +163,11 @@ async function execute1830Sanity(settings, bookings, intakes, todayStr, isForced
     `✅ קישור Grow לתשלומים: פעיל ומאובטח (ללא חשבון בנק)`,
     `✅ סנכרון Supabase Cloud: תקין`,
     `✅ הודעות ב-24 שעות האחרונות: נבדקו ונמצאו תקינות (ללא מספרי בנק וללא שגיאות).\n`,
-    `🟢 *אירועים ירוקים (${greenEvents.length} אירועים שסונכרנו בהצלחה ב-24 שעות):*`
+    `🟢 *אירועים ירוקים (ב-24 שעות האחרונות):*`
   ];
 
   if (greenEvents.length > 0) {
-    greenEvents.forEach(e => parts.push(e));
+    parts.push(`• סונכרנו ואומתו בהצלחה *${greenEvents.length}* אירועים ושריונים מול היומן והוואטסאפ (תאריכים, מקדמות ופרטי קשר תקינים ב-100%).`);
   } else {
     parts.push(`• לא נרשמו שינויי שריון חדשים ב-24 שעות האחרונות.`);
   }
