@@ -67,21 +67,34 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'ignored', reason: 'empty_data' });
     }
 
-    // Ignore Michal Sela per explicit business rule
-    if (fullName.includes('מיכל סלע') || cleanPhone.includes('4446337')) {
-      console.log('Skipping Michal Sela (excluded from Resort)');
-      return res.status(200).json({ status: 'ignored', reason: 'excluded_customer' });
+    // Multi-layer filter to separate "זכויות המורה" and other non-resort businesses:
+    const textCorpus = `${fullName} ${customField} ${data.description || ''} ${data.itemName || ''} ${data.productName || ''}`.toLowerCase();
+    
+    const TEACHER_RIGHTS_KEYWORDS = [
+      'זכויות המורה', 'מורה', 'מורים', 'הוראה', 'עובד הוראה', 'עובדי הוראה',
+      'שכר', 'תלוש', 'פנסיה', 'ייעוץ פנסיוני', 'בדיקת שכר', 'ערעור', 'גמול',
+      'דרגה', 'ותק', 'שבתון', 'אופק חדש', 'עוז לתמורה', 'מיכל סלע'
+    ];
+
+    const isTeacherRights = TEACHER_RIGHTS_KEYWORDS.some(kw => textCorpus.includes(kw)) || cleanPhone.includes('4446337');
+    if (isTeacherRights) {
+      console.log(`Skipping non-resort transaction (זכויות המורה): ${fullName} - ₪${amount}`);
+      return res.status(200).json({ status: 'ignored', reason: 'teacher_rights_business' });
     }
 
     // Connect to Supabase
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // Find matching booking
+    // Find matching booking & intake requests in Resort database
     const { data: bookings } = await supabase
       .from('bookings')
       .select('*')
       .neq('stay_status', 'cancelled');
+
+    const { data: intakes } = await supabase
+      .from('intake_requests')
+      .select('*');
 
     let matchedBooking = null;
 
@@ -99,6 +112,18 @@ export default async function handler(req, res) {
         const bName = (b.owner_name || b.ownerName || '').trim().toLowerCase();
         return bName && (bName.includes(targetName) || targetName.includes(bName));
       });
+    }
+
+    // If still no booking, check if matching intake questionnaire exists
+    const matchingIntake = !matchedBooking && cleanPhone ? (intakes || []).find(r => {
+      const rPhone = cleanPhoneNumber(r.owner_phone || r.ownerPhone || '');
+      return rPhone && rPhone.endsWith(cleanPhone.slice(-7));
+    }) : null;
+
+    // Strict guard: If this payment has NO relation to Resort bookings, intakes, or dogs, ignore it cleanly
+    if (!matchedBooking && !matchingIntake) {
+      console.log(`No resort booking or intake matched for: ${fullName} (${cleanPhone}) - treated as non-resort transaction.`);
+      return res.status(200).json({ status: 'ignored', reason: 'non_resort_transaction' });
     }
 
     let matchSummary = '';
@@ -129,13 +154,13 @@ export default async function handler(req, res) {
       }).eq('id', matchedBooking.id);
 
       matchSummary = `עודכן בהזמנה של *${matchedBooking.dog_name || curData.dogName}* (${matchedBooking.owner_name || curData.ownerName}). סטטוס: ${isFullyPaid ? 'שולם במלואו ✅' : 'שולמה מקדמה 🟢'}`;
-    } else {
-      matchSummary = `לא אותרה הזמנה פעילה במערכת עבור ${fullName} (${cleanPhone}) - נרשם בדוח הביקורת.`;
+    } else if (matchingIntake) {
+      matchSummary = `נקלטה מקדמה לשאלון קליטה של *${matchingIntake.dog_name || matchingIntake.dogName}* (${matchingIntake.owner_name || matchingIntake.ownerName}).`;
     }
 
-    // Send real-time WhatsApp alert to manager
+    // Send real-time WhatsApp alert to manager ONLY for verified Resort transactions
     const methodDisplay = paymentType.includes('bit') ? 'Bit' : paymentType.includes('apple') ? 'ApplePay' : 'כרטיס אשראי';
-    const alertMsg = `💳 *התקבל תשלום חדש ב-GROW!*
+    const alertMsg = `💳 *התקבל תשלום ריזורט ב-GROW!*
 • *לקוח:* ${fullName || 'לא צוין'} (📞 ${cleanPhone || 'ללא טלפון'})
 • *סכום:* ₪${amount.toLocaleString()} (${methodDisplay})
 • *אסמכתא:* ${transactionId}
@@ -145,7 +170,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       status: 'success',
-      matched: Boolean(matchedBooking),
+      matched: true,
       bookingId: matchedBooking ? matchedBooking.id : null
     });
   } catch (err) {
