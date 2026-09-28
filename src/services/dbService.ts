@@ -1165,95 +1165,20 @@ export const subscribeToIntakeRequests = (
 
   const fetchRequests = async () => {
     try {
-      const { data, error } = await supabase
-        .from(INTAKE_REQUESTS_TABLE)
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data: sRow } = await supabase
+        .from(SETTINGS_TABLE)
+        .select('data')
+        .eq('id', SETTINGS_DOC_ID)
+        .single();
 
-      if (error) {
-        // Table might not exist yet, fallback to reading settings.data.intakeRequests
-        try {
-          const { data: sRow } = await supabase
-            .from(SETTINGS_TABLE)
-            .select('data')
-            .eq('id', SETTINGS_DOC_ID)
-            .single();
-
-          if (sRow?.data?.intakeRequests && Array.isArray(sRow.data.intakeRequests)) {
-            const list: IntakeRequest[] = sRow.data.intakeRequests;
-            localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(list));
-            callback(list);
-            return;
-          }
-        } catch (e2) {}
-
-        callback(loadStoredIntakeRequests());
+      if (sRow?.data?.intakeRequests && Array.isArray(sRow.data.intakeRequests)) {
+        const list: IntakeRequest[] = sRow.data.intakeRequests;
+        localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(list));
+        callback(list);
         return;
       }
 
-      if (data && data.length > 0) {
-        const mapped: IntakeRequest[] = data.map((row: any) => {
-          if (row.data && typeof row.data === 'object') {
-            return {
-              ...row.data,
-              id: row.id,
-              status: row.status || row.data.status,
-              ownerAddress: row.data.ownerAddress || row.owner_address || '',
-              ownerCoordinates: row.data.ownerCoordinates || undefined,
-            };
-          }
-          return {
-            id: row.id,
-            createdAt: row.created_at || new Date().toISOString(),
-            status: row.status || 'pending',
-            ownerName: row.owner_name,
-            ownerPhone: row.owner_phone,
-            ownerEmail: row.owner_email || '',
-            ownerAddress: row.owner_address || row.data?.ownerAddress || '',
-            ownerCoordinates: row.data?.ownerCoordinates || undefined,
-            dogName: row.dog_name,
-            dogBreed: row.dog_breed || '',
-            dogAge: row.dog_age || '',
-            dogGender: row.dog_gender || row.data?.dogGender || 'male',
-            dogSize: row.dog_size || 'medium',
-            serviceType: row.service_type || 'boarding',
-            startDate: row.start_date,
-            endDate: row.end_date,
-            isFriendlyWithDogs: row.is_friendly_with_dogs || 'yes',
-            isNeutered: Boolean(row.is_neutered),
-            isVaccinated: Boolean(row.is_vaccinated),
-            isHouseTrained: row.is_house_trained !== undefined ? Boolean(row.is_house_trained) : (row.data?.isHouseTrained !== false),
-            isTreatedParasites: row.is_treated_parasites !== undefined ? Boolean(row.is_treated_parasites) : (row.data?.isTreatedParasites !== false),
-            specialNeeds: row.special_needs || '',
-            notes: row.notes || '',
-            calculatedPrice: Number(row.calculated_price) || 0,
-            depositRequested: Number(row.deposit_requested) || 0,
-            internalNotes: row.internal_notes || '',
-          } as IntakeRequest;
-        });
-
-        localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(mapped));
-        callback(mapped);
-      } else {
-        // Check if settings fallback has any
-        try {
-          const { data: sRow } = await supabase
-            .from(SETTINGS_TABLE)
-            .select('data')
-            .eq('id', SETTINGS_DOC_ID)
-            .single();
-
-          if (sRow?.data?.intakeRequests && Array.isArray(sRow.data.intakeRequests)) {
-            const list: IntakeRequest[] = sRow.data.intakeRequests;
-            localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(list));
-            callback(list);
-            return;
-          }
-        } catch (e2) {}
-
-        localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify([]));
-        callback([]);
-      }
+      callback(loadStoredIntakeRequests());
     } catch (e) {
       callback(loadStoredIntakeRequests());
     }
@@ -1263,13 +1188,6 @@ export const subscribeToIntakeRequests = (
 
   const channel = supabase
     .channel('public:intake_requests_all')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: INTAKE_REQUESTS_TABLE },
-      () => {
-        fetchRequests();
-      }
-    )
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: SETTINGS_TABLE },
