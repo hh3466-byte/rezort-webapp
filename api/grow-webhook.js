@@ -17,6 +17,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const GREEN_API_ID = "710722735421";
 const GREEN_API_TOKEN = "ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b";
 const MANAGER_PHONE = "0543200007";
+const ETTI_PHONE = "0524467314";
 
 function cleanPhoneNumber(phone) {
   if (!phone) return '';
@@ -26,16 +27,18 @@ function cleanPhoneNumber(phone) {
   return cleaned;
 }
 
-async function sendWhatsAppToManager(message) {
+async function sendWhatsAppDirect(phone, message) {
   try {
+    const clean = cleanPhoneNumber(phone);
+    const chatId = `${clean.startsWith('0') ? '972' + clean.slice(1) : clean}@c.us`;
     const url = `https://api.green-api.com/waInstance${GREEN_API_ID}/sendMessage/${GREEN_API_TOKEN}`;
     await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId: `${MANAGER_PHONE}@c.us`, message })
+      body: JSON.stringify({ chatId, message })
     });
   } catch (err) {
-    console.error('Error sending WhatsApp to manager:', err);
+    console.error(`Error sending WhatsApp to ${phone}:`, err);
   }
 }
 
@@ -62,6 +65,7 @@ export default async function handler(req, res) {
     const transactionId = String(data.transactionId || data.asmachta || data.transaction_id || data.id || Date.now());
     const paymentType = (data.paymentType || data.payment_method || data.type || 'אשראי').toLowerCase();
     const customField = data.customFields || data.description || data.comments || '';
+    const methodDisplay = paymentType.includes('bit') ? 'Bit' : paymentType.includes('apple') ? 'ApplePay' : 'כרטיס אשראי';
 
     if (amount <= 0 && !fullName && !cleanPhone) {
       return res.status(200).json({ status: 'ignored', reason: 'empty_data' });
@@ -78,8 +82,26 @@ export default async function handler(req, res) {
 
     const isTeacherRights = TEACHER_RIGHTS_KEYWORDS.some(kw => textCorpus.includes(kw)) || cleanPhone.includes('4446337');
     if (isTeacherRights) {
-      console.log(`Skipping non-resort transaction (זכויות המורה): ${fullName} - ₪${amount}`);
-      return res.status(200).json({ status: 'ignored', reason: 'teacher_rights_business' });
+      console.log(`Routing Teacher Rights transaction to Etti: ${fullName} - ₪${amount}`);
+      
+      const nowIL = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
+      const serviceDesc = data.itemName || data.productName || data.description || customField || 'זכויות המורה';
+
+      const ettiMsg = `📚 *התקבל תשלום חדש - זכויות המורה!*
+• *שם הלקוח:* ${fullName || 'לא צוין'} (📞 ${cleanPhone || 'ללא טלפון'})
+• *סכום:* ₪${amount.toLocaleString()} (${methodDisplay})
+• *שירות/פירוט:* ${serviceDesc}
+• *אסמכתא:* ${transactionId}
+• *תאריך ושעה:* ${nowIL}`;
+
+      await sendWhatsAppDirect(ETTI_PHONE, ettiMsg);
+
+      return res.status(200).json({
+        status: 'success',
+        type: 'teacher_rights_routed_to_etti',
+        amount,
+        customer: fullName
+      });
     }
 
     // Connect to Supabase
@@ -159,14 +181,13 @@ export default async function handler(req, res) {
     }
 
     // Send real-time WhatsApp alert to manager ONLY for verified Resort transactions
-    const methodDisplay = paymentType.includes('bit') ? 'Bit' : paymentType.includes('apple') ? 'ApplePay' : 'כרטיס אשראי';
     const alertMsg = `💳 *התקבל תשלום ריזורט ב-GROW!*
 • *לקוח:* ${fullName || 'לא צוין'} (📞 ${cleanPhone || 'ללא טלפון'})
 • *סכום:* ₪${amount.toLocaleString()} (${methodDisplay})
 • *אסמכתא:* ${transactionId}
 • *סנכרון יומן:* ${matchSummary}`;
 
-    await sendWhatsAppToManager(alertMsg);
+    await sendWhatsAppDirect(MANAGER_PHONE, alertMsg);
 
     return res.status(200).json({
       status: 'success',
