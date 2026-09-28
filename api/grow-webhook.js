@@ -82,23 +82,25 @@ export default async function handler(req, res) {
 
     const isTeacherRights = TEACHER_RIGHTS_KEYWORDS.some(kw => textCorpus.includes(kw)) || cleanPhone.includes('4446337');
     if (isTeacherRights) {
-      console.log(`Routing Teacher Rights transaction to Etti: ${fullName} - ₪${amount}`);
+      console.log(`Routing Teacher Rights transaction to Etti & Manager: ${fullName} - ₪${amount}`);
       
       const nowIL = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
       const serviceDesc = data.itemName || data.productName || data.description || customField || 'זכויות המורה';
 
-      const ettiMsg = `📚 *התקבל תשלום חדש - זכויות המורה!*
+      const teacherRightsMsg = `📚 *התקבל תשלום חדש - זכויות המורה!*
 • *שם הלקוח:* ${fullName || 'לא צוין'} (📞 ${cleanPhone || 'ללא טלפון'})
 • *סכום:* ₪${amount.toLocaleString()} (${methodDisplay})
 • *שירות/פירוט:* ${serviceDesc}
 • *אסמכתא:* ${transactionId}
 • *תאריך ושעה:* ${nowIL}`;
 
-      await sendWhatsAppDirect(ETTI_PHONE, ettiMsg);
+      // Send to both Etti (052-4467314) and Manager (054-3200007)
+      await sendWhatsAppDirect(ETTI_PHONE, teacherRightsMsg);
+      await sendWhatsAppDirect(MANAGER_PHONE, teacherRightsMsg);
 
       return res.status(200).json({
         status: 'success',
-        type: 'teacher_rights_routed_to_etti',
+        type: 'teacher_rights_routed_to_etti_and_manager',
         amount,
         customer: fullName
       });
