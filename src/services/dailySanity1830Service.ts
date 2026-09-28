@@ -31,12 +31,38 @@ export interface Sanity1830AuditResult {
   formattedReport: string;
 }
 
+export function formatKennelName(k?: string | number): string {
+  if (!k && k !== 0) return 'ללא שיבוץ';
+  const s = String(k);
+  if (s.startsWith('room_')) return `חדר ${s.replace('room_', '')}`;
+  if (s.startsWith('suite_')) return `סוויטה ${s.replace('suite_', '')}`;
+  if (s === 'home') return 'הלנה ביתית';
+  if (s === 'east_path') return 'שביל מזרחי';
+  if (s === 'west_path') return 'שביל מערבי';
+  if (s === 'main_yard') return 'חצר מרכזית';
+  return `מתחם ${s}`;
+}
+
+export function countDogsInBooking(b: Booking): number {
+  const name = (b.dogName || '').trim();
+  const notes = (b.notes || '').trim();
+  if (name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes(' ועוד ') || name.includes('&')) {
+    return 2;
+  }
+  if (notes.includes('2 כלבים') || notes.includes('שני כלבים') || notes.includes('זוג כלבים') || notes.includes('2 כלבות') || notes.includes('שתי כלבות')) {
+    return 2;
+  }
+  return 1;
+}
+
 /**
  * Runs the comprehensive 18:30 Daily Sanity Audit:
  * 1. Checks all infrastructure functions (Green-API, Grow, Supabase).
  * 2. Checks all templates & messages sent in the last 24 hours.
- * 3. Inspects all events in the last 24 hours and reconciles them with WhatsApp chats.
- * 4. Identifies "Green Events" (fully verified) vs "Red Lights" (anomalies, unanswered chats, unpaid links, 0 deposits, payment discrepancies).
+ * 3. 16 Deep Checks covering: Room collisions, pending checkouts, pending checkins, ghost bookings,
+ *    overcapacity, multi-dog discrepancies, training vs boarding mismatches, Grow payments vs ledger,
+ *    urgent 48h ₪0 deposits, tomorrow departure balances, vaccinations, meds, pending intakes,
+ *    unanswered WhatsApp chats, and communication problems.
  */
 export function run1830SanityAudit(
   bookings: Booking[],
@@ -47,6 +73,8 @@ export function run1830SanityAudit(
 ): Sanity1830AuditResult {
   const nowMs = Date.now();
   const past24HoursMs = nowMs - 24 * 60 * 60 * 1000;
+  const tomorrowStr = addDays(todayStr, 1);
+  const in2DaysStr = addDays(todayStr, 2);
 
   // 1. Infrastructure checks
   const isGreenApiHealthy = Boolean(settings.greenApiIdInstance && settings.greenApiToken);
@@ -58,7 +86,18 @@ export function run1830SanityAudit(
 
   const greenEvents: string[] = [];
   const redLights = {
-    unassignedKennels: [] as string[],
+    roomCollisions: [] as string[],
+    pendingCheckouts: [] as string[],
+    pendingCheckins: [] as string[],
+    expiredGhostBookings: [] as string[],
+    overcapacity: [] as string[],
+    multiDogDiscrepancies: [] as string[],
+    trainingDiscrepancies: [] as string[],
+    earlyArrivalDiscrepancies: [] as string[],
+    urgentZeroDeposit: [] as string[],
+    tomorrowPendingBalances: [] as string[],
+    urgentIntakes: [] as string[],
+    vaccinationIssues: [] as string[],
     unansweredChats: [] as string[],
     unpaidLinks: [] as string[],
     unfilledIntakes: [] as string[],
@@ -86,7 +125,135 @@ export function run1830SanityAudit(
     return lastMsgTime >= past24HoursMs;
   });
 
-  // 2. Reconcile recent bookings against WhatsApp chats
+  // ==========================================
+  // DEEP CHECK 1: Room Collisions (התנגשות חדרים)
+  // ==========================================
+  const currentAndFutureActive = activeBookings.filter(b => b.endDate >= todayStr && b.stayStatus !== 'checked_out');
+  for (let i = 0; i < currentAndFutureActive.length; i++) {
+    for (let j = i + 1; j < currentAndFutureActive.length; j++) {
+      const b1 = currentAndFutureActive[i];
+      const b2 = currentAndFutureActive[j];
+      if (!b1.kennelNumber || !b2.kennelNumber) continue;
+      if (b1.kennelNumber !== b2.kennelNumber) continue;
+
+      // Check date overlap
+      const hasOverlap = b1.startDate <= b2.endDate && b1.endDate >= b2.startDate;
+      if (!hasOverlap) continue;
+
+      const p1 = cleanPhoneNumber(b1.ownerPhone || '');
+      const p2 = cleanPhoneNumber(b2.ownerPhone || '');
+      // If different owners in the same kennel
+      if (p1 !== p2 && b1.ownerName !== b2.ownerName) {
+        const kName = formatKennelName(b1.kennelNumber);
+        redLights.roomCollisions.push(`🚨 התנגשות ב${kName}: *${b1.dogName}* (${b1.ownerName}) ו-*${b2.dogName}* (${b2.ownerName}) משובצים לאותו מתחם בתאריכים חופפים (${formatDateIL(b1.startDate)}-${formatDateIL(b1.endDate)})!`);
+      }
+    }
+  }
+
+  // ==========================================
+  // DEEP CHECK 2: Pending Checkouts Today (שחרורים של היום שטרם נסגרו)
+  // ==========================================
+  activeBookings.filter(b => b.endDate === todayStr && b.stayStatus !== 'checked_out').forEach(b => {
+    redLights.pendingCheckouts.push(`🚪 שחרור ממתין מהיום: *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | רשום לסיום שהות היום אך טרם סומן שחרור הביתה (checked_out) או הוארכה שהותו!`);
+  });
+
+  // ==========================================
+  // DEEP CHECK 3: Pending Checkins Today (כניסות של היום שטרם סומנו)
+  // ==========================================
+  activeBookings.filter(b => b.startDate === todayStr && b.stayStatus !== 'checked_in' && b.stayStatus !== 'checked_out').forEach(b => {
+    redLights.pendingCheckins.push(`📥 כניסה של היום שטרם סומנה: *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | רשום לכניסה היום אך טרם סומן שנכנס בפועל (checked_in)!`);
+  });
+
+  // ==========================================
+  // DEEP CHECK 4: Expired Ghost Bookings (שריוני עבר שטרם נסגרו)
+  // ==========================================
+  activeBookings.filter(b => b.endDate < todayStr && b.stayStatus !== 'checked_out').forEach(b => {
+    redLights.expiredGhostBookings.push(`👻 שריון עבר שלא נסגר: *${b.dogName}* (${b.ownerName}) | תאריכים ${formatDateIL(b.startDate)}-${formatDateIL(b.endDate)} עברו, נדרש שחרור או העברה לארכיון.`);
+  });
+
+  // ==========================================
+  // DEEP CHECK 5: Overcapacity Alert (בקרת תפוסת שיא)
+  // ==========================================
+  const stayingBookingsToday = activeBookings.filter(b => b.startDate <= todayStr && b.endDate >= todayStr && b.stayStatus !== 'checked_out');
+  const totalStayingDogsCount = stayingBookingsToday.reduce((sum, b) => sum + countDogsInBooking(b), 0);
+  if (totalStayingDogsCount >= 14) {
+    redLights.overcapacity.push(`⚠️ תפוסת שיא בריזורט: *${totalStayingDogsCount} כלבים* שוהים כעת (סף התרעת עומס: 14 כלבים)!`);
+  }
+
+  // ==========================================
+  // DEEP CHECK 6: Multi-Dog Discrepancy (זיהוי 2 כלבים בשם יחיד)
+  // ==========================================
+  activeBookings.filter(b => b.endDate >= todayStr).forEach(b => {
+    const name = (b.dogName || '').trim();
+    const notes = (b.notes || '').trim();
+    const isMultiDogMentioned = notes.includes('2 כלבים') || notes.includes('שני כלבים') || notes.includes('זוג כלבים') || notes.includes('2 כלבות') || notes.includes('שתי כלבות');
+    const isMultiName = name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes('&');
+    if (isMultiDogMentioned && !isMultiName) {
+      redLights.multiDogDiscrepancies.push(`🐶🐶 חשד ל-2 כלבים בשם יחיד: *${name}* (${b.ownerName}) - ההערות מעידות על 2 כלבים, אך בשם מופיע כלב יחיד!`);
+    }
+  });
+
+  // ==========================================
+  // DEEP CHECK 7: Training vs Boarding Classification Discrepancy
+  // ==========================================
+  activeBookings.filter(b => b.endDate >= todayStr).forEach(b => {
+    const price = Number(b.totalPrice) || 0;
+    const startMs = new Date(b.startDate).getTime();
+    const endMs = new Date(b.endDate).getTime();
+    const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+    const notes = (b.notes || '').toLowerCase();
+    const isTrainingMentioned = notes.includes('אילוף') || notes.includes('מאלף') || notes.includes('אימון');
+
+    if (b.serviceType === 'boarding' && (price >= 3500 || days >= 21 || isTrainingMentioned)) {
+      redLights.trainingDiscrepancies.push(`🎓 חשד לאילוף שסווג כפנסיון: *${b.dogName}* (${b.ownerName}) | שהות ${days} ימים / ₪${price.toLocaleString()} | נדרש לוודא סיווג!`);
+    } else if (b.serviceType === 'training' && price > 0 && price < 2500 && days < 10) {
+      redLights.trainingDiscrepancies.push(`🎓 תמחור/משך אילוף חריג: *${b.dogName}* (${b.ownerName}) | מסווג כאילוף אך מחיר ₪${price.toLocaleString()} / ${days} ימים נמוך מהתקן!`);
+    }
+  });
+
+  // ==========================================
+  // DEEP CHECK 8: Urgent 48h ₪0 Deposit Bookings
+  // ==========================================
+  activeBookings.filter(b => b.startDate >= todayStr && b.startDate <= in2DaysStr).forEach(b => {
+    const price = Number(b.totalPrice) || 0;
+    const deposit = Number(b.depositAmount) || 0;
+    if (price > 0 && deposit === 0 && !b.isFreeStay) {
+      redLights.urgentZeroDeposit.push(`🚨 כניסה דחופה ב-48 שעות הקרובות ללא מקדמה (₪0): *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | כניסה: ${formatDateIL(b.startDate)} | חוב: ₪${price.toLocaleString()}`);
+    }
+  });
+
+  // ==========================================
+  // DEEP CHECK 9: Pending Balances for Tomorrow's Departures
+  // ==========================================
+  activeBookings.filter(b => b.endDate === tomorrowStr && b.stayStatus !== 'checked_out').forEach(b => {
+    const price = Number(b.totalPrice) || 0;
+    const deposit = Number(b.depositAmount) || 0;
+    const balance = price - deposit;
+    if (balance > 0 && !b.isFreeStay) {
+      redLights.tomorrowPendingBalances.push(`💰 יתרת חוב למשתחרר של מחר: *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | נותרה יתרה לתשלום: ₪${balance.toLocaleString()}`);
+    }
+  });
+
+  // ==========================================
+  // DEEP CHECK 10: Urgent Pending Intakes for Next 48h
+  // ==========================================
+  intakeRequests.filter(r => r.status === 'pending').forEach(r => {
+    const sDate = r.startDate || '';
+    if (sDate >= todayStr && sDate <= in2DaysStr) {
+      redLights.urgentIntakes.push(`📋 שאלון קליטה דחוף ל-48 שעות הקרובות טרם מולא: *${r.dogName}* (${r.ownerName} - 📞 ${r.ownerPhone}) | כניסה מתוכננת: ${formatDateIL(r.startDate)}`);
+    }
+  });
+
+  // ==========================================
+  // DEEP CHECK 11: Vaccination Issues for Staying & Next 48h Dogs
+  // ==========================================
+  activeBookings.filter(b => (b.startDate <= todayStr && b.endDate >= todayStr) || (b.startDate >= todayStr && b.startDate <= in2DaysStr)).forEach(b => {
+    if (b.vaccinationValid === false) {
+      redLights.vaccinationIssues.push(`💉 חיסונים לא מאומתים: *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | נדרש אימות פנקס חיסונים בתוקף!`);
+    }
+  });
+
+  // 2. Reconcile recent bookings against WhatsApp chats & data sanity
   recentBookings.forEach(b => {
     const cleanPhone = cleanPhoneNumber(b.ownerPhone || '');
     const price = Number(b.totalPrice) || 0;
@@ -104,7 +271,10 @@ export function run1830SanityAudit(
 
     // Check zero deposit for upcoming paid stay
     if (price > 0 && deposit === 0 && !isFree && b.endDate >= todayStr) {
-      redLights.zeroDepositHolding.push(`🔴 *${b.dogName}* (${b.ownerName} - ${b.ownerPhone || 'ללא טלפון'}) | ${formatDateIL(b.startDate)} עד ${formatDateIL(b.endDate)} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`);
+      const line = `🔴 *${b.dogName}* (${b.ownerName} - ${b.ownerPhone || 'ללא טלפון'}) | ${formatDateIL(b.startDate)} עד ${formatDateIL(b.endDate)} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`;
+      if (!redLights.zeroDepositHolding.includes(line)) {
+        redLights.zeroDepositHolding.push(line);
+      }
       hasIssue = true;
     }
 
@@ -117,7 +287,6 @@ export function run1830SanityAudit(
     // Check WhatsApp match if available
     if (matchingChat && matchingChat.lastMessage) {
       const msgText = matchingChat.lastMessage || '';
-      // Check if client asked for different dates in recent text
       if (msgText.includes('לבטל') || msgText.includes('ביטול') || msgText.includes('לא נוכל')) {
         redLights.calendarDiscrepancies.push(`⚠️ ${b.dogName} (${b.ownerName}): בוואטסאפ הלקוח ציין ביטול/שינוי, אך ביומן ההזמנה עדיין פעילה!`);
         hasIssue = true;
@@ -140,29 +309,24 @@ export function run1830SanityAudit(
     const name = c.name || 'לקוח';
     const hasBooking = c.classification === 'customer_with_booking' || activeBookings.some(b => cleanPhoneNumber(b.ownerPhone || '') === phone);
 
-    // Unanswered incoming message from lead (only if truly actionable, unread, and NOT an already booked customer engaged in routine stay chat)
     if (c.lastMessageType === 'incoming' && !hasBooking && c.unreadCount !== 0 && isActionableIncomingMessage(text)) {
       const msgTime = c.timestamp ? (c.timestamp < 1e12 ? c.timestamp * 1000 : c.timestamp) : nowMs;
       const elapsedHours = Math.round((nowMs - msgTime) / (1000 * 60 * 60));
-      // Truncate message quote to 60 chars
       const quote = text.length > 60 ? text.slice(0, 60) + '...' : text;
       redLights.unansweredChats.push(`💬 *${name}* (📞 ${phone}) כתב/ה לפני ${elapsedHours} שעות: "${quote}" (ממתין למענה!)`);
     }
 
-    // Payment link sent in outgoing message but not settled
     if (c.lastMessageType === 'outgoing' && (text.includes('grow.link') || text.includes('pay.grow'))) {
       const matchingBooking = activeBookings.find(b => cleanPhoneNumber(b.ownerPhone || '') === phone);
       const deposit = matchingBooking ? Number(matchingBooking.depositAmount) || 0 : 0;
       const isFree = matchingBooking?.isFreeStay;
 
-      // Cross-reference verified Grow ledger transactions (by name or phone)
       const isPaidInLedger = VERIFIED_GROW_LEDGER.some(t => {
         const tName = (t.customerName || '').trim().toLowerCase();
         const cName = (name || '').trim().toLowerCase();
         return (cName && (tName.includes(cName) || cName.includes(tName)));
       });
 
-      // Also check intake questionnaires
       const matchingIntake = intakeRequests.find(r => cleanPhoneNumber(r.ownerPhone || '') === phone);
       const intakePaid = matchingIntake && ((matchingIntake as any).depositPaid || (matchingIntake as any).paymentStatus === 'paid');
 
@@ -171,7 +335,6 @@ export function run1830SanityAudit(
       }
     }
 
-    // Check for customer complaints or problem keywords
     const problemKeywords = ['טעות', 'שגוי', 'תקלה', 'בעיה', 'הבטחתם', 'מאוכזב', 'לבטל הגעה', 'ביטול שריון'];
     const foundProblem = problemKeywords.find(k => text.includes(k));
     if (foundProblem && c.lastMessageType === 'incoming') {
@@ -179,7 +342,7 @@ export function run1830SanityAudit(
     }
   });
 
-  // 4. Check unhandled / open intake questionnaires (only future pending and active, excluding abandoned / booked / expired)
+  // 4. Check unhandled / open intake questionnaires
   const pendingIntakes = intakeRequests.filter(r => {
     if (r.status !== 'pending') return false;
     const sDate = r.startDate || '';
@@ -188,10 +351,13 @@ export function run1830SanityAudit(
     return true;
   });
   pendingIntakes.forEach(r => {
-    redLights.unfilledIntakes.push(`📋 שאלון ממתין: *${r.dogName}* (${r.ownerName} - 📞 ${r.ownerPhone || 'ללא טלפון'}) | נשלח לתאריכים ${formatDateIL(r.startDate)}-${formatDateIL(r.endDate)}`);
+    const line = `📋 שאלון ממתין: *${r.dogName}* (${r.ownerName} - 📞 ${r.ownerPhone || 'ללא טלפון'}) | נשלח לתאריכים ${formatDateIL(r.startDate)}-${formatDateIL(r.endDate)}`;
+    if (!redLights.unfilledIntakes.includes(line)) {
+      redLights.unfilledIntakes.push(line);
+    }
   });
 
-  // 5. Check all upcoming bookings for 0-deposit reservations (even if created earlier)
+  // 5. Check all upcoming bookings for 0-deposit reservations
   activeBookings.filter(b => b.endDate >= todayStr).forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
@@ -233,7 +399,6 @@ export function run1830SanityAudit(
     const deposit = Number(b.depositAmount) || 0;
     const price = Number(b.totalPrice) || 0;
     
-    // Check if there are verified Grow transactions matching this customer
     const matchingGrow = VERIFIED_GROW_LEDGER.filter(t => {
       const tName = (t.customerName || '').trim().toLowerCase();
       const bName = (b.ownerName || '').trim().toLowerCase();
@@ -246,17 +411,21 @@ export function run1830SanityAudit(
     }
   });
 
-  // 8. Check for unassigned dogs (Informational only - per AGENTS.md rule 4, assignment can be done later via top drawer)
-  const unassignedStayingDogs: string[] = [];
-  activeBookings.filter(b => b.startDate <= todayStr && b.endDate >= todayStr).forEach(b => {
-    if (!b.kennelNumber && b.kennelNumber !== 0) {
-      unassignedStayingDogs.push(`🏠 *${b.dogName}* (${b.ownerName}) | ממתין לשיבוץ מהיר בלוח החדרים`);
-    }
-  });
-
-  // Count totals (Excluding unassigned dogs since assignment can be done at Shmulik's convenience)
+  // Count totals across all red categories
   const totalGreen = greenEvents.length;
   const totalRed =
+    redLights.roomCollisions.length +
+    redLights.pendingCheckouts.length +
+    redLights.pendingCheckins.length +
+    redLights.expiredGhostBookings.length +
+    redLights.overcapacity.length +
+    redLights.multiDogDiscrepancies.length +
+    redLights.trainingDiscrepancies.length +
+    redLights.earlyArrivalDiscrepancies.length +
+    redLights.urgentZeroDeposit.length +
+    redLights.tomorrowPendingBalances.length +
+    redLights.urgentIntakes.length +
+    redLights.vaccinationIssues.length +
     redLights.unansweredChats.length +
     redLights.unpaidLinks.length +
     redLights.unfilledIntakes.length +
@@ -280,7 +449,7 @@ export function run1830SanityAudit(
     ''
   ];
 
-  // Green Events Section (Concise summary as requested by manager - general numbers only)
+  // Green Events Section (Concise summary)
   parts.push(`🟢 *אירועים ירוקים (ב-24 שעות האחרונות):*`);
   if (totalGreen > 0) {
     parts.push(`• סונכרנו ואומתו בהצלחה *${totalGreen}* אירועים ושריונים מול היומן והוואטסאפ (תאריכים, מקדמות ופרטי קשר תקינים ב-100%).`);
@@ -294,6 +463,61 @@ export function run1830SanityAudit(
   if (totalRed === 0) {
     parts.push(`אין אורות אדומים ✅`);
   } else {
+    if (redLights.roomCollisions.length > 0) {
+      parts.push(`\n🏨 *התנגשויות חדרים / שיבוץ כפול:*`);
+      redLights.roomCollisions.forEach(r => parts.push(`   • ${r}`));
+    }
+
+    if (redLights.pendingCheckouts.length > 0) {
+      parts.push(`\n🚪 *שחרורים ממתינים מהיום (טרם נסגרו):*`);
+      redLights.pendingCheckouts.forEach(r => parts.push(`   • ${r}`));
+    }
+
+    if (redLights.pendingCheckins.length > 0) {
+      parts.push(`\n📥 *כניסות של היום שטרם סומנו:*`);
+      redLights.pendingCheckins.forEach(r => parts.push(`   • ${r}`));
+    }
+
+    if (redLights.expiredGhostBookings.length > 0) {
+      parts.push(`\n👻 *שריוני עבר שטרם נסגרו:*`);
+      redLights.expiredGhostBookings.forEach(r => parts.push(`   • ${r}`));
+    }
+
+    if (redLights.overcapacity.length > 0) {
+      parts.push(`\n⚠️ *בקרת תפוסה וקיבולת שיא:*`);
+      redLights.overcapacity.forEach(r => parts.push(`   • ${r}`));
+    }
+
+    if (redLights.multiDogDiscrepancies.length > 0) {
+      parts.push(`\n🐶🐶 *זיהוי 2 כלבים הרשומים ככלב יחיד:*`);
+      redLights.multiDogDiscrepancies.forEach(r => parts.push(`   • ${r}`));
+    }
+
+    if (redLights.trainingDiscrepancies.length > 0) {
+      parts.push(`\n🎓 *אי-התאמות בסיווג אילוף מול פנסיון:*`);
+      redLights.trainingDiscrepancies.forEach(r => parts.push(`   • ${r}`));
+    }
+
+    if (redLights.urgentZeroDeposit.length > 0) {
+      parts.push(`\n🚨 *שריונים דחופים ל-48 השעות הקרובות ללא מקדמה (₪0):*`);
+      redLights.urgentZeroDeposit.forEach(r => parts.push(`   • ${r}`));
+    }
+
+    if (redLights.tomorrowPendingBalances.length > 0) {
+      parts.push(`\n💰 *יתרות חוב למשתחררים של מחר:*`);
+      redLights.tomorrowPendingBalances.forEach(r => parts.push(`   • ${r}`));
+    }
+
+    if (redLights.urgentIntakes.length > 0) {
+      parts.push(`\n📋 *שאלוני קליטה דחופים ל-48 שעות הקרובות טרם מולאו:*`);
+      redLights.urgentIntakes.forEach(r => parts.push(`   • ${r}`));
+    }
+
+    if (redLights.vaccinationIssues.length > 0) {
+      parts.push(`\n💉 *חיסונים לא מאומתים / חסרים:*`);
+      redLights.vaccinationIssues.forEach(r => parts.push(`   • ${r}`));
+    }
+
     if (redLights.unansweredChats.length > 0) {
       parts.push(`\n💬 *שיחות לקוחות הממתינות למענה:*`);
       redLights.unansweredChats.forEach(c => parts.push(`   • ${c}`));
@@ -305,7 +529,7 @@ export function run1830SanityAudit(
     }
 
     if (redLights.unfilledIntakes.length > 0) {
-      parts.push(`\n📋 *שאלוני קליטה פתוחים:*`);
+      parts.push(`\n📋 *שאלוני קליטה פתוחים נוספים:*`);
       redLights.unfilledIntakes.forEach(i => parts.push(`   • ${i}`));
     }
 
@@ -315,7 +539,7 @@ export function run1830SanityAudit(
     }
 
     if (redLights.zeroDepositHolding.length > 0) {
-      parts.push(`\n🔴 *שריונים ללא מקדמה (₪0) שתופסים מקום ביומן (${redLights.zeroDepositHolding.length} כלבים):*`);
+      parts.push(`\n🔴 *שריונים עתידיים ללא מקדמה (₪0):*`);
       redLights.zeroDepositHolding.forEach(z => parts.push(`   • ${z}`));
     }
 
