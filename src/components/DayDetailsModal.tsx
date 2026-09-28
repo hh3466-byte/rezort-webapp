@@ -28,6 +28,7 @@ import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessa
 import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
 import { getPlacementDisplayName, normalizePlacementKey } from '../utils/kennelUtils';
+import { getStayStatusColors } from './CalendarView';
 
 interface DayDetailsModalProps {
   dateStr: string | null;
@@ -326,6 +327,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   const remainingDebt = Math.max(0, Math.round(booking.totalPrice - booking.depositAmount));
   const roundedTotal = Math.round(booking.totalPrice || 0);
   const roundedDeposit = Math.round(booking.depositAmount || 0);
+  const stayColors = getStayStatusColors(booking.stayStatus, booking.endDate, todayStr);
 
   // Status color styles matching design
   let paymentBorder = isEnded 
@@ -376,8 +378,8 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
         <div className="space-y-1 flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-base shrink-0">🐾</span>
-            <span className={`font-black text-base sm:text-lg ${isEnded ? 'text-slate-700' : 'text-slate-900'}`}>{booking.dogName}</span>
-            <span className="text-xs sm:text-sm font-bold text-slate-500">({booking.ownerName})</span>
+            <span className={`font-black text-base sm:text-lg ${stayColors.dogClass}`}>{booking.dogName}</span>
+            <span className={`text-xs sm:text-sm font-bold ${stayColors.ownerClass}`}>({booking.ownerName})</span>
             {booking.dogBreed && (
               <span className="text-xs text-slate-500 font-normal">({booking.dogBreed})</span>
             )}
@@ -407,7 +409,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
           <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-600 mt-1">
             <span className="flex items-center gap-1 font-bold text-slate-800">
               <User className="w-3.5 h-3.5 text-indigo-500" />
-              <span>בעלים: <strong className="text-slate-900">{booking.ownerName}</strong></span>
+              <span>בעלים: <strong className={stayColors.ownerClass ? 'text-slate-900 font-bold' : 'text-slate-900'}>{booking.ownerName}</strong></span>
             </span>
             <span className="flex items-center gap-1 font-mono text-slate-700 font-semibold" dir="ltr">
               <Phone className="w-3.5 h-3.5 text-green-600" /> {booking.ownerPhone}

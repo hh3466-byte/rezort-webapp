@@ -53,6 +53,56 @@ interface CalendarViewProps {
   onJumpToToday?: () => void;
 }
 
+// Helper function to get high-contrast unified colors for dogs and owners according to stay status:
+// 1. Released (checked_out / ended) -> Light gray (text-slate-400) for both dog and owner
+// 2. Checked in (active stay) -> Deep dark green (text-[#065f46]) for both dog and owner (high sunlight visibility)
+// 3. Booked (reserved, not checked in yet) -> Strong vibrant purple (text-[#581c87]) for both dog and owner (high sunlight visibility)
+export function getStayStatusColors(stayStatus: Booking['stayStatus'], endDate: string, todayStr: string) {
+  const isEnded = stayStatus === 'checked_out' || (endDate < todayStr);
+  const isCheckedIn = stayStatus === 'checked_in' && !isEnded;
+
+  if (isEnded) {
+    return {
+      isEnded: true,
+      isCheckedIn: false,
+      isBooked: false,
+      dogClass: 'text-slate-400 font-bold',
+      ownerClass: 'text-slate-400 font-bold text-[11px]',
+      textClass: 'text-slate-400',
+      cardBorderBg: 'bg-slate-100/80 border-slate-200 hover:border-slate-300 opacity-75',
+      monthChipBg: 'bg-slate-100 border-slate-200 text-slate-400 font-medium',
+      iconClass: 'text-slate-400'
+    };
+  }
+
+  if (isCheckedIn) {
+    return {
+      isEnded: false,
+      isCheckedIn: true,
+      isBooked: false,
+      dogClass: 'text-[#065f46] font-black', // Deep dark emerald green, high sunlight contrast
+      ownerClass: 'text-[#065f46] font-black text-[11px]', // Unified exact same color
+      textClass: 'text-[#065f46]',
+      cardBorderBg: 'bg-emerald-50/70 border-emerald-300 hover:border-emerald-400 hover:bg-emerald-50',
+      monthChipBg: 'bg-emerald-50 border-emerald-300 text-[#065f46] font-black',
+      iconClass: 'text-[#065f46]'
+    };
+  }
+
+  // Booked / Reserved (not checked in yet)
+  return {
+    isEnded: false,
+    isCheckedIn: false,
+    isBooked: true,
+    dogClass: 'text-[#581c87] font-black', // Deep vibrant purple, high sunlight contrast
+    ownerClass: 'text-[#581c87] font-black text-[11px]', // Unified exact same color
+    textClass: 'text-[#581c87]',
+    cardBorderBg: 'bg-purple-50/60 border-purple-200 hover:border-purple-300 hover:bg-purple-50',
+    monthChipBg: 'bg-purple-50 border-purple-200 text-[#581c87] font-black',
+    iconClass: 'text-[#581c87]'
+  };
+}
+
 export const CalendarView: React.FC<CalendarViewProps> = ({
   bookings,
   settings,
@@ -740,6 +790,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         const isDeposit = b.paymentStatus === 'deposit_paid';
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
+                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr);
 
                         return (
                           <div
@@ -750,17 +801,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 ? 'bg-amber-100 border-amber-400 text-amber-950 ring-2 ring-amber-400 shadow-md scale-[1.03]'
                                 : isDimmed
                                 ? 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90'
-                                : isEnded
-                                ? 'bg-slate-100 border-slate-200 text-slate-400 opacity-70'
-                                : 'bg-white hover:bg-emerald-50 border-slate-200 hover:border-emerald-300 text-slate-900'
+                                : stayColors.cardBorderBg
                             }`}
-                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${b.stayStatus === 'checked_out' ? ' (שוחרר הביתה)' : ''} - לחץ לפרטים מלאים`}
+                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${isEnded ? ' (שוחרר הביתה)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת בריזורט)' : ' (שוריין)'} - לחץ לפרטים מלאים`}
                           >
                             <span className="flex items-center gap-1.5 truncate">
-                              <span className="text-emerald-600 text-xs">🐾</span>
-                              <span className="truncate">{b.dogName} <span className="text-slate-500 font-medium text-[11px]">({b.ownerName})</span></span>
+                              <span className={`text-xs ${isMatch ? 'text-amber-700' : stayColors.iconClass}`}>🐾</span>
+                              <span className="truncate">
+                                <span className={isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
+                                <span className={isMatch ? 'text-amber-900 font-bold text-[11px]' : stayColors.ownerClass}>({b.ownerName})</span>
+                              </span>
                             </span>
-                            {b.stayStatus === 'checked_out' ? (
+                            {isEnded ? (
                               <span className="text-[10px] bg-slate-200 text-slate-600 font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shrink-0" title="שוחרר הביתה">
                                 <span>🏁</span>
                                 <span>שוחרר</span>
@@ -882,29 +934,42 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       const isDeposit = b.paymentStatus === 'deposit_paid';
                       const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                       const isDimmed = Boolean(searchQuery.trim() && !isMatch);
+                      const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr);
 
-                      let chipStyle = 'bg-red-500 text-white';
+                      let chipStyle = stayColors.monthChipBg;
                       if (isMatch) {
                         chipStyle = 'bg-amber-500 text-white ring-2 ring-amber-300 font-black shadow-md';
                       } else if (isDimmed) {
                         chipStyle = 'bg-slate-200/60 text-slate-400 opacity-30';
-                      } else if (isEnded) {
-                        chipStyle = 'bg-slate-200 text-slate-700 border border-slate-300 font-medium';
-                      } else if (isPaid) {
-                        chipStyle = 'bg-emerald-600 text-white';
-                      } else if (isDeposit) {
-                        chipStyle = 'bg-emerald-50 text-emerald-900 border border-dashed border-emerald-500';
                       }
 
                       return (
                         <div
                           key={b.id}
-                          className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between ${chipStyle}`}
-                          title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${isEnded ? ' - הסתיים' : ''}`}
+                          className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between border ${chipStyle}`}
+                          title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
                         >
-                          <span className="truncate">🐾 {b.dogName} ({b.ownerName})</span>
-                          {isMatch && <span className="text-[9px] shrink-0">⭐</span>}
-                          {!isMatch && isEnded && <span className="text-[9px] opacity-70 shrink-0">🏁</span>}
+                          <span className="truncate flex items-center gap-1 min-w-0">
+                            <span className="text-[10px] shrink-0">🐾</span>
+                            <span className={`truncate ${isMatch ? 'text-white font-black' : stayColors.dogClass}`}>{b.dogName}</span>
+                            <span className={`text-[9px] shrink-0 ${isMatch ? 'text-amber-100 font-medium' : stayColors.ownerClass}`}>({b.ownerName})</span>
+                          </span>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            {isMatch && <span className="text-[9px]">⭐</span>}
+                            {!isMatch && isEnded && <span className="text-[9px] opacity-70">🏁</span>}
+                            {!isEnded && (
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  isPaid
+                                    ? 'bg-emerald-500'
+                                    : isDeposit
+                                    ? 'bg-amber-400'
+                                    : 'bg-red-500'
+                                }`}
+                                title={isPaid ? 'שולם מלא' : isDeposit ? 'שולמה מקדמה' : 'חוב פתוח'}
+                              />
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -1042,6 +1107,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
+                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr);
 
                         return (
                           <div
@@ -1052,16 +1118,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 ? 'bg-amber-50/90 border-2 border-amber-400 text-amber-950 ring-2 ring-amber-400/80 shadow-md scale-[1.02]'
                                 : isDimmed
                                 ? 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90'
-                                : isEnded
-                                ? 'bg-slate-100/80 border-slate-200 text-slate-500 opacity-80'
-                                : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-900'
+                                : stayColors.cardBorderBg
                             }`}
-                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}`}
+                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${isEnded ? ' (שוחרר)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת)' : ' (שוריין)'}`}
                           >
                             <div className="flex items-center justify-between font-bold">
                               <span className="flex items-center gap-1 min-w-0">
-                                <Dog className={`w-3 h-3 shrink-0 ${isEnded ? 'text-slate-400' : 'text-emerald-600'}`} />
-                                <span className="truncate">{b.dogName} <span className="text-slate-500 font-medium text-[11px]">({b.ownerName})</span></span>
+                                <Dog className={`w-3 h-3 shrink-0 ${isMatch ? 'text-amber-700' : stayColors.iconClass}`} />
+                                <span className="truncate">
+                                  <span className={isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
+                                  <span className={isMatch ? 'text-amber-900 font-bold text-[11px]' : stayColors.ownerClass}>({b.ownerName})</span>
+                                </span>
                               </span>
                               <span className="text-[10px] text-slate-400 font-normal">
                                 {isEnded ? '🏁 הסתיים' : getServiceTypeHebrew(b.serviceType)}
@@ -1069,7 +1136,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             </div>
 
                             <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
-                              <span>בעלים: <strong className="text-slate-700">{b.ownerName}</strong></span>
+                              <span>בעלים: <strong className={isMatch ? 'text-amber-950' : stayColors.ownerClass ? 'text-slate-800' : 'text-slate-700'}>{b.ownerName}</strong></span>
                               {!isEnded && isArrival && <span className="text-emerald-700 font-bold">📥 כניסה</span>}
                               {!isEnded && isDeparture && <span className="text-amber-700 font-bold">📤 יציאה</span>}
                             </div>
@@ -1203,6 +1270,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                   const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === booking.id));
                   const isDimmed = Boolean(searchQuery.trim() && !isMatch);
+                  const stayColors = getStayStatusColors(booking.stayStatus, booking.endDate, todayStr);
 
                   return (
                     <div
@@ -1213,15 +1281,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           ? 'bg-amber-50/90 border-2 border-amber-400 ring-2 ring-amber-300 shadow-md scale-[1.01]'
                           : isDimmed
                           ? 'bg-white/60 border border-slate-200 opacity-30 hover:opacity-90'
-                          : 'bg-white hover:bg-slate-50/80 border border-slate-200'
+                          : stayColors.cardBorderBg
                       }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-base shrink-0">🐾</span>
-                            <span className="font-black text-base text-slate-900">{booking.dogName}</span>
-                            <span className="text-xs font-bold text-slate-500">({booking.ownerName})</span>
+                            <span className={`font-black text-base ${isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}`}>{booking.dogName}</span>
+                            <span className={`text-xs font-bold ${isMatch ? 'text-amber-900 font-bold' : stayColors.ownerClass}`}>({booking.ownerName})</span>
                             {booking.dogBreed && (
                               <span className="text-xs text-slate-500 font-normal">({booking.dogBreed})</span>
                             )}
@@ -1233,7 +1301,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           <div className="flex items-center gap-3 text-xs text-slate-600 mt-1">
                             <span className="flex items-center gap-1 font-bold text-slate-800">
                               <User className="w-3 h-3 text-indigo-500" />
-                              <span>בעלים: <strong className="text-slate-900">{booking.ownerName}</strong></span>
+                              <span>בעלים: <strong className={isMatch ? 'text-amber-950' : stayColors.ownerClass ? 'text-slate-800' : 'text-slate-700'}>{booking.ownerName}</strong></span>
                             </span>
                             <span className="flex items-center gap-1 font-mono" dir="ltr">
                               <Phone className="w-3 h-3 text-emerald-600" /> {booking.ownerPhone}

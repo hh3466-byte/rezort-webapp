@@ -223,7 +223,8 @@ export function formatTomorrowOverviewReport(
   });
 
   const unhandledIntakes = safeIntakes.filter(r => {
-    if (r.status === 'approved' || r.status === 'rejected' || r.status === 'archived') return false;
+    const s = r.status as string;
+    if (s === 'approved' || s === 'rejected' || s === 'archived') return false;
     const rStart = r.startDate || '';
     const rEnd = r.endDate || '';
     // Auto-archive rule: if dates have already passed without a booking, ignore from report
@@ -255,7 +256,7 @@ export function formatTomorrowOverviewReport(
     }
   });
 
-  safeIntakes.filter(r => r.status === 'pending' || r.status === 'approved').forEach(r => {
+  safeIntakes.filter(r => (r.status as string) === 'pending' || (r.status as string) === 'approved').forEach(r => {
     const phone = r.ownerPhone;
     const dog = r.dogName || 'כלב';
     const owner = r.ownerName || 'בעלים';
@@ -281,8 +282,8 @@ export function formatTomorrowOverviewReport(
       const phone = formatPhoneFormatted(rawPhone);
       const dates = `${formatDateIL(pi.startDate)} עד ${formatDateIL(pi.endDate)}`;
       let statusBadge = '🔴 לבדיקה';
-      if (pi.status === 'in_progress') statusBadge = '🟡 בתהליך';
-      else if (pi.status === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
+      if ((pi.status as string) === 'in_progress') statusBadge = '🟡 בתהליך';
+      else if ((pi.status as string) === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
       return `${idx + 1}. ${statusBadge}: *${dog}* (${owner} - 📞 ${phone}) | מיועד: ${dates}`;
     }).join('\n');
     actionBlocks.push(`📋 *שאלוני קליטה לבדיקה / בתהליך שממתינים לטיפול וסגירה (${unhandledIntakes.length}):*\n${list}\n👉 *שמוליק, אנא היכנס למסך שאלוני קליטה כדי לאשר, לקלוט ליומן או לסגור טיפול.*`);

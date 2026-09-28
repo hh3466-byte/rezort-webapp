@@ -175,13 +175,14 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
   // Action items / Red lights for tomorrow
   const actionBlocks = [];
 
-  // 1. Unhandled Intakes (Pending, In Progress, Payment Requested) - FIRST PRIORITY (Exclude abandoned, archived, past)
+  // 1. Unhandled Intakes (Pending, In Progress, Payment Requested) - FIRST PRIORITY
   const unhandledIntakes = (intakes || []).filter(r => {
     const st = r.status;
-    if (st !== 'pending' && st !== 'in_progress' && st !== 'payment_requested' && st !== 'new') return false;
+    if (st === 'approved' || st === 'rejected' || st === 'archived') return false;
     const rStart = r.startDate || r.start_date || '';
     const rEnd = r.endDate || r.end_date || '';
-    if (rStart <= todayStr || rEnd <= todayStr) return false;
+    // Auto-archive rule: if dates have already passed without a booking, ignore from report
+    if ((rEnd && rEnd < todayStr) || (rStart && rStart < todayStr)) return false;
 
     const rDog = (r.dogName || r.dog_name || '').trim().toLowerCase();
     const rPhone = cleanPhoneNumber(r.ownerPhone || r.owner_phone || '');
@@ -213,7 +214,8 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
     if (ai.status !== 'approved') return false;
     const aiStart = ai.startDate || ai.start_date || '';
     const aiEnd = ai.endDate || ai.end_date || '';
-    if (aiStart <= todayStr || aiEnd <= todayStr) return false;
+    // Auto-archive rule: if dates have already passed without a booking, ignore from report
+    if ((aiEnd && aiEnd < todayStr) || (aiStart && aiStart < todayStr)) return false;
 
     const aiDog = (ai.dogName || ai.dog_name || '').trim().toLowerCase();
     const aiPhone = cleanPhoneNumber(ai.ownerPhone || ai.owner_phone || '');
@@ -224,7 +226,7 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
       const bEnd = b.end_date || b.endDate;
       const sameDog = bDog === aiDog;
       const samePhone = (aiPhone && bPhone && aiPhone === bPhone);
-      const sameDates = (aiStart && bStart === aiStart && aiEnd && bEnd === aiEnd);
+      const sameDates = ((ai.startDate || ai.start_date) && bStart === (ai.startDate || ai.start_date) && (ai.endDate || ai.end_date) && bEnd === (ai.endDate || ai.end_date));
       return (sameDog && samePhone) || (sameDog && sameDates);
     });
   });
@@ -293,10 +295,8 @@ ${endOfDayDogs.length >= maxCapacity ? '• 🔥 *תפוסה מלאה בריזו
 שיהיה יום מוצלח, פורה ושקט! ❤️🐶🐾`;
 }
 
-async function sendCleanReportToManager() {
+async function run() {
   const todayStr = getTodayIsraelStr();
-  console.log(`מפיק ושולח את הדוח המדויק עבור ${todayStr}...`);
-
   const { data: bookings } = await supabase.from('bookings').select('*');
   const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
   const { data: intakesRows } = await supabase.from('intake_requests').select('*');
@@ -313,25 +313,9 @@ async function sendCleanReportToManager() {
   });
   const intakes = Array.from(intakeMap.values());
 
-  const greenId = settings.greenApiIdInstance || '710722735421';
-  const greenToken = settings.greenApiToken || 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b';
-
-  const reportText = buildTomorrowReport(bookings, settings, intakes, todayStr);
-
-  const recipients = [
-    { name: 'מנהל', phone: '054-3200007', chatId: '972543200007@c.us' }
-  ];
-
-  for (const r of recipients) {
-    console.log(`שולח דוח מדויק אל ${r.name} (${r.phone})...`);
-    const res = await fetch(`https://api.green-api.com/waInstance${greenId}/sendMessage/${greenToken}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId: r.chatId, message: reportText })
-    });
-    const resData = await res.json();
-    console.log(`תוצאת משלוח אל ${r.name}:`, resData);
-  }
+  const report = buildTomorrowReport(bookings, settings, intakes, todayStr);
+  console.log('--- EXACT REPORT OUTPUT ---');
+  console.log(report);
 }
 
-sendCleanReportToManager();
+run();
