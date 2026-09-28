@@ -728,68 +728,68 @@ const SlotCard: React.FC<SlotCardProps> = ({
   let cardClasses = 'border-slate-200 bg-slate-50/40 opacity-90';
   let iconBgClass = 'bg-slate-200 text-slate-600';
   let titleColorClass = 'text-slate-900';
-  let bucketColorClass = 'text-slate-500';
+  let bucketColorClass = 'text-slate-600 bg-slate-100 border border-slate-200';
   let badgeClasses = 'bg-slate-100 text-slate-500 border-slate-200';
   let actionBtnClass = 'text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border-indigo-200';
   let dogCardBorder = 'border-slate-200 hover:border-indigo-400';
 
   if (slot.category === 'room') {
     titleColorClass = 'text-sky-950 font-black';
-    bucketColorClass = 'text-sky-700 font-bold';
-    actionBtnClass = 'text-sky-700 hover:text-sky-950 bg-sky-50 hover:bg-sky-100 border-sky-200';
+    bucketColorClass = 'text-sky-900 bg-sky-100/90 border border-sky-300 font-extrabold';
+    actionBtnClass = 'text-sky-800 hover:text-sky-950 bg-sky-100/90 hover:bg-sky-200/80 border-sky-300';
     dogCardBorder = 'border-sky-200 hover:border-sky-400';
     if (isOccupied) {
-      cardClasses = 'border-sky-300 ring-2 ring-sky-100 bg-sky-50/20 shadow-sm';
+      cardClasses = 'border-2 border-sky-300 ring-2 ring-sky-100 bg-sky-50/30 shadow-sm';
       iconBgClass = 'bg-gradient-to-br from-sky-500 to-blue-600 text-white shadow-xs';
-      badgeClasses = 'bg-sky-100 text-sky-900 border-sky-300 font-extrabold';
+      badgeClasses = 'bg-sky-100 text-sky-950 border border-sky-300 font-black';
     } else {
-      cardClasses = 'border-sky-200/70 bg-sky-50/30 opacity-95';
+      cardClasses = 'border border-sky-200/70 bg-sky-50/20 opacity-95';
       iconBgClass = 'bg-sky-100 text-sky-700 border border-sky-200';
     }
   } else if (slot.category === 'suite') {
     titleColorClass = 'text-purple-950 font-black';
-    bucketColorClass = 'text-purple-700 font-bold';
-    actionBtnClass = 'text-purple-700 hover:text-purple-950 bg-purple-50 hover:bg-purple-100 border-purple-200';
+    bucketColorClass = 'text-purple-950 bg-purple-100/90 border border-purple-300 font-extrabold';
+    actionBtnClass = 'text-purple-800 hover:text-purple-950 bg-purple-100/90 hover:bg-purple-200/80 border-purple-300';
     dogCardBorder = 'border-purple-200 hover:border-purple-400';
     if (isOccupied) {
-      cardClasses = 'border-purple-300 ring-2 ring-purple-100 bg-purple-50/25 shadow-sm';
+      cardClasses = 'border-2 border-purple-300 ring-2 ring-purple-100 bg-purple-50/30 shadow-sm';
       iconBgClass = 'bg-gradient-to-br from-purple-600 via-indigo-600 to-purple-800 text-amber-300 shadow-xs ring-1 ring-purple-400';
-      badgeClasses = 'bg-purple-100 text-purple-950 border-purple-300 font-extrabold shadow-2xs';
+      badgeClasses = 'bg-purple-100 text-purple-950 border border-purple-300 font-black shadow-2xs';
     } else {
-      cardClasses = 'border-purple-200/70 bg-purple-50/30 opacity-95';
+      cardClasses = 'border border-purple-200/70 bg-purple-50/20 opacity-95';
       iconBgClass = 'bg-purple-100 text-purple-700 border border-purple-200';
     }
   } else if (slot.category === 'outdoor') {
     titleColorClass = 'text-emerald-950 font-black';
-    bucketColorClass = 'text-emerald-700 font-bold';
-    actionBtnClass = 'text-emerald-700 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 border-emerald-200';
+    bucketColorClass = 'text-emerald-950 bg-emerald-100/90 border border-emerald-300 font-extrabold';
+    actionBtnClass = 'text-emerald-800 hover:text-emerald-950 bg-emerald-100/90 hover:bg-emerald-200/80 border-emerald-300';
     dogCardBorder = 'border-emerald-200 hover:border-emerald-400';
     if (isOccupied) {
-      cardClasses = 'border-emerald-300 ring-2 ring-emerald-100 bg-emerald-50/20 shadow-sm';
+      cardClasses = 'border-2 border-emerald-300 ring-2 ring-emerald-100 bg-emerald-50/30 shadow-sm';
       iconBgClass = 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-xs';
-      badgeClasses = 'bg-emerald-100 text-emerald-950 border-emerald-300 font-extrabold';
+      badgeClasses = 'bg-emerald-100 text-emerald-950 border border-emerald-300 font-black';
     } else {
-      cardClasses = 'border-emerald-200/70 bg-emerald-50/30 opacity-95';
+      cardClasses = 'border border-emerald-200/70 bg-emerald-50/20 opacity-95';
       iconBgClass = 'bg-emerald-100 text-emerald-700 border border-emerald-200';
     }
   }
 
   return (
-    <div className={`bg-white border rounded-3xl p-4 shadow-sm flex flex-col justify-between transition-all ${cardClasses}`}>
+    <div className={`bg-white rounded-3xl p-4 sm:p-5 shadow-sm flex flex-col justify-between transition-all space-y-3 ${cardClasses}`}>
       {/* Card Header */}
-      <div className="pb-3 border-b border-slate-100/80 flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-base shrink-0 ${iconBgClass}`}>
+      <div className="pb-3 border-b border-slate-200/80 flex items-start justify-between gap-2">
+        <div className="flex items-center gap-3">
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl shrink-0 ${iconBgClass}`}>
             {slot.icon}
           </div>
           <div>
-            <div className={`font-black text-sm flex items-center gap-1.5 ${titleColorClass}`}>
+            <div className={`font-black text-base sm:text-lg flex items-center gap-2 flex-wrap ${titleColorClass}`}>
               <span>{slot.name}</span>
-              <span className={`text-[11px] ${bucketColorClass}`}>| 🪣 {slot.bucketName}</span>
+              <span className={`text-xs px-2.5 py-0.5 rounded-lg ${bucketColorClass}`}>🪣 {slot.bucketName}</span>
             </div>
-            <div className="text-[11px] font-medium text-slate-500">
+            <div className="text-xs font-bold text-slate-600 mt-0.5">
               {!isOccupied
-                ? 'פנוי'
+                ? 'פנוי לשיבוץ'
                 : slot.dogs.length === 1
                 ? 'כלב 1 (שקית מזון 1)'
                 : `${slot.dogs.length} כלבים (${slot.dogs.length} שקיות מזון)`}
@@ -797,16 +797,16 @@ const SlotCard: React.FC<SlotCardProps> = ({
           </div>
         </div>
 
-        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${badgeClasses}`}>
-          {isOccupied ? `🟢 ${slot.dogs.length} כלבים` : '⚪ פנוי'}
+        <span className={`text-xs sm:text-sm px-3 py-1 rounded-full font-black ${badgeClasses}`}>
+          {isOccupied ? `🟢 ${slot.dogs.length} ${slot.dogs.length === 1 ? 'כלב' : 'כלבים'}` : '⚪ פנוי'}
         </span>
       </div>
 
       {/* Dogs in Slot */}
-      <div className="py-3 flex-1 space-y-2.5">
+      <div className="py-2 flex-1 space-y-3">
         {!isOccupied ? (
-          <div className="text-center py-6 text-xs text-slate-400 italic">
-            מיקום זה פנוי ביום זה
+          <div className="text-center py-8 text-sm text-slate-400 font-medium italic bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+            מיקום זה פנוי ביום זה ✨
           </div>
         ) : (
           slot.dogs.map(dog => (
@@ -824,9 +824,9 @@ const SlotCard: React.FC<SlotCardProps> = ({
       </div>
 
       {/* Footer Quick Assign */}
-      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-        <span className="text-[11px] text-slate-400 font-medium">
-          {slot.dogs.length > 1 ? 'שקיות נפרדות לכל כלב בדלי' : 'שקית מזון אישית'}
+      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+        <span className="text-xs text-slate-500 font-bold">
+          {slot.dogs.length > 1 ? 'שקיות נפרדות לכל כלב' : 'שקית מזון אישית'}
         </span>
         <button
           type="button"
@@ -839,9 +839,9 @@ const SlotCard: React.FC<SlotCardProps> = ({
               });
             }
           }}
-          className={`text-[11px] font-bold flex items-center gap-1 px-2.5 py-1 rounded-xl border transition-all cursor-pointer ${actionBtnClass}`}
+          className={`text-xs sm:text-sm font-black flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border-2 transition-all cursor-pointer shadow-2xs active:scale-95 ${actionBtnClass}`}
         >
-          <Plus className="w-3 h-3" />
+          <Plus className="w-4 h-4 stroke-[3]" />
           <span>קלוט ל{slot.shortName}</span>
         </button>
       </div>
@@ -874,20 +874,31 @@ const DogKennelCard: React.FC<DogKennelCardProps> = ({
   return (
     <div
       onClick={onSelect}
-      className={`bg-white border p-3 rounded-2xl shadow-2xs hover:shadow-sm transition-all cursor-pointer space-y-2 group ${customBorderClass || 'border-slate-200 hover:border-indigo-400'}`}
+      className={`bg-white border-2 p-4 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer space-y-3 group ${customBorderClass || 'border-slate-200 hover:border-indigo-400'}`}
     >
-      {/* Dog Top Info */}
-      <div className="flex items-start justify-between gap-1.5">
-        <div>
-          <div className="font-black text-slate-900 text-sm flex items-center gap-1.5">
-            <span>🐾 {dog.dogName}</span>
-            {dog.dogBreed && <span className="text-[11px] font-normal text-slate-500">({dog.dogBreed})</span>}
+      {/* Dog Top Info - Prominent Dog Name & Owner */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-black text-slate-950 text-lg sm:text-xl tracking-tight">
+              🐾 {dog.dogName}
+            </span>
+            {dog.dogBreed && (
+              <span className="text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg">
+                {dog.dogBreed}
+              </span>
+            )}
           </div>
-          <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-            <User className="w-3 h-3 text-slate-400" />
-            <span>{dog.ownerName}</span>
+          
+          <div className="text-xs sm:text-sm text-slate-700 font-bold flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-1 text-slate-900 font-extrabold">
+              <User className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>{dog.ownerName}</span>
+            </span>
             {dog.ownerPhone && (
-              <span className="font-mono text-slate-600">({formatIsraeliPhoneDisplay(dog.ownerPhone)})</span>
+              <span className="font-mono text-xs font-black text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-lg" dir="ltr">
+                {formatIsraeliPhoneDisplay(dog.ownerPhone)}
+              </span>
             )}
           </div>
         </div>
@@ -898,92 +909,92 @@ const DogKennelCard: React.FC<DogKennelCardProps> = ({
             onChangePlacement();
           }}
           title="שנה שיבוץ מיקום / חדר"
-          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-indigo-600 p-1 rounded-lg transition-all"
+          className="text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-xl border border-transparent hover:border-indigo-200 transition-all cursor-pointer shrink-0"
         >
-          <Edit2 className="w-3.5 h-3.5" />
+          <Edit2 className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Food Bag Instructions */}
-      <div className="bg-slate-50 border border-slate-100 p-2 rounded-xl text-xs space-y-1">
-        <div className="font-bold text-slate-800 flex items-center gap-1">
-          <Utensils className="w-3 h-3 text-amber-600 shrink-0" />
+      {/* Food Bag Instructions - Large & Highly Visible */}
+      <div className="bg-amber-50/90 border border-amber-200/90 p-3 rounded-xl text-xs sm:text-sm space-y-1.5 shadow-2xs">
+        <div className="font-black text-amber-950 flex items-center gap-1.5">
+          <Utensils className="w-4 h-4 text-amber-600 shrink-0" />
           <span>שקית מזון:</span>
-          <span className="font-normal text-slate-700">{dog.feedingSchedule || 'שעות כרגיל'}</span>
+          <span className="font-extrabold text-slate-900">{dog.feedingSchedule || 'שעות כרגיל'}</span>
         </div>
         {foodDetails && (
-          <div className="text-[11px] text-slate-600 pr-4">
-            {foodDetails}
+          <div className="text-xs font-bold text-amber-900 bg-white/80 p-1.5 rounded-lg border border-amber-200">
+            🥣 {foodDetails}
           </div>
         )}
       </div>
 
       {/* Medications Badge */}
       {hasMeds && (
-        <div className="bg-rose-50 border border-rose-200 p-2 rounded-xl text-xs">
-          <div className="font-black text-rose-900 flex items-center gap-1">
-            <Pill className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+        <div className="bg-rose-50 border-2 border-rose-200 p-2.5 rounded-xl text-xs sm:text-sm shadow-2xs">
+          <div className="font-black text-rose-950 flex items-center gap-1.5">
+            <Pill className="w-4 h-4 text-rose-600 shrink-0" />
             <span>תרופות:</span>
-            <span className="font-medium text-rose-800">{meds}</span>
+            <span className="font-bold text-rose-900">{meds}</span>
           </div>
         </div>
       )}
 
       {/* Complexity Surcharge Badge */}
       {dog.complexitySurcharge && dog.complexitySurcharge > 0 && (
-        <div className="bg-amber-100/80 border border-amber-300 text-amber-950 font-bold text-[11px] px-2 py-0.5 rounded-lg inline-flex items-center gap-1">
+        <div className="bg-amber-100 border border-amber-300 text-amber-950 font-black text-xs px-2.5 py-1 rounded-xl flex items-center gap-1">
           <span>💰 תוספת מורכבות: ₪{dog.complexitySurcharge}</span>
-          {dog.complexityReason && <span className="font-normal text-amber-800">({dog.complexityReason})</span>}
+          {dog.complexityReason && <span className="font-normal text-amber-900">({dog.complexityReason})</span>}
         </div>
       )}
 
       {/* Placement Note Badge */}
       {dog.placementNotes && (
-        <div className="bg-orange-50 border border-orange-200 text-orange-950 text-[11px] font-bold px-2 py-0.5 rounded-lg flex items-center gap-1">
+        <div className="bg-orange-100/80 border border-orange-300 text-orange-950 text-xs font-black px-2.5 py-1 rounded-xl flex items-center gap-1">
           <span>🚩 {dog.placementNotes}</span>
         </div>
       )}
 
-      {/* Daily Feeding Checkboxes (☀️ בוקר, 🌙 ערב, 💊 תרופות) */}
-      <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-1">
+      {/* Daily Feeding Checkboxes (☀️ בוקר, 🌙 ערב, 💊 תרופות) - Large & Touch-Friendly */}
+      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={(e) => onToggleDailyFeeding(dog, 'morning', e)}
-          className={`flex-1 py-1 px-1.5 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition-all border ${
+          className={`flex-1 py-2 px-2.5 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 transition-all border-2 cursor-pointer active:scale-95 ${
             feedings.morning
-              ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-300 shadow-xs'
+              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
           }`}
         >
           <span>☀️ בוקר</span>
-          {feedings.morning && <Check className="w-3 h-3 stroke-[3]" />}
+          {feedings.morning && <Check className="w-4 h-4 stroke-[3]" />}
         </button>
 
         <button
           type="button"
           onClick={(e) => onToggleDailyFeeding(dog, 'evening', e)}
-          className={`flex-1 py-1 px-1.5 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition-all border ${
+          className={`flex-1 py-2 px-2.5 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 transition-all border-2 cursor-pointer active:scale-95 ${
             feedings.evening
-              ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+              ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-300 shadow-xs'
+              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
           }`}
         >
           <span>🌙 ערב</span>
-          {feedings.evening && <Check className="w-3 h-3 stroke-[3]" />}
+          {feedings.evening && <Check className="w-4 h-4 stroke-[3]" />}
         </button>
 
         {hasMeds && (
           <button
             type="button"
             onClick={(e) => onToggleDailyFeeding(dog, 'meds', e)}
-            className={`flex-1 py-1 px-1.5 rounded-lg text-[10px] font-extrabold flex items-center justify-center gap-1 transition-all border ${
+            className={`flex-1 py-2 px-2.5 rounded-xl text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 transition-all border-2 cursor-pointer active:scale-95 ${
               feedings.meds
-                ? 'bg-rose-600 text-white border-rose-600 shadow-2xs'
-                : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                ? 'bg-rose-600 text-white border-rose-700 ring-2 ring-rose-300 shadow-xs'
+                : 'bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100 hover:border-rose-300'
             }`}
           >
             <span>💊 תרופה</span>
-            {feedings.meds && <Check className="w-3 h-3 stroke-[3]" />}
+            {feedings.meds && <Check className="w-4 h-4 stroke-[3]" />}
           </button>
         )}
       </div>

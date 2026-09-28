@@ -24,6 +24,7 @@ export interface Sanity1830AuditResult {
     phoneIssues: string[];
     dateIssues: string[];
     customerIssues: string[];
+    paymentDiscrepancies: string[];
   };
   totalGreen: number;
   totalRed: number;
@@ -35,7 +36,7 @@ export interface Sanity1830AuditResult {
  * 1. Checks all infrastructure functions (Green-API, Grow, Supabase).
  * 2. Checks all templates & messages sent in the last 24 hours.
  * 3. Inspects all events in the last 24 hours and reconciles them with WhatsApp chats.
- * 4. Identifies "Green Events" (fully verified) vs "Red Lights" (anomalies, unanswered chats, unpaid links, 0 deposits).
+ * 4. Identifies "Green Events" (fully verified) vs "Red Lights" (anomalies, unanswered chats, unpaid links, 0 deposits, payment discrepancies).
  */
 export function run1830SanityAudit(
   bookings: Booking[],
@@ -66,7 +67,8 @@ export function run1830SanityAudit(
     partnerDuplicates: [] as string[],
     phoneIssues: [] as string[],
     dateIssues: [] as string[],
-    customerIssues: [] as string[]
+    customerIssues: [] as string[],
+    paymentDiscrepancies: [] as string[]
   };
 
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
@@ -225,7 +227,26 @@ export function run1830SanityAudit(
     }
   }
 
-  // 7. Check for unassigned dogs (Informational only - per AGENTS.md rule 4, assignment can be done later via top drawer)
+  // 7. Payment Discrepancies & Stale Debts Check
+  activeBookings.filter(b => b.endDate >= todayStr).forEach(b => {
+    const cleanPhone = cleanPhoneNumber(b.ownerPhone || '');
+    const deposit = Number(b.depositAmount) || 0;
+    const price = Number(b.totalPrice) || 0;
+    
+    // Check if there are verified Grow transactions matching this customer
+    const matchingGrow = VERIFIED_GROW_LEDGER.filter(t => {
+      const tName = (t.customerName || '').trim().toLowerCase();
+      const bName = (b.ownerName || '').trim().toLowerCase();
+      return bName && (tName.includes(bName) || bName.includes(tName));
+    });
+    const totalGrowPaid = matchingGrow.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    
+    if (totalGrowPaid > 0 && totalGrowPaid !== deposit && Math.abs(totalGrowPaid - deposit) > 1) {
+      redLights.paymentDiscrepancies.push(`💳 *${b.dogName}* (${b.ownerName}): נקלטו ב-Grow ₪${totalGrowPaid.toLocaleString()} אך ביומן רשום ₪${deposit.toLocaleString()}`);
+    }
+  });
+
+  // 8. Check for unassigned dogs (Informational only - per AGENTS.md rule 4, assignment can be done later via top drawer)
   const unassignedStayingDogs: string[] = [];
   activeBookings.filter(b => b.startDate <= todayStr && b.endDate >= todayStr).forEach(b => {
     if (!b.kennelNumber && b.kennelNumber !== 0) {
@@ -242,6 +263,7 @@ export function run1830SanityAudit(
     redLights.calendarDiscrepancies.length +
     redLights.zeroDepositHolding.length +
     redLights.partnerDuplicates.length +
+    redLights.paymentDiscrepancies.length +
     redLights.phoneIssues.length +
     redLights.dateIssues.length +
     redLights.customerIssues.length;
@@ -305,6 +327,11 @@ export function run1830SanityAudit(
     if (redLights.customerIssues.length > 0) {
       parts.push(`\n⚠️ *בעיות ותלונות שזוהו בשיחות:*`);
       redLights.customerIssues.forEach(ci => parts.push(`   • ${ci}`));
+    }
+
+    if (redLights.paymentDiscrepancies.length > 0) {
+      parts.push(`\n💰 *אי-התאמות כספיות / תשלומים שדורשים סנכרון:*`);
+      redLights.paymentDiscrepancies.forEach(pd => parts.push(`   • ${pd}`));
     }
 
     if (redLights.phoneIssues.length > 0) {
