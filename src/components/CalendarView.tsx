@@ -674,10 +674,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
       )}
 
-      {/* Mini Legend for Dog Status Colors */}
-      <div className="flex items-center gap-2.5 text-xs font-bold text-slate-600 bg-white/80 backdrop-blur-xs px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs w-fit mb-3 flex-wrap">
-        <span className="text-[11px] text-slate-400 font-bold">מקרא:</span>
-        <span className="flex items-center gap-1.5 text-[#065f46] bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300">
+      {/* Mini Legend for Dog Status & Payment Colors */}
+      <div className="flex items-center gap-2 text-xs font-bold text-slate-600 bg-white/85 backdrop-blur-xs px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs w-fit mb-3 flex-wrap">
+        <span className="text-[11px] text-slate-400 font-bold">שהייה:</span>
+        <span className="flex items-center gap-1.5 text-[#065f46] bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300 font-black">
           <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
           <span>שוהה בריזורט</span>
         </span>
@@ -685,13 +685,29 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           <span>🚪</span>
           <span>משתחרר ביום זה</span>
         </span>
-        <span className="flex items-center gap-1.5 text-[#581c87] bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+        <span className="flex items-center gap-1.5 text-[#581c87] bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200 font-black">
           <span className="w-2 h-2 rounded-full bg-purple-500"></span>
           <span>שוריין לעתיד</span>
         </span>
         <span className="flex items-center gap-1.5 text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 font-normal">
           <span>🏁</span>
           <span>שוחרר (עבר)</span>
+        </span>
+
+        <span className="text-slate-300 mx-1">|</span>
+
+        <span className="text-[11px] text-slate-400 font-bold">תשלום:</span>
+        <span className="flex items-center gap-1 text-emerald-800 bg-emerald-50/90 px-1.5 py-0.5 rounded-md border border-emerald-200 text-[11px]">
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>שולם מלא</span>
+        </span>
+        <span className="flex items-center gap-1 text-amber-900 bg-amber-50/90 px-1.5 py-0.5 rounded-md border border-amber-300 text-[11px]">
+          <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span>שולמה מקדמה (נותר חוב)</span>
+        </span>
+        <span className="flex items-center gap-1 text-red-700 bg-red-50/90 px-1.5 py-0.5 rounded-md border border-red-200 text-[11px]">
+          <span className="w-2 h-2 rounded-full bg-red-500"></span>
+          <span>חוב פתוח (0₪ מקדמה)</span>
         </span>
       </div>
 
@@ -848,8 +864,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     ) : (
                       dayBookings.map((b) => {
                         const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
-                        const isPaid = b.paymentStatus === 'fully_paid';
-                        const isDeposit = b.paymentStatus === 'deposit_paid';
+                        const remainingDebt = Math.max(0, Math.round((Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0)));
+                        const isPaid = b.paymentStatus === 'fully_paid' || (remainingDebt === 0 && (Number(b.totalPrice) || 0) > 0);
+                        const isDeposit = !isPaid && (b.paymentStatus === 'deposit_paid' || (Number(b.depositAmount) || 0) > 0);
+                        const isUnpaid = !isPaid && !isDeposit && !b.isFreeStay && (Number(b.totalPrice) || 0) > 0;
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
                         const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, day.dateStr);
@@ -865,7 +883,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 ? 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90'
                                 : stayColors.cardBorderBg
                             }`}
-                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' (משתחרר ביום זה!)' : isEnded ? ' (שוחרר הביתה)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת בריזורט)' : ' (שוריין)'} - לחץ לפרטים מלאים`}
+                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' (משתחרר ביום זה!)' : isEnded ? ' (שוחרר הביתה)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת בריזורט)' : ' (שוריין)'} - תשלום: ${isPaid || b.isFreeStay ? 'שולם במלואו' : isDeposit ? `שולמה מקדמה ₪${b.depositAmount} (יתרה ₪${remainingDebt})` : `לא שולם (חוב ₪${remainingDebt || b.totalPrice})`}`}
                           >
                             <span className="flex items-center gap-1.5 truncate">
                               <span className={`text-xs ${isMatch ? 'text-amber-700' : stayColors.iconClass}`}>🐾</span>
@@ -885,26 +903,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                   <span>🚪</span>
                                   <span>שחרור</span>
                                 </span>
-                                {!isPaid && !isDeposit && !b.isFreeStay && (b.totalPrice || 0) > 0 && (
-                                  <span className="text-[10px] bg-red-100 text-red-700 font-black px-1 rounded flex items-center" title="שריין מקום ללא מקדמה!">
-                                    0₪
+                                {isPaid || b.isFreeStay ? (
+                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs border border-emerald-300" title={`שולם במלואו (₪${b.totalPrice || 0})`}>
+                                    <span>✓</span>
+                                    <span>שולם</span>
                                   </span>
-                                )}
-                                <span
-                                  className={`w-2 h-2 rounded-full shrink-0 ${
-                                    isPaid
-                                      ? 'bg-emerald-500'
-                                      : isDeposit
-                                      ? 'bg-amber-400'
-                                      : 'bg-red-500'
-                                  }`}
-                                  title={isPaid ? 'שולם מלא' : isDeposit ? 'שולמה מקדמה' : (!b.isFreeStay && (b.totalPrice || 0) > 0 ? 'חוב פתוח - ₪0 מקדמה' : 'חוב פתוח')}
-                                />
+                                ) : isDeposit ? (
+                                  <span className="text-[10px] bg-amber-100 text-amber-900 font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs border border-amber-300" title={`שולמה מקדמה של ₪${b.depositAmount}. נותרה יתרה לגבייה של ₪${remainingDebt}!`}>
+                                    <span>⚠️</span>
+                                    <span>יתרה ₪{remainingDebt}</span>
+                                  </span>
+                                ) : isUnpaid ? (
+                                  <span className="text-[10px] bg-red-500 text-white font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-xs" title={`לא שולם כלל! חוב של ₪${remainingDebt || b.totalPrice}`}>
+                                    <span>🔴</span>
+                                    <span>חוב ₪{remainingDebt || b.totalPrice}</span>
+                                  </span>
+                                ) : null}
                               </div>
                             ) : (
                               <div className="flex items-center gap-1 shrink-0">
-                                {!isEnded && !isPaid && !isDeposit && !b.isFreeStay && (b.totalPrice || 0) > 0 && (
-                                  <span className="text-[10px] bg-red-100 text-red-700 font-black px-1 rounded flex items-center" title="שריין מקום ללא מקדמה!">
+                                {isUnpaid && (
+                                  <span className="text-[10px] bg-red-100 text-red-700 font-black px-1 rounded flex items-center" title={`שריין מקום ללא מקדמה! חוב: ₪${remainingDebt}`}>
                                     0₪
                                   </span>
                                 )}
@@ -916,7 +935,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                       ? 'bg-amber-400'
                                       : 'bg-red-500'
                                   }`}
-                                  title={isPaid ? 'שולם מלא' : isDeposit ? 'שולמה מקדמה' : (!b.isFreeStay && (b.totalPrice || 0) > 0 ? 'חוב פתוח - ₪0 מקדמה' : 'חוב פתוח')}
+                                  title={isPaid ? `שולם במלואו (₪${b.totalPrice})` : isDeposit ? `שולמה מקדמה ₪${b.depositAmount} (נותרו ₪${remainingDebt})` : `חוב פתוח ₪${remainingDebt || b.totalPrice}`}
                                 />
                               </div>
                             )}
