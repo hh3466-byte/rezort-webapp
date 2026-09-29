@@ -253,6 +253,55 @@ export function run1830SanityAudit(
     }
   });
 
+  // ==========================================
+  // DEEP CHECK 12: Financial & Pricing Integrity (בקרת תמחור, יתרות שליליות ודיוק כספי)
+  // ==========================================
+  activeBookings.forEach(b => {
+    const price = Number(b.totalPrice) || 0;
+    const deposit = Number(b.depositAmount) || 0;
+    const isFree = b.isFreeStay;
+    const dailyRate = Number(b.dailyRate) || 0;
+    const dog = (b.dogName || '').trim();
+    const owner = (b.ownerName || '').trim();
+    const phone = b.ownerPhone || '';
+
+    // 1. Negative balance / Deposit > Total price
+    if (deposit > price && !isFree && price > 0) {
+      redLights.paymentDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${deposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}! (דורש קיבוע סה"כ ל-₪${deposit.toLocaleString()} כמחיר תקופה/פיקס או בדיקת זיכוי)`);
+    }
+
+    // 2. Pricing mismatch when daily mode is active
+    if (b.pricingMode === 'daily' && b.serviceType !== 'training' && !isFree && price > 0 && dailyRate > 0) {
+      const startMs = new Date(b.startDate).getTime();
+      const endMs = new Date(b.endDate).getTime();
+      const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+      const expected = days * dailyRate;
+      if (Math.abs(price - expected) > 1) {
+        redLights.paymentDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
+      }
+    }
+
+    // 3. Multi-dog booking without period pricing
+    const isMultiDog = dog.includes(' ו') || dog.includes(' + ') || dog.includes(' and ');
+    if (isMultiDog && b.pricingMode !== 'period' && b.serviceType !== 'training' && !isFree) {
+      redLights.paymentDiscrepancies.push(`🐶🐶 תמחור זוג כלבים: *${dog}* (${owner}) | נדרש לוודא שהתמחור מוגדר כ'מחיר פיקס/לתקופה' הכולל את שני הכלבים.`);
+    }
+
+    // 4. Payment status vs amounts inconsistency
+    if (!isFree && price > 0) {
+      if (deposit >= price && b.paymentStatus !== 'fully_paid') {
+        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) שילם מלוא הסכום (₪${deposit.toLocaleString()}) אך סטטוס מוגדר '${b.paymentStatus}' במקום 'fully_paid'`);
+      } else if (deposit === 0 && b.paymentStatus === 'fully_paid') {
+        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך לא נרשמה מקדמה (₪0 מתוך ₪${price.toLocaleString()})`);
+      }
+    }
+
+    // 5. Free stay inconsistency
+    if (isFree && (price > 0 || deposit > 0)) {
+      redLights.paymentDiscrepancies.push(`🎁 אירוח חינם עם חיוב כספי: *${dog}* (${owner}) סומן כחינם אך מופיעים סכומים (סה"כ ₪${price.toLocaleString()}, שולם ₪${deposit.toLocaleString()})`);
+    }
+  });
+
   // 2. Reconcile recent bookings against WhatsApp chats & data sanity
   recentBookings.forEach(b => {
     const cleanPhone = cleanPhoneNumber(b.ownerPhone || '');

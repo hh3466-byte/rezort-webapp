@@ -386,6 +386,60 @@ async function run1830Audit() {
     }
   });
 
+  // 12. Deep Check: Financial & Pricing Integrity (בקרת תמחור, יתרות שליליות ודיוק כספי)
+  activeBookings.forEach(b => {
+    const d = b.data || {};
+    const dog = (b.dog_name || b.dogName || d.dogName || '').trim();
+    const owner = (b.owner_name || b.ownerName || d.ownerName || '').trim();
+    const phone = b.owner_phone || b.ownerPhone || d.ownerPhone || '';
+    const price = Number(b.total_price ?? b.totalPrice ?? d.totalPrice ?? 0);
+    const deposit = Number(b.deposit_amount ?? b.depositAmount ?? d.depositAmount ?? 0);
+    const isFree = Boolean(b.is_free_stay || b.isFreeStay || d.isFreeStay || (b.notes && (b.notes.includes('חינם') || b.notes.includes('כלב נוסף') || b.notes.includes('כלב שני'))));
+    const dailyRate = Number(d.dailyRate ?? b.dailyRate ?? 0);
+    const pricingMode = d.pricingMode || b.pricingMode || (b.service_type === 'training' || b.serviceType === 'training' ? 'period' : 'daily');
+    const paymentStatus = b.payment_status || b.paymentStatus || d.paymentStatus || 'unpaid';
+
+    // 1. Negative balance / Deposit > Total Price
+    if (deposit > price && !isFree && price > 0) {
+      redLights.paymentDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${deposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}! (דורש קיבוע סה"כ ל-₪${deposit.toLocaleString()} כמחיר תקופה/פיקס או בדיקת זיכוי)`);
+    }
+
+    // 2. Pricing mismatch when daily mode is active
+    if (pricingMode === 'daily' && b.service_type !== 'training' && b.serviceType !== 'training' && !isFree && price > 0 && dailyRate > 0) {
+      const s = b.start_date || b.startDate;
+      const e = b.end_date || b.endDate;
+      if (s && e) {
+        const startMs = new Date(s).getTime();
+        const endMs = new Date(e).getTime();
+        const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+        const expected = days * dailyRate;
+        if (Math.abs(price - expected) > 1) {
+          redLights.paymentDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
+        }
+      }
+    }
+
+    // 3. Multi-dog booking without period pricing
+    const isMultiDog = dog.includes(' ו') || dog.includes(' + ') || dog.includes(' and ');
+    if (isMultiDog && pricingMode !== 'period' && b.service_type !== 'training' && b.serviceType !== 'training' && !isFree) {
+      redLights.paymentDiscrepancies.push(`🐶🐶 תמחור זוג כלבים: *${dog}* (${owner}) | נדרש לוודא שהתמחור מוגדר כ'מחיר פיקס/לתקופה' הכולל את שני הכלבים.`);
+    }
+
+    // 4. Payment status vs amounts inconsistency
+    if (!isFree && price > 0) {
+      if (deposit >= price && paymentStatus !== 'fully_paid') {
+        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) שילם מלוא הסכום (₪${deposit.toLocaleString()}) אך סטטוס מוגדר '${paymentStatus}' במקום 'fully_paid'`);
+      } else if (deposit === 0 && paymentStatus === 'fully_paid') {
+        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך לא נרשמה מקדמה (₪0 מתוך ₪${price.toLocaleString()})`);
+      }
+    }
+
+    // 5. Free stay inconsistency
+    if (isFree && (price > 0 || deposit > 0)) {
+      redLights.paymentDiscrepancies.push(`🎁 אירוח חינם עם חיוב כספי: *${dog}* (${owner}) סומן כחינם אך מופיעים סכומים (סה"כ ₪${price.toLocaleString()}, שולם ₪${deposit.toLocaleString()})`);
+    }
+  });
+
   // Reconcile recent bookings against WhatsApp chats
   recentBookings.forEach(b => {
     const dog = b.dog_name || b.dogName || 'כלב';
@@ -645,6 +699,10 @@ async function run1830Audit() {
     if (redLights.dateIssues.length > 0) {
       parts.push(`\n📅 *תקלות תאריכים:*`);
       redLights.dateIssues.forEach(di => parts.push(`   • ${di}`));
+    }
+    if (redLights.paymentDiscrepancies.length > 0) {
+      parts.push(`\n💰 *אי-התאמות כספיות / תמחור שדורש בדיקה:*`);
+      redLights.paymentDiscrepancies.forEach(pd => parts.push(`   • ${pd}`));
     }
   }
 
