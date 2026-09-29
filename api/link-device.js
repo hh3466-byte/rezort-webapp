@@ -1,20 +1,24 @@
-const GREEN_API_ID = "710722735421";
-const GREEN_API_TOKEN = "ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b";
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
 
-  const cluster = GREEN_API_ID.slice(0, 4);
-  const baseUrl = `https://${cluster}.api.greenapi.com/waInstance${GREEN_API_ID}`;
-
-  // 1. JSON endpoint for live polling
+  // If JSON request
   if (req.url && req.url.includes('json=true')) {
+    res.setHeader('Content-Type', 'application/json');
     try {
+      const cluster = '7107';
+      const idInstance = '710722735421';
+      const token = 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b';
+      
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+
       const [stateRes, qrRes] = await Promise.all([
-        fetch(`${baseUrl}/getStateInstance/${GREEN_API_TOKEN}`).then(r => r.json()).catch(() => ({})),
-        fetch(`${baseUrl}/qr/${GREEN_API_TOKEN}`).then(r => r.json()).catch(() => ({}))
+        fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/getStateInstance/${token}`, { signal: controller.signal }).then(r => r.json()).catch(() => ({})),
+        fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/qr/${token}`, { signal: controller.signal }).then(r => r.json()).catch(() => ({}))
       ]);
+      clearTimeout(timeout);
+
       return res.status(200).json({
         state: stateRes.stateInstance || 'notAuthorized',
         qrBase64: qrRes.message || null,
@@ -25,22 +29,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // 2. Fetch initial state for HTML render
-  let state = 'notAuthorized';
-  let qrBase64 = '';
-  try {
-    const [stateRes, qrRes] = await Promise.all([
-      fetch(`${baseUrl}/getStateInstance/${GREEN_API_TOKEN}`).then(r => r.json()).catch(() => ({})),
-      fetch(`${baseUrl}/qr/${GREEN_API_TOKEN}`).then(r => r.json()).catch(() => ({}))
-    ]);
-    state = stateRes.stateInstance || 'notAuthorized';
-    if (qrRes.type === 'qrCode') {
-      qrBase64 = qrRes.message;
-    }
-  } catch (e) {}
-
-  const isConnected = state === 'authorized';
-
+  // Serve fast HTML
   const html = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -56,35 +45,37 @@ export default async function handler(req, res) {
     .badge-disconnected { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid #ef4444; }
     h1 { font-size: 22px; font-weight: 800; color: #ffffff; margin-bottom: 6px; }
     p.sub { font-size: 14px; color: #94a3b8; margin-bottom: 20px; }
-    .qr-box { background: #ffffff; border-radius: 20px; padding: 14px; display: inline-block; margin-bottom: 20px; box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
-    .qr-img { width: 220px; height: 220px; display: block; border-radius: 10px; margin: 0 auto; }
+    .qr-box { background: #ffffff; border-radius: 20px; padding: 14px; display: inline-block; margin-bottom: 20px; box-shadow: 0 8px 25px rgba(0,0,0,0.4); min-width: 240px; min-height: 240px; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; }
+    .qr-img { width: 220px; height: 220px; display: block; border-radius: 10px; }
     .steps { background: #0f172a; border-radius: 18px; padding: 16px 14px; text-align: right; margin-bottom: 18px; font-size: 14px; color: #cbd5e1; line-height: 1.8; border: 1px solid #334155; }
     .steps ol { padding-right: 20px; }
     .steps li { margin-bottom: 6px; }
     .steps strong { color: #38bdf8; font-weight: 700; }
-    .pulse-dot { width: 10px; height: 10px; background: #22c55e; border-radius: 50%; display: inline-block; animation: pulse 1.5s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(1.4); } }
+    .pulse-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .spinner { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid #38bdf8; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <div class="card">
-    <div id="statusBadge" class="badge ${isConnected ? 'badge-connected' : 'badge-disconnected'}">
-      <span class="pulse-dot" style="background: ${isConnected ? '#22c55e' : '#ef4444'};"></span>
-      <span id="badgeText">${isConnected ? 'הוואטסאפ מחובר בהצלחה!' : 'ממתין לסריקת ברקוד'}</span>
+    <div id="statusBadge" class="badge badge-disconnected">
+      <span id="pulseDot" class="pulse-dot" style="background: #ef4444;"></span>
+      <span id="badgeText">טוען נתוני חיבור...</span>
     </div>
     
     <h1>חיבור וואטסאפ הריזורט 🐾</h1>
     <p class="sub">טלפון הריזורט: <strong style="color:#ffffff;">054-8765888</strong></p>
 
-    <div id="connectedView" style="display: ${isConnected ? 'block' : 'none'}; padding: 40px 0;">
+    <div id="connectedView" style="display: none; padding: 40px 0;">
       <div style="font-size: 72px; margin-bottom: 16px;">🎉</div>
       <h2 style="color: #4ade80; font-size: 22px; margin-bottom: 8px;">הוואטסאפ מקושר ופעיל!</h2>
       <p style="color: #94a3b8; font-size: 14px;">כל ההודעות האוטומטיות והדוחות יוצאים כסדרם.</p>
     </div>
 
-    <div id="scanView" style="display: ${isConnected ? 'none' : 'block'};">
+    <div id="scanView" style="display: block;">
       <div class="qr-box">
-        <img id="qrImage" class="qr-img" src="${qrBase64 ? 'data:image/png;base64,' + qrBase64 : ''}" alt="QR Code" />
+        <div id="loadingSpinner" class="spinner"></div>
+        <img id="qrImage" class="qr-img" style="display:none;" alt="QR Code" />
       </div>
 
       <div class="steps">
@@ -111,8 +102,11 @@ export default async function handler(req, res) {
         
         const badge = document.getElementById('statusBadge');
         const badgeText = document.getElementById('badgeText');
+        const pulseDot = document.getElementById('pulseDot');
+
         badge.className = 'badge ' + (isAuth ? 'badge-connected' : 'badge-disconnected');
         badgeText.textContent = isAuth ? 'הוואטסאפ מחובר בהצלחה!' : 'ממתין לסריקת ברקוד';
+        pulseDot.style.background = isAuth ? '#22c55e' : '#ef4444';
 
         if (isAuth) {
           document.getElementById('scanView').style.display = 'none';
@@ -121,16 +115,19 @@ export default async function handler(req, res) {
           document.getElementById('scanView').style.display = 'block';
           document.getElementById('connectedView').style.display = 'none';
           if (data.qrBase64) {
-            document.getElementById('qrImage').src = 'data:image/png;base64,' + data.qrBase64;
+            const qrImg = document.getElementById('qrImage');
+            qrImg.src = 'data:image/png;base64,' + data.qrBase64;
+            qrImg.style.display = 'block';
+            document.getElementById('loadingSpinner').style.display = 'none';
           }
         }
       } catch (e) {}
     }
-    setInterval(checkStatus, 4000);
+    checkStatus();
+    setInterval(checkStatus, 3500);
   </script>
 </body>
 </html>`;
 
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
   return res.status(200).send(html);
 }
