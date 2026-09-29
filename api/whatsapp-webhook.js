@@ -710,9 +710,43 @@ export default async function handler(req, res) {
                     cleanPhone.includes('524467314');
 
   if (isManager) {
-    console.log('--- Incoming message from Manager/Team (Silent - No Auto Reply) ---', { senderPhone: cleanPhone, incomingText });
-    // Rule: Never send automated replies back to Manager (054-3200007) or team members so conversations remain 100% natural and human.
-    return res.status(200).json({ ok: true, handled: 'manager_silent_no_auto_reply' });
+    const trimmed = incomingText.trim();
+    const nText = normHebrew(trimmed);
+    // Triggers for Manager AI Assistant:
+    // 1. Prefixes: '!', '#', '/', 'מערכת', 'בוט', 'ריזורט', 'ai', 'פקודה'
+    // 2. Standalone keywords: 'שלום', 'עזרה', 'פקודות', 'תפריט', 'תפוסה'
+    const isCommandTrigger = trimmed.startsWith('!') || 
+                             trimmed.startsWith('#') || 
+                             trimmed.startsWith('/') || 
+                             nText.startsWith('מערכת') || 
+                             nText.startsWith('בוט') || 
+                             nText.startsWith('ריזורט') || 
+                             nText.startsWith('ai') || 
+                             nText.startsWith('פקודה') ||
+                             nText === 'שלומ' ||
+                             nText === 'שלום' ||
+                             nText === 'עזרה' ||
+                             nText === 'פקודות' ||
+                             nText === 'תפריט' ||
+                             nText === 'תפוסה';
+
+    if (isCommandTrigger) {
+      const cleanCommand = trimmed
+        .replace(/^[!#/]/, '')
+        .replace(/^(?:מערכת|בוט|ריזורט|ai|פקודה)[:,\s-]*/i, '')
+        .trim();
+
+      console.log('--- Manager AI Command Triggered ---', { senderPhone: cleanPhone, cleanCommand });
+      const replyText = await handleManagerAICommand(chatId, cleanCommand || 'שלום', incomingFileUrl);
+      if (replyText) {
+        await sendWhatsAppMessage(chatId, replyText);
+      }
+      return res.status(200).json({ ok: true, handled: 'manager_command_executed' });
+    }
+
+    console.log('--- Incoming message from Manager/Team (Human chat - Silent) ---', { senderPhone: cleanPhone, incomingText });
+    // Regular human chat with Shmulik - stay 100% silent!
+    return res.status(200).json({ ok: true, handled: 'manager_silent_human_chat' });
   }
 
   // 5. Anti-spam / Cooldown check for regular clients (don't reply more than once every 6 hours)
