@@ -54,23 +54,29 @@ interface CalendarViewProps {
 }
 
 // Helper function to get high-contrast unified colors for dogs and owners according to stay status:
-// 1. Released (checked_out / completed / cancelled / ended date) -> Light gray (text-slate-400) for both dog and owner
-// 2. Checked in (active stay / inside resort today) -> Deep dark green (text-[#065f46]) for both dog and owner (high sunlight visibility)
-// 3. Booked (reserved for future, not checked in yet) -> Strong vibrant purple (text-[#581c87]) for both dog and owner (high sunlight visibility)
+// 1. Released in past (checked_out / completed / cancelled / ended date in past) -> Light gray (text-slate-400)
+// 2. Releasing on this day (משתחרר באותו היום) -> Vivid Sky/Ocean Blue (text-[#0284c7], bg-sky-50, border-sky-300)
+// 3. Checked in (active stay / inside resort) -> Deep dark emerald green (text-[#065f46])
+// 4. Booked (reserved for future, not checked in yet) -> Strong vibrant purple (text-[#581c87])
 export function getStayStatusColors(
   stayStatus: Booking['stayStatus'] | string | undefined, 
   endDate: string, 
   todayStr: string,
-  startDate?: string
+  startDate?: string,
+  currentDateStr?: string
 ) {
+  const targetDate = currentDateStr || todayStr;
+
   const isEnded = stayStatus === 'checked_out' || 
                   (stayStatus as any) === 'completed' || 
                   stayStatus === 'cancelled' || 
-                  (Boolean(endDate) && endDate < todayStr);
+                  (Boolean(endDate) && Boolean(currentDateStr) ? endDate < currentDateStr : endDate < todayStr);
+
+  const isReleasing = !isEnded && Boolean(endDate) && endDate === targetDate && stayStatus !== 'cancelled';
 
   const isCheckedIn = !isEnded && (
     stayStatus === 'checked_in' || 
-    (Boolean(startDate) && startDate! <= todayStr && (!endDate || endDate >= todayStr))
+    (Boolean(startDate) && startDate! <= targetDate && (!endDate || endDate >= targetDate))
   );
 
   if (isEnded) {
@@ -78,12 +84,31 @@ export function getStayStatusColors(
       isEnded: true,
       isCheckedIn: false,
       isBooked: false,
+      isReleasing: false,
       dogClass: 'text-slate-400 font-bold',
       ownerClass: 'text-slate-400 font-bold text-[11px]',
       textClass: 'text-slate-400',
       cardBorderBg: 'bg-slate-100/80 border-slate-200 hover:border-slate-300 opacity-75',
       monthChipBg: 'bg-slate-100 border-slate-200 text-slate-400 font-medium',
-      iconClass: 'text-slate-400'
+      iconClass: 'text-slate-400',
+      badgeLabel: 'שוחרר'
+    };
+  }
+
+  // 2. Releasing on this day (משתחרר באותו היום - כחול שמיים ייעודי בולט)
+  if (isReleasing) {
+    return {
+      isEnded: false,
+      isCheckedIn: isCheckedIn,
+      isBooked: !isCheckedIn,
+      isReleasing: true,
+      dogClass: 'text-[#0284c7] font-black', // Vivid high-contrast sky blue
+      ownerClass: 'text-[#0369a1] font-black text-[11px]', // Deep sky blue
+      textClass: 'text-[#0369a1]',
+      cardBorderBg: 'bg-sky-50/90 border-sky-300 hover:border-sky-400 hover:bg-sky-100/80 shadow-2xs ring-1 ring-sky-300/40',
+      monthChipBg: 'bg-sky-50 border-sky-300 text-[#0284c7] font-black',
+      iconClass: 'text-[#0284c7]',
+      badgeLabel: 'משתחרר היום'
     };
   }
 
@@ -92,12 +117,14 @@ export function getStayStatusColors(
       isEnded: false,
       isCheckedIn: true,
       isBooked: false,
+      isReleasing: false,
       dogClass: 'text-[#065f46] font-black', // Deep dark emerald green, high sunlight contrast
       ownerClass: 'text-[#065f46] font-black text-[11px]', // Unified exact same color
       textClass: 'text-[#065f46]',
       cardBorderBg: 'bg-emerald-50/70 border-emerald-300 hover:border-emerald-400 hover:bg-emerald-50',
       monthChipBg: 'bg-emerald-50 border-emerald-300 text-[#065f46] font-black',
-      iconClass: 'text-[#065f46]'
+      iconClass: 'text-[#065f46]',
+      badgeLabel: 'שוהה'
     };
   }
 
@@ -106,12 +133,14 @@ export function getStayStatusColors(
     isEnded: false,
     isCheckedIn: false,
     isBooked: true,
+    isReleasing: false,
     dogClass: 'text-[#581c87] font-black', // Deep vibrant purple, high sunlight contrast
     ownerClass: 'text-[#581c87] font-black text-[11px]', // Unified exact same color
     textClass: 'text-[#581c87]',
     cardBorderBg: 'bg-purple-50/60 border-purple-200 hover:border-purple-300 hover:bg-purple-50',
     monthChipBg: 'bg-purple-50 border-purple-200 text-[#581c87] font-black',
-    iconClass: 'text-[#581c87]'
+    iconClass: 'text-[#581c87]',
+    badgeLabel: 'שוריין'
   };
 }
 
@@ -645,6 +674,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
       )}
 
+      {/* Mini Legend for Dog Status Colors */}
+      <div className="flex items-center gap-2.5 text-xs font-bold text-slate-600 bg-white/80 backdrop-blur-xs px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs w-fit mb-3 flex-wrap">
+        <span className="text-[11px] text-slate-400 font-bold">מקרא:</span>
+        <span className="flex items-center gap-1.5 text-[#065f46] bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300">
+          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span>שוהה בריזורט</span>
+        </span>
+        <span className="flex items-center gap-1.5 text-[#0369a1] bg-sky-50 px-2 py-0.5 rounded-md border border-sky-300 font-black">
+          <span>🚪</span>
+          <span>משתחרר ביום זה</span>
+        </span>
+        <span className="flex items-center gap-1.5 text-[#581c87] bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+          <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+          <span>שוריין לעתיד</span>
+        </span>
+        <span className="flex items-center gap-1.5 text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 font-normal">
+          <span>🏁</span>
+          <span>שוחרר (עבר)</span>
+        </span>
+      </div>
+
       {/* =========================================================================
           MODE: TWO WEEKS VIEW (תצוגת שבועיים קרובים - 14 ימים עם כל הכלבים ומקומות פנויים ללא הסתרה)
          ========================================================================= */}
@@ -802,7 +852,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         const isDeposit = b.paymentStatus === 'deposit_paid';
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate);
+                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, day.dateStr);
 
                         return (
                           <div
@@ -815,7 +865,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 ? 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90'
                                 : stayColors.cardBorderBg
                             }`}
-                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${isEnded ? ' (שוחרר הביתה)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת בריזורט)' : ' (שוריין)'} - לחץ לפרטים מלאים`}
+                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' (משתחרר ביום זה!)' : isEnded ? ' (שוחרר הביתה)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת בריזורט)' : ' (שוריין)'} - לחץ לפרטים מלאים`}
                           >
                             <span className="flex items-center gap-1.5 truncate">
                               <span className={`text-xs ${isMatch ? 'text-amber-700' : stayColors.iconClass}`}>🐾</span>
@@ -829,6 +879,28 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 <span>🏁</span>
                                 <span>שוחרר</span>
                               </span>
+                            ) : stayColors.isReleasing ? (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="text-[10px] bg-sky-200 text-sky-950 font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs border border-sky-300" title="משתחרר ביום זה!">
+                                  <span>🚪</span>
+                                  <span>שחרור</span>
+                                </span>
+                                {!isPaid && !isDeposit && !b.isFreeStay && (b.totalPrice || 0) > 0 && (
+                                  <span className="text-[10px] bg-red-100 text-red-700 font-black px-1 rounded flex items-center" title="שריין מקום ללא מקדמה!">
+                                    0₪
+                                  </span>
+                                )}
+                                <span
+                                  className={`w-2 h-2 rounded-full shrink-0 ${
+                                    isPaid
+                                      ? 'bg-emerald-500'
+                                      : isDeposit
+                                      ? 'bg-amber-400'
+                                      : 'bg-red-500'
+                                  }`}
+                                  title={isPaid ? 'שולם מלא' : isDeposit ? 'שולמה מקדמה' : (!b.isFreeStay && (b.totalPrice || 0) > 0 ? 'חוב פתוח - ₪0 מקדמה' : 'חוב פתוח')}
+                                />
+                              </div>
                             ) : (
                               <div className="flex items-center gap-1 shrink-0">
                                 {!isEnded && !isPaid && !isDeposit && !b.isFreeStay && (b.totalPrice || 0) > 0 && (
@@ -838,9 +910,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 )}
                                 <span
                                   className={`w-2 h-2 rounded-full shrink-0 ${
-                                    isEnded
-                                      ? 'bg-slate-300'
-                                      : isPaid
+                                    isPaid
                                       ? 'bg-emerald-500'
                                       : isDeposit
                                       ? 'bg-amber-400'
@@ -946,7 +1016,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       const isDeposit = b.paymentStatus === 'deposit_paid';
                       const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                       const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                      const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate);
+                      const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, dayObj.dateStr);
 
                       let chipStyle = stayColors.monthChipBg;
                       if (isMatch) {
@@ -959,7 +1029,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         <div
                           key={b.id}
                           className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between border ${chipStyle}`}
-                          title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
+                          title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' - משתחרר ביום זה!' : isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
                         >
                           <span className="truncate flex items-center gap-1 min-w-0">
                             <span className="text-[10px] shrink-0">🐾</span>
@@ -968,7 +1038,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           </span>
                           <div className="flex items-center gap-0.5 shrink-0">
                             {isMatch && <span className="text-[9px]">⭐</span>}
-                            {!isMatch && isEnded && <span className="text-[9px] opacity-70">🏁</span>}
+                            {!isMatch && stayColors.isReleasing && <span className="text-[9px]" title="משתחרר ביום זה">🚪</span>}
+                            {!isMatch && !stayColors.isReleasing && isEnded && <span className="text-[9px] opacity-70">🏁</span>}
                             {!isEnded && (
                               <span
                                 className={`w-1.5 h-1.5 rounded-full ${
@@ -1119,7 +1190,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate);
+                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, day.dateStr);
 
                         return (
                           <div
@@ -1132,7 +1203,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 ? 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90'
                                 : stayColors.cardBorderBg
                             }`}
-                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${isEnded ? ' (שוחרר)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת)' : ' (שוריין)'}`}
+                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' (משתחרר היום)' : isEnded ? ' (שוחרר)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת)' : ' (שוריין)'}`}
                           >
                             <div className="flex items-center justify-between font-bold">
                               <span className="flex items-center gap-1 min-w-0">
@@ -1282,7 +1353,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                   const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === booking.id));
                   const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                  const stayColors = getStayStatusColors(booking.stayStatus, booking.endDate, todayStr, booking.startDate);
+                  const stayColors = getStayStatusColors(booking.stayStatus, booking.endDate, todayStr, booking.startDate, focusedDate);
 
                   return (
                     <div
@@ -1308,6 +1379,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             <span className="bg-slate-100 text-slate-700 text-[11px] font-bold px-2 py-0.5 rounded-md">
                               {getServiceTypeHebrew(booking.serviceType)}
                             </span>
+                            {stayColors.isReleasing && (
+                              <span className="bg-sky-200 text-sky-950 text-[11px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs border border-sky-300">
+                                <span>🚪</span>
+                                <span>משתחרר היום!</span>
+                              </span>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-3 text-xs text-slate-600 mt-1">
