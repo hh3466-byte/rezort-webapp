@@ -3,22 +3,31 @@
  * WhatsApp Webhook Handler for Green-API - הריזורט לכלב
  * Vercel Serverless Function: /api/whatsapp-webhook
  * 
- * Logic:
- * 1. Filters out group messages, outgoing messages, broadcasts, and spam.
- * 2. Identifies existing clients vs new clients from Supabase bookings & customers.
- * 3. Identifies closed hours (Fridays from 14:00, Shabbat, Sunday mornings to 09:30, Jewish Holidays, and weeknights).
- * 4. Sends:
- *    - Closed hours to existing clients: Weekend/Holiday closed message.
- *    - Closed hours to new clients: Weekend/Holiday closed message + Intake Questionnaire link.
- *    - Open hours to new clients: Intake Questionnaire link only.
- *    - Open hours to existing clients: No auto-reply (human team handles).
+ * Capabilities:
+ * 1. Manager AI Assistant: Full natural language commands & queries via WhatsApp
+ *    from Manager (054-3200007), Shmulik (050-6336896), Raz (054-3180407), Etti (052-4467314):
+ *    - Real-time occupancy & staying dogs status
+ *    - Tomorrow & today overview (incoming/departing)
+ *    - Room/Kennel placements (1-7, suite 1-4, paths, yard, home)
+ *    - Payment & deposit updates
+ *    - Stay date extensions & modifications
+ *    - Check-in, check-out, and cancellations
+ *    - Search dog & customer cards
+ *    - Pending intake questionnaires overview
+ *    - Quick booking registrations
+ * 2. Trainer Hila receipt filing & Bit payment settlement.
+ * 3. Client Auto-Replies (Intake Questionnaire for new clients, closed hours messages).
  * =========================================================================
  */
 
-const SUPABASE_URL = "https://ydlynqqmulojhrxbfjsc.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ydlynqqmulojhrxbfjsc.supabase.co";
+const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
 const GREEN_API_ID = "710722735421";
 const GREEN_API_TOKEN = "ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const CLOSED_WEEKEND_HOLIDAY_MSG = `תודה על פנייתך, בחגים וסופי שבוע שירות הלקוחות שלנו סגור משעה 14:00 בשישי/ערב החג ועד למחרת השבת/או החג בשעה 09:30. כמובן שהמקום מאוייש והכלבים מקבלים טיפול מלא ומפנק. רק הבעלים שלהם צריכים להתגבר ולהתאפק עד ששרות הלקוחות יחזור לפעילות.תודה על ההבנה.`;
 
@@ -57,23 +66,19 @@ async function sendWhatsAppMessage(chatId, message) {
 async function isExistingClient(phoneSuffix) {
   if (!phoneSuffix || phoneSuffix.length < 6) return false;
   try {
-    // Check bookings table
-    const bRes = await fetch(`${SUPABASE_URL}/rest/v1/bookings?owner_phone=ilike.*${phoneSuffix}*&select=id&limit=1`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
-    });
-    if (bRes.ok) {
-      const bData = await bRes.json();
-      if (Array.isArray(bData) && bData.length > 0) return true;
-    }
+    const { data: bData } = await supabase
+      .from('bookings')
+      .select('id')
+      .ilike('owner_phone', `%${phoneSuffix}%`)
+      .limit(1);
+    if (Array.isArray(bData) && bData.length > 0) return true;
 
-    // Check customers table
-    const cRes = await fetch(`${SUPABASE_URL}/rest/v1/customers?phone=ilike.*${phoneSuffix}*&select=id&limit=1`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
-    });
-    if (cRes.ok) {
-      const cData = await cRes.json();
-      if (Array.isArray(cData) && cData.length > 0) return true;
-    }
+    const { data: cData } = await supabase
+      .from('customers')
+      .select('id')
+      .ilike('phone', `%${phoneSuffix}%`)
+      .limit(1);
+    if (Array.isArray(cData) && cData.length > 0) return true;
   } catch (e) {
     console.warn('Supabase client check warning:', e);
   }
@@ -88,22 +93,527 @@ async function checkIsShabbatOrHoliday(israelDateStr) {
       const data = await res.json();
       if (data && Array.isArray(data.events) && data.events.length > 0) {
         const eventsStr = data.events.join(' ').toLowerCase();
-        // Major holidays where customer service is closed
-        const isHoliday = eventsStr.includes('rosh hashana') || 
-                          eventsStr.includes('yom kippur') || 
-                          eventsStr.includes('sukkot') || 
-                          eventsStr.includes('shmini atzeret') || 
-                          eventsStr.includes('simchat torah') || 
-                          eventsStr.includes('pesach') || 
-                          eventsStr.includes('shavuot') || 
-                          eventsStr.includes('erev');
-        return isHoliday;
+        return eventsStr.includes('rosh hashana') || 
+               eventsStr.includes('yom kippur') || 
+               eventsStr.includes('sukkot') || 
+               eventsStr.includes('shmini atzeret') || 
+               eventsStr.includes('simchat torah') || 
+               eventsStr.includes('pesach') || 
+               eventsStr.includes('shavuot') || 
+               eventsStr.includes('erev');
       }
     }
   } catch (e) {
     console.warn('Hebcal check error:', e);
   }
   return false;
+}
+
+function normHebrew(str) {
+  return (str || '')
+    .replace(/[\u0591-\u05C7]/g, '')
+    .replace(/ך/g, 'כ')
+    .replace(/ם/g, 'מ')
+    .replace(/ן/g, 'נ')
+    .replace(/ף/g, 'פ')
+    .replace(/ץ/g, 'צ')
+    .toLowerCase();
+}
+
+function formatKennelLabel(kennel) {
+  if (!kennel) return 'ממתין לשיבוץ ⏳';
+  const k = String(kennel).trim().toLowerCase();
+  if (k === 'home' || k.includes('בית') || k.includes('הלנה')) return 'הלנה ביתית 🏡';
+  if (k === 'suite_1' || k === 'סוויטה 1') return 'סוויטה 1 🌟';
+  if (k === 'suite_2' || k === 'סוויטה 2') return 'סוויטה 2 🌟';
+  if (k === 'suite_3' || k === 'סוויטה 3') return 'סוויטה 3 🌟';
+  if (k === 'suite_4' || k === 'סוויטה 4') return 'סוויטה 4 🌟';
+  if (k === 'east_path' || k.includes('מזרחי')) return 'שביל מזרחי 🌿';
+  if (k === 'west_path' || k.includes('מערבי')) return 'שביל מערבי 🌿';
+  if (k === 'main_yard' || k.includes('מרכזית')) return 'חצר מרכזית 🌳';
+  if (k.startsWith('room_')) return `חדר ${k.replace('room_', '')} 🏠`;
+  if (/^[1-7]$/.test(k)) return `חדר ${k} 🏠`;
+  return kennel;
+}
+
+function parseLocationKey(str) {
+  if (!str) return null;
+  const s = str.trim().toLowerCase();
+  if (s.includes('בית') || s.includes('הלנה') || s.includes('home')) return 'home';
+  if (s.includes('שביל מזרחי') || s.includes('מזרחי')) return 'east_path';
+  if (s.includes('שביל מערבי') || s.includes('מערבי')) return 'west_path';
+  if (s.includes('חצר מרכזית') || s.includes('מרכזית') || s.includes('חצר')) return 'main_yard';
+  const suiteMatch = s.match(/סוויטה\s*(\d)/);
+  if (suiteMatch) return `suite_${suiteMatch[1]}`;
+  const roomMatch = s.match(/(?:חדר|תא)\s*(\d)/);
+  if (roomMatch) return `room_${roomMatch[1]}`;
+  const digitOnly = s.match(/\b([1-7])\b/);
+  if (digitOnly) return `room_${digitOnly[1]}`;
+  return null;
+}
+
+function parseDateInput(rawStr, refDate = new Date()) {
+  if (!rawStr) return null;
+  const str = rawStr.trim().toLowerCase();
+  const today = new Date(refDate);
+  const year = today.getFullYear();
+  if (str.includes('היום')) return today.toISOString().substring(0, 10);
+  if (str.includes('מחרתיים')) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + 2);
+    return d.toISOString().substring(0, 10);
+  }
+  if (str.includes('מחר')) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().substring(0, 10);
+  }
+  const matchFull = str.match(/(\d{1,2})[./\-](\d{1,2})(?:[./\-](\d{2,4}))?/);
+  if (matchFull) {
+    const day = matchFull[1].padStart(2, '0');
+    const month = matchFull[2].padStart(2, '0');
+    let y = matchFull[3] ? matchFull[3] : String(year);
+    if (y.length === 2) y = '20' + y;
+    return `${y}-${month}-${day}`;
+  }
+  return null;
+}
+
+function formatDateIL(dateStr) {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length >= 3) {
+    return `${parts[2].substring(0, 2)}.${parts[1]}.${parts[0].slice(2)}`;
+  }
+  return dateStr;
+}
+
+/**
+ * Handle Manager AI Commands and WhatsApp queries
+ */
+async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
+  const norm = normHebrew(cleanText);
+  const todayIso = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+
+  // 1. HELP & MENU
+  if (norm === 'עזרה' || norm === 'פקודות' || norm === 'תפריט' || norm === 'היי' || norm === 'שלום' || norm === 'help' || norm === 'הוראות' || norm === 'מה אתה יודע לעשות') {
+    return `👋 *שלום מנהל! ברוך הבא למערכת הניהול בוואטסאפ של הריזורט לכלב* 🐾
+
+תוכל לרשום לי כל בקשה, שאילתה או עדכון בשפה חופשית:
+
+📊 *דוחות ותפוסה:*
+• "כמה כלבים שוהים כרגע?"
+• "מי משתחרר מחר?" / "מי מגיע מחר?"
+• "מה קורה מחר?" / "מי נכנס היום?"
+
+🔍 *בירור על כלב או לקוח:*
+• "מה המצב של לונה?"
+• "איפה ג'וי משובץ?"
+• "חפש לקוח יוסי" / "טלפון 0501234567"
+
+🛏️ *שיבוץ והעברת חדרים:*
+• "שבץ את מייק בחדר 3"
+• "העבר את מוקה לסוויטה 2"
+• "שבץ את רקסי בהלנה ביתית"
+
+💰 *עדכון תשלום ומקדמה:*
+• "תעדכן מקדמה 300 שח לרוקי"
+• "סגר חשבון 800 שח עבור לונה"
+• (או שליחת צילום אישור ביט / קבלה)
+
+📅 *תאריכים וסטטוס:*
+• "הארך את השהייה של לונה עד 15.10"
+• "קלוט את שון" / "צ'ק אין לשון"
+• "שחרר את ברונו" / "בטל שהייה של בל"
+
+📝 *רישום שהייה חדשה:*
+• "רשום שהייה: כלב מקס, גזע פודל, בעלים דני, 0541112233, 01.10 עד 05.10, 720 שח"
+
+📑 *שאלוני קליטה ממתינים:*
+• "שאלונים חדשים" / "בקשות ממתינות"
+
+הכל מתעדכן ישירות ב-Supabase ומסונכרן בזמן אמת ל-CRM! 🚀`;
+  }
+
+  // 2. OCCUPANCY & STAYING DOGS
+  if (norm.includes('כמה כלבימ') || norm.includes('תפוסה') || norm.includes('מי שוהה') || (norm.includes('סטטוס') && !norm.includes('של')) || norm === 'מצב') {
+    const { data: bookings } = await supabase.from('bookings').select('*');
+    const active = (bookings || []).filter(b => {
+      const isNotCancelled = b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled';
+      const s = b.start_date || b.startDate;
+      const e = b.end_date || b.endDate;
+      return isNotCancelled && ((s <= todayIso && e >= todayIso) || b.stay_status === 'checked_in');
+    });
+
+    let msg = `📊 *דוח תפוסה נוכחי בריזורט (${formatDateIL(todayIso)}):*\n`;
+    msg += `סה"כ כלבים שוהים כרגע: *${active.length} כלבים* 🐶\n\n`;
+
+    if (active.length === 0) {
+      msg += `אין כלבים שוהים כרגע.`;
+    } else {
+      active.forEach((b, idx) => {
+        const dog = b.dog_name || b.dogName || 'כלב';
+        const breed = b.dog_breed || b.dogBreed || '';
+        const owner = b.owner_name || b.ownerName || '';
+        const kennel = formatKennelLabel(b.data?.kennelNumber || b.kennel_number);
+        const s = formatDateIL(b.start_date || b.startDate);
+        const e = formatDateIL(b.end_date || b.endDate);
+        msg += `${idx + 1}. *${dog}* ${breed ? `(${breed})` : ''} – ${kennel}\n`;
+        msg += `   👤 בעלים: ${owner} | 🗓️ ${s} ⬅️ ${e}\n`;
+      });
+    }
+    return msg;
+  }
+
+  // 3. TOMORROW & TODAY OVERVIEW
+  if (norm.includes('מחר') || norm.includes('משתחרר') || norm.includes('מגיע') || norm.includes('נכנס')) {
+    const isTomorrow = norm.includes('מחר');
+    let targetDate = todayIso;
+    if (isTomorrow) {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      targetDate = d.toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+    }
+
+    const { data: bookings } = await supabase.from('bookings').select('*');
+    const active = (bookings || []).filter(b => b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled');
+
+    const incoming = active.filter(b => (b.start_date || b.startDate) === targetDate);
+    const departing = active.filter(b => (b.end_date || b.endDate) === targetDate);
+
+    let msg = `📋 *סקירת ${isTomorrow ? 'מחר' : 'היום'} (${formatDateIL(targetDate)}):*\n\n`;
+    
+    msg += `🐕 *נכנסים / מגיעים (${incoming.length}):*\n`;
+    if (incoming.length === 0) {
+      msg += `אין כניסות מתוכננות.\n`;
+    } else {
+      incoming.forEach(b => {
+        const dog = b.dog_name || b.dogName || '';
+        const owner = b.owner_name || b.ownerName || '';
+        const phone = b.owner_phone || b.ownerPhone || '';
+        const deposit = b.deposit_amount || 0;
+        const total = b.total_price || 0;
+        msg += `• *${dog}* (${owner}, ${phone}) | מקדמה: ₪${deposit} מתוך ₪${total}\n`;
+      });
+    }
+
+    msg += `\n🚪 *משתחררים / יוצאים (${departing.length}):*\n`;
+    if (departing.length === 0) {
+      msg += `אין יציאות מתוכננות.\n`;
+    } else {
+      departing.forEach(b => {
+        const dog = b.dog_name || b.dogName || '';
+        const owner = b.owner_name || b.ownerName || '';
+        const phone = b.owner_phone || b.ownerPhone || '';
+        const total = b.total_price || 0;
+        const deposit = b.deposit_amount || 0;
+        const balance = Math.max(0, total - deposit);
+        msg += `• *${dog}* (${owner}, ${phone}) | יתרה לתשלום: *₪${balance}*\n`;
+      });
+    }
+
+    return msg;
+  }
+
+  // 4. PENDING QUESTIONNAIRES
+  if (norm.includes('שאלונ') || norm.includes('בקשות') || norm.includes('ממתינ')) {
+    const { data: sRows } = await supabase.from('settings').select('data').eq('id', 'resort_config');
+    const sData = sRows?.[0]?.data || {};
+    const intakes = Array.isArray(sData.intakeRequests) ? sData.intakeRequests : [];
+    const pending = intakes.filter(r => {
+      const st = r.status || 'pending';
+      const isPendingStatus = st === 'pending' || st === 'new' || st === 'in_progress' || st === 'review';
+      const isNotPast = !r.endDate || r.endDate >= todayIso;
+      return isPendingStatus && isNotPast;
+    });
+
+    if (pending.length === 0) {
+      return `✅ אין כרגע שאלוני קליטה חדשים הממתינים לטיפול. הכל מעודכן! 🐾`;
+    }
+
+    let msg = `📑 *שאלוני קליטה ממתינים לטיפול (${pending.length}):*\n\n`;
+    pending.slice(0, 5).forEach((r, idx) => {
+      const dog = r.dogName || 'כלב';
+      const breed = r.dogBreed || '';
+      const owner = r.ownerName || '';
+      const phone = r.ownerPhone || '';
+      const s = formatDateIL(r.startDate);
+      const e = formatDateIL(r.endDate);
+      msg += `${idx + 1}. *${dog}* ${breed ? `(${breed})` : ''} – ${owner} (${phone})\n`;
+      msg += `   🗓️ מבוקש: ${s} ⬅️ ${e}\n`;
+    });
+    msg += `\nלפתיחה ואישור ב-CRM: https://rezort-webapp.vercel.app`;
+    return msg;
+  }
+
+  // 5. ROOM / KENNEL PLACEMENT ("שבץ את ג'וי בחדר 3", "העבר את מוקה לסוויטה 2")
+  if (norm.includes('שבצ') || norm.includes('העבר') || norm.includes('שימ')) {
+    const locKey = parseLocationKey(cleanText);
+    if (locKey) {
+      const { data: bookings } = await supabase.from('bookings').select('*');
+      const active = (bookings || []).filter(b => b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled');
+
+      let matchedBooking = null;
+      for (const b of active) {
+        const dName = normHebrew(b.dog_name || b.dogName || '');
+        if (dName && norm.includes(dName)) {
+          matchedBooking = b;
+          break;
+        }
+      }
+
+      if (matchedBooking) {
+        const updatedData = {
+          ...(matchedBooking.data || {}),
+          kennelNumber: locKey,
+          updatedAt: new Date().toISOString()
+        };
+
+        await supabase.from('bookings').update({
+          data: updatedData,
+          updated_at: new Date().toISOString()
+        }).eq('id', matchedBooking.id);
+
+        return `✅ *שיבוץ עודכן בהצלחה!* 🛏️🐾\n\n🐶 *כלב:* ${matchedBooking.dog_name || matchedBooking.dogName}\n📍 *מיקום חדש:* ${formatKennelLabel(locKey)}\n👤 *בעלים:* ${matchedBooking.owner_name || matchedBooking.ownerName} (${matchedBooking.owner_phone || matchedBooking.ownerPhone})\n🗓️ *תאריכים:* ${formatDateIL(matchedBooking.start_date)} ⬅️ ${formatDateIL(matchedBooking.end_date)}`;
+      } else {
+        return `⚠️ זיהיתי את המיקום (${formatKennelLabel(locKey)}), אך לא מצאתי כלב פעיל שתואם לשם שצוין.\nנסה לרשום למשל: "שבץ את מייק בחדר 3"`;
+      }
+    }
+  }
+
+  // 6. PAYMENT UPDATES ("תעדכן מקדמה 300 שח לרוקי", "שולם 500 ללונה", or Bit receipt)
+  if (norm.includes('שולמ') || norm.includes('מקדמה') || norm.includes('סגר חשבונ') || norm.includes('תשלומ') || norm.includes('ביט') || fileUrl.length > 0) {
+    const amountMatch = cleanText.match(/(?:₪|שולם|סך|הועבר|סכום|מקדמה)?\s*(\d{2,5})/);
+    const parsedAmount = amountMatch ? Number(amountMatch[1]) : 0;
+
+    const { data: bookings } = await supabase.from('bookings').select('*');
+    const active = (bookings || []).filter(b => b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled');
+
+    let matchedBooking = null;
+    for (const b of active) {
+      const dName = normHebrew(b.dog_name || b.dogName || '');
+      const oName = normHebrew(b.owner_name || b.ownerName || '');
+      if ((dName && norm.includes(dName)) || (oName && norm.includes(oName))) {
+        matchedBooking = b;
+        break;
+      }
+    }
+
+    if (matchedBooking && parsedAmount > 0) {
+      const totalPrice = matchedBooking.total_price || matchedBooking.data?.totalPrice || parsedAmount;
+      const newDeposit = parsedAmount;
+      const isFull = newDeposit >= totalPrice;
+      const paymentStatus = isFull ? 'fully_paid' : 'deposit_paid';
+
+      const updatedData = {
+        ...(matchedBooking.data || {}),
+        depositAmount: newDeposit,
+        paymentStatus,
+        notes: `${matchedBooking.notes || ''} | שולם ₪${newDeposit} (עודכן מוואטסאפ מנהל ב-${todayIso})`.trim(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await supabase.from('bookings').update({
+        deposit_amount: newDeposit,
+        payment_status: paymentStatus,
+        notes: updatedData.notes,
+        data: updatedData,
+        updated_at: new Date().toISOString()
+      }).eq('id', matchedBooking.id);
+
+      return `✅ *התשלום עודכן בהצלחה במערכת!* 💰\n\n🐶 *כלב:* ${matchedBooking.dog_name || matchedBooking.dogName}\n👤 *בעלים:* ${matchedBooking.owner_name || matchedBooking.ownerName}\n💵 *סכום שנקלט:* ₪${newDeposit.toLocaleString('he-IL')}\n📊 *סטטוס תשלום:* ${isFull ? 'שולם במלואו 🟢' : `מקדמה שולמה (יתרה: ₪${Math.max(0, totalPrice - newDeposit)}) 🟡`}`;
+    }
+  }
+
+  // 7. DATE EXTENSION / MODIFICATION ("הארך את השהייה של לונה עד 15.10")
+  if (norm.includes('הארכ') || norm.includes('שנה תאריכ') || norm.includes('תאריכימ')) {
+    const { data: bookings } = await supabase.from('bookings').select('*');
+    const active = (bookings || []).filter(b => b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled');
+
+    let matchedBooking = null;
+    for (const b of active) {
+      const dName = normHebrew(b.dog_name || b.dogName || '');
+      if (dName && norm.includes(dName)) {
+        matchedBooking = b;
+        break;
+      }
+    }
+
+    if (matchedBooking) {
+      const newEnd = parseDateInput(cleanText);
+      if (newEnd) {
+        const updatedData = {
+          ...(matchedBooking.data || {}),
+          endDate: newEnd,
+          notes: `${matchedBooking.notes || ''} | הוארך עד ${formatDateIL(newEnd)} (עודכן מוואטסאפ מנהל)`.trim(),
+          updatedAt: new Date().toISOString()
+        };
+
+        await supabase.from('bookings').update({
+          end_date: newEnd,
+          notes: updatedData.notes,
+          data: updatedData,
+          updated_at: new Date().toISOString()
+        }).eq('id', matchedBooking.id);
+
+        return `✅ *תאריך השהייה הוארך ועודכן בהצלחה!* 📅\n\n🐶 *כלב:* ${matchedBooking.dog_name || matchedBooking.dogName}\n👤 *בעלים:* ${matchedBooking.owner_name || matchedBooking.ownerName}\n🗓️ *תאריכים מעודכנים:* ${formatDateIL(matchedBooking.start_date)} ⬅️ *${formatDateIL(newEnd)}*`;
+      }
+    }
+  }
+
+  // 8. CHECK-IN / CHECK-OUT / CANCEL
+  if (norm.includes('קלוט') || norm.includes('צ\'ק אינ') || norm.includes('צק אינ') || norm.includes('שחרר') || norm.includes('צ\'ק אאוט') || norm.includes('בטל שהייה')) {
+    const isCheckIn = norm.includes('קלוט') || norm.includes('אינ');
+    const isCheckOut = norm.includes('שחרר') || norm.includes('אאוט');
+    const isCancel = norm.includes('בטל') || norm.includes('מחק');
+
+    const { data: bookings } = await supabase.from('bookings').select('*');
+    let matchedBooking = null;
+    for (const b of bookings || []) {
+      const dName = normHebrew(b.dog_name || b.dogName || '');
+      if (dName && norm.includes(dName)) {
+        matchedBooking = b;
+        break;
+      }
+    }
+
+    if (matchedBooking) {
+      let targetStatus = matchedBooking.stay_status;
+      let statusLabel = '';
+      if (isCheckIn) { targetStatus = 'checked_in'; statusLabel = 'נקלט בריזורט (צ\'ק אין) 🐾'; }
+      else if (isCheckOut) { targetStatus = 'checked_out'; statusLabel = 'השתחרר מהריזורט (צ\'ק אאוט) 🚪'; }
+      else if (isCancel) { targetStatus = 'cancelled'; statusLabel = 'בוטל ❌'; }
+
+      const updatedData = {
+        ...(matchedBooking.data || {}),
+        stayStatus: targetStatus,
+        updatedAt: new Date().toISOString()
+      };
+
+      await supabase.from('bookings').update({
+        stay_status: targetStatus,
+        data: updatedData,
+        updated_at: new Date().toISOString()
+      }).eq('id', matchedBooking.id);
+
+      return `✅ *סטטוס השהייה עודכן בהצלחה!* 🐕\n\n🐶 *כלב:* ${matchedBooking.dog_name || matchedBooking.dogName}\n👤 *בעלים:* ${matchedBooking.owner_name || matchedBooking.ownerName}\n📌 *סטטוס נוכחי:* ${statusLabel}`;
+    }
+  }
+
+  // 9. QUICK BOOKING REGISTRATION ("רשום שהייה לכלב מקס, בעלים דני, 0501234567...")
+  if (norm.includes('רשומ שהייה') || norm.includes('הוספ שהייה') || norm.includes('שריונ חדש')) {
+    const dogMatch = cleanText.match(/כלב[:\s]+([^\s,]+)/i);
+    const ownerMatch = cleanText.match(/בעלים[:\s]+([^\d,]+)/i);
+    const phoneMatch = cleanText.match(/(05\d[\s-]?\d{7})/);
+    const datesMatch = cleanText.match(/(\d{1,2}[./\-]\d{1,2}(?:[./\-]\d{2,4})?)\s*(?:עד|ל|-)\s*(\d{1,2}[./\-]\d{1,2}(?:[./\-]\d{2,4})?)/);
+    const priceMatch = cleanText.match(/(\d{3,5})\s*(?:ש"ח|שח|₪)?/);
+
+    if (dogMatch && phoneMatch && datesMatch) {
+      const dogName = dogMatch[1].trim();
+      const ownerName = ownerMatch ? ownerMatch[1].trim() : 'בעלים';
+      const ownerPhone = phoneMatch[1].replace(/\D/g, '');
+      const startDate = parseDateInput(datesMatch[1]);
+      const endDate = parseDateInput(datesMatch[2]);
+      const totalPrice = priceMatch ? Number(priceMatch[1]) : 0;
+      const newId = `b-wa-${Date.now()}`;
+
+      const bookingObj = {
+        id: newId,
+        dog_name: dogName,
+        dog_breed: 'מעורב',
+        owner_name: ownerName,
+        owner_phone: ownerPhone,
+        service_type: 'boarding',
+        start_date: startDate,
+        end_date: endDate,
+        total_price: totalPrice,
+        deposit_amount: 0,
+        payment_status: 'unpaid',
+        stay_status: 'booked',
+        notes: `נרשם ישירות מוואטסאפ מנהל ב-${todayIso}`,
+        data: {
+          id: newId,
+          dogName,
+          dogBreed: 'מעורב',
+          ownerName,
+          ownerPhone,
+          serviceType: 'boarding',
+          startDate,
+          endDate,
+          totalPrice,
+          depositAmount: 0,
+          paymentStatus: 'unpaid',
+          stayStatus: 'booked',
+          notes: `נרשם ישירות מוואטסאפ מנהל ב-${todayIso}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        },
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      await supabase.from('bookings').insert([bookingObj]);
+
+      return `✅ *שהייה חדשה נרשמה בהצלחה בריזורט!* 🐾🎉\n\n🐶 *כלב:* ${dogName}\n👤 *בעלים:* ${ownerName} (${ownerPhone})\n🗓️ *תאריכים:* ${formatDateIL(startDate)} ⬅️ ${formatDateIL(endDate)}\n💰 *מחיר:* ₪${totalPrice.toLocaleString('he-IL')}\n\nהשהייה מופיעה כעת ביומן הריזורט ב-CRM!`;
+    }
+  }
+
+  // 10. SEARCH CUSTOMER / CLIENT ("חפש לקוח יוסי", "טלפון 0546610321")
+  if (norm.includes('חפש') || norm.includes('לקוח') || norm.includes('טלפונ')) {
+    const queryTerm = cleanText.replace(/(?:חפש|לקוח|טלפון|מספר|פרטים|עבור|של)/gi, '').trim().toLowerCase();
+    if (queryTerm.length >= 2) {
+      const { data: bookings } = await supabase.from('bookings').select('*');
+      const matches = (bookings || []).filter(b => {
+        const oName = (b.owner_name || b.ownerName || '').toLowerCase();
+        const dName = (b.dog_name || b.dogName || '').toLowerCase();
+        const phone = (b.owner_phone || b.ownerPhone || '').replace(/\D/g, '');
+        return oName.includes(queryTerm) || dName.includes(queryTerm) || phone.includes(queryTerm);
+      });
+
+      if (matches.length > 0) {
+        const first = matches[0];
+        const dog = first.dog_name || first.dogName;
+        const owner = first.owner_name || first.ownerName;
+        const phone = first.owner_phone || first.ownerPhone;
+        const s = formatDateIL(first.start_date || first.startDate);
+        const e = formatDateIL(first.end_date || first.endDate);
+        const kennel = formatKennelLabel(first.data?.kennelNumber || first.kennel_number);
+        const deposit = first.deposit_amount || 0;
+        const total = first.total_price || 0;
+
+        return `👤 *נמצא כרטיס לקוח: ${owner}*\n\n🐶 *כלב:* ${dog} (${first.dog_breed || first.dogBreed || 'מעורב'})\n📱 *טלפון:* ${phone}\n🗓️ *שהייה:* ${s} ⬅️ ${e}\n🛏️ *מיקום:* ${kennel}\n💰 *תשלום:* ₪${deposit} מתוך ₪${total}\n📊 *סך ביקורים בהיסטוריה:* ${matches.length}`;
+      }
+    }
+  }
+
+  // 11. SPECIFIC DOG QUERY (Active first, then past)
+  const { data: allBookings } = await supabase.from('bookings').select('*');
+  const activeBookings = (allBookings || []).filter(b => b.stay_status !== 'cancelled' && (b.end_date >= todayIso || b.stay_status === 'checked_in'));
+  const candidateList = activeBookings.length > 0 ? activeBookings : (allBookings || []);
+
+  for (const b of candidateList) {
+    const dName = normHebrew(b.dog_name || b.dogName || '');
+    if (dName.length >= 2 && norm.includes(dName)) {
+      const dog = b.dog_name || b.dogName;
+      const breed = b.dog_breed || b.dogBreed || 'מעורב';
+      const owner = b.owner_name || b.ownerName || '';
+      const phone = b.owner_phone || b.ownerPhone || '';
+      const s = formatDateIL(b.start_date || b.startDate);
+      const e = formatDateIL(b.end_date || b.endDate);
+      const kennel = formatKennelLabel(b.data?.kennelNumber || b.kennel_number);
+      const deposit = b.deposit_amount || 0;
+      const total = b.total_price || 0;
+      const balance = Math.max(0, total - deposit);
+      const notes = b.notes || b.data?.notes || 'אין הערות מיוחדות';
+
+      return `🐶 *כרטיס שהייה: ${dog} (${breed})*\n\n👤 *בעלים:* ${owner} (${phone})\n🗓️ *תאריכים:* ${s} ⬅️ ${e}\n🛏️ *מיקום משובץ:* ${kennel}\n💰 *תשלום:* שולם ₪${deposit} מתוך ₪${total} (יתרה: ₪${balance})\n📝 *הערות:* ${notes}`;
+    }
+  }
+
+  // 12. Fallback friendly guide
+  return `🤖 קיבלתי את הודעתך: "${cleanText}".
+תוכל לרשום לי שאילתות, בדיקת תפוסה, שיבוץ חדרים, עדכוני תשלומים או סטטוסים.
+לרשימת כל האפשרויות, שלח *"עזרה"* או *"פקודות"*.`;
 }
 
 export default async function handler(req, res) {
@@ -137,24 +647,22 @@ export default async function handler(req, res) {
   const phoneSuffix = cleanPhone.slice(-7); // Last 7 digits
   const senderName = senderData.senderName || senderData.senderContactName || '';
 
-  // 3. Special handling for Hila the Trainer (0526908943) and Managers (0506336896 / 0543200007)
+  const msgData = payload.messageData || {};
+  const incomingText = (msgData.textMessageData?.textMessage || 
+                        msgData.extendedTextMessageData?.text || 
+                        msgData.fileMessageData?.caption || '').trim();
+  const incomingFileUrl = msgData.fileMessageData?.downloadUrl || '';
+
+  // 3. Special handling for Hila the Trainer (0526908943)
   const isHila = cleanPhone.includes('526908943');
-  const isManager = cleanPhone.includes('543200007') || cleanPhone.includes('506336896');
-
   if (isHila) {
-    const msgData = payload.messageData || {};
-    const text = msgData.textMessageData?.textMessage || 
-                 msgData.extendedTextMessageData?.text || 
-                 msgData.fileMessageData?.caption || '';
-    const fileUrl = msgData.fileMessageData?.downloadUrl || '';
-
-    console.log('--- Incoming message from Hila the Trainer ---', { text, fileUrl });
+    console.log('--- Incoming message from Hila the Trainer ---', { incomingText, incomingFileUrl });
 
     // Send immediate query to Shmulik (050-6336896) and Manager (054-3200007)
     const alertRecipients = ['972506336896@c.us', '972543200007@c.us'];
     let alertMsg = `🐾 *התקבלה קבלה/הודעה מהילה המאלפת (Halodog)*\n`;
-    if (text) alertMsg += `\n📄 *פרטי הודעה/קבלה:* "${text}"`;
-    if (fileUrl) alertMsg += `\n📷 *צורפה תמונת קבלה לתיוק*`;
+    if (incomingText) alertMsg += `\n📄 *פרטי הודעה/קבלה:* "${incomingText}"`;
+    if (incomingFileUrl) alertMsg += `\n📷 *צורפה תמונת קבלה לתיוק*`;
     alertMsg += `\n\n❓ *האם שולם בפועל וכמה?*\nנא לשתף כאן אישור תשלום ביט / צילום מסך או לרשום "שולם 1000 בביט" כדי שאתייק אותו במערכת ואסגור את החשבון.`;
 
     for (const rec of alertRecipients) {
@@ -163,42 +671,31 @@ export default async function handler(req, res) {
 
     // Save pending receipt to Supabase settings
     try {
-      const sRes = await fetch(`${SUPABASE_URL}/rest/v1/settings?id=eq.default&select=data`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
-      });
-      if (sRes.ok) {
-        const sData = await sRes.json();
-        const curData = sData?.[0]?.data || {};
-        const curReceipts = Array.isArray(curData.trainerReceipts) ? curData.trainerReceipts : [];
-        const detectedNum = (text.match(/(?:קבלה|מס'|מספר)\s*[:#]?\s*(\d+)/i) || [])[1] || `הילה-${Date.now().toString().slice(-4)}`;
-        const detectedAmount = (text.match(/(?:₪|סך|סכום|שולם)?\s*(\d{3,4})/i) || [])[1];
-        const newReceipt = {
-          id: `rcpt-${Date.now()}`,
-          receiptNumber: detectedNum,
-          receiptDate: new Date().toISOString().substring(0, 10),
-          totalAmount: detectedAmount ? Number(detectedAmount) : 1000,
-          paymentMethod: 'ביט',
-          rawLineText: text || 'תמונת קבלה מוואטסאפ',
-          receiptImageUrl: fileUrl,
-          allocations: [],
-          isPaidActually: false,
-          managerQuerySent: true,
-          managerQuerySentAt: new Date().toISOString(),
-          status: 'pending_payment',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        curReceipts.unshift(newReceipt);
-        await fetch(`${SUPABASE_URL}/rest/v1/settings?id=eq.default`, {
-          method: 'PATCH',
-          headers: {
-            apikey: SUPABASE_KEY,
-            Authorization: `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ data: { ...curData, trainerReceipts: curReceipts } })
-        });
-      }
+      const { data: sData } = await supabase.from('settings').select('data').eq('id', 'resort_config');
+      const curData = sData?.[0]?.data || {};
+      const curReceipts = Array.isArray(curData.trainerReceipts) ? curData.trainerReceipts : [];
+      const detectedNum = (incomingText.match(/(?:קבלה|מס'|מספר)\s*[:#]?\s*(\d+)/i) || [])[1] || `הילה-${Date.now().toString().slice(-4)}`;
+      const detectedAmount = (incomingText.match(/(?:₪|סך|סכום|שולם)?\s*(\d{3,4})/i) || [])[1];
+      const newReceipt = {
+        id: `rcpt-${Date.now()}`,
+        receiptNumber: detectedNum,
+        receiptDate: new Date().toISOString().substring(0, 10),
+        totalAmount: detectedAmount ? Number(detectedAmount) : 1000,
+        paymentMethod: 'ביט',
+        rawLineText: incomingText || 'תמונת קבלה מוואטסאפ',
+        receiptImageUrl: incomingFileUrl,
+        allocations: [],
+        isPaidActually: false,
+        managerQuerySent: true,
+        managerQuerySentAt: new Date().toISOString(),
+        status: 'pending_payment',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      curReceipts.unshift(newReceipt);
+      await supabase.from('settings').update({
+        data: { ...curData, trainerReceipts: curReceipts }
+      }).eq('id', 'resort_config');
     } catch (dbErr) {
       console.warn('Error saving Hila receipt to Supabase:', dbErr);
     }
@@ -206,120 +703,29 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, handled: 'hila_notified_manager' });
   }
 
+  // 4. Authorized Manager / Resort Team Handling (Manager 0543200007, Shmulik 0506336896, Raz 0543180407, Etti 0524467314)
+  const isManager = cleanPhone.includes('543200007') || 
+                    cleanPhone.includes('506336896') || 
+                    cleanPhone.includes('543180407') || 
+                    cleanPhone.includes('524467314');
+
   if (isManager) {
-    const msgData = payload.messageData || {};
-    const text = (msgData.textMessageData?.textMessage || 
-                  msgData.extendedTextMessageData?.text || 
-                  msgData.fileMessageData?.caption || '').trim();
-    const fileUrl = msgData.fileMessageData?.downloadUrl || '';
-
-    console.log('--- Incoming message from Manager ---', { senderPhone: cleanPhone, text, fileUrl });
-
-    const isPaymentConfirm = text.includes('שולם') || 
-                             text.includes('ביט') || 
-                             text.includes('bit') || 
-                             text.includes('העברתי') || 
-                             text.includes('אישור') || 
-                             text.includes('קבלה') || 
-                             text.includes('הילה') || 
-                             fileUrl.length > 0;
-
-    if (isPaymentConfirm) {
-      // Parse amount from text if present
-      const amountMatch = text.match(/(?:₪|שולם|סך|הועבר|סכום)?\s*(\d{3,5})/);
-      const parsedAmount = amountMatch ? Number(amountMatch[1]) : 500;
-      const todayIso = new Date().toISOString().substring(0, 10);
-
-      // Detect dog name mentioned (Joy, Theo, Luna, Boss, etc.)
-      let matchedDogName = '';
-      if (text.includes('גוי') || text.includes("ג'וי") || text.includes('ג׳וי')) matchedDogName = "ג'וי";
-      else if (text.includes('תיאו') || text.includes('תיאן')) matchedDogName = 'תיאו';
-      else if (text.includes('לונה')) matchedDogName = 'לונה';
-      else if (text.includes('בוס')) matchedDogName = 'בוס';
-
-      try {
-        const sRes = await fetch(`${SUPABASE_URL}/rest/v1/settings?id=eq.default&select=data`, {
-          headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
-        });
-        if (sRes.ok) {
-          const sData = await sRes.json();
-          const curData = sData?.[0]?.data || {};
-          const curReceipts = Array.isArray(curData.trainerReceipts) ? curData.trainerReceipts : [];
-          
-          let updatedExisting = false;
-          for (const r of curReceipts) {
-            if (!r.isPaidActually) {
-              r.isPaidActually = true;
-              r.paidDate = todayIso;
-              r.paymentConfirmationNotes = text || 'אישור תשלום ביט נקלט מוואטסאפ';
-              if (fileUrl) r.paymentConfirmationUrl = fileUrl;
-              r.status = 'paid';
-              r.updatedAt = new Date().toISOString();
-              updatedExisting = true;
-              break;
-            }
-          }
-
-          if (!updatedExisting) {
-            // Add new confirmed paid receipt
-            const newPaidReceipt = {
-              id: `bit-${Date.now()}`,
-              receiptNumber: `BIT-${todayIso.replace(/-/g, '')}-${Date.now().toString().slice(-4)}`,
-              receiptDate: todayIso,
-              totalAmount: parsedAmount,
-              paymentMethod: 'ביט',
-              rawLineText: text || 'אישור תשלום ביט',
-              receiptImageUrl: fileUrl,
-              allocations: matchedDogName ? [{
-                bookingId: '',
-                dogName: matchedDogName,
-                stage: '1/3',
-                amount: parsedAmount
-              }] : [],
-              isPaidActually: true,
-              paidDate: todayIso,
-              paymentConfirmationNotes: text || 'אישור תשלום ביט נקלט מוואטסאפ',
-              paymentConfirmationUrl: fileUrl,
-              status: 'paid',
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            };
-            curReceipts.unshift(newPaidReceipt);
-          }
-
-          await fetch(`${SUPABASE_URL}/rest/v1/settings?id=eq.default`, {
-            method: 'PATCH',
-            headers: {
-              apikey: SUPABASE_KEY,
-              Authorization: `Bearer ${SUPABASE_KEY}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ data: { ...curData, trainerReceipts: curReceipts } })
-          });
-        }
-      } catch (dbErr) {
-        console.warn('Error updating manager confirmation:', dbErr);
-      }
-
-      let confirmMsg = `✅ *אישור התשלום בביט נקלט ותויק בהצלחה בריזורט!* 🐾\n`;
-      if (matchedDogName) confirmMsg += `🐶 *שיוך כלב:* ${matchedDogName}\n`;
-      if (parsedAmount) confirmMsg += `💰 *סכום שנקלט:* ₪${parsedAmount.toLocaleString('he-IL')}\n`;
-      if (fileUrl) confirmMsg += `📷 *תמונת/מסמך האישור נשמרה במערכת*\n`;
-      confirmMsg += `\nסטטוס התשלומים מול הילה מעודכן והחשבון סגור!`;
-
-      await sendWhatsAppMessage(chatId, confirmMsg);
-      return res.status(200).json({ ok: true, handled: 'manager_payment_filed' });
+    console.log('--- Incoming message from Manager/Team ---', { senderPhone: cleanPhone, incomingText, incomingFileUrl });
+    const replyText = await handleManagerAICommand(chatId, incomingText, incomingFileUrl);
+    if (replyText) {
+      await sendWhatsAppMessage(chatId, replyText);
     }
+    return res.status(200).json({ ok: true, handled: 'manager_command_executed' });
   }
 
-  // 4. Anti-spam / Cooldown check (don't reply more than once every 6 hours)
+  // 5. Anti-spam / Cooldown check for regular clients (don't reply more than once every 6 hours)
   const nowMs = Date.now();
   const lastSent = cooldownMap.get(cleanPhone);
   if (lastSent && (nowMs - lastSent) < 6 * 60 * 60 * 1000) {
     return res.status(200).json({ ok: true, reason: 'cooldown active' });
   }
 
-  // 4. Determine Israel Time & Status
+  // 6. Determine Israel Time & Status
   const now = new Date();
   const israelDateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" }); // YYYY-MM-DD
   const israelTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Jerusalem", hour: '2-digit', minute: '2-digit' });
@@ -337,16 +743,15 @@ export default async function handler(req, res) {
 
   // Jewish Holiday check
   const isHolidayClosed = await checkIsShabbatOrHoliday(israelDateStr);
-
   const isClosedHours = isWeekendClosed || isHolidayClosed;
 
-  // 5. Check client status (Existing vs New)
+  // 7. Check client status (Existing vs New)
   const isExisting = await isExistingClient(phoneSuffix);
 
   // Set cooldown mark
   cooldownMap.set(cleanPhone, nowMs);
 
-  // 6. Action decision
+  // 8. Action decision for regular clients
   if (isClosedHours) {
     if (isExisting) {
       // Existing client in closed hours: send closed message
@@ -354,7 +759,6 @@ export default async function handler(req, res) {
     } else {
       // New client in closed hours: send closed message + intake form message
       await sendWhatsAppMessage(chatId, CLOSED_WEEKEND_HOLIDAY_MSG);
-      // Small pause of 1.2s before second message
       await new Promise(r => setTimeout(r, 1200));
       await sendWhatsAppMessage(chatId, getIntakeFormMessage(cleanPhone, senderName));
     }
