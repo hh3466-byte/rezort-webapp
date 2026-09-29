@@ -1,41 +1,19 @@
-const https = require('https');
-
 const GREEN_API_ID = "710722735421";
 const GREEN_API_TOKEN = "ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b";
 
-function fetchFromGreenApi(endpoint) {
-  return new Promise((resolve) => {
-    const cluster = GREEN_API_ID.slice(0, 4);
-    const options = {
-      hostname: `${cluster}.api.greenapi.com`,
-      path: `/waInstance${GREEN_API_ID}/${endpoint}/${GREEN_API_TOKEN}`,
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      timeout: 8000
-    };
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch (e) { resolve({ raw: data }); }
-      });
-    });
-    req.on('error', () => resolve({}));
-    req.on('timeout', () => { req.destroy(); resolve({}); });
-    req.end();
-  });
-}
-
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-store, max-age=0');
 
+  const cluster = GREEN_API_ID.slice(0, 4);
+  const baseUrl = `https://${cluster}.api.greenapi.com/waInstance${GREEN_API_ID}`;
+
   // 1. JSON endpoint for live polling
-  if (req.url.includes('json=true')) {
+  if (req.url && req.url.includes('json=true')) {
     try {
       const [stateRes, qrRes] = await Promise.all([
-        fetchFromGreenApi('getStateInstance'),
-        fetchFromGreenApi('qr')
+        fetch(`${baseUrl}/getStateInstance/${GREEN_API_TOKEN}`).then(r => r.json()).catch(() => ({})),
+        fetch(`${baseUrl}/qr/${GREEN_API_TOKEN}`).then(r => r.json()).catch(() => ({}))
       ]);
       return res.status(200).json({
         state: stateRes.stateInstance || 'notAuthorized',
@@ -52,8 +30,8 @@ module.exports = async (req, res) => {
   let qrBase64 = '';
   try {
     const [stateRes, qrRes] = await Promise.all([
-      fetchFromGreenApi('getStateInstance'),
-      fetchFromGreenApi('qr')
+      fetch(`${baseUrl}/getStateInstance/${GREEN_API_TOKEN}`).then(r => r.json()).catch(() => ({})),
+      fetch(`${baseUrl}/qr/${GREEN_API_TOKEN}`).then(r => r.json()).catch(() => ({}))
     ]);
     state = stateRes.stateInstance || 'notAuthorized';
     if (qrRes.type === 'qrCode') {
@@ -155,4 +133,4 @@ module.exports = async (req, res) => {
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   return res.status(200).send(html);
-};
+}
