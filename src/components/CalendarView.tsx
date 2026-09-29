@@ -894,8 +894,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 <span>שוחרר</span>
                               </span>
                             ) : (
-                              <div className="flex items-center gap-1 shrink-0">
-                                {isUnpaid && (
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {stayColors.isReleasing && (
+                                  <span className="text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-300 px-1.5 py-0.2 rounded-md flex items-center gap-0.5 shrink-0 shadow-2xs">
+                                    <span>🚪</span>
+                                    <span>משתחרר</span>
+                                  </span>
+                                )}
+                                {isUnpaid && !stayColors.isReleasing && (
                                   <span className="text-[10px] bg-red-100 text-red-700 font-black px-1 rounded flex items-center" title={`שריין מקום ללא מקדמה! חוב: ₪${remainingDebt}`}>
                                     0₪
                                   </span>
