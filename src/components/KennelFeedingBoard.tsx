@@ -27,7 +27,7 @@ import {
   Trees
 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
-import { formatDateIL, formatFullHebrewDate, getTodayStr, addDays } from '../utils/dateUtils';
+import { formatDateIL, formatFullHebrewDate, getTodayStr, addDays, isTrainingBooking } from '../utils/dateUtils';
 import { formatIsraeliPhoneDisplay, openWhatsAppMessage } from '../utils/whatsappUtils';
 import { 
   getKennelOccupancyForDate, 
@@ -292,7 +292,12 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
               >
                 <div className="min-w-0 flex-1">
                   <div className="font-black text-slate-900 text-sm flex items-center gap-1.5 flex-wrap">
-                    <span>🐾 {b.dogName}</span>
+                    {isTrainingBooking(b) ? (
+                      <img src="/resort-logo.svg" alt="אילוף" title="כלב בתהליך אילוף" className="w-4 h-4 object-contain shrink-0 rounded-full" />
+                    ) : (
+                      <span>🐾</span>
+                    )}
+                    <span>{b.dogName}</span>
                     <span className="text-xs font-normal text-slate-500">({b.ownerName})</span>
                     <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded-md font-bold group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                       ✏️ ערוך הכל
@@ -880,8 +885,13 @@ const DogKennelCard: React.FC<DogKennelCardProps> = ({
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
+            {isTrainingBooking(dog) ? (
+              <img src="/resort-logo.svg" alt="אילוף" title="כלב בתהליך אילוף" className="w-5 h-5 object-contain shrink-0 rounded-full" />
+            ) : (
+              <span>🐾</span>
+            )}
             <span className="font-black text-slate-950 text-lg sm:text-xl tracking-tight">
-              🐾 {dog.dogName}
+              {dog.dogName}
             </span>
             {dog.dogBreed && (
               <span className="text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg">

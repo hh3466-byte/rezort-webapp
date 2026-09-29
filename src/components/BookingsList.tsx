@@ -24,7 +24,7 @@ import {
   MapPin
 } from 'lucide-react';
 import { Booking, ResortSettings, ServiceType, PaymentStatus, StayStatus } from '../types';
-import { formatDateIL, calculateDaysCount } from '../utils/dateUtils';
+import { formatDateIL, calculateDaysCount, isTrainingBooking, sortBookingsWithTrainingLast } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage } from '../utils/whatsappUtils';
 import { exportBookingsToCSV } from '../utils/exportUtils';
 import { getWazeNavigationUrl } from '../utils/geolocationUtils';
@@ -83,6 +83,8 @@ export const BookingsList: React.FC<BookingsListProps> = ({
     }
     return true;
   });
+
+  const sortedFiltered = sortBookingsWithTrainingLast(filtered);
 
   // Calculate totals
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
@@ -253,7 +255,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
 
       {/* Bookings Cards / Table List */}
       <div className="space-y-3">
-        {filtered.length === 0 ? (
+        {sortedFiltered.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-500 space-y-3">
             <AlertCircle className="w-10 h-10 mx-auto text-slate-400" />
             <p className="font-bold text-base text-slate-700">לא נמצאו הזמנות התואמות את הסינון</p>
@@ -270,7 +272,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
             </button>
           </div>
         ) : (
-          filtered.map(b => {
+          sortedFiltered.map(b => {
             const remainingDebt = Math.max(0, b.totalPrice - b.depositAmount);
             const daysCount = calculateDaysCount(b.startDate, b.endDate);
 
@@ -317,7 +319,16 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                   {/* Left Column: Dog & Service Details */}
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2.5">
-                      <span className="text-xl shrink-0">🐾</span>
+                      {isTrainingBooking(b) ? (
+                        <img
+                          src="/resort-logo.svg"
+                          alt="אילוף"
+                          title="כלב בתהליך אילוף"
+                          className="w-5 h-5 object-contain shrink-0 rounded-full"
+                        />
+                      ) : (
+                        <span className="text-xl shrink-0">🐾</span>
+                      )}
                       <span className={`font-black text-lg sm:text-xl ${isEnded ? 'text-slate-700' : 'text-slate-900'}`}>
                         {b.dogName}
                       </span>

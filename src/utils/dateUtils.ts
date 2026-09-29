@@ -99,14 +99,47 @@ export function getBookingDayState(booking: Booking, dateStr: string): 'arrival'
 }
 
 /**
- * Get list of bookings for a specific date
+ * Check if a booking is a training booking (full training, day training, or combined)
  */
-export function getBookingsForDate(bookings: Booking[], dateStr: string): Booking[] {
-  return bookings.filter(b => isBookingOnDate(b, dateStr));
+export function isTrainingBooking(booking?: Booking | { serviceType?: string; notes?: string; behaviorNotes?: string } | null): boolean {
+  if (!booking) return false;
+  if (booking.serviceType === 'training' || booking.serviceType === 'day_training' || booking.serviceType === 'combined') {
+    return true;
+  }
+  const text = `${booking.notes || ''} ${booking.behaviorNotes || ''}`.toLowerCase();
+  return (
+    text.includes('אילוף') ||
+    text.includes('מאלף') ||
+    text.includes('משמעת') ||
+    text.includes('חינוך גור') ||
+    text.includes('שיעור אילוף')
+  );
 }
 
 /**
- * Get daily arrivals, stayers, and departures for a specific date
+ * Sorts bookings array so that training dogs are always positioned at the bottom of the list
+ */
+export function sortBookingsWithTrainingLast<T extends Booking>(bookingsList: T[]): T[] {
+  return [...bookingsList].sort((a, b) => {
+    const aTrain = isTrainingBooking(a) ? 1 : 0;
+    const bTrain = isTrainingBooking(b) ? 1 : 0;
+    if (aTrain !== bTrain) {
+      return aTrain - bTrain; // 0 (non-training / boarding) comes first, 1 (training) comes last
+    }
+    return 0;
+  });
+}
+
+/**
+ * Get list of bookings for a specific date (training dogs sorted at the bottom)
+ */
+export function getBookingsForDate(bookings: Booking[], dateStr: string): Booking[] {
+  const dayBookings = bookings.filter(b => isBookingOnDate(b, dateStr));
+  return sortBookingsWithTrainingLast(dayBookings);
+}
+
+/**
+ * Get daily arrivals, stayers, and departures for a specific date (training dogs at bottom)
  */
 export function getDailyBreakdown(bookings: Booking[], dateStr: string) {
   const dayBookings = getBookingsForDate(bookings, dateStr);
@@ -117,9 +150,9 @@ export function getDailyBreakdown(bookings: Booking[], dateStr: string) {
 
   return {
     total: dayBookings.length,
-    arrivals,
-    departures,
-    staying,
+    arrivals: sortBookingsWithTrainingLast(arrivals),
+    departures: sortBookingsWithTrainingLast(departures),
+    staying: sortBookingsWithTrainingLast(staying),
     all: dayBookings
   };
 }

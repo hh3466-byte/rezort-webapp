@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import { Booking, ResortSettings } from '../types';
-import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr } from '../utils/dateUtils';
+import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr, isTrainingBooking } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage, cleanPhoneNumber } from '../utils/whatsappUtils';
 import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
@@ -79,10 +79,16 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   };
 
   const sortWithHighlighted = (list: Booking[]) => {
-    if (!highlightedBookingId) return list;
     return [...list].sort((a, b) => {
-      if (a.id === highlightedBookingId) return -1;
-      if (b.id === highlightedBookingId) return 1;
+      if (highlightedBookingId) {
+        if (a.id === highlightedBookingId) return -1;
+        if (b.id === highlightedBookingId) return 1;
+      }
+      const aTrain = isTrainingBooking(a) ? 1 : 0;
+      const bTrain = isTrainingBooking(b) ? 1 : 0;
+      if (aTrain !== bTrain) {
+        return aTrain - bTrain; // non-training first, training last
+      }
       return 0;
     });
   };
@@ -420,7 +426,16 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5 pb-2.5 border-b border-slate-200/60">
         <div className="space-y-1 flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-base shrink-0">🐾</span>
+            {isTrainingBooking(booking) ? (
+              <img
+                src="/resort-logo.svg"
+                alt="אילוף"
+                title="כלב בתהליך אילוף"
+                className="w-5 h-5 object-contain shrink-0 rounded-full"
+              />
+            ) : (
+              <span className="text-base shrink-0">🐾</span>
+            )}
             <span className={`font-black text-base sm:text-lg ${stayColors.dogClass}`}>{booking.dogName}</span>
             <span className={`text-xs sm:text-sm font-bold ${stayColors.ownerClass}`}>({booking.ownerName})</span>
             {isHighlighted && (

@@ -30,7 +30,8 @@ import {
   formatDateIL, 
   formatFullHebrewDate,
   addDays,
-  getDailyBreakdown
+  getDailyBreakdown,
+  isTrainingBooking
 } from '../utils/dateUtils';
 import { getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
@@ -882,7 +883,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' (משתחרר ביום זה!)' : isEnded ? ' (שוחרר הביתה)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת בריזורט)' : ' (שוריין)'} - תשלום: ${isPaid || b.isFreeStay ? 'שולם במלואו' : isDeposit ? `שולמה מקדמה ₪${b.depositAmount} (יתרה ₪${remainingDebt})` : `לא שולם (חוב ₪${remainingDebt || b.totalPrice})`}`}
                           >
                             <span className="flex items-center gap-1 truncate min-w-0 flex-1">
-                              <span className={`text-[11px] shrink-0 ${isMatch ? 'text-amber-700' : stayColors.iconClass}`}>🐾</span>
+                              {isTrainingBooking(b) ? (
+                                <img
+                                  src="/resort-logo.svg"
+                                  alt="אילוף"
+                                  title="כלב בתהליך אילוף"
+                                  className="w-3.5 h-3.5 object-contain shrink-0 rounded-full"
+                                />
+                              ) : (
+                                <span className={`text-[11px] shrink-0 ${isMatch ? 'text-amber-700' : stayColors.iconClass}`}>🐾</span>
+                              )}
                               <span className="truncate text-[11px] sm:text-xs">
                                 <span className={isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
                                 <span className={isMatch ? 'text-amber-900 font-bold text-[10px]' : stayColors.ownerClass}>({b.ownerName})</span>
@@ -1033,7 +1043,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' - משתחרר ביום זה!' : isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
                         >
                           <span className="truncate flex items-center gap-1 min-w-0">
-                            <span className="text-[10px] shrink-0">🐾</span>
+                            {isTrainingBooking(b) ? (
+                              <img
+                                src="/resort-logo.svg"
+                                alt="אילוף"
+                                title="כלב בתהליך אילוף"
+                                className="w-3 h-3 object-contain shrink-0 rounded-full"
+                              />
+                            ) : (
+                              <span className="text-[10px] shrink-0">🐾</span>
+                            )}
                             <span className={`truncate ${isMatch ? 'text-white font-black' : stayColors.dogClass}`}>{b.dogName}</span>
                             <span className={`text-[9px] shrink-0 ${isMatch ? 'text-amber-100 font-medium' : stayColors.ownerClass}`}>({b.ownerName})</span>
                           </span>
@@ -1208,7 +1227,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           >
                             <div className="flex items-center justify-between font-bold">
                               <span className="flex items-center gap-1 min-w-0">
-                                <Dog className={`w-3 h-3 shrink-0 ${isMatch ? 'text-amber-700' : stayColors.iconClass}`} />
+                                {isTrainingBooking(b) ? (
+                                  <img
+                                    src="/resort-logo.svg"
+                                    alt="אילוף"
+                                    title="כלב בתהליך אילוף"
+                                    className="w-3.5 h-3.5 object-contain shrink-0 rounded-full"
+                                  />
+                                ) : (
+                                  <Dog className={`w-3 h-3 shrink-0 ${isMatch ? 'text-amber-700' : stayColors.iconClass}`} />
+                                )}
                                 <span className="truncate">
                                   <span className={isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
                                   <span className={isMatch ? 'text-amber-900 font-bold text-[11px]' : stayColors.ownerClass}>({b.ownerName})</span>
@@ -1371,7 +1399,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-base shrink-0">🐾</span>
+                            {isTrainingBooking(booking) ? (
+                              <img
+                                src="/resort-logo.svg"
+                                alt="אילוף"
+                                title="כלב בתהליך אילוף"
+                                className="w-5 h-5 object-contain shrink-0 rounded-full"
+                              />
+                            ) : (
+                              <span className="text-base shrink-0">🐾</span>
+                            )}
                             <span className={`font-black text-base ${isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}`}>{booking.dogName}</span>
                             <span className={`text-xs font-bold ${isMatch ? 'text-amber-900 font-bold' : stayColors.ownerClass}`}>({booking.ownerName})</span>
                             {booking.dogBreed && (
@@ -1413,7 +1450,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           )}
                           {!isArrival && !isDeparture && (
                             <span className="inline-block bg-slate-100 text-slate-700 text-xs font-bold px-2.5 py-0.5 rounded-lg">
-                              🐾 שוהה
+                              {isTrainingBooking(booking) ? (
+                                <span className="inline-flex items-center gap-1">
+                                  <img src="/resort-logo.svg" alt="אילוף" className="w-3.5 h-3.5 object-contain inline rounded-full" />
+                                  <span>באילוף</span>
+                                </span>
+                              ) : (
+                                '🐾 שוהה'
+                              )}
                             </span>
                           )}
                         </div>

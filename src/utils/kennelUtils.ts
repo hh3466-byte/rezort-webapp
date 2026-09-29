@@ -1,5 +1,5 @@
 import { Booking } from '../types';
-import { formatDateIL, formatFullHebrewDate, getTodayStr } from './dateUtils';
+import { formatDateIL, formatFullHebrewDate, getTodayStr, sortBookingsWithTrainingLast } from './dateUtils';
 import { formatIsraeliPhoneDisplay } from './whatsappUtils';
 
 export type PlacementCategory = 'room' | 'suite' | 'outdoor' | 'home';
@@ -151,7 +151,7 @@ export function getKennelOccupancyForDate(bookings: Booking[], dateStr: string =
   });
 
   const allSlots: KennelSlotData[] = ALL_PLACEMENT_SLOTS.map(def => {
-    const dogs = slotDogsMap[def.id] || [];
+    const dogs = sortBookingsWithTrainingLast(slotDogsMap[def.id] || []);
     return {
       slotId: def.id,
       name: def.name,
@@ -177,7 +177,7 @@ export function getKennelOccupancyForDate(bookings: Booking[], dateStr: string =
     suites,
     outdoors,
     homeBoarding,
-    unassigned,
+    unassigned: sortBookingsWithTrainingLast(unassigned),
     totalStaying: activeBookings.length,
     occupiedSlotsCount,
     // Backward compatibility aliases

@@ -17,7 +17,9 @@ import {
   getTodayStr,
   getBookingsForDate,
   formatFullHebrewDate,
-  formatDateIL
+  formatDateIL,
+  isTrainingBooking,
+  sortBookingsWithTrainingLast
 } from '../utils/dateUtils';
 import { getServiceTypeHebrew } from '../utils/whatsappUtils';
 
@@ -47,14 +49,16 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
     return getBookingsForDate(bookings, todayStr).filter(b => b.stayStatus !== 'cancelled');
   }, [bookings, todayStr]);
 
-  // Dogs arriving today (startDate === todayStr)
+  // Dogs arriving today (startDate === todayStr, training dogs sorted last)
   const arrivingToday = useMemo(() => {
-    return bookings.filter(b => b.startDate === todayStr && b.stayStatus !== 'cancelled');
+    const list = bookings.filter(b => b.startDate === todayStr && b.stayStatus !== 'cancelled');
+    return sortBookingsWithTrainingLast(list);
   }, [bookings, todayStr]);
 
-  // Dogs departing today (endDate === todayStr)
+  // Dogs departing today (endDate === todayStr, training dogs sorted last)
   const departingToday = useMemo(() => {
-    return bookings.filter(b => b.endDate === todayStr && b.stayStatus !== 'cancelled');
+    const list = bookings.filter(b => b.endDate === todayStr && b.stayStatus !== 'cancelled');
+    return sortBookingsWithTrainingLast(list);
   }, [bookings, todayStr]);
 
   // Total open debt of departing dogs
@@ -324,9 +328,14 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
                     if (onSelectBooking) onSelectBooking(b);
                     onClose();
                   }}
-                  className="bg-slate-100 hover:bg-emerald-50 hover:border-emerald-300 border border-slate-200 rounded-xl px-2.5 py-1 text-xs text-slate-800 font-bold flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs"
+                  className="bg-slate-100 hover:bg-emerald-50 hover:border-emerald-300 border border-slate-200 rounded-xl px-2.5 py-1 text-xs text-slate-800 font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-2xs"
                 >
-                  <span>🐾 {b.dogName}</span>
+                  {isTrainingBooking(b) ? (
+                    <img src="/resort-logo.svg" alt="אילוף" title="כלב בתהליך אילוף" className="w-3.5 h-3.5 object-contain shrink-0 rounded-full" />
+                  ) : (
+                    <span>🐾</span>
+                  )}
+                  <span>{b.dogName}</span>
                   <span className="text-[10px] text-slate-400 font-normal">({b.ownerName.split(' ')[0]})</span>
                 </button>
               ))}

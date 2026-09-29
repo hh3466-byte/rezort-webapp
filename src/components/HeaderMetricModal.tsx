@@ -1747,7 +1747,8 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                           <tr key={b.id} className="hover:bg-slate-50/70 transition-colors">
                             <td className="p-2.5 font-bold text-slate-900">
                               <div className="flex items-center gap-1.5">
-                                <span>🐾 {b.dogName}</span>
+                                <img src="/resort-logo.svg" alt="אילוף" className="w-4 h-4 object-contain shrink-0 rounded-full" />
+                                <span>{b.dogName}</span>
                                 <span className="text-slate-500 font-normal">({b.ownerName})</span>
                                 {isCompleted && (
                                   <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.2 rounded font-black">
@@ -1850,8 +1851,9 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                       {/* RIGHT: Dog Name (Owner Name), Dates, Phone & WhatsApp */}
                       <div className="lg:w-64 space-y-2 text-right shrink-0">
                         <div className="flex items-center gap-2 flex-wrap">
+                          <img src="/resort-logo.svg" alt="אילוף" className="w-5 h-5 object-contain shrink-0 rounded-full" />
                           <span className="font-black text-lg text-slate-900">
-                            🐾 {b.dogName}
+                            {b.dogName}
                           </span>
                           <span className="text-sm font-bold text-slate-600">
                             ({b.ownerName})
