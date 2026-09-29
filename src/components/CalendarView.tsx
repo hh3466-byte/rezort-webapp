@@ -872,7 +872,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           <div
                             key={b.id}
                             onClick={() => onSelectBooking(b)}
-                            className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer text-xs font-black flex items-center justify-between shadow-2xs hover:shadow-xs gap-1.5 ${
+                            className={`px-2 py-1.5 rounded-xl border transition-all cursor-pointer text-xs font-black flex items-center justify-between shadow-2xs hover:shadow-xs gap-1 ${
                               isMatch
                                 ? 'bg-amber-100 border-amber-400 text-amber-950 ring-2 ring-amber-400 shadow-md scale-[1.03]'
                                 : isDimmed
@@ -881,28 +881,27 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             }`}
                             title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' (משתחרר ביום זה!)' : isEnded ? ' (שוחרר הביתה)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת בריזורט)' : ' (שוריין)'} - תשלום: ${isPaid || b.isFreeStay ? 'שולם במלואו' : isDeposit ? `שולמה מקדמה ₪${b.depositAmount} (יתרה ₪${remainingDebt})` : `לא שולם (חוב ₪${remainingDebt || b.totalPrice})`}`}
                           >
-                            <span className="flex items-center gap-1.5 truncate min-w-0 flex-1">
-                              <span className={`text-xs shrink-0 ${isMatch ? 'text-amber-700' : stayColors.iconClass}`}>🐾</span>
-                              <span className="truncate">
+                            <span className="flex items-center gap-1 truncate min-w-0 flex-1">
+                              <span className={`text-[11px] shrink-0 ${isMatch ? 'text-amber-700' : stayColors.iconClass}`}>🐾</span>
+                              <span className="truncate text-[11px] sm:text-xs">
                                 <span className={isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
-                                <span className={isMatch ? 'text-amber-900 font-bold text-[11px]' : stayColors.ownerClass}>({b.ownerName})</span>
+                                <span className={isMatch ? 'text-amber-900 font-bold text-[10px]' : stayColors.ownerClass}>({b.ownerName})</span>
                               </span>
                             </span>
                             {isEnded ? (
-                              <span className="text-[10px] bg-slate-200 text-slate-600 font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shrink-0" title="שוחרר הביתה">
+                              <span className="text-[9px] bg-slate-200 text-slate-600 font-bold px-1 py-0.2 rounded flex items-center gap-0.5 shrink-0" title="שוחרר הביתה">
                                 <span>🏁</span>
                                 <span>שוחרר</span>
                               </span>
                             ) : (
-                              <div className="flex items-center gap-1.5 shrink-0">
+                              <div className="flex items-center gap-1 shrink-0">
                                 {stayColors.isReleasing && (
-                                  <span className="text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-300 px-1.5 py-0.2 rounded-md flex items-center gap-0.5 shrink-0 shadow-2xs">
-                                    <span>🚪</span>
-                                    <span>משתחרר</span>
+                                  <span className="text-xs leading-none shrink-0" title="משתחרר ביום זה">
+                                    🚪
                                   </span>
                                 )}
                                 {isUnpaid && !stayColors.isReleasing && (
-                                  <span className="text-[10px] bg-red-100 text-red-700 font-black px-1 rounded flex items-center" title={`שריין מקום ללא מקדמה! חוב: ₪${remainingDebt}`}>
+                                  <span className="text-[9px] bg-red-100 text-red-700 font-black px-1 rounded flex items-center leading-none" title={`שריין מקום ללא מקדמה! חוב: ₪${remainingDebt}`}>
                                     0₪
                                   </span>
                                 )}
