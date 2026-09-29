@@ -304,6 +304,13 @@ export const VERIFIED_GROW_LEDGER: VerifiedGrowTransaction[] = [
   { ref: '175543879', amount: 440, date: '2026-09-21', month: '2026-09', customerName: 'קארין להב', dogName: 'שון' },
   { ref: '175551443', amount: 2220, date: '2026-09-22', month: '2026-09', customerName: 'בוריס ברנר', dogName: 'מייק' },
   { ref: '4909041312', amount: 200, date: '2026-09-22', month: '2026-09', customerName: 'אייל ברקוביץ׳', dogName: 'לולה וברנדי' },
+  { ref: 'grow_zeev_360_180926', amount: 360, date: '2026-09-22', month: '2026-09', customerName: 'זאב אביק', dogName: 'זאב' },
+  { ref: 'grow_rika_1260_220926', amount: 1260, date: '2026-09-22', month: '2026-09', customerName: 'ריקה נברי', dogName: "ג'סי הרוטוויילרית" },
+  { ref: '519342850', amount: 540, date: '2026-09-24', month: '2026-09', customerName: 'בר בן בסט', dogName: 'קיה' },
+  { ref: '519707458', amount: 200, date: '2026-09-25', month: '2026-09', customerName: 'הלל שמש', dogName: 'שמש' },
+  { ref: '519827839', amount: 1960, date: '2026-09-26', month: '2026-09', customerName: 'שליו ביטון', dogName: 'שליו' },
+  { ref: '4921268768', amount: 250, date: '2026-09-27', month: '2026-09', customerName: 'עומרי וינשטיין', dogName: 'לאקי' },
+  { ref: '4926270153', amount: 2500, date: '2026-09-28', month: '2026-09', customerName: 'אייל ברקוביץ׳', dogName: 'לולה וברנדי' },
 
   // August 2026 (28 items, total: 25,370) - entered bank on 10.09.2026
   { ref: '171099384', amount: 2200, date: '2026-08-09', month: '2026-08', customerName: 'אשר ריפמן', dogName: 'ריפמן' },
@@ -437,9 +444,11 @@ export function getMonthlyRevenueBreakdown(
   if (incomingGrowPayments && Array.isArray(incomingGrowPayments)) {
     incomingGrowPayments.forEach(p => {
       const ref = String(p.reference_id || p.id || '');
-      if (ref && !processedRefs.has(ref)) {
+      const custName = p.customer_name || '';
+      const isRonen = custName.includes('רונן') || ref.includes('ronen');
+      if (ref && !processedRefs.has(ref) && !isRonen) {
         const pMonth = (p.created_at || '').substring(0, 7);
-        if (pMonth === targetMonthKey && p.status !== 'dismissed') {
+        if (pMonth === targetMonthKey && p.status !== 'dismissed' && p.status !== 'refunded') {
           growClearedBankOn10th += Number(p.amount) || 0;
           growPaidCount += 1;
           processedRefs.add(ref);

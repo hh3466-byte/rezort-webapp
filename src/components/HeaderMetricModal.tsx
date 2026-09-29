@@ -36,7 +36,7 @@ import {
 } from '../utils/dateUtils';
 import { generatePaymentReminderMessage, openWhatsAppMessage, getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { exportRevenueChartsToExcel, ChartPeriodItem } from '../utils/exportUtils';
-import { Booking, ResortSettings, StayStatus, TrainerReceipt, TrainerPaymentStage } from '../types';
+import { Booking, ResortSettings, StayStatus, TrainerReceipt, TrainerPaymentStage, GrowIncomingPayment } from '../types';
 import { 
   getTrainerReceipts, 
   saveTrainerReceipts, 
@@ -60,6 +60,7 @@ interface HeaderMetricModalProps {
   onClose: () => void;
   bookings: Booking[];
   settings: ResortSettings;
+  growPayments?: GrowIncomingPayment[];
   onEditBooking: (booking: Booking) => void;
   onMarkAsPaid: (bookingId: string) => void;
   onOpenPaymentModal: (booking: Booking) => void;
@@ -79,6 +80,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   onClose,
   bookings,
   settings,
+  growPayments,
   onEditBooking,
   onMarkAsPaid,
   onOpenPaymentModal,
@@ -380,7 +382,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
     // Compute actual collections per month across the 4 categories
     recentKeys.forEach(mKey => {
-      const breakdown = getMonthlyRevenueBreakdown(mKey, bookings);
+      const breakdown = getMonthlyRevenueBreakdown(mKey, bookings, growPayments);
       let mExpected = 0;
       let mDebt = 0;
 

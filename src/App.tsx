@@ -8,6 +8,7 @@ import {
   subscribeToBookings, 
   subscribeToSettings, 
   subscribeToGrowPayments,
+  subscribeToAllGrowPayments,
   updateGrowPaymentStatus,
   subscribeToIntakeRequests,
   updateIntakeRequestStatusInDb,
@@ -120,6 +121,7 @@ export default function App() {
   const [isMonthlyRefundsModalOpen, setIsMonthlyRefundsModalOpen] = useState(false);
 
   // Incoming Grow Payments from Gmail sync
+  const [allGrowPayments, setAllGrowPayments] = useState<GrowIncomingPayment[]>([]);
   const [pendingGrowPayments, setPendingGrowPayments] = useState<GrowIncomingPayment[]>([]);
   const [activeGrowPayment, setActiveGrowPayment] = useState<GrowIncomingPayment | null>(null);
   const [isGrowPaymentsMinimized, setIsGrowPaymentsMinimized] = useState(false);
@@ -255,8 +257,9 @@ export default function App() {
       setSettings(updatedSettings);
     });
 
-    const unsubGrowPayments = subscribeToGrowPayments((payments) => {
-      setPendingGrowPayments(payments);
+    const unsubGrowPayments = subscribeToAllGrowPayments((payments) => {
+      setAllGrowPayments(payments);
+      setPendingGrowPayments(payments.filter(p => p.status === 'pending'));
     });
 
     const unsubIntake = subscribeToIntakeRequests((requests) => {
@@ -497,8 +500,8 @@ export default function App() {
   // 3. monthBankIn2Months: יכנס לבנק ב-10 בעוד חודשיים (תשלומי המשך / עסקאות בתשלומים)
   const currentMonthKey = todayStr.substring(0, 7);
   const currentMonthRevenue = React.useMemo(() => {
-    return getMonthlyRevenueBreakdown(currentMonthKey, bookings, pendingGrowPayments);
-  }, [currentMonthKey, bookings, pendingGrowPayments]);
+    return getMonthlyRevenueBreakdown(currentMonthKey, bookings, allGrowPayments);
+  }, [currentMonthKey, bookings, allGrowPayments]);
 
   const monthDigitalCleared = currentMonthRevenue.digitalCleared; // 1. נסלק החודש (דיגיטלי)
   const monthBankOn10th = currentMonthRevenue.growClearedBankOn10th; // 2. יכנס לבנק ב-10 לחודש הקרוב
@@ -546,7 +549,7 @@ export default function App() {
       }
       const mStr = String(m + 1).padStart(2, '0');
       const ymPrefix = `${y}-${mStr}`;
-      const rev = getGrowClearedRevenueForMonth(ymPrefix, activeBookings, pendingGrowPayments);
+      const rev = getGrowClearedRevenueForMonth(ymPrefix, activeBookings, allGrowPayments);
       list.push({
         label: HEBREW_MONTHS[m].slice(0, 3),
         fullName: `${HEBREW_MONTHS[m]} ${y}`,
@@ -555,7 +558,7 @@ export default function App() {
       });
     }
     return list;
-  }, [activeBookings, pendingGrowPayments, todayStr]);
+  }, [activeBookings, allGrowPayments, todayStr]);
   const maxRecentMiniRev = Math.max(1, ...recentMonthsMiniData.map(d => d.revenue));
 
   const openDebtTotal = activeBookings.reduce((acc, b) => {
@@ -2314,6 +2317,7 @@ export default function App() {
           metricType={activeHeaderMetric}
           bookings={bookings}
           settings={settings}
+          growPayments={allGrowPayments}
           onClose={() => setActiveHeaderMetric(null)}
           onEditBooking={(booking) => {
             setActiveHeaderMetric(null);

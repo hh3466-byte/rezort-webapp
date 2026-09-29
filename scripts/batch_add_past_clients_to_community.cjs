@@ -57,6 +57,25 @@ function makeGreenApiCall(method, body) {
   });
 }
 
+function buildPastClientMessage(ownerName, dogName) {
+  return `היי ${ownerName || 'יקר/ה'}, כאן שמוליק וצוות הריזורט לכלב! 🐾🐶✨
+
+מקווים ששלומכם מצוין וש-${dogName || 'הכלב/ה'} מקשקש/ת בזנב ושמח/ה! 🤍
+
+רצינו לעדכן שצירפנו אתכם ישירות לקהילת ה-VIP הרשמית של הריזורט לכלב בוואטסאפ! 💎🐕
+
+מה מחכה לכם בקהילה?
+✨ עדיפות ראשונה בשריון מקומות לחגים, חופשות וסופי שבוע לפני כולם
+💡 טיפים מקצועיים מאלפים לגידול נכון, פריקת אנרגיה והתנהגות
+🎁 הטבות ומבצעים בלעדיים לחברי הקהילה
+📸 הצצה בלעדית לרגעים הכי יפים ומשמחים מהריזורט
+
+(הצירוף נעשה אוטומטית כחלק ממשפחת הריזורט. מי שפחות מתאים לו – כמובן יכול לפרוש בכל עת).
+
+שמחים שאתם איתנו! ❤️
+שמוליק וצוות הריזורט לכלב 🐾`;
+}
+
 async function runBatchAdd(dryRun = false) {
   console.log(`\n--- Starting Batch Community Participant Addition (dryRun=${dryRun}) ---`);
 
@@ -85,7 +104,7 @@ async function runBatchAdd(dryRun = false) {
           phone: p,
           chatId: `${p}@c.us`,
           name: (name || 'לקוח יקר').trim(),
-          dog: (dog || 'כלב').trim()
+          dog: (dog || 'הכלב').trim()
         });
       }
     }
@@ -116,29 +135,50 @@ async function runBatchAdd(dryRun = false) {
 
   let addedCount = 0;
   let failCount = 0;
+  let msgCount = 0;
 
   for (const client of toAdd) {
     console.log(`Adding ${client.name} (${client.dog}) [${client.phone}] to community group...`);
+    
+    // 1. Add to group
     const addRes = await makeGreenApiCall('addGroupParticipant', {
       groupId: GROUP_ID,
       participantChatId: client.chatId
     });
 
     if (addRes.status === 200) {
-      console.log(` -> Success!`);
+      console.log(` -> Added to group!`);
       addedCount++;
     } else {
-      console.log(` -> Failed (${addRes.status}):`, addRes.data || addRes.raw);
+      console.log(` -> Failed to add (${addRes.status}):`, addRes.data || addRes.raw);
       failCount++;
     }
 
-    // Short pause between requests to maintain rate limits
-    await new Promise(r => setTimeout(r, 1200));
+    // Short pause
+    await new Promise(r => setTimeout(r, 1000));
+
+    // 2. Send personal explanation message
+    const msgText = buildPastClientMessage(client.name, client.dog);
+    const msgRes = await makeGreenApiCall('sendMessage', {
+      chatId: client.chatId,
+      message: msgText
+    });
+
+    if (msgRes.status === 200) {
+      console.log(` -> Sent personal welcome message!`);
+      msgCount++;
+    } else {
+      console.log(` -> Failed to send personal message (${msgRes.status})`);
+    }
+
+    // 1.5s pause between contacts
+    await new Promise(r => setTimeout(r, 1500));
   }
 
-  console.log(`\n--- Completed Batch Add ---`);
-  console.log(`Added: ${addedCount}`);
-  console.log(`Failed/Restricted: ${failCount}`);
+  console.log(`\n--- Completed Batch Process ---`);
+  console.log(`Added to group: ${addedCount}`);
+  console.log(`Personal messages sent: ${msgCount}`);
+  console.log(`Failed/Restricted additions: ${failCount}`);
 }
 
 const isDryRun = process.argv.includes('--dry-run');

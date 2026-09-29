@@ -942,6 +942,60 @@ export const subscribeToGrowPayments = (
   };
 };
 
+export const subscribeToAllGrowPayments = (
+  callback: (payments: GrowIncomingPayment[]) => void
+): Unsubscribe => {
+  const fetchAll = async () => {
+    try {
+      const { data, error } = await supabase
+        .from(GROW_PAYMENTS_TABLE)
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.warn('Error fetching all Grow payments:', error.message);
+        return;
+      }
+
+      if (data) {
+        const mapped: GrowIncomingPayment[] = data.map((row: any) => ({
+          id: row.id,
+          reference_id: row.reference_id,
+          customer_name: row.customer_name,
+          customer_phone: row.customer_phone,
+          customer_email: row.customer_email || '',
+          amount: Number(row.amount) || 0,
+          payment_method: row.payment_method || 'Bit',
+          raw_email_snippet: row.raw_email_snippet || '',
+          status: row.status,
+          created_at: row.created_at,
+          updated_at: row.updated_at
+        }));
+        callback(mapped);
+      }
+    } catch (e) {
+      console.warn('All Grow payments fetch exception:', e);
+    }
+  };
+
+  fetchAll();
+
+  const channel = supabase
+    .channel('public:all_grow_incoming_payments')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: GROW_PAYMENTS_TABLE },
+      () => {
+        fetchAll();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
+
 export const updateGrowPaymentStatus = async (
   id: string,
   status: 'completed' | 'dismissed'
