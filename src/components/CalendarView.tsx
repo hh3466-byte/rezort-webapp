@@ -56,7 +56,7 @@ interface CalendarViewProps {
 // Helper function to get high-contrast unified colors for dogs and owners according to stay status:
 // 1. Released in past (checked_out / completed / cancelled / ended date in past) -> Light gray (text-slate-400)
 // 2. Booked (reserved / not checked in yet - שוריין אך טרם נקלט) -> Prominent Vivid Purple (text-[#581c87], bg-purple-100/90, border-purple-300)
-// 3. Releasing on this day (checked_in & releasing today - שוהה שמשתחרר באותו היום) -> Vivid Sky/Ocean Blue (text-[#0284c7], bg-sky-50, border-sky-300)
+// 3. Releasing on this day (checked_in & releasing today - שוהה שמשתחרר באותו היום) -> Prominent Vivid Royal Blue (text-[#1e3a8a], bg-blue-100/95, border-blue-400)
 // 4. Checked in (active stay / inside resort - שוהה פעיל בריזורט) -> Deep dark emerald green (text-[#065f46])
 export function getStayStatusColors(
   stayStatus: Booking['stayStatus'] | string | undefined, 
@@ -106,7 +106,7 @@ export function getStayStatusColors(
     };
   }
 
-  // 3. Releasing on this day (משתחרר באותו היום - כחול שמיים ייעודי בולט)
+  // 3. Releasing on this day (משתחרר באותו היום - כחול רויאל בולט ומודגש)
   const isReleasing = Boolean(endDate) && endDate === targetDate && stayStatus !== 'cancelled';
   if (isReleasing) {
     return {
@@ -114,12 +114,12 @@ export function getStayStatusColors(
       isCheckedIn: true,
       isBooked: false,
       isReleasing: true,
-      dogClass: 'text-[#0284c7] font-black', // Vivid high-contrast sky blue
-      ownerClass: 'text-[#0369a1] font-black text-[11px]', // Deep sky blue
-      textClass: 'text-[#0369a1]',
-      cardBorderBg: 'bg-sky-50/95 border-sky-300 hover:border-sky-400 hover:bg-sky-100/80 shadow-2xs ring-1 ring-sky-300/50',
-      monthChipBg: 'bg-sky-50 border-sky-300 text-[#0284c7] font-black',
-      iconClass: 'text-[#0284c7]',
+      dogClass: 'text-[#1e3a8a] font-black', // Deep vivid royal blue, high contrast
+      ownerClass: 'text-[#1d4ed8] font-black text-[10px]', // Deep royal blue
+      textClass: 'text-[#1e3a8a]',
+      cardBorderBg: 'bg-blue-100/95 border-blue-400 hover:border-blue-500 hover:bg-blue-100 text-[#1e3a8a] shadow-2xs ring-1 ring-blue-400/70',
+      monthChipBg: 'bg-blue-100 border-blue-400 text-[#1e3a8a] font-black',
+      iconClass: 'text-[#2563eb]',
       badgeLabel: 'משתחרר היום'
     };
   }
@@ -677,7 +677,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
           <span>שוהה בריזורט</span>
         </span>
-        <span className="flex items-center gap-1.5 text-[#0369a1] bg-sky-50 px-2 py-0.5 rounded-md border border-sky-300 font-black">
+        <span className="flex items-center gap-1.5 text-[#1e3a8a] bg-blue-100 px-2 py-0.5 rounded-md border border-blue-400 font-black">
           <span>🚪</span>
           <span>משתחרר ביום זה</span>
         </span>
