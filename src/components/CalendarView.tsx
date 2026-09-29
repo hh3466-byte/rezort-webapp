@@ -55,9 +55,9 @@ interface CalendarViewProps {
 
 // Helper function to get high-contrast unified colors for dogs and owners according to stay status:
 // 1. Released in past (checked_out / completed / cancelled / ended date in past) -> Light gray (text-slate-400)
-// 2. Releasing on this day (משתחרר באותו היום) -> Vivid Sky/Ocean Blue (text-[#0284c7], bg-sky-50, border-sky-300)
-// 3. Checked in (active stay / inside resort) -> Deep dark emerald green (text-[#065f46])
-// 4. Booked (reserved for future, not checked in yet) -> Strong vibrant purple (text-[#581c87])
+// 2. Booked (reserved / not checked in yet - שוריין אך טרם נקלט) -> Prominent Vivid Purple (text-[#581c87], bg-purple-100/90, border-purple-300)
+// 3. Releasing on this day (checked_in & releasing today - שוהה שמשתחרר באותו היום) -> Vivid Sky/Ocean Blue (text-[#0284c7], bg-sky-50, border-sky-300)
+// 4. Checked in (active stay / inside resort - שוהה פעיל בריזורט) -> Deep dark emerald green (text-[#065f46])
 export function getStayStatusColors(
   stayStatus: Booking['stayStatus'] | string | undefined, 
   endDate: string, 
@@ -71,13 +71,6 @@ export function getStayStatusColors(
                   (stayStatus as any) === 'completed' || 
                   stayStatus === 'cancelled' || 
                   (Boolean(endDate) && Boolean(currentDateStr) ? endDate < currentDateStr : endDate < todayStr);
-
-  const isReleasing = !isEnded && Boolean(endDate) && endDate === targetDate && stayStatus !== 'cancelled';
-
-  const isCheckedIn = !isEnded && (
-    stayStatus === 'checked_in' || 
-    (Boolean(startDate) && startDate! <= targetDate && (!endDate || endDate >= targetDate))
-  );
 
   if (isEnded) {
     return {
@@ -95,52 +88,55 @@ export function getStayStatusColors(
     };
   }
 
-  // 2. Releasing on this day (משתחרר באותו היום - כחול שמיים ייעודי בולט)
+  // 2. Booked / Reserved (שוריין אך טרם נקלט בצ'ק אין) -> סגול בולט ומודגש
+  const isBooked = stayStatus === 'booked' || (!stayStatus && startDate && startDate > targetDate);
+  if (isBooked) {
+    return {
+      isEnded: false,
+      isCheckedIn: false,
+      isBooked: true,
+      isReleasing: false,
+      dogClass: 'text-[#581c87] font-black', // Deep rich purple, high contrast
+      ownerClass: 'text-[#6b21a8] font-black text-[11px]', // Vivid purple
+      textClass: 'text-[#581c87]',
+      cardBorderBg: 'bg-purple-100/90 border-purple-300 hover:border-purple-400 hover:bg-purple-100 text-[#581c87] shadow-2xs ring-1 ring-purple-300/60',
+      monthChipBg: 'bg-purple-100 border-purple-300 text-[#581c87] font-black',
+      iconClass: 'text-[#7e22ce]',
+      badgeLabel: 'שוריין (טרם נקלט)'
+    };
+  }
+
+  // 3. Releasing on this day (משתחרר באותו היום - כחול שמיים ייעודי בולט)
+  const isReleasing = Boolean(endDate) && endDate === targetDate && stayStatus !== 'cancelled';
   if (isReleasing) {
     return {
       isEnded: false,
-      isCheckedIn: isCheckedIn,
-      isBooked: !isCheckedIn,
+      isCheckedIn: true,
+      isBooked: false,
       isReleasing: true,
       dogClass: 'text-[#0284c7] font-black', // Vivid high-contrast sky blue
       ownerClass: 'text-[#0369a1] font-black text-[11px]', // Deep sky blue
       textClass: 'text-[#0369a1]',
-      cardBorderBg: 'bg-sky-50/90 border-sky-300 hover:border-sky-400 hover:bg-sky-100/80 shadow-2xs ring-1 ring-sky-300/40',
+      cardBorderBg: 'bg-sky-50/95 border-sky-300 hover:border-sky-400 hover:bg-sky-100/80 shadow-2xs ring-1 ring-sky-300/50',
       monthChipBg: 'bg-sky-50 border-sky-300 text-[#0284c7] font-black',
       iconClass: 'text-[#0284c7]',
       badgeLabel: 'משתחרר היום'
     };
   }
 
-  if (isCheckedIn) {
-    return {
-      isEnded: false,
-      isCheckedIn: true,
-      isBooked: false,
-      isReleasing: false,
-      dogClass: 'text-[#065f46] font-black', // Deep dark emerald green, high sunlight contrast
-      ownerClass: 'text-[#065f46] font-black text-[11px]', // Unified exact same color
-      textClass: 'text-[#065f46]',
-      cardBorderBg: 'bg-emerald-50/70 border-emerald-300 hover:border-emerald-400 hover:bg-emerald-50',
-      monthChipBg: 'bg-emerald-50 border-emerald-300 text-[#065f46] font-black',
-      iconClass: 'text-[#065f46]',
-      badgeLabel: 'שוהה'
-    };
-  }
-
-  // Booked / Reserved (not checked in yet, future)
+  // 4. Checked In (שוהה פעיל בריזורט - ירוק אמרלד עמוק)
   return {
     isEnded: false,
-    isCheckedIn: false,
-    isBooked: true,
+    isCheckedIn: true,
+    isBooked: false,
     isReleasing: false,
-    dogClass: 'text-[#581c87] font-black', // Deep vibrant purple, high sunlight contrast
-    ownerClass: 'text-[#581c87] font-black text-[11px]', // Unified exact same color
-    textClass: 'text-[#581c87]',
-    cardBorderBg: 'bg-purple-50/60 border-purple-200 hover:border-purple-300 hover:bg-purple-50',
-    monthChipBg: 'bg-purple-50 border-purple-200 text-[#581c87] font-black',
-    iconClass: 'text-[#581c87]',
-    badgeLabel: 'שוריין'
+    dogClass: 'text-[#065f46] font-black', // Deep dark emerald green, high sunlight contrast
+    ownerClass: 'text-[#065f46] font-black text-[11px]', // Unified exact same color
+    textClass: 'text-[#065f46]',
+    cardBorderBg: 'bg-emerald-50/70 border-emerald-300 hover:border-emerald-400 hover:bg-emerald-50 shadow-2xs',
+    monthChipBg: 'bg-emerald-50 border-emerald-300 text-[#065f46] font-black',
+    iconClass: 'text-[#065f46]',
+    badgeLabel: 'שוהה'
   };
 }
 
