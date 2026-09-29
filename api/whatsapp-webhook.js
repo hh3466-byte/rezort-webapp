@@ -280,8 +280,26 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
 
     const incoming = active.filter(b => (b.start_date || b.startDate) === targetDate);
     const departing = active.filter(b => (b.end_date || b.endDate) === targetDate);
+    const staying = active.filter(b => {
+      const s = b.start_date || b.startDate;
+      const e = b.end_date || b.endDate;
+      return (s <= targetDate && e >= targetDate);
+    });
 
-    let msg = `📋 *סקירת ${isTomorrow ? 'מחר' : 'היום'} (${formatDateIL(targetDate)}):*\n\n`;
+    let msg = `📋 *סקירת ${isTomorrow ? 'מחר' : 'היום'} (${formatDateIL(targetDate)}):*\n`;
+    msg += `סה"כ שוהים בריזורט: *${staying.length} כלבים* 🐶\n\n`;
+
+    if (staying.length > 0) {
+      msg += `🏠 *כלבים שוהים ושיבוצים (${staying.length}):*\n`;
+      staying.forEach((b, idx) => {
+        const dog = b.dog_name || b.dogName || 'כלב';
+        const breed = b.dog_breed || b.dogBreed || '';
+        const owner = b.owner_name || b.ownerName || '';
+        const kennel = formatKennelLabel(b.data?.kennelNumber || b.kennel_number);
+        msg += `${idx + 1}. *${dog}* ${breed ? `(${breed})` : ''} – ${kennel} (${owner})\n`;
+      });
+      msg += `\n`;
+    }
     
     msg += `🐕 *נכנסים / מגיעים (${incoming.length}):*\n`;
     if (incoming.length === 0) {
