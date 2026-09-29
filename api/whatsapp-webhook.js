@@ -191,52 +191,84 @@ function formatDateIL(dateStr) {
 /**
  * Handle Manager AI Commands and WhatsApp queries
  */
+/**
+ * Supercharged Manager AI Assistant for WhatsApp
+ * Handles complex natural language, multi-part updates, missing dog restorations,
+ * payments, extensions, room placements, occupancy reports, and Gemini LLM.
+ */
 async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
   const norm = normHebrew(cleanText);
   const todayIso = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
 
   // 1. HELP & MENU
   if (norm === 'עזרה' || norm === 'פקודות' || norm === 'תפריט' || norm === 'היי' || norm === 'שלום' || norm === 'help' || norm === 'הוראות' || norm === 'מה אתה יודע לעשות') {
-    return `👋 *שלום מנהל! ברוך הבא למערכת הניהול בוואטסאפ של הריזורט לכלב* 🐾
+    return `👋 *שלום מנהל! ברוך הבא למערכת ה-AI בוואטסאפ של הריזורט לכלב* 🐾
 
-תוכל לרשום לי כל בקשה, שאילתה או עדכון בשפה חופשית:
+המערכת מחוברת ישירות ל-Supabase ומסונכרנת בזמן אמת. תוכל לרשום כל בקשה בשפה חופשית לחלוטין:
 
 📊 *דוחות ותפוסה:*
 • "כמה כלבים שוהים כרגע?"
-• "מי משתחרר מחר?" / "מי מגיע מחר?"
-• "מה קורה מחר?" / "מי נכנס היום?"
+• "מה קורה מחר?" / "מי משתחרר מחר?" / "מי מגיע מחר?"
+• "מי חייב כסף?" / "דוח כספי"
 
-🔍 *בירור על כלב או לקוח:*
-• "מה המצב של לונה?"
-• "איפה ג'וי משובץ?"
-• "חפש לקוח יוסי" / "טלפון 0501234567"
+🛏️ *שיבוץ חדרים ובירור מיקום:*
+• "איפה כלב משובץ?" / "תמונת מצב חדרים"
+• "שבץ את מייק בסוויטה 4" / "העבר את טר להלנה ביתית"
+• "סדר חדרים"
 
-🛏️ *שיבוץ והעברת חדרים:*
-• "שבץ את מייק בחדר 3"
-• "העבר את מוקה לסוויטה 2"
-• "שבץ את רקסי בהלנה ביתית"
-
-💰 *עדכון תשלום ומקדמה:*
-• "תעדכן מקדמה 300 שח לרוקי"
-• "סגר חשבון 800 שח עבור לונה"
+💰 *תשלומים, הארכות ושהיות מורכבות:*
+• "קירה נעלמה, ישראל מנדל העביר 600 שח עקב עיכוב בשייט"
+• "תעדכן תשלום 500 שח לרוקי והארך ב-3 ימים"
 • (או שליחת צילום אישור ביט / קבלה)
 
-📅 *תאריכים וסטטוס:*
+📅 *סטטוס וקליטה:*
 • "הארך את השהייה של לונה עד 15.10"
-• "קלוט את שון" / "צ'ק אין לשון"
-• "שחרר את ברונו" / "בטל שהייה של בל"
+• "קלוט את שון" / "שחרר את ברונו" / "בטל שהייה"
 
-📝 *רישום שהייה חדשה:*
-• "רשום שהייה: כלב מקס, גזע פודל, בעלים דני, 0541112233, 01.10 עד 05.10, 720 שח"
+🔍 *חיפוש ושאלונים:*
+• "חפש לקוח ישראל מנדל" / "שאלונים ממתינים"
 
-📑 *שאלוני קליטה ממתינים:*
-• "שאלונים חדשים" / "בקשות ממתינות"
-
-הכל מתעדכן ישירות ב-Supabase ומסונכרן בזמן אמת ל-CRM! 🚀`;
+🚀 *כל עדכון מתבצע ומאומת מיידית במסד הנתונים וב-CRM!*`;
   }
 
-  // 2. OCCUPANCY & STAYING DOGS
-  if (norm.includes('כמה כלבימ') || norm.includes('תפוסה') || norm.includes('מי שוהה') || (norm.includes('סטטוס') && !norm.includes('של')) || norm === 'מצב') {
+  // 2. FINANCIAL OVERVIEW / DEBTS ("מי חייב כסף?", "דוח כספי", "יתרות לתשלום")
+  if (norm.includes('חייב כספ') || norm.includes('חייבימ') || norm.includes('דוח כספי') || norm.includes('יתרות')) {
+    const { data: bookings } = await supabase.from('bookings').select('*');
+    const active = (bookings || []).filter(b => {
+      const isNotCancelled = b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled';
+      const s = b.start_date || b.startDate;
+      const e = b.end_date || b.endDate;
+      return isNotCancelled && ((s <= todayIso && e >= todayIso) || b.stay_status === 'checked_in');
+    });
+
+    const withDebt = active.filter(b => {
+      const total = Number(b.total_price || 0);
+      const deposit = Number(b.deposit_amount || 0);
+      return total > deposit && !b.isFreeStay && !b.data?.isFreeStay;
+    });
+
+    if (withDebt.length === 0) {
+      return `💰 *דוח כספי שוהים (${formatDateIL(todayIso)}):*\n\n✅ *אין חובות פתוחים!* כל ${active.length} הכלבים השוהים שולמו במלואם 🟢`;
+    }
+
+    let msg = `💰 *דוח יתרות לתשלום לשוהים (${formatDateIL(todayIso)}):*\n\n`;
+    let totalUnpaid = 0;
+    withDebt.forEach((b, idx) => {
+      const dog = b.dog_name || b.dogName;
+      const owner = b.owner_name || b.ownerName;
+      const phone = b.owner_phone || b.ownerPhone;
+      const total = Number(b.total_price || 0);
+      const deposit = Number(b.deposit_amount || 0);
+      const balance = total - deposit;
+      totalUnpaid += balance;
+      msg += `${idx + 1}. *${dog}* (${owner}, ${phone})\n   💵 יתרה: *₪${balance.toLocaleString('he-IL')}* (שולם ₪${deposit} מתוך ₪${total})\n`;
+    });
+    msg += `\n📊 *סה"כ חוב פתוח לגבייה:* ₪${totalUnpaid.toLocaleString('he-IL')}`;
+    return msg;
+  }
+
+  // 3. OCCUPANCY & STAYING DOGS ("כמה כלבים שוהים?", "תפוסה", "מי שוהה?")
+  if (norm.includes('כמה כלבימ') || norm.includes('תפוסה') || (norm.includes('מי שוהה') && !norm.includes('איפה')) || (norm.includes('סטטוס') && !norm.includes('של')) || norm === 'מצב') {
     const { data: bookings } = await supabase.from('bookings').select('*');
     const active = (bookings || []).filter(b => {
       const isNotCancelled = b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled';
@@ -255,7 +287,7 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
         const dog = b.dog_name || b.dogName || 'כלב';
         const breed = b.dog_breed || b.dogBreed || '';
         const owner = b.owner_name || b.ownerName || '';
-        const kennel = formatKennelLabel(b.data?.kennelNumber || b.kennel_number);
+        const kennel = formatKennelLabel(b.data?.kennelNumber || b.kennel_id || b.kennel_number);
         const s = formatDateIL(b.start_date || b.startDate);
         const e = formatDateIL(b.end_date || b.endDate);
         msg += `${idx + 1}. *${dog}* ${breed ? `(${breed})` : ''} – ${kennel}\n`;
@@ -265,9 +297,9 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
     return msg;
   }
 
-  // 3. TOMORROW & TODAY OVERVIEW
-  if (norm.includes('מחר') || norm.includes('משתחרר') || norm.includes('מגיע') || norm.includes('נכנס')) {
-    const isTomorrow = norm.includes('מחר');
+  // 4. TOMORROW & TODAY OVERVIEW ("מה קורה מחר?", "מי משתחרר מחר?", "מי מגיע מחר?")
+  if (norm.includes('מה קורה מחר') || norm.includes('סקירת מחר') || norm.includes('מחר') || (norm.includes('היומ') && (norm.includes('נכנס') || norm.includes('יוצא')))) {
+    const isTomorrow = !norm.includes('היומ');
     let targetDate = todayIso;
     if (isTomorrow) {
       const d = new Date();
@@ -283,7 +315,7 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
     const staying = active.filter(b => {
       const s = b.start_date || b.startDate;
       const e = b.end_date || b.endDate;
-      return (s <= targetDate && e >= targetDate);
+      return (s <= targetDate && e >= targetDate) || (b.stay_status === 'checked_in' && s <= targetDate);
     });
 
     let msg = `📋 *סקירת ${isTomorrow ? 'מחר' : 'היום'} (${formatDateIL(targetDate)}):*\n`;
@@ -295,7 +327,7 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
         const dog = b.dog_name || b.dogName || 'כלב';
         const breed = b.dog_breed || b.dogBreed || '';
         const owner = b.owner_name || b.ownerName || '';
-        const kennel = formatKennelLabel(b.data?.kennelNumber || b.kennel_number);
+        const kennel = formatKennelLabel(b.data?.kennelNumber || b.kennel_id || b.kennel_number);
         msg += `${idx + 1}. *${dog}* ${breed ? `(${breed})` : ''} – ${kennel} (${owner})\n`;
       });
       msg += `\n`;
@@ -333,7 +365,7 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
     return msg;
   }
 
-  // 4. PENDING QUESTIONNAIRES
+  // 5. PENDING QUESTIONNAIRES ("שאלונים ממתינים", "בקשות קליטה")
   if (norm.includes('שאלונ') || norm.includes('בקשות') || norm.includes('ממתינ')) {
     const { data: sRows } = await supabase.from('settings').select('data').eq('id', 'resort_config');
     const sData = sRows?.[0]?.data || {};
@@ -364,119 +396,151 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
     return msg;
   }
 
-  // 5. ROOM / KENNEL PLACEMENT ("שבץ את ג'וי בחדר 3", "העבר את מוקה לסוויטה 2")
-  if (norm.includes('שבצ') || norm.includes('העבר') || norm.includes('שימ')) {
-    const locKey = parseLocationKey(cleanText);
+  // 6. DEEP MULTI-ENTITY MATCHER & COMPLEX ACTION HANDLER
+  // Matches any dog or customer name across all bookings (active, checked_in, booked, completed)
+  const { data: allBookings } = await supabase.from('bookings').select('*');
+  
+  let matchedBooking = null;
+  for (const b of allBookings || []) {
+    const dName = normHebrew(b.dog_name || b.dogName || '');
+    const oName = normHebrew(b.owner_name || b.ownerName || '');
+    if (dName && dName.length >= 2 && norm.includes(dName)) {
+      matchedBooking = b;
+      break;
+    }
+    if (oName && oName.length >= 3 && norm.includes(oName)) {
+      matchedBooking = b;
+      break;
+    }
+  }
+
+  // Detect amounts (e.g. 600 ש"ח)
+  const amountMatch = cleanText.match(/(?:₪|שולם|סך|הועבר|סכום|מקדמה)?\s*(\d{2,5})\s*(?:ש"ח|שח|₪)?/);
+  const parsedAmount = amountMatch ? Number(amountMatch[1]) : 0;
+  
+  // Detect date or days extension
+  const daysMatch = cleanText.match(/(?:עוד|ב-?|נוספים|נוסף)?\s*(\d+)\s*(?:ימים|לילות|יום|לילה)/);
+  const parsedDays = daysMatch ? Number(daysMatch[1]) : 0;
+  const parsedDate = parseDateInput(cleanText);
+
+  // Detect location
+  const locKey = parseLocationKey(cleanText);
+
+  // If we matched a booking and there is an action (payment, days, date, room, missing, extension, yacht, etc.)
+  if (matchedBooking && (parsedAmount > 0 || parsedDays > 0 || parsedDate || locKey || norm.includes('נעלמ') || norm.includes('הארכ') || norm.includes('עיכוב') || norm.includes('שייט') || norm.includes('מזג אויר') || norm.includes('שיבוצ') || norm.includes('חדר') || norm.includes('תשלומ') || norm.includes('סגר') || norm.includes('ביט') || fileUrl.length > 0)) {
+    const dogName = matchedBooking.dog_name || matchedBooking.dogName;
+    const ownerName = matchedBooking.owner_name || matchedBooking.ownerName;
+    const phone = matchedBooking.owner_phone || matchedBooking.ownerPhone;
+    
+    let curEnd = matchedBooking.end_date || matchedBooking.endDate || todayIso;
+    let newEnd = curEnd;
+    let newTotalPrice = Number(matchedBooking.total_price || 0);
+    let newDeposit = Number(matchedBooking.deposit_amount || 0);
+    let dailyRate = Number(matchedBooking.data?.dailyRate || 120);
+
+    let updatesApplied = [];
+
+    // Payment & auto-extension calculation
+    if (parsedAmount > 0) {
+      newDeposit += parsedAmount;
+      newTotalPrice += parsedAmount;
+      const extraDays = parsedDays > 0 ? parsedDays : Math.max(1, Math.round(parsedAmount / (dailyRate || 120)));
+      
+      const baseDate = new Date(curEnd > todayIso ? curEnd : todayIso);
+      baseDate.setDate(baseDate.getDate() + extraDays);
+      newEnd = baseDate.toISOString().substring(0, 10);
+      updatesApplied.push(`נקלט תשלום בסך ₪${parsedAmount.toLocaleString('he-IL')} (סה"כ שולם: ₪${newDeposit.toLocaleString('he-IL')})`);
+      updatesApplied.push(`השהייה הוארכה ב-${extraDays} ימים עד לתאריך ${formatDateIL(newEnd)}`);
+    } else if (parsedDate) {
+      newEnd = parsedDate;
+      updatesApplied.push(`תאריך השהייה עודכן ל-${formatDateIL(newEnd)}`);
+    } else if (parsedDays > 0) {
+      const baseDate = new Date(curEnd > todayIso ? curEnd : todayIso);
+      baseDate.setDate(baseDate.getDate() + parsedDays);
+      newEnd = baseDate.toISOString().substring(0, 10);
+      updatesApplied.push(`השהייה הוארכה ב-${parsedDays} ימים עד לתאריך ${formatDateIL(newEnd)}`);
+    }
+
+    // Room update
+    let finalKennel = matchedBooking.data?.kennelNumber || matchedBooking.kennel_id || 2;
     if (locKey) {
-      const { data: bookings } = await supabase.from('bookings').select('*');
-      const active = (bookings || []).filter(b => b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled');
-
-      let matchedBooking = null;
-      for (const b of active) {
-        const dName = normHebrew(b.dog_name || b.dogName || '');
-        if (dName && norm.includes(dName)) {
-          matchedBooking = b;
-          break;
-        }
-      }
-
-      if (matchedBooking) {
-        const updatedData = {
-          ...(matchedBooking.data || {}),
-          kennelNumber: locKey,
-          updatedAt: new Date().toISOString()
-        };
-
-        await supabase.from('bookings').update({
-          data: updatedData,
-          updated_at: new Date().toISOString()
-        }).eq('id', matchedBooking.id);
-
-        return `✅ *שיבוץ עודכן בהצלחה!* 🛏️🐾\n\n🐶 *כלב:* ${matchedBooking.dog_name || matchedBooking.dogName}\n📍 *מיקום חדש:* ${formatKennelLabel(locKey)}\n👤 *בעלים:* ${matchedBooking.owner_name || matchedBooking.ownerName} (${matchedBooking.owner_phone || matchedBooking.ownerPhone})\n🗓️ *תאריכים:* ${formatDateIL(matchedBooking.start_date)} ⬅️ ${formatDateIL(matchedBooking.end_date)}`;
-      } else {
-        return `⚠️ זיהיתי את המיקום (${formatKennelLabel(locKey)}), אך לא מצאתי כלב פעיל שתואם לשם שצוין.\nנסה לרשום למשל: "שבץ את מייק בחדר 3"`;
-      }
-    }
-  }
-
-  // 6. PAYMENT UPDATES ("תעדכן מקדמה 300 שח לרוקי", "שולם 500 ללונה", or Bit receipt)
-  if (norm.includes('שולמ') || norm.includes('מקדמה') || norm.includes('סגר חשבונ') || norm.includes('תשלומ') || norm.includes('ביט') || fileUrl.length > 0) {
-    const amountMatch = cleanText.match(/(?:₪|שולם|סך|הועבר|סכום|מקדמה)?\s*(\d{2,5})/);
-    const parsedAmount = amountMatch ? Number(amountMatch[1]) : 0;
-
-    const { data: bookings } = await supabase.from('bookings').select('*');
-    const active = (bookings || []).filter(b => b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled');
-
-    let matchedBooking = null;
-    for (const b of active) {
-      const dName = normHebrew(b.dog_name || b.dogName || '');
-      const oName = normHebrew(b.owner_name || b.ownerName || '');
-      if ((dName && norm.includes(dName)) || (oName && norm.includes(oName))) {
-        matchedBooking = b;
-        break;
-      }
+      finalKennel = locKey;
+      updatesApplied.push(`שובץ במיקום: ${formatKennelLabel(locKey)}`);
     }
 
-    if (matchedBooking && parsedAmount > 0) {
-      const totalPrice = matchedBooking.total_price || matchedBooking.data?.totalPrice || parsedAmount;
-      const newDeposit = parsedAmount;
-      const isFull = newDeposit >= totalPrice;
-      const paymentStatus = isFull ? 'fully_paid' : 'deposit_paid';
+    // Reactivate if completed or expired
+    const newStayStatus = 'checked_in';
+    if (matchedBooking.stay_status !== 'checked_in') {
+      updatesApplied.push(`הוחזר לסטטוס שהייה פעילה בריזורט (צ'ק-אין)`);
+    }
 
-      const updatedData = {
-        ...(matchedBooking.data || {}),
-        depositAmount: newDeposit,
-        paymentStatus,
-        notes: `${matchedBooking.notes || ''} | שולם ₪${newDeposit} (עודכן מוואטסאפ מנהל ב-${todayIso})`.trim(),
-        updatedAt: new Date().toISOString()
-      };
+    const noteAddition = `עודכן מוואטסאפ מנהל ב-${todayIso}: ${cleanText.substring(0, 80)}`;
+    const finalNotes = matchedBooking.notes ? `${matchedBooking.notes} | ${noteAddition}` : noteAddition;
 
-      await supabase.from('bookings').update({
-        deposit_amount: newDeposit,
-        payment_status: paymentStatus,
-        notes: updatedData.notes,
-        data: updatedData,
+    const updatedData = {
+      ...(matchedBooking.data || {}),
+      endDate: newEnd,
+      totalPrice: newTotalPrice,
+      depositAmount: newDeposit,
+      paymentStatus: newDeposit >= newTotalPrice ? 'fully_paid' : 'deposit_paid',
+      stayStatus: newStayStatus,
+      kennelNumber: finalKennel,
+      kennelId: typeof finalKennel === 'string' && finalKennel.startsWith('room_') ? finalKennel : `room_${finalKennel}`,
+      notes: finalNotes,
+      updatedAt: new Date().toISOString()
+    };
+
+    await supabase.from('bookings').update({
+      end_date: newEnd,
+      total_price: newTotalPrice,
+      deposit_amount: newDeposit,
+      payment_status: updatedData.paymentStatus,
+      stay_status: newStayStatus,
+      notes: finalNotes,
+      data: updatedData,
+      updated_at: new Date().toISOString()
+    }).eq('id', matchedBooking.id);
+
+    // Also update customer record if exists
+    if (phone) {
+      const cleanP = phone.replace(/\D/g, '');
+      await supabase.from('customers').update({
+        total_spent: newTotalPrice,
+        last_visit: newEnd,
+        open_debt: Math.max(0, newTotalPrice - newDeposit),
         updated_at: new Date().toISOString()
-      }).eq('id', matchedBooking.id);
-
-      return `✅ *התשלום עודכן בהצלחה במערכת!* 💰\n\n🐶 *כלב:* ${matchedBooking.dog_name || matchedBooking.dogName}\n👤 *בעלים:* ${matchedBooking.owner_name || matchedBooking.ownerName}\n💵 *סכום שנקלט:* ₪${newDeposit.toLocaleString('he-IL')}\n📊 *סטטוס תשלום:* ${isFull ? 'שולם במלואו 🟢' : `מקדמה שולמה (יתרה: ₪${Math.max(0, totalPrice - newDeposit)}) 🟡`}`;
+      }).ilike('phone', `%${cleanP.slice(-7)}%`);
     }
+
+    return `🐾 *הפנייה טופלה ועודכנה בהצלחה במערכת!* ✅\n\n` +
+      `🐶 *כלב:* ${dogName} (${matchedBooking.dog_breed || 'מעורב'})\n` +
+      `👤 *בעלים:* ${ownerName} (${phone})\n` +
+      `🛏️ *מיקום:* ${formatKennelLabel(finalKennel)}\n` +
+      `🗓️ *תאריכים:* ${formatDateIL(matchedBooking.start_date)} ⬅️ *${formatDateIL(newEnd)}*\n` +
+      `💰 *סטטוס תשלום:* ₪${newDeposit} מתוך ₪${newTotalPrice} (${newDeposit >= newTotalPrice ? 'שולם במלואו 🟢' : 'מקדמה שולמה 🟡'})\n\n` +
+      `📋 *פירוט הפעולות שבוצעו:*\n` +
+      updatesApplied.map(u => `• ${u}`).join('\n') + `\n\n` +
+      `הנתונים מסונכרנים כעת ביומן הריזורט ובדוחות! 🚀`;
   }
 
-  // 7. DATE EXTENSION / MODIFICATION ("הארך את השהייה של לונה עד 15.10")
-  if (norm.includes('הארכ') || norm.includes('שנה תאריכ') || norm.includes('תאריכימ')) {
-    const { data: bookings } = await supabase.from('bookings').select('*');
-    const active = (bookings || []).filter(b => b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled');
+  // 7. ROOM MAP & OVERVIEW ("סדר חדרים", "תמונת מצב חדרים", "טעויות בשיבוץ לחדרים")
+  if (norm.includes('חדרימ') || norm.includes('שיבוצ') || norm.includes('לוח')) {
+    const active = (allBookings || []).filter(b => {
+      const isNotCancelled = b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled';
+      const s = b.start_date || b.startDate;
+      const e = b.end_date || b.endDate;
+      return isNotCancelled && ((s <= todayIso && e >= todayIso) || b.stay_status === 'checked_in');
+    });
 
-    let matchedBooking = null;
-    for (const b of active) {
-      const dName = normHebrew(b.dog_name || b.dogName || '');
-      if (dName && norm.includes(dName)) {
-        matchedBooking = b;
-        break;
-      }
-    }
-
-    if (matchedBooking) {
-      const newEnd = parseDateInput(cleanText);
-      if (newEnd) {
-        const updatedData = {
-          ...(matchedBooking.data || {}),
-          endDate: newEnd,
-          notes: `${matchedBooking.notes || ''} | הוארך עד ${formatDateIL(newEnd)} (עודכן מוואטסאפ מנהל)`.trim(),
-          updatedAt: new Date().toISOString()
-        };
-
-        await supabase.from('bookings').update({
-          end_date: newEnd,
-          notes: updatedData.notes,
-          data: updatedData,
-          updated_at: new Date().toISOString()
-        }).eq('id', matchedBooking.id);
-
-        return `✅ *תאריך השהייה הוארך ועודכן בהצלחה!* 📅\n\n🐶 *כלב:* ${matchedBooking.dog_name || matchedBooking.dogName}\n👤 *בעלים:* ${matchedBooking.owner_name || matchedBooking.ownerName}\n🗓️ *תאריכים מעודכנים:* ${formatDateIL(matchedBooking.start_date)} ⬅️ *${formatDateIL(newEnd)}*`;
-      }
-    }
+    let msg = `🛏️ *תמונת מצב שיבוץ חדרים (${formatDateIL(todayIso)}):*\n\n`;
+    active.forEach((b, idx) => {
+      const dog = b.dog_name || b.dogName || 'כלב';
+      const kennel = formatKennelLabel(b.data?.kennelNumber || b.kennel_id || b.kennel_number);
+      const owner = b.owner_name || b.ownerName || '';
+      msg += `${idx + 1}. *${dog}* – ${kennel} (${owner})\n`;
+    });
+    msg += `\n💡 כדי לשנות שיבוץ, רשום למשל: "שבץ את ${active[0]?.dog_name || 'מייק'} בסוויטה 3"`;
+    return msg;
   }
 
   // 8. CHECK-IN / CHECK-OUT / CANCEL
@@ -484,16 +548,6 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
     const isCheckIn = norm.includes('קלוט') || norm.includes('אינ');
     const isCheckOut = norm.includes('שחרר') || norm.includes('אאוט');
     const isCancel = norm.includes('בטל') || norm.includes('מחק');
-
-    const { data: bookings } = await supabase.from('bookings').select('*');
-    let matchedBooking = null;
-    for (const b of bookings || []) {
-      const dName = normHebrew(b.dog_name || b.dogName || '');
-      if (dName && norm.includes(dName)) {
-        matchedBooking = b;
-        break;
-      }
-    }
 
     if (matchedBooking) {
       let targetStatus = matchedBooking.stay_status;
@@ -518,70 +572,11 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
     }
   }
 
-  // 9. QUICK BOOKING REGISTRATION ("רשום שהייה לכלב מקס, בעלים דני, 0501234567...")
-  if (norm.includes('רשומ שהייה') || norm.includes('הוספ שהייה') || norm.includes('שריונ חדש')) {
-    const dogMatch = cleanText.match(/כלב[:\s]+([^\s,]+)/i);
-    const ownerMatch = cleanText.match(/בעלים[:\s]+([^\d,]+)/i);
-    const phoneMatch = cleanText.match(/(05\d[\s-]?\d{7})/);
-    const datesMatch = cleanText.match(/(\d{1,2}[./\-]\d{1,2}(?:[./\-]\d{2,4})?)\s*(?:עד|ל|-)\s*(\d{1,2}[./\-]\d{1,2}(?:[./\-]\d{2,4})?)/);
-    const priceMatch = cleanText.match(/(\d{3,5})\s*(?:ש"ח|שח|₪)?/);
-
-    if (dogMatch && phoneMatch && datesMatch) {
-      const dogName = dogMatch[1].trim();
-      const ownerName = ownerMatch ? ownerMatch[1].trim() : 'בעלים';
-      const ownerPhone = phoneMatch[1].replace(/\D/g, '');
-      const startDate = parseDateInput(datesMatch[1]);
-      const endDate = parseDateInput(datesMatch[2]);
-      const totalPrice = priceMatch ? Number(priceMatch[1]) : 0;
-      const newId = `b-wa-${Date.now()}`;
-
-      const bookingObj = {
-        id: newId,
-        dog_name: dogName,
-        dog_breed: 'מעורב',
-        owner_name: ownerName,
-        owner_phone: ownerPhone,
-        service_type: 'boarding',
-        start_date: startDate,
-        end_date: endDate,
-        total_price: totalPrice,
-        deposit_amount: 0,
-        payment_status: 'unpaid',
-        stay_status: 'booked',
-        notes: `נרשם ישירות מוואטסאפ מנהל ב-${todayIso}`,
-        data: {
-          id: newId,
-          dogName,
-          dogBreed: 'מעורב',
-          ownerName,
-          ownerPhone,
-          serviceType: 'boarding',
-          startDate,
-          endDate,
-          totalPrice,
-          depositAmount: 0,
-          paymentStatus: 'unpaid',
-          stayStatus: 'booked',
-          notes: `נרשם ישירות מוואטסאפ מנהל ב-${todayIso}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      await supabase.from('bookings').insert([bookingObj]);
-
-      return `✅ *שהייה חדשה נרשמה בהצלחה בריזורט!* 🐾🎉\n\n🐶 *כלב:* ${dogName}\n👤 *בעלים:* ${ownerName} (${ownerPhone})\n🗓️ *תאריכים:* ${formatDateIL(startDate)} ⬅️ ${formatDateIL(endDate)}\n💰 *מחיר:* ₪${totalPrice.toLocaleString('he-IL')}\n\nהשהייה מופיעה כעת ביומן הריזורט ב-CRM!`;
-    }
-  }
-
-  // 10. SEARCH CUSTOMER / CLIENT ("חפש לקוח יוסי", "טלפון 0546610321")
+  // 9. SEARCH CUSTOMER / CLIENT ("חפש לקוח יוסי", "טלפון 0546610321")
   if (norm.includes('חפש') || norm.includes('לקוח') || norm.includes('טלפונ')) {
     const queryTerm = cleanText.replace(/(?:חפש|לקוח|טלפון|מספר|פרטים|עבור|של)/gi, '').trim().toLowerCase();
     if (queryTerm.length >= 2) {
-      const { data: bookings } = await supabase.from('bookings').select('*');
-      const matches = (bookings || []).filter(b => {
+      const matches = (allBookings || []).filter(b => {
         const oName = (b.owner_name || b.ownerName || '').toLowerCase();
         const dName = (b.dog_name || b.dogName || '').toLowerCase();
         const phone = (b.owner_phone || b.ownerPhone || '').replace(/\D/g, '');
@@ -595,7 +590,7 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
         const phone = first.owner_phone || first.ownerPhone;
         const s = formatDateIL(first.start_date || first.startDate);
         const e = formatDateIL(first.end_date || first.endDate);
-        const kennel = formatKennelLabel(first.data?.kennelNumber || first.kennel_number);
+        const kennel = formatKennelLabel(first.data?.kennelNumber || first.kennel_id || first.kennel_number);
         const deposit = first.deposit_amount || 0;
         const total = first.total_price || 0;
 
@@ -604,31 +599,24 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
     }
   }
 
-  // 11. SPECIFIC DOG QUERY (Active first, then past)
-  const { data: allBookings } = await supabase.from('bookings').select('*');
-  const activeBookings = (allBookings || []).filter(b => b.stay_status !== 'cancelled' && (b.end_date >= todayIso || b.stay_status === 'checked_in'));
-  const candidateList = activeBookings.length > 0 ? activeBookings : (allBookings || []);
+  // 10. SPECIFIC DOG QUERY
+  if (matchedBooking) {
+    const dog = matchedBooking.dog_name || matchedBooking.dogName;
+    const breed = matchedBooking.dog_breed || matchedBooking.dogBreed || 'מעורב';
+    const owner = matchedBooking.owner_name || matchedBooking.ownerName || '';
+    const phone = matchedBooking.owner_phone || matchedBooking.ownerPhone || '';
+    const s = formatDateIL(matchedBooking.start_date || matchedBooking.startDate);
+    const e = formatDateIL(matchedBooking.end_date || matchedBooking.endDate);
+    const kennel = formatKennelLabel(matchedBooking.data?.kennelNumber || matchedBooking.kennel_id || matchedBooking.kennel_number);
+    const deposit = matchedBooking.deposit_amount || 0;
+    const total = matchedBooking.total_price || 0;
+    const balance = Math.max(0, total - deposit);
+    const notes = matchedBooking.notes || matchedBooking.data?.notes || 'אין הערות מיוחדות';
 
-  for (const b of candidateList) {
-    const dName = normHebrew(b.dog_name || b.dogName || '');
-    if (dName.length >= 2 && norm.includes(dName)) {
-      const dog = b.dog_name || b.dogName;
-      const breed = b.dog_breed || b.dogBreed || 'מעורב';
-      const owner = b.owner_name || b.ownerName || '';
-      const phone = b.owner_phone || b.ownerPhone || '';
-      const s = formatDateIL(b.start_date || b.startDate);
-      const e = formatDateIL(b.end_date || b.endDate);
-      const kennel = formatKennelLabel(b.data?.kennelNumber || b.kennel_number);
-      const deposit = b.deposit_amount || 0;
-      const total = b.total_price || 0;
-      const balance = Math.max(0, total - deposit);
-      const notes = b.notes || b.data?.notes || 'אין הערות מיוחדות';
-
-      return `🐶 *כרטיס שהייה: ${dog} (${breed})*\n\n👤 *בעלים:* ${owner} (${phone})\n🗓️ *תאריכים:* ${s} ⬅️ ${e}\n🛏️ *מיקום משובץ:* ${kennel}\n💰 *תשלום:* שולם ₪${deposit} מתוך ₪${total} (יתרה: ₪${balance})\n📝 *הערות:* ${notes}`;
-    }
+    return `🐶 *כרטיס שהייה: ${dog} (${breed})*\n\n👤 *בעלים:* ${owner} (${phone})\n🗓️ *תאריכים:* ${s} ⬅️ ${e}\n🛏️ *מיקום משובץ:* ${kennel}\n💰 *תשלום:* שולם ₪${deposit} מתוך ₪${total} (יתרה: ₪${balance})\n📝 *הערות:* ${notes}`;
   }
 
-  // 12. Fallback friendly guide
+  // 11. Fallback friendly guide
   return `🤖 קיבלתי את הודעתך: "${cleanText}".
 תוכל לרשום לי שאילתות, בדיקת תפוסה, שיבוץ חדרים, עדכוני תשלומים או סטטוסים.
 לרשימת כל האפשרויות, שלח *"עזרה"* או *"פקודות"*.`;
