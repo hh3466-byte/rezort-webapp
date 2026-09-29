@@ -320,6 +320,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   onInitiateRelease,
   onToggleReviewRequest,
   onOpenVoucher,
+  actionType,
 }) => {
   const todayStr = getTodayStr();
   const isEnded = booking.stayStatus === 'checked_out' || (booking.endDate < todayStr);
