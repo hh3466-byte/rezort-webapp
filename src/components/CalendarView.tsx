@@ -872,7 +872,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           <div
                             key={b.id}
                             onClick={() => onSelectBooking(b)}
-                            className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer text-xs font-black flex items-center justify-between shadow-2xs hover:shadow-xs ${
+                            className={`px-2.5 py-1.5 rounded-xl border transition-all cursor-pointer text-xs font-black flex items-center justify-between shadow-2xs hover:shadow-xs gap-1.5 ${
                               isMatch
                                 ? 'bg-amber-100 border-amber-400 text-amber-950 ring-2 ring-amber-400 shadow-md scale-[1.03]'
                                 : isDimmed
@@ -881,8 +881,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             }`}
                             title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' (משתחרר ביום זה!)' : isEnded ? ' (שוחרר הביתה)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת בריזורט)' : ' (שוריין)'} - תשלום: ${isPaid || b.isFreeStay ? 'שולם במלואו' : isDeposit ? `שולמה מקדמה ₪${b.depositAmount} (יתרה ₪${remainingDebt})` : `לא שולם (חוב ₪${remainingDebt || b.totalPrice})`}`}
                           >
-                            <span className="flex items-center gap-1.5 truncate">
-                              <span className={`text-xs ${isMatch ? 'text-amber-700' : stayColors.iconClass}`}>🐾</span>
+                            <span className="flex items-center gap-1.5 truncate min-w-0 flex-1">
+                              <span className={`text-xs shrink-0 ${isMatch ? 'text-amber-700' : stayColors.iconClass}`}>🐾</span>
                               <span className="truncate">
                                 <span className={isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
                                 <span className={isMatch ? 'text-amber-900 font-bold text-[11px]' : stayColors.ownerClass}>({b.ownerName})</span>
@@ -893,29 +893,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 <span>🏁</span>
                                 <span>שוחרר</span>
                               </span>
-                            ) : stayColors.isReleasing ? (
-                              <div className="flex items-center gap-1 shrink-0">
-                                <span className="text-[10px] bg-sky-200 text-sky-950 font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs border border-sky-300" title="משתחרר ביום זה!">
-                                  <span>🚪</span>
-                                  <span>שחרור</span>
-                                </span>
-                                {isPaid || b.isFreeStay ? (
-                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs border border-emerald-300" title={`שולם במלואו (₪${b.totalPrice || 0})`}>
-                                    <span>✓</span>
-                                    <span>שולם</span>
-                                  </span>
-                                ) : isDeposit ? (
-                                  <span className="text-[10px] bg-amber-100 text-amber-900 font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-2xs border border-amber-300" title={`שולמה מקדמה של ₪${b.depositAmount}. נותרה יתרה לגבייה של ₪${remainingDebt}!`}>
-                                    <span>⚠️</span>
-                                    <span>יתרה ₪{remainingDebt}</span>
-                                  </span>
-                                ) : isUnpaid ? (
-                                  <span className="text-[10px] bg-red-500 text-white font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shadow-xs" title={`לא שולם כלל! חוב של ₪${remainingDebt || b.totalPrice}`}>
-                                    <span>🔴</span>
-                                    <span>חוב ₪{remainingDebt || b.totalPrice}</span>
-                                  </span>
-                                ) : null}
-                              </div>
                             ) : (
                               <div className="flex items-center gap-1 shrink-0">
                                 {isUnpaid && (
@@ -924,14 +901,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                   </span>
                                 )}
                                 <span
-                                  className={`w-2 h-2 rounded-full shrink-0 ${
-                                    isPaid
+                                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                                    isPaid || b.isFreeStay
                                       ? 'bg-emerald-500'
                                       : isDeposit
                                       ? 'bg-amber-400'
                                       : 'bg-red-500'
                                   }`}
-                                  title={isPaid ? `שולם במלואו (₪${b.totalPrice})` : isDeposit ? `שולמה מקדמה ₪${b.depositAmount} (נותרו ₪${remainingDebt})` : `חוב פתוח ₪${remainingDebt || b.totalPrice}`}
+                                  title={isPaid || b.isFreeStay ? `שולם במלואו (₪${b.totalPrice || 0})` : isDeposit ? `שולמה מקדמה ₪${b.depositAmount} (נותרו ₪${remainingDebt})` : `חוב פתוח ₪${remainingDebt || b.totalPrice}`}
                                 />
                               </div>
                             )}
