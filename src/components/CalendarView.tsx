@@ -42,7 +42,7 @@ interface CalendarViewProps {
   bookings: Booking[];
   settings: ResortSettings;
   onSelectDate: (dateStr: string) => void;
-  onSelectBooking: (booking: Booking) => void;
+  onSelectBooking: (booking: Booking, targetDateStr?: string) => void;
   onNewBookingForDate: (dateStr: string) => void;
   currentYear: number;
   currentMonth: number;
@@ -871,7 +871,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         return (
                           <div
                             key={b.id}
-                            onClick={() => onSelectBooking(b)}
+                            onClick={() => onSelectBooking(b, day.dateStr)}
                             className={`px-2 py-1.5 rounded-xl border transition-all cursor-pointer text-xs font-black flex items-center justify-between shadow-2xs hover:shadow-xs gap-1 ${
                               isMatch
                                 ? 'bg-amber-100 border-amber-400 text-amber-950 ring-2 ring-amber-400 shadow-md scale-[1.03]'
@@ -1006,7 +1006,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   </div>
 
                   {/* Bookings inside the day cell */}
-                  <div className="space-y-1 mt-1 flex-1 overflow-y-auto max-h-[58px] no-scrollbar pointer-events-none">
+                  <div className="space-y-1 mt-1 flex-1 overflow-y-auto max-h-[58px] no-scrollbar">
                     {dateBookings.slice(0, 2).map((b) => {
                       const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                       const isPaid = b.paymentStatus === 'fully_paid';
@@ -1025,7 +1025,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       return (
                         <div
                           key={b.id}
-                          className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between border ${chipStyle}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectBooking(b, dayObj.dateStr);
+                          }}
+                          className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between border cursor-pointer hover:scale-[1.02] transition-transform ${chipStyle}`}
                           title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' - משתחרר ביום זה!' : isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
                         >
                           <span className="truncate flex items-center gap-1 min-w-0">

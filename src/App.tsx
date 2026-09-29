@@ -95,6 +95,7 @@ export default function App() {
 
   // Modals state
   const [selectedDateForDetails, setSelectedDateForDetails] = useState<string | null>(null);
+  const [selectedBookingIdForDetails, setSelectedBookingIdForDetails] = useState<string | null>(null);
   const [greetingModalDate, setGreetingModalDate] = useState<string | null>(null);
   const [isGreetingBannerDismissed, setIsGreetingBannerDismissed] = useState(false);
   const [isGreetingFloatingSnoozed, setIsGreetingFloatingSnoozed] = useState(false);
@@ -1981,8 +1982,14 @@ export default function App() {
               onSetMonth={(m) => setCurrentMonth(m)}
               onSetYear={(y) => setCurrentYear(y)}
               onJumpToToday={handleJumpToToday}
-              onSelectDate={(dStr) => setSelectedDateForDetails(dStr)}
-              onSelectBooking={(b) => setSelectedDateForDetails(b.startDate)}
+              onSelectDate={(dStr) => {
+                setSelectedBookingIdForDetails(null);
+                setSelectedDateForDetails(dStr);
+              }}
+              onSelectBooking={(b, targetDateStr) => {
+                setSelectedBookingIdForDetails(b.id);
+                setSelectedDateForDetails(targetDateStr || b.startDate);
+              }}
               onNewBookingForDate={(dStr) => {
                 setBookingWizardOpen({
                   isOpen: true,
@@ -1997,7 +2004,10 @@ export default function App() {
             <OccupancyForecast
               bookings={bookings}
               settings={settings}
-              onSelectDate={(dStr) => setSelectedDateForDetails(dStr)}
+              onSelectDate={(dStr) => {
+                setSelectedBookingIdForDetails(null);
+                setSelectedDateForDetails(dStr);
+              }}
               onNewBookingForDate={(dStr) => {
                 setBookingWizardOpen({
                   isOpen: true,
@@ -2011,7 +2021,10 @@ export default function App() {
             <BookingsList
               bookings={bookings}
               settings={settings}
-              onSelectBooking={(b) => setSelectedDateForDetails(b.startDate)}
+              onSelectBooking={(b) => {
+                setSelectedBookingIdForDetails(b.id);
+                setSelectedDateForDetails(b.startDate);
+              }}
               onOpenPaymentModal={(b) => setPaymentModalBooking(b)}
               onOpenSendPaymentLink={(b) => setPaymentLinkBooking(b)}
               onMarkAsPaid={handleMarkAsPaid}
@@ -2095,16 +2108,22 @@ export default function App() {
       {selectedDateForDetails && (
         <DayDetailsModal
           dateStr={selectedDateForDetails}
+          highlightedBookingId={selectedBookingIdForDetails}
           bookings={bookings}
           settings={settings}
-          onClose={() => setSelectedDateForDetails(null)}
+          onClose={() => {
+            setSelectedDateForDetails(null);
+            setSelectedBookingIdForDetails(null);
+          }}
           onOpenVoucher={(data) => setVoucherModalData({ isOpen: true, ...data })}
           onSelectBooking={(booking) => {
             setSelectedDateForDetails(null);
+            setSelectedBookingIdForDetails(null);
             setBookingFormModal({ isOpen: true, initialData: booking });
           }}
           onNewBookingForDate={(date) => {
             setSelectedDateForDetails(null);
+            setSelectedBookingIdForDetails(null);
             setBookingWizardOpen({
               isOpen: true,
               initialData: { startDate: date, endDate: addDays(date, 3) },
@@ -2114,10 +2133,12 @@ export default function App() {
           onDeleteBooking={handleDeleteBooking}
           onOpenPaymentModal={(b) => {
             setSelectedDateForDetails(null);
+            setSelectedBookingIdForDetails(null);
             setPaymentModalBooking(b);
           }}
           onOpenSendPaymentLink={(b) => {
             setSelectedDateForDetails(null);
+            setSelectedBookingIdForDetails(null);
             setPaymentLinkBooking(b);
           }}
           onToggleStayStatus={handleToggleStayStatus}

@@ -32,6 +32,7 @@ import { getStayStatusColors } from './CalendarView';
 
 interface DayDetailsModalProps {
   dateStr: string | null;
+  highlightedBookingId?: string | null;
   bookings: Booking[];
   settings: ResortSettings;
   onClose: () => void;
@@ -49,6 +50,7 @@ interface DayDetailsModalProps {
 
 export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   dateStr,
+  highlightedBookingId,
   bookings,
   settings,
   onClose,
@@ -75,6 +77,134 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
     if (!clean) return 0;
     return bookings.filter(bk => cleanPhoneNumber(bk.ownerPhone) === clean).length;
   };
+
+  const sortWithHighlighted = (list: Booking[]) => {
+    if (!highlightedBookingId) return list;
+    return [...list].sort((a, b) => {
+      if (a.id === highlightedBookingId) return -1;
+      if (b.id === highlightedBookingId) return 1;
+      return 0;
+    });
+  };
+
+  const arrivalsList = sortWithHighlighted(breakdown.arrivals);
+  const stayingList = sortWithHighlighted(breakdown.staying);
+  const departuresList = sortWithHighlighted(breakdown.departures);
+
+  // If a specific dog was clicked, prioritize its section first
+  const isStayingTarget = stayingList.some(b => b.id === highlightedBookingId);
+  const isDepartureTarget = departuresList.some(b => b.id === highlightedBookingId);
+
+  const renderArrivalsSection = () => (
+    <div key="arrivals">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-sm font-extrabold text-green-700 flex items-center gap-1.5">
+          <ArrowDownLeft className="w-4 h-4" />
+          <span>מגיעים היום ({arrivalsList.length})</span>
+        </h4>
+      </div>
+
+      {arrivalsList.length === 0 ? (
+        <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
+          אין כניסות מתוכננות ליום זה
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          {arrivalsList.map(b => (
+            <DogBookingCard
+              key={b.id}
+              booking={b}
+              settings={settings}
+              isHighlighted={b.id === highlightedBookingId}
+              onSelect={() => onSelectBooking(b)}
+              onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
+              onMarkPaid={() => onMarkAsPaid(b.id)}
+              onOpenPayment={() => onOpenPaymentModal(b)}
+              onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
+              onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
+              onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
+              onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
+              actionType="arrival"
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderStayingSection = () => (
+    <div key="staying">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-sm font-extrabold text-indigo-700 flex items-center gap-1.5">
+          <Home className="w-4 h-4" />
+          <span>שוהים בריזורט ({stayingList.length})</span>
+        </h4>
+      </div>
+
+      {stayingList.length === 0 ? (
+        <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
+          אין כלבים נוספים השוהים ביום זה
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          {stayingList.map(b => (
+            <DogBookingCard
+              key={b.id}
+              booking={b}
+              settings={settings}
+              isHighlighted={b.id === highlightedBookingId}
+              onSelect={() => onSelectBooking(b)}
+              onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
+              onMarkPaid={() => onMarkAsPaid(b.id)}
+              onOpenPayment={() => onOpenPaymentModal(b)}
+              onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
+              onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
+              onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
+              onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
+              actionType="staying"
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderDeparturesSection = () => (
+    <div key="departures">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-sm font-extrabold text-amber-700 flex items-center gap-1.5">
+          <ArrowUpRight className="w-4 h-4" />
+          <span>חוזרים הביתה היום ({departuresList.length})</span>
+        </h4>
+      </div>
+
+      {departuresList.length === 0 ? (
+        <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
+          אין יציאות מתוכננות ליום זה
+        </p>
+      ) : (
+        <div className="space-y-2.5">
+          {departuresList.map(b => (
+            <DogBookingCard
+              key={b.id}
+              booking={b}
+              settings={settings}
+              isHighlighted={b.id === highlightedBookingId}
+              onSelect={() => onSelectBooking(b)}
+              onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
+              onMarkPaid={() => onMarkAsPaid(b.id)}
+              onOpenPayment={() => onOpenPaymentModal(b)}
+              onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
+              onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
+              onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
+              onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
+              actionType="departure"
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in overflow-y-auto">
@@ -169,126 +299,26 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
           </div>
         )}
 
-        {/* 3 Sections: Arrivals, Stayers, Departures */}
+        {/* Sections in dynamic priority order */}
         <div className="space-y-5">
-          
-          {/* 1. מגיעים היום (Arrivals) */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-extrabold text-green-700 flex items-center gap-1.5">
-                <ArrowDownLeft className="w-4 h-4" />
-                <span>מגיעים היום ({breakdown.arrivals.length})</span>
-              </h4>
-            </div>
-
-            {breakdown.arrivals.length === 0 ? (
-              <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
-                אין כניסות מתוכננות ליום זה
-              </p>
-            ) : (
-              <div className="space-y-2.5">
-                {breakdown.arrivals.map(b => (
-                  <DogBookingCard
-                    key={b.id}
-                    booking={b}
-                    settings={settings}
-                    onSelect={() => onSelectBooking(b)}
-                    onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
-                    onMarkPaid={() => onMarkAsPaid(b.id)}
-                    onOpenPayment={() => onOpenPaymentModal(b)}
-                    onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
-                    onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
-                    onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
-                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
-                    actionType="arrival"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 2. שוהים בריזורט (Stayers) */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-extrabold text-indigo-700 flex items-center gap-1.5">
-                <Home className="w-4 h-4" />
-                <span>שוהים בריזורט ({breakdown.staying.length})</span>
-              </h4>
-            </div>
-
-            {breakdown.staying.length === 0 ? (
-              <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
-                אין כלבים נוספים השוהים ביום זה
-              </p>
-            ) : (
-              <div className="space-y-2.5">
-                {breakdown.staying.map(b => (
-                  <DogBookingCard
-                    key={b.id}
-                    booking={b}
-                    settings={settings}
-                    onSelect={() => onSelectBooking(b)}
-                    onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
-                    onMarkPaid={() => onMarkAsPaid(b.id)}
-                    onOpenPayment={() => onOpenPaymentModal(b)}
-                    onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
-                    onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
-                    onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
-                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
-                    actionType="staying"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 3. יוצאים הביתה (Departures) */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-extrabold text-amber-700 flex items-center gap-1.5">
-                <ArrowUpRight className="w-4 h-4" />
-                <span>חוזרים הביתה היום ({breakdown.departures.length})</span>
-              </h4>
-            </div>
-
-            {breakdown.departures.length === 0 ? (
-              <p className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded-xl border border-slate-100">
-                אין יציאות מתוכננות ליום זה
-              </p>
-            ) : (
-              <div className="space-y-2.5">
-                {breakdown.departures.map(b => (
-                  <DogBookingCard
-                    key={b.id}
-                    booking={b}
-                    settings={settings}
-                    onSelect={() => onSelectBooking(b)}
-                    onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
-                    onMarkPaid={() => onMarkAsPaid(b.id)}
-                    onOpenPayment={() => onOpenPaymentModal(b)}
-                    onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
-                    onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
-                    onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
-                    onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
-                    actionType="departure"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          </div>
+          {isStayingTarget
+            ? [renderStayingSection(), renderArrivalsSection(), renderDeparturesSection()]
+            : isDepartureTarget
+            ? [renderDeparturesSection(), renderArrivalsSection(), renderStayingSection()]
+            : [renderArrivalsSection(), renderStayingSection(), renderDeparturesSection()]}
         </div>
 
-        {/* Shabbat / Holiday Greeting Modal */}
-        {isGreetingModalOpen && (
-          <ShabbatHolidayGreetingModal
-            dateStr={dateStr}
-            bookings={bookings}
-            settings={settings}
-            onClose={() => setIsGreetingModalOpen(false)}
-          />
-        )}
+      </div>
+
+      {/* Shabbat / Holiday Greeting Modal */}
+      {isGreetingModalOpen && (
+        <ShabbatHolidayGreetingModal
+          dateStr={dateStr}
+          bookings={bookings}
+          settings={settings}
+          onClose={() => setIsGreetingModalOpen(false)}
+        />
+      )}
 
       </div>
     </div>
@@ -298,6 +328,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
 interface DogBookingCardProps {
   booking: Booking;
   settings: ResortSettings;
+  isHighlighted?: boolean;
   onSelect: () => void;
   onDelete?: () => void;
   onMarkPaid: () => void;
@@ -312,6 +343,7 @@ interface DogBookingCardProps {
 const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   booking,
   settings,
+  isHighlighted,
   onSelect,
   onDelete,
   onMarkPaid,
@@ -378,7 +410,11 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   return (
     <div
       onClick={onSelect}
-      className={`p-3.5 sm:p-4 rounded-2xl border transition-all hover:shadow-xs cursor-pointer ${paymentBorder}`}
+      className={`p-3.5 sm:p-4 rounded-2xl border-2 transition-all hover:shadow-xs cursor-pointer ${
+        isHighlighted
+          ? 'ring-3 ring-emerald-500 border-emerald-500 bg-emerald-50/50 shadow-md scale-[1.01]'
+          : paymentBorder
+      }`}
     >
       {/* Top Row: Dog Details & Payment Tag */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5 pb-2.5 border-b border-slate-200/60">
@@ -387,6 +423,12 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             <span className="text-base shrink-0">🐾</span>
             <span className={`font-black text-base sm:text-lg ${stayColors.dogClass}`}>{booking.dogName}</span>
             <span className={`text-xs sm:text-sm font-bold ${stayColors.ownerClass}`}>({booking.ownerName})</span>
+            {isHighlighted && (
+              <span className="bg-emerald-700 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1 shrink-0">
+                <span>⭐</span>
+                <span>נבחר ביומן</span>
+              </span>
+            )}
             {booking.dogBreed && (
               <span className="text-xs text-slate-500 font-normal">({booking.dogBreed})</span>
             )}
