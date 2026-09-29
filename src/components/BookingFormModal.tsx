@@ -57,7 +57,18 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   const [endDate, setEndDate] = useState(initialData?.endDate || addDays(todayStr, 3));
   
   // Pricing mode: Per Day vs Fixed Period
-  const [pricingMode, setPricingMode] = useState<'daily' | 'period'>('daily');
+  const [pricingMode, setPricingMode] = useState<'daily' | 'period'>(() => {
+    if (initialData?.pricingMode === 'period' || (initialData?.pricingMode as string) === 'fixed') return 'period';
+    if (initialData?.serviceType === 'training') return 'period';
+    if (initialData?.totalPrice && initialData?.startDate && initialData?.endDate) {
+      const initialDays = Math.max(1, calculateDaysCount(initialData.startDate, initialData.endDate));
+      const expected = initialDays * (initialData.dailyRate || 150);
+      if (Math.abs(initialData.totalPrice - expected) > 1 && initialData.totalPrice > 0) {
+        return 'period';
+      }
+    }
+    return 'daily';
+  });
   const [dailyRate, setDailyRate] = useState<number>(() => {
     if (initialData?.dailyRate && initialData.dailyRate > 0) return initialData.dailyRate;
     if (initialData?.serviceType === 'day_training') return settings.defaultDailyRateDayTraining || 250;
@@ -398,6 +409,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       ownerPhone: ownerPhone.trim(),
       ownerEmail: ownerEmail.trim(),
       serviceType,
+      pricingMode,
       startDate,
       endDate,
       totalPrice: isFreeStay ? 0 : (Number(totalPrice) || 0),
