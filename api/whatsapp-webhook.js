@@ -710,12 +710,9 @@ export default async function handler(req, res) {
                     cleanPhone.includes('524467314');
 
   if (isManager) {
-    console.log('--- Incoming message from Manager/Team ---', { senderPhone: cleanPhone, incomingText, incomingFileUrl });
-    const replyText = await handleManagerAICommand(chatId, incomingText, incomingFileUrl);
-    if (replyText) {
-      await sendWhatsAppMessage(chatId, replyText);
-    }
-    return res.status(200).json({ ok: true, handled: 'manager_command_executed' });
+    console.log('--- Incoming message from Manager/Team (Silent - No Auto Reply) ---', { senderPhone: cleanPhone, incomingText });
+    // Rule: Never send automated replies back to Manager (054-3200007) or team members so conversations remain 100% natural and human.
+    return res.status(200).json({ ok: true, handled: 'manager_silent_no_auto_reply' });
   }
 
   // 5. Anti-spam / Cooldown check for regular clients (don't reply more than once every 6 hours)
