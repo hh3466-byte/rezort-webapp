@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { IntakeRequest, IntakeRequestStatus, ResortSettings, Booking } from '../types';
 import { cleanPhoneNumber, getServiceTypeHebrew, getFirstName } from '../utils/whatsappUtils';
 import { formatClientPaymentLinkMessage, formatClientRejectionMessage, sendGreenApiDirectMessage } from '../services/notificationService';
+import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
 import { getNextAllowedCommunicationDate, isShabbatOrHolidayRestricted } from '../utils/jewishCalendar';
 import { SendIntakeModal } from './SendIntakeModal';
 import { 
@@ -414,8 +415,27 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     }
     const effectiveAmount = customPrices[request.id] ?? (request.depositRequested && request.depositRequested > 0 ? request.depositRequested : calculatedDefault);
     setPaymentAmount(String(effectiveAmount));
-    setCustomPaymentLink(settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg');
+    const fallbackLink = settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
+    setCustomPaymentLink(fallbackLink);
     setPaymentSendError(null);
+
+    // Asynchronously fetch dynamic locked Grow link
+    if (effectiveAmount > 0) {
+      createGrowDynamicPaymentLink({
+        amount: effectiveAmount,
+        bookingId: request.id,
+        dogName: request.dogName,
+        ownerName: request.ownerName,
+        ownerPhone: request.ownerPhone,
+        description: `שריון אירוח בריזורט לכלב - ${request.dogName}`
+      }).then(res => {
+        if (res && res.paymentUrl) {
+          setCustomPaymentLink(res.paymentUrl);
+        }
+      }).catch(err => {
+        console.warn('Error generating dynamic Grow link for intake:', err);
+      });
+    }
   };
 
   const handleQuickSendPayment = async (req: IntakeRequest) => {
@@ -442,6 +462,26 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
       const numAmount = customPrices[req.id] ?? (req.depositRequested && req.depositRequested > 0 ? req.depositRequested : calculatedDefault);
       
       let linkToUse = (settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg').trim();
+      
+      // Auto-generate dynamic locked Grow link for quick send
+      if (numAmount > 0) {
+        try {
+          const dynRes = await createGrowDynamicPaymentLink({
+            amount: numAmount,
+            bookingId: req.id,
+            dogName: req.dogName,
+            ownerName: req.ownerName,
+            ownerPhone: req.ownerPhone,
+            description: `שריון אירוח בריזורט לכלב - ${req.dogName}`
+          });
+          if (dynRes && dynRes.paymentUrl) {
+            linkToUse = dynRes.paymentUrl;
+          }
+        } catch (dynErr) {
+          console.warn('Could not generate dynamic link for quick send:', dynErr);
+        }
+      }
+
       if (linkToUse.startsWith('//')) linkToUse = 'https:' + linkToUse;
       else if (!linkToUse.startsWith('http://') && !linkToUse.startsWith('https://')) linkToUse = 'https://' + linkToUse;
 

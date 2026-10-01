@@ -107,15 +107,15 @@ export function formatClientPaymentLinkMessage(
 צוות הריזורט לכלב`;
   }
 
-  const amountSection = `\n💰 *הסכום שסוכם הוא:* ₪${agreedAmount}\n`;
-  const amountInstruction = ` (יש להזין ₪${agreedAmount} בעמוד התשלום)`;
+  const isLocked = paymentLink.includes('sandbox.grow.link') || (paymentLink.includes('pay.grow.link') && !paymentLink.includes('MjcyNjk'));
+  const amountInstruction = isLocked ? ` (הסכום ₪${agreedAmount} מעודכן ונעול לתשלום)` : (agreedAmount > 0 ? ` (יש להזין ₪${agreedAmount} בעמוד התשלום)` : '');
 
   return `היי ${firstName}, שמחנו לשוחח! 🐾🐶
 שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר ${stayText}.${amountSection}
 להשלמת השריון, יש ללחוץ על הקישור המאובטח${amountInstruction}:
 👉 \u200E${paymentLink}
 
-💡 *לתשלום ב-Bit, Apple Pay או אשראי:* פשוט לוחצים על הקישור למעלה ובוחרים באמצעי התשלום הרצוי (אין צורך להעביר ידנית לטלפון או לחשבון בנק – התשלום נקלט אוטומטית עם קבלה מיידית למייל ולטלפון!).
+💡 *לתשלום ב-Bit, Apple Pay, Google Pay, PayBox, אשראי או העברה בנקאית:* פשוט לוחצים על הקישור למעלה ובוחרים באמצעי התשלום הרצוי (התשלום נקלט ומעדכן את המערכת אוטומטית עם קבלה וחשבונית מס מיידית למייל ולטלפון!).
 
 ⏰ *שעות פעילות הריזורט לכלב בימים א-ה הן 09:30 - 18:30*
 • בשישי וערב חג: עד שעה 14:00, ובצאת השבת / החג (למחרת השבת / חג) משעה 09:30

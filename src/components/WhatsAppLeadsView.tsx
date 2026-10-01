@@ -1419,7 +1419,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   type="button"
                   onClick={() => {
                     const payUrl = settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
-                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾 בהמשך לתיאום מול הריזורט לכלב, מצורף קישור לתשלום מאובטח (Bit, Apple Pay ואשראי):\n👉 ${payUrl}\n\nלאחר ביצוע התשלום המקום משוריין רשמית ביומן! נשמח לראותכם 🐶✨`;
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾 בהמשך לתיאום מול הריזורט לכלב, מצורף קישור לתשלום מאובטח (Bit, Apple Pay, Google Pay, PayBox, אשראי או העברה בנקאית):\n👉 ${payUrl}\n\nלאחר ביצוע התשלום המקום משוריין רשמית ביומן ומופקת חשבונית מס קבלה אוטומטית! נשמח לראותכם 🐶✨`;
                     setMessageInput(text);
                   }}
                   className="bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
