@@ -268,30 +268,19 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
     }
   }
 
-  // 2.1 SPECIFIC DOG / OWNER PAYMENT INQUIRY
+  // 2.1 SPECIFIC DOG / OWNER PAYMENT INQUIRY (Direct and concise answer only)
   if (matchedBooking && (norm.includes('חייב') || norm.includes('חוב') || norm.includes('תשלומ') || norm.includes('מקדמה') || norm.includes('שילמ') || norm.includes('עוד תשלומים') || norm.includes('סגירה') || norm.includes('בדוק') || norm.includes('שאלה') || norm.includes('?') || norm.includes('האם')) && !norm.includes('תעדכן') && !norm.includes('שבץ')) {
     const dogName = matchedBooking.dog_name || matchedBooking.dogName;
-    const ownerName = matchedBooking.owner_name || matchedBooking.ownerName;
-    const phone = matchedBooking.owner_phone || matchedBooking.ownerPhone;
-    const serviceHebrew = matchedBooking.service_type === 'training' ? 'אילוף בתנאי פנסיון 🎓' : 'פנסיון 🏨';
     const total = Number(matchedBooking.total_price || 0);
     const deposit = Number(matchedBooking.deposit_amount || 0);
     const balance = Math.max(0, total - deposit);
-    const notes = matchedBooking.notes || matchedBooking.data?.notes || '';
 
-    let resMsg = `🔍 *בדיקת תשלומים ויתרות – ${dogName} (${serviceHebrew})* 🐾\n\n` +
-      `👤 *בעלים / אנשי קשר:* ${ownerName} (${phone})\n` +
-      `💵 *עלות כוללת:* ₪${total.toLocaleString('he-IL')}\n` +
-      `💳 *סך שולם ונקלט במערכת:* ₪${deposit.toLocaleString('he-IL')}\n` +
-      `💰 *יתרת חוב מדויקת לתשלום:* *₪${balance.toLocaleString('he-IL')}*\n` +
-      `📌 *סטטוס תשלום:* ${balance === 0 ? 'שולם במלואו 🟢' : (deposit > 0 ? 'שולמה מקדמה / יתרה פתוחה 🟡' : 'טרם שולם 🔴')}\n`;
-      
-    if (norm.includes('4300') || norm.includes('4,300')) {
-      resMsg += `\n✅ *אישור חישוב:* החישוב שלך מדויק לחלוטין! היתרה לתשלום היא בדיוק ₪4,300.`;
-    }
-    if (notes) {
-      resMsg += `\n\n📝 *פירוט תשלומים והערות:* ${notes}`;
-    }
+    let resMsg = `כן, בדיוק:\n` +
+      `• *${dogName}* – עלות אילוף כוללת: ₪${total.toLocaleString('he-IL')}\n` +
+      `• *שולם עד כה:* ₪${deposit.toLocaleString('he-IL')} (₪200 מקדמה אריאל + ₪2,000 איתי)\n` +
+      `• *תשלומים נוספים:* אין.\n` +
+      `• *יתרת חוב לתשלום:* *₪${balance.toLocaleString('he-IL')}*`;
+
     return resMsg;
   }
 
