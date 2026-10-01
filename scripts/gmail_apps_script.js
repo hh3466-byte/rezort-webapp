@@ -433,62 +433,8 @@ function processResortEmails() {
           Logger.log("✓ תשלום נרשם ב-Supabase (" + paymentStatusInDb + "): " + customerName + " | ₪" + amount);
         } catch (ePayIns) {}
 
-        // שליחת מייל דיווח נקי ומסודר לשמוליק ולמנהל
-        try {
-          var emailSubject = "[תשלום חדש בריזורט לכלב] " + customerName + " - " + amount + " ש״ח";
-          var emailHtml = "<div dir='rtl' style='font-family: Arial, sans-serif; padding: 18px; border: 1px solid #10b981; border-radius: 14px; background: #f0fdf4; color: #0f172a;'>"
-            + "<h2 style='color: #065f46; margin-top: 0;'>&#10004; תשלום חדש נקלט בהצלחה בריזורט לכלב!</h2>"
-            + "<p style='font-size: 15px;'><strong>שם המשלם:</strong> " + customerName + "</p>"
-            + "<p style='font-size: 16px; color: #047857;'><strong>סכום ששולם:</strong> ₪" + amount.toLocaleString('he-IL') + "</p>"
-            + "<p style='font-size: 14px;'><strong>אמצעי תשלום:</strong> " + paymentMethod + "</p>"
-            + "<p style='font-size: 14px;'><strong>אסמכתא:</strong> " + referenceId + "</p>"
-            + "<p style='font-size: 14px;'><strong>טלפון:</strong> " + customerPhone + "</p>"
-            + "<p style='font-size: 14px; background: #dcfce7; padding: 10px; border-radius: 8px;'>התשלום נרשם במערכת הניהול של הריזורט לכלב (" + (isLinkedToBooking ? "שויך אוטומטית להזמנה ביומן" : "ממתין לשיוך ביומן") + ").</p>"
-            + "</div>";
-
-          try {
-            GmailApp.sendEmail(targetRecipients, emailSubject, "", { 
-              htmlBody: emailHtml,
-              name: "הריזורט לכלב - עדכוני תשלומים"
-            });
-          } catch (eGApp) {
-            MailApp.sendEmail({
-              to: targetRecipients,
-              subject: emailSubject,
-              htmlBody: emailHtml,
-              name: "הריזורט לכלב - עדכוני תשלומים"
-            });
-          }
-          Logger.log("✓ נשלח מייל דיווח לעסקה אל: " + targetRecipients);
-        } catch (eMail) {
-          Logger.log("שגיאה בשליחת מייל דיווח: " + eMail.toString());
-        }
-
-        // שליחת התראת וואטסאפ מיידית לשמוליק ולמנהל דרך Green-API
-        try {
-          var waMsg = "🟢 *התקבל תשלום חדש ב-Grow לריזורט לכלב!*\n\n"
-            + "👤 *שם המשלם:* " + customerName + "\n"
-            + "💰 *סכום:* ₪" + Number(amount).toLocaleString('he-IL') + "\n"
-            + "💳 *אמצעי תשלום:* " + paymentMethod + "\n"
-            + "🔢 *אסמכתא:* " + referenceId + "\n"
-            + "📞 *טלפון:* " + customerPhone + "\n"
-            + "📅 *סטטוס במערכת:* " + (isLinkedToBooking ? "שויך אוטומטית להזמנה ביומן ✓" : "ממתין לשיוך ביומן ⏳");
-
-          var waRecipients = ["972506336896@c.us", "972543200007@c.us"];
-          for (var wi = 0; wi < waRecipients.length; wi++) {
-            try {
-              UrlFetchApp.fetch("https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN, {
-                method: "post",
-                contentType: "application/json",
-                payload: JSON.stringify({ chatId: waRecipients[wi], message: waMsg }),
-                muteHttpExceptions: true
-              });
-            } catch (eWaInner) {}
-          }
-          Logger.log("✓ נשלחה התראת וואטסאפ מיידית לשמוליק ולמנהל.");
-        } catch (eWa) {
-          Logger.log("שגיאה בשליחת וואטסאפ: " + eWa.toString());
-        }
+        // הודעת וואטסאפ ועדכון נשלחים ישירות ובזמן אמת משרת ה-Webhook של Grow (למניעת כפילויות), ולכן סריקת המיילים רק מסנכרנת בסופאבייס ומעבירה לאשפה את המייל הנכנס ללא שליחת מייל דיווח או וואטסאפ כפול.
+        Logger.log("✓ תשלום סונכרן מול Supabase. מייל המקור יועבר לאשפה (התראת וואטסאפ נשלחת ישירות מה-Webhook).");
 
         growCount++;
         threadHandled = true;

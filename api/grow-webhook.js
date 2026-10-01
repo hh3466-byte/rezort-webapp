@@ -18,6 +18,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const GREEN_API_ID = "710722735421";
 const GREEN_API_TOKEN = "ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b";
 const MANAGER_PHONE = "0543200007";
+const SHMULIK_PHONE = "0506336896";
 const ETTI_PHONE = "0524467314";
 const GROW_API_KEY = process.env.GROW_API_KEY || "hfBND9mlC28BGvUkwQBls9hypPUIoJIj4Sy6LyUH";
 
@@ -55,20 +56,42 @@ export default async function handler(req, res) {
   }
 
   try {
-    const payload = req.body || {};
+    let payload = req.body || {};
+    if (typeof payload === 'string') {
+      try {
+        payload = JSON.parse(payload);
+      } catch (e) {
+        try {
+          const params = new URLSearchParams(payload);
+          payload = Object.fromEntries(params.entries());
+        } catch (e2) {}
+      }
+    }
     console.log('Received Grow Webhook payload:', JSON.stringify(payload));
 
     // Handle Grow/Meshulam payload structures
-    const data = payload.data || payload;
-    const amount = Number(data.sum || data.amount || data.total || data.payment_sum || 0);
-    const fullName = (data.fullName || data.customer_name || data.payer_name || data.name || '').trim();
-    const rawPhone = data.phone || data.payerPhone || data.customer_phone || data.payer_phone || data.mobile || '';
+    let data = payload.data || payload;
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch (e) {
+        try {
+          const params = new URLSearchParams(data);
+          data = Object.fromEntries(params.entries());
+        } catch (e2) {}
+      }
+    }
+
+    const rawSum = data.sum ?? data.amount ?? data.total ?? data.payment_sum ?? data.price ?? data.transactionAmount ?? payload.sum ?? payload.amount ?? payload.total ?? payload.payment_sum ?? payload.price ?? 0;
+    const amount = Number(rawSum) || 0;
+    const fullName = (data.fullName || data.payerName || data.payer_name || data.customer_name || data.customerName || data.name || payload.fullName || payload.payerName || payload.customer_name || '').trim();
+    const rawPhone = data.phone || data.payerPhone || data.payer_phone || data.customer_phone || data.customerPhone || data.mobile || payload.phone || payload.payerPhone || payload.customer_phone || '';
     const cleanPhone = cleanPhoneNumber(rawPhone);
-    const transactionId = String(data.transactionId || data.asmachta || data.transaction_id || data.id || Date.now());
-    const paymentType = (data.paymentType || data.payment_method || data.type || '').toLowerCase();
-    const transactionTypeId = String(data.transactionTypeId || '');
-    const customField = data.customFields || data.description || data.comments || '';
-    const cField1 = String(data.cField1 || (data.customFields && data.customFields.cField1) || '').trim();
+    const transactionId = String(data.transactionId || data.asmachta || data.transaction_id || data.id || payload.transactionId || payload.asmachta || Date.now());
+    const paymentType = (data.paymentType || data.payment_method || data.type || payload.paymentType || '').toLowerCase();
+    const transactionTypeId = String(data.transactionTypeId || payload.transactionTypeId || '');
+    const customField = data.customFields || data.description || data.comments || payload.customFields || payload.description || '';
+    const cField1 = String(data.cField1 || (data.customFields && data.customFields.cField1) || payload.cField1 || '').trim();
 
     // Determine payment method and labels
     let methodDisplay = 'כרטיס אשראי';
@@ -219,7 +242,24 @@ export default async function handler(req, res) {
       matchSummary = `נקלטה מקדמה לשאלון קליטה של *${matchingIntake.dog_name || matchingIntake.dogName}* (${matchingIntake.owner_name || matchingIntake.ownerName}).`;
     }
 
-    // Send real-time WhatsApp alert to manager ONLY for verified Resort transactions
+    // Record in grow_incoming_payments table in Supabase
+    try {
+      await supabase.from('grow_incoming_payments').upsert({
+        id: `grow_${transactionId}`,
+        reference_id: transactionId,
+        customer_name: fullName,
+        customer_phone: cleanPhone,
+        customer_email: data.email || data.payerEmail || data.customer_email || payload.email || '',
+        amount: amount,
+        payment_method: methodDisplay,
+        raw_email_snippet: `Grow Webhook: ${methodDisplay}${bankInfoStr}`,
+        status: matchedBooking ? 'completed' : 'pending'
+      }, { onConflict: 'id' });
+    } catch (eGrowIns) {
+      console.error('Error recording grow_incoming_payments:', eGrowIns);
+    }
+
+    // Send real-time WhatsApp alert to BOTH Manager (054-3200007) and Shmulik (050-6336896) ONLY for verified Resort transactions
     const alertMsg = `💳 *התקבל תשלום ריזורט ב-GROW!*
 • *לקוח:* ${fullName || 'לא צוין'} (📞 ${cleanPhone || 'ללא טלפון'})
 • *סכום:* ₪${amount.toLocaleString()} (${methodDisplay}${bankInfoStr})
@@ -227,6 +267,7 @@ export default async function handler(req, res) {
 • *סנכרון יומן:* ${matchSummary}`;
 
     await sendWhatsAppDirect(MANAGER_PHONE, alertMsg);
+    await sendWhatsAppDirect(SHMULIK_PHONE, alertMsg);
 
     // Call Grow approveTransaction to acknowledge receipt if identifiers exist
     if (data.processId && data.processToken && data.transactionId && data.transactionToken) {
