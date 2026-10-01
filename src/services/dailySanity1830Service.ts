@@ -56,6 +56,62 @@ export function countDogsInBooking(b: Booking): number {
 }
 
 /**
+ * Matches all Grow transactions (from static ledger and live incoming grow payments) for a specific booking
+ */
+export function matchGrowPaymentsForBooking(
+  booking: Booking,
+  ledgerTransactions: typeof VERIFIED_GROW_LEDGER,
+  liveGrowPayments: any[] = []
+): { totalGrowPaid: number; transactions: Array<{ ref: string; amount: number; date?: string; method?: string }> } {
+  const bPhone = cleanPhoneNumber(booking.ownerPhone || '');
+  const bName = (booking.ownerName || '').trim().toLowerCase();
+  const bDog = (booking.dogName || '').trim().toLowerCase();
+
+  const matched = new Map<string, { ref: string; amount: number; date?: string; method?: string }>();
+
+  // Match from static ledger
+  ledgerTransactions.forEach(t => {
+    const tName = (t.customerName || '').trim().toLowerCase();
+    const tDog = (t.dogName || '').trim().toLowerCase();
+    const isNameMatch = bName && (tName.includes(bName) || bName.includes(tName));
+    const isDogMatch = bDog && tDog && (tDog.includes(bDog) || bDog.includes(tDog));
+    if (isNameMatch || (isDogMatch && bName)) {
+      matched.set(t.ref, {
+        ref: t.ref,
+        amount: Number(t.amount) || 0,
+        date: t.date,
+        method: 'Grow Ledger'
+      });
+    }
+  });
+
+  // Match from live incoming Grow payments
+  liveGrowPayments.forEach(p => {
+    const pPhone = cleanPhoneNumber(p.customer_phone || p.customerPhone || '');
+    const pName = (p.customer_name || p.customerName || '').trim().toLowerCase();
+    const ref = String(p.reference_id || p.referenceId || p.id || '');
+    const amount = Number(p.amount) || 0;
+
+    const isPhoneMatch = bPhone.length >= 7 && pPhone.length >= 7 && (bPhone.slice(-7) === pPhone.slice(-7));
+    const isNameMatch = bName && (pName.includes(bName) || bName.includes(pName));
+
+    if (isPhoneMatch || isNameMatch) {
+      matched.set(ref || `grow-${Math.random()}`, {
+        ref,
+        amount,
+        date: p.created_at || p.createdAt,
+        method: p.payment_method || p.paymentMethod || 'Grow'
+      });
+    }
+  });
+
+  const transactions = Array.from(matched.values());
+  const totalGrowPaid = transactions.reduce((sum, t) => sum + t.amount, 0);
+
+  return { totalGrowPaid, transactions };
+}
+
+/**
  * Runs the comprehensive 18:30 Daily Sanity Audit:
  * 1. Checks all infrastructure functions (Green-API, Grow, Supabase).
  * 2. Checks all templates & messages sent in the last 24 hours.
@@ -69,7 +125,8 @@ export function run1830SanityAudit(
   settings: ResortSettings,
   intakeRequests: IntakeRequest[],
   chats: EnrichedWhatsAppChat[] = [],
-  todayStr: string = getTodayStr()
+  todayStr: string = getTodayStr(),
+  growPayments: any[] = []
 ): Sanity1830AuditResult {
   const nowMs = Date.now();
   const past24HoursMs = nowMs - 24 * 60 * 60 * 1000;
@@ -264,6 +321,12 @@ export function run1830SanityAudit(
     const dog = (b.dogName || '').trim();
     const owner = (b.ownerName || '').trim();
     const phone = b.ownerPhone || '';
+    const notes = b.notes || '';
+
+    // Calculate stay duration
+    const startMs = new Date(b.startDate).getTime();
+    const endMs = new Date(b.endDate).getTime();
+    const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
 
     // 1. Negative balance / Deposit > Total price
     if (deposit > price && !isFree && price > 0) {
@@ -272,9 +335,6 @@ export function run1830SanityAudit(
 
     // 2. Pricing mismatch when daily mode is active
     if (b.pricingMode === 'daily' && b.serviceType !== 'training' && !isFree && price > 0 && dailyRate > 0) {
-      const startMs = new Date(b.startDate).getTime();
-      const endMs = new Date(b.endDate).getTime();
-      const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
       const expected = days * dailyRate;
       if (Math.abs(price - expected) > 1) {
         redLights.paymentDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
@@ -293,12 +353,31 @@ export function run1830SanityAudit(
         redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) שילם מלוא הסכום (₪${deposit.toLocaleString()}) אך סטטוס מוגדר '${b.paymentStatus}' במקום 'fully_paid'`);
       } else if (deposit === 0 && b.paymentStatus === 'fully_paid') {
         redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך לא נרשמה מקדמה (₪0 מתוך ₪${price.toLocaleString()})`);
+      } else if (deposit > 0 && deposit < price && b.paymentStatus === 'fully_paid') {
+        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך קיימת יתרת חוב של ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
       }
     }
 
     // 5. Free stay inconsistency
     if (isFree && (price > 0 || deposit > 0)) {
       redLights.paymentDiscrepancies.push(`🎁 אירוח חינם עם חיוב כספי: *${dog}* (${owner}) סומן כחינם אך מופיעים סכומים (סה"כ ₪${price.toLocaleString()}, שולם ₪${deposit.toLocaleString()})`);
+    }
+
+    // 6. Abnormal low average daily rate on long stays (indicates unbilled extended days)
+    if (b.serviceType === 'boarding' && !isFree && price > 0 && days >= 10 && (price / days) < 125) {
+      redLights.paymentDiscrepancies.push(`⚠️ תמחור יומי נמוך מהתקן לשהות ממושכת: *${dog}* (${owner} - 📞 ${phone}) | שהות של ${days} ימים תומחרה ב-₪${price.toLocaleString()} (~₪${Math.round(price / days)}/יום, מתחת ל-₪150/יום) | נדרש לוודא האם הוארכו תאריכים ללא עדכון מחיר כולל או גביית תוספת!`);
+    }
+
+    // 7. Stay extension mentioned in notes with open balance
+    const isExtension = notes.includes('הוארך') || notes.includes('הארכה') || notes.includes('עודכן מוואטסאפ');
+    if (isExtension && price > deposit && !isFree) {
+      redLights.paymentDiscrepancies.push(`💰 שהות מוארכת עם יתרת חוב פתוחה: *${dog}* (${owner} - 📞 ${phone}) | שהות הוארכה עד ${formatDateIL(b.endDate)}, נותרה יתרה לגבייה: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
+    }
+
+    // 8. Active staying dog with open debt
+    const isCurrentlyStaying = b.startDate <= todayStr && b.endDate >= todayStr && b.stayStatus !== 'checked_out';
+    if (isCurrentlyStaying && price > deposit && !isFree) {
+      redLights.paymentDiscrepancies.push(`💰 כלב שוהה כעת בריזורט עם יתרת חוב: *${dog}* (${owner} - 📞 ${phone}) | שוהה עד ${formatDateIL(b.endDate)}, נותרה יתרה לתשלום: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
     }
   });
 
@@ -442,20 +521,24 @@ export function run1830SanityAudit(
     }
   }
 
-  // 7. Payment Discrepancies & Stale Debts Check
+  // 7. Payment Discrepancies & Stale Debts Check (Cross-reconciles against static ledger & live Grow payments)
   activeBookings.filter(b => b.endDate >= todayStr).forEach(b => {
-    const cleanPhone = cleanPhoneNumber(b.ownerPhone || '');
     const deposit = Number(b.depositAmount) || 0;
-    const price = Number(b.totalPrice) || 0;
-    
-    const matchingGrow = VERIFIED_GROW_LEDGER.filter(t => {
-      const tName = (t.customerName || '').trim().toLowerCase();
-      const bName = (b.ownerName || '').trim().toLowerCase();
-      return bName && (tName.includes(bName) || bName.includes(tName));
-    });
-    const totalGrowPaid = matchingGrow.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    
-    if (totalGrowPaid > 0 && totalGrowPaid !== deposit && Math.abs(totalGrowPaid - deposit) > 1) {
+    const { totalGrowPaid } = matchGrowPaymentsForBooking(b, VERIFIED_GROW_LEDGER, growPayments);
+
+    const isGrowPaymentMethod =
+      b.paymentMethod === 'bit' ||
+      b.paymentMethod === 'grow' ||
+      b.paymentMethod === 'credit_card' ||
+      b.paymentMethod === 'grow_invoice' ||
+      (b.notes && (b.notes.includes('Grow') || b.notes.includes('Bit') || b.notes.includes('אסמכתא')));
+
+    // If booking claims a Grow payment that is higher than actual cleared Grow transactions
+    if (isGrowPaymentMethod && totalGrowPaid > 0 && deposit > totalGrowPaid + 10) {
+      redLights.paymentDiscrepancies.push(`🚨 פער סליקת Grow: *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | נרשם ביומן ששולם ₪${deposit.toLocaleString()}, אך ב-Grow נסלקו בפועל ₪${totalGrowPaid.toLocaleString()} בלבד! (חסרים ₪${(deposit - totalGrowPaid).toLocaleString()})`);
+    } else if (totalGrowPaid > 0 && deposit === 0 && !b.isFreeStay) {
+      redLights.paymentDiscrepancies.push(`💡 תשלום Grow שלא הוזן ליומן: *${b.dogName}* (${b.ownerName}) | נקלטו ב-Grow ₪${totalGrowPaid.toLocaleString()} אך ביומן רשום ₪0 מקדמה.`);
+    } else if (totalGrowPaid > 0 && totalGrowPaid !== deposit && Math.abs(totalGrowPaid - deposit) > 10 && !isGrowPaymentMethod) {
       redLights.paymentDiscrepancies.push(`💳 *${b.dogName}* (${b.ownerName}): נקלטו ב-Grow ₪${totalGrowPaid.toLocaleString()} אך ביומן רשום ₪${deposit.toLocaleString()}`);
     }
   });
@@ -764,7 +847,18 @@ export async function send1830SanityReportToAdmin(
     console.warn('Could not fetch chats for 18:30 audit:', err);
   }
 
-  const auditResult = run1830SanityAudit(bookings, settings, intakeRequests, chats, today);
+  // Fetch live Grow incoming payments from Supabase
+  let growPayments: any[] = [];
+  try {
+    const { data: gRows } = await supabase.from('grow_incoming_payments').select('*');
+    if (gRows && Array.isArray(gRows)) {
+      growPayments = gRows;
+    }
+  } catch (e) {
+    console.warn('Could not fetch grow_incoming_payments for 18:30 audit:', e);
+  }
+
+  const auditResult = run1830SanityAudit(bookings, settings, intakeRequests, chats, today, growPayments);
 
   // Send message ONLY to Manager (054-3200007) - skipHolidayCheck is true for internal management audit
   const res = await sendGreenApiDirectMessage(

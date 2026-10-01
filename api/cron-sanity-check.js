@@ -157,7 +157,31 @@ async function fetchGreenApiChats(id, token, count = 80) {
   }
 }
 
-export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr) {
+function matchGrowPaymentsForBooking(b, growPayments = []) {
+  const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+  const bName = (b.owner_name || b.ownerName || '').trim().toLowerCase();
+  const matched = new Map();
+
+  (growPayments || []).forEach(p => {
+    const pPhone = cleanPhoneNumber(p.customer_phone || p.customerPhone || '');
+    const pName = (p.customer_name || p.customerName || '').trim().toLowerCase();
+    const ref = String(p.reference_id || p.referenceId || p.id || '');
+    const amount = Number(p.amount) || 0;
+
+    const isPhoneMatch = bPhone.length >= 7 && pPhone.length >= 7 && (bPhone.slice(-7) === pPhone.slice(-7));
+    const isNameMatch = bName && (pName.includes(bName) || bName.includes(pName));
+
+    if (isPhoneMatch || isNameMatch) {
+      matched.set(ref || `grow-${Math.random()}`, { ref, amount });
+    }
+  });
+
+  const transactions = Array.from(matched.values());
+  const totalGrowPaid = transactions.reduce((sum, t) => sum + t.amount, 0);
+  return { totalGrowPaid, transactions };
+}
+
+export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr, growPayments = []) {
   const nowMs = Date.now();
   const past24HoursMs = nowMs - 24 * 60 * 60 * 1000;
 
@@ -235,6 +259,16 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     const dailyRate = Number(d.dailyRate ?? b.dailyRate ?? 0);
     const pricingMode = d.pricingMode || b.pricingMode || (b.service_type === 'training' || b.serviceType === 'training' ? 'period' : 'daily');
     const paymentStatus = b.payment_status || b.paymentStatus || d.paymentStatus || 'unpaid';
+    const notes = b.notes || d.notes || '';
+    const start = b.start_date || b.startDate;
+    const end = b.end_date || b.endDate;
+
+    let days = 1;
+    if (start && end) {
+      const startMs = new Date(start).getTime();
+      const endMs = new Date(end).getTime();
+      days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+    }
 
     // 1. Negative balance / Deposit > Total Price
     if (deposit > price && !isFree && price > 0) {
@@ -243,16 +277,9 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
 
     // 2. Pricing mismatch when daily mode is active
     if (pricingMode === 'daily' && b.service_type !== 'training' && b.serviceType !== 'training' && !isFree && price > 0 && dailyRate > 0) {
-      const s = b.start_date || b.startDate;
-      const e = b.end_date || b.endDate;
-      if (s && e) {
-        const startMs = new Date(s).getTime();
-        const endMs = new Date(e).getTime();
-        const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
-        const expected = days * dailyRate;
-        if (Math.abs(price - expected) > 1) {
-          redLights.paymentDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
-        }
+      const expected = days * dailyRate;
+      if (Math.abs(price - expected) > 1) {
+        redLights.paymentDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
       }
     }
 
@@ -268,12 +295,43 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
         redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) שילם מלוא הסכום (₪${deposit.toLocaleString()}) אך סטטוס מוגדר '${paymentStatus}' במקום 'fully_paid'`);
       } else if (deposit === 0 && paymentStatus === 'fully_paid') {
         redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך לא נרשמה מקדמה (₪0 מתוך ₪${price.toLocaleString()})`);
+      } else if (deposit > 0 && deposit < price && paymentStatus === 'fully_paid') {
+        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך קיימת יתרת חוב של ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
       }
     }
 
     // 5. Free stay inconsistency
     if (isFree && (price > 0 || deposit > 0)) {
       redLights.paymentDiscrepancies.push(`🎁 אירוח חינם עם חיוב כספי: *${dog}* (${owner}) סומן כחינם אך מופיעים סכומים (סה"כ ₪${price.toLocaleString()}, שולם ₪${deposit.toLocaleString()})`);
+    }
+
+    // 6. Abnormal low average daily rate on long boarding stays (indicates unbilled extension)
+    const isBoarding = (b.service_type || b.serviceType) === 'boarding';
+    if (isBoarding && !isFree && price > 0 && days >= 10 && (price / days) < 125) {
+      redLights.paymentDiscrepancies.push(`⚠️ תמחור יומי נמוך מהתקן לשהות ממושכת: *${dog}* (${owner} - 📞 ${phone}) | שהות של ${days} ימים תומחרה ב-₪${price.toLocaleString()} (~₪${Math.round(price / days)}/יום, מתחת ל-₪150/יום) | נדרש לוודא האם הוארכו תאריכים ללא עדכון מחיר כולל או גביית תוספת!`);
+    }
+
+    // 7. Stay extension mentioned in notes with open debt
+    const isExtension = notes.includes('הוארך') || notes.includes('הארכה') || notes.includes('עודכן מוואטסאפ');
+    if (isExtension && price > deposit && !isFree) {
+      redLights.paymentDiscrepancies.push(`💰 שהות מוארכת עם יתרת חוב פתוחה: *${dog}* (${owner} - 📞 ${phone}) | שהות הוארכה עד ${formatDateIL(end)}, נותרה יתרה לגבייה: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
+    }
+
+    // 8. Active staying dog with open debt
+    const isCurrentlyStaying = start <= todayStr && end >= todayStr && (b.stay_status || b.stayStatus) !== 'checked_out';
+    if (isCurrentlyStaying && price > deposit && !isFree) {
+      redLights.paymentDiscrepancies.push(`💰 כלב שוהה כעת בריזורט עם יתרת חוב: *${dog}* (${owner} - 📞 ${phone}) | שוהה עד ${formatDateIL(end)}, נותרה יתרה לתשלום: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
+    }
+
+    // 9. Cross-reconcile against live Grow transactions
+    const { totalGrowPaid } = matchGrowPaymentsForBooking(b, growPayments);
+    const pMethod = b.payment_method || b.paymentMethod || d.paymentMethod || '';
+    const isGrowMethod = pMethod === 'bit' || pMethod === 'grow' || pMethod === 'credit_card' || pMethod === 'grow_invoice' || notes.includes('Grow') || notes.includes('Bit') || notes.includes('אסמכתא');
+
+    if (isGrowMethod && totalGrowPaid > 0 && deposit > totalGrowPaid + 10) {
+      redLights.paymentDiscrepancies.push(`🚨 פער סליקת Grow: *${dog}* (${owner} - 📞 ${phone}) | נרשם ביומן ששולם ₪${deposit.toLocaleString()}, אך ב-Grow נסלקו בפועל ₪${totalGrowPaid.toLocaleString()} בלבד! (חסרים ₪${(deposit - totalGrowPaid).toLocaleString()})`);
+    } else if (totalGrowPaid > 0 && deposit === 0 && !isFree && end >= todayStr) {
+      redLights.paymentDiscrepancies.push(`💡 תשלום Grow שלא הוזן ליומן: *${dog}* (${owner}) | נקלטו ב-Grow ₪${totalGrowPaid.toLocaleString()} אך ביומן רשום ₪0 מקדמה.`);
     }
   });
 
@@ -401,7 +459,8 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr)
     redLights.partnerDuplicates.length +
     redLights.phoneIssues.length +
     redLights.dateIssues.length +
-    redLights.customerIssues.length;
+    redLights.customerIssues.length +
+    redLights.paymentDiscrepancies.length;
 
   const parts = [
     `🛡️ *דוח בדיקת שפיות יומית ובקרת אירועים (18:30)*`,
@@ -500,6 +559,7 @@ export default async function handler(req, res) {
     const { data: bookings } = await supabase.from('bookings').select('*');
     const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
     const { data: intakes } = await supabase.from('intake_requests').select('*');
+    const { data: growPayments } = await supabase.from('grow_incoming_payments').select('*');
 
     const sRow = settingsRows?.[0] || {};
     const settings = { ...sRow, ...(sRow.data || {}) };
@@ -548,7 +608,8 @@ export default async function handler(req, res) {
       settings,
       intakes || [],
       chats,
-      todayStr
+      todayStr,
+      growPayments || []
     );
 
     // Send WhatsApp directly to Manager (0543200007)
