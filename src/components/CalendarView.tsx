@@ -938,19 +938,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 <span className={isMatch ? 'text-amber-950 font-black' : isPairHovered ? 'text-indigo-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
                                 <span className={isMatch ? 'text-amber-900 font-bold text-[10px]' : isPairHovered ? 'text-indigo-900 font-bold text-[10px]' : stayColors.ownerClass}>({b.ownerName})</span>
                               </span>
-                              {pairInfo.isPair && (
-                                <span 
-                                  className={`text-[9px] px-1 py-0.2 rounded-md font-black flex items-center gap-0.5 shrink-0 shadow-2xs ${
-                                    isPairHovered
-                                      ? 'bg-indigo-600 text-white animate-pulse'
-                                      : 'bg-indigo-100/90 text-indigo-800 border border-indigo-200'
-                                  }`}
-                                  title={`זוג כלבים - ${pairInfo.isSecondary ? `שולם דרך ${pairInfo.siblingNames}` : `יחד עם ${pairInfo.siblingNames}`}`}
-                                >
-                                  <span className="text-[10px]">🔗</span>
-                                  <span className="hidden sm:inline">זוג</span>
-                                </span>
-                              )}
                             </span>
                             {isEnded ? (
                               <span className="text-[9px] bg-slate-200 text-slate-600 font-bold px-1 py-0.2 rounded flex items-center gap-0.5 shrink-0" title="שוחרר הביתה">
@@ -1120,9 +1107,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             )}
                             <span className={`truncate ${isMatch ? 'text-white font-black' : stayColors.dogClass}`}>{b.dogName}</span>
                             <span className={`text-[9px] shrink-0 ${isMatch ? 'text-amber-100 font-medium' : stayColors.ownerClass}`}>({b.ownerName})</span>
-                            {pairInfo.isPair && (
-                              <span className="text-[9px] text-indigo-600 shrink-0 font-black" title="חלק מזוג כלבים">🔗</span>
-                            )}
                           </span>
                           <div className="flex items-center gap-0.5 shrink-0">
                             {isMatch && <span className="text-[9px]">⭐</span>}
@@ -1312,12 +1296,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                   <span className={isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
                                   <span className={isMatch ? 'text-amber-900 font-bold text-[11px]' : stayColors.ownerClass}>({b.ownerName})</span>
                                 </span>
-                                {pairInfo.isPair && (
-                                  <span className="text-[9px] bg-indigo-100 text-indigo-800 px-1 py-0.2 rounded font-black flex items-center gap-0.5 shrink-0" title={`זוג כלבים יחד עם ${pairInfo.siblingNames}`}>
-                                    <span>🔗</span>
-                                    <span>זוג</span>
-                                  </span>
-                                )}
                               </span>
                               <span className="text-[10px] text-slate-400 font-normal">
                                 {isEnded ? '🏁 הסתיים' : getServiceTypeHebrew(b.serviceType)}
