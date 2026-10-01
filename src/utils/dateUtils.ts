@@ -131,12 +131,70 @@ export function sortBookingsWithTrainingLast<T extends Booking>(bookingsList: T[
 }
 
 /**
+ * Detect pair / multi-dog context for a booking within a given list
+ */
+export interface BookingPairInfo {
+  isPair: boolean;
+  householdKey: string;
+  siblings: Booking[];
+  siblingNames: string;
+  isPrimary: boolean;
+  isSecondary: boolean;
+  indexInGroup: number;
+  totalInGroup: number;
+}
+
+export function getBookingPairInfo(booking: Booking, allBookingsInContext: Booking[]): BookingPairInfo {
+  const cleanPhone = (booking.ownerPhone || '').replace(/\D/g, '');
+  const householdKey = cleanPhone.length >= 7 
+    ? `phone_${cleanPhone}` 
+    : `owner_${(booking.ownerName || '').trim().toLowerCase()}`;
+
+  const siblings = allBookingsInContext.filter(other => {
+    if (other.id === booking.id) return false;
+    const otherClean = (other.ownerPhone || '').replace(/\D/g, '');
+    if (cleanPhone.length >= 7 && otherClean.length >= 7) {
+      return cleanPhone === otherClean;
+    }
+    return (other.ownerName || '').trim().toLowerCase() === (booking.ownerName || '').trim().toLowerCase();
+  });
+
+  const isPair = siblings.length > 0;
+  const siblingNames = siblings.map(s => s.dogName).filter(Boolean).join(', ');
+  
+  // Sort group to determine primary vs secondary
+  const group = [booking, ...siblings].sort((a, b) => {
+    const aFree = (a.isFreeStay || (a as any).is_free_stay) ? 1 : 0;
+    const bFree = (b.isFreeStay || (b as any).is_free_stay) ? 1 : 0;
+    if (aFree !== bFree) return aFree - bFree;
+    return (a.dogName || '').localeCompare(b.dogName || '', 'he');
+  });
+
+  const indexInGroup = group.findIndex(b => b.id === booking.id);
+  const isPrimary = isPair && indexInGroup === 0;
+  const isSecondary = isPair && indexInGroup > 0;
+
+  return {
+    isPair,
+    householdKey,
+    siblings,
+    siblingNames,
+    isPrimary,
+    isSecondary,
+    indexInGroup,
+    totalInGroup: siblings.length + 1
+  };
+}
+
+/**
  * Sorts bookings array for a specific date:
  * 1. Non-training dogs first (top section), training dogs last (bottom section).
  * 2. Within each section:
  *    - Releasing on that day (endDate === dateStr) at the top of the list
  *    - Entering on that day (startDate === dateStr && endDate !== dateStr) immediately after
  *    - Continuing stay (startDate < dateStr && endDate > dateStr)
+ * 3. Pair dogs (from the same owner/phone) are ALWAYS sorted right next to each other!
+ *    - Primary / paid dog first, secondary (free/0₪) dog immediately second.
  */
 export function sortBookingsForDate<T extends Booking>(bookingsList: T[], dateStr: string): T[] {
   return [...bookingsList].sort((a, b) => {
@@ -152,10 +210,10 @@ export function sortBookingsForDate<T extends Booking>(bookingsList: T[], dateSt
     // Priority 2: Entering / arriving on dateStr (startDate === dateStr)
     // Priority 3: Continuing stay (startDate < dateStr && endDate > dateStr)
     // Priority 4: Other
-    const getPriority = (b: Booking) => {
-      if (b.endDate === dateStr) return 1;
-      if (b.startDate === dateStr) return 2;
-      if (b.startDate < dateStr && b.endDate > dateStr) return 3;
+    const getPriority = (bk: Booking) => {
+      if (bk.endDate === dateStr) return 1;
+      if (bk.startDate === dateStr) return 2;
+      if (bk.startDate < dateStr && bk.endDate > dateStr) return 3;
       return 4;
     };
 
@@ -165,7 +223,27 @@ export function sortBookingsForDate<T extends Booking>(bookingsList: T[], dateSt
       return prioA - prioB;
     }
 
-    // 3. Secondary stable alphabetical sort by dog name
+    // 3. Pair / Household grouping (same owner / phone always together)
+    const cleanPhoneA = (a.ownerPhone || '').replace(/\D/g, '');
+    const cleanPhoneB = (b.ownerPhone || '').replace(/\D/g, '');
+    const isSamePhone = cleanPhoneA.length >= 7 && cleanPhoneA === cleanPhoneB;
+    const isSameOwner = (a.ownerName || '').trim().toLowerCase() === (b.ownerName || '').trim().toLowerCase();
+
+    if (isSamePhone || isSameOwner) {
+      // Within the same pair/household:
+      // Primary / paid dog first (isFreeStay === false before isFreeStay === true)
+      const aFree = (a.isFreeStay || (a as any).is_free_stay) ? 1 : 0;
+      const bFree = (b.isFreeStay || (b as any).is_free_stay) ? 1 : 0;
+      if (aFree !== bFree) return aFree - bFree;
+      return (a.dogName || '').localeCompare(b.dogName || '', 'he');
+    }
+
+    // Secondary sort across different households by owner name, then dog name
+    const ownerComp = (a.ownerName || '').localeCompare(b.ownerName || '', 'he');
+    if (ownerComp !== 0) {
+      return ownerComp;
+    }
+
     return (a.dogName || '').localeCompare(b.dogName || '', 'he');
   });
 }

@@ -375,11 +375,17 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   // Status color styles matching design
   let paymentBorder = isEnded 
     ? 'border-slate-200 bg-slate-50/70 text-slate-600 opacity-80' 
+    : (booking.isFreeStay || (booking as any).is_free_stay)
+    ? 'border-emerald-300 bg-emerald-50/40'
     : 'border-red-300 bg-red-50/40';
 
   let paymentTag = isEnded ? (
     <span className="text-[11px] bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
       <span>🏁 הסתיים ושוחרר</span>
+    </span>
+  ) : (booking.isFreeStay || (booking as any).is_free_stay) ? (
+    <span className="text-[11px] bg-emerald-600 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-xs whitespace-nowrap">
+      <span>🎁 שולם במלואו (דרך {booking.linkedDogName || 'כרטיס ראשון'})</span>
     </span>
   ) : (
     <span className="text-[11px] bg-red-500 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-xs whitespace-nowrap">
@@ -387,7 +393,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
     </span>
   );
 
-  if (!isEnded) {
+  if (!isEnded && !booking.isFreeStay && !(booking as any).is_free_stay) {
     if (booking.paymentStatus === 'fully_paid' || (remainingDebt === 0 && roundedTotal > 0)) {
       paymentBorder = 'border-green-300 bg-green-50/40';
       paymentTag = (
@@ -405,6 +411,13 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
     }
   }
 
+  const isPairDog = Boolean(
+    booking.isFreeStay || 
+    (booking as any).is_free_stay || 
+    booking.linkedDogName || 
+    (booking.notes && (booking.notes.includes('זוג כלבים') || booking.notes.includes('2 כלבים') || booking.notes.includes('שולם דרך')))
+  );
+
   const handleSendWhatsApp = (e: React.MouseEvent) => {
     e.stopPropagation();
     const msg = generatePaymentReminderMessage(booking, settings);
@@ -417,6 +430,8 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
       className={`p-3.5 sm:p-4 rounded-2xl border-2 transition-all hover:shadow-xs cursor-pointer ${
         isHighlighted
           ? 'ring-3 ring-emerald-500 border-emerald-500 bg-emerald-50/50 shadow-md scale-[1.01]'
+          : isPairDog
+          ? `${paymentBorder} border-r-[5px] border-r-indigo-500`
           : paymentBorder
       }`}
     >
@@ -440,6 +455,12 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
               <span className="bg-emerald-700 text-white text-[11px] font-black px-2.5 py-0.5 rounded-full shadow-xs flex items-center gap-1 shrink-0">
                 <span>⭐</span>
                 <span>נבחר ביומן</span>
+              </span>
+            )}
+            {isPairDog && (
+              <span className="text-xs bg-indigo-100 text-indigo-900 border border-indigo-300 px-2.5 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs">
+                <span>🔗</span>
+                <span>{booking.isFreeStay || (booking as any).is_free_stay ? `זוג כלבים (שולם דרך ${booking.linkedDogName || 'כרטיס ראשון'})` : 'זוג כלבים'}</span>
               </span>
             )}
             {booking.dogBreed && (

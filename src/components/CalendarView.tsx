@@ -31,7 +31,8 @@ import {
   formatFullHebrewDate,
   addDays,
   getDailyBreakdown,
-  isTrainingBooking
+  isTrainingBooking,
+  getBookingPairInfo
 } from '../utils/dateUtils';
 import { getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
@@ -159,6 +160,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [displayMode, setDisplayMode] = useState<CalendarDisplayMode>('two_weeks');
   const [focusedDate, setFocusedDate] = useState<string>(todayStr);
   const [greetingModalDate, setGreetingModalDate] = useState<string | null>(null);
+  const [hoveredHousehold, setHoveredHousehold] = useState<string | null>(null);
 
   // Search state for Shmulik (חיפוש ביומן לפי שם כלב או בעלים)
   const [searchQuery, setSearchQuery] = useState('');
@@ -859,7 +861,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         <span className="text-[11px] text-emerald-600 font-medium">כל {maxCap} המקומות פנויים</span>
                       </div>
                     ) : (
-                      dayBookings.map((b) => {
+                      dayBookings.map((b, bIdx) => {
                         const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                         const remainingDebt = Math.max(0, Math.round((Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0)));
                         const isPaid = b.paymentStatus === 'fully_paid' || (remainingDebt === 0 && (Number(b.totalPrice) || 0) > 0);
@@ -869,18 +871,57 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
                         const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, day.dateStr);
 
+                        // Pair detection & connected UI styling
+                        const pairInfo = getBookingPairInfo(b, dayBookings);
+                        const isPairHovered = hoveredHousehold === pairInfo.householdKey && pairInfo.isPair;
+                        const prevSibling = bIdx > 0 && getBookingPairInfo(dayBookings[bIdx - 1], dayBookings).householdKey === pairInfo.householdKey && pairInfo.isPair;
+                        const nextSibling = bIdx < dayBookings.length - 1 && getBookingPairInfo(dayBookings[bIdx + 1], dayBookings).householdKey === pairInfo.householdKey && pairInfo.isPair;
+
+                        let cardClasses = `px-2 py-1.5 border transition-all cursor-pointer text-xs font-black flex items-center justify-between shadow-2xs hover:shadow-xs gap-1 relative `;
+                        if (prevSibling && nextSibling) {
+                          cardClasses += 'rounded-md ';
+                        } else if (prevSibling) {
+                          cardClasses += 'rounded-xl rounded-t-xs -mt-0.5 ';
+                        } else if (nextSibling) {
+                          cardClasses += 'rounded-xl rounded-b-xs ';
+                        } else {
+                          cardClasses += 'rounded-xl ';
+                        }
+
+                        if (isMatch) {
+                          cardClasses += 'bg-amber-100 border-amber-400 text-amber-950 ring-2 ring-amber-400 shadow-md scale-[1.03]';
+                        } else if (isPairHovered) {
+                          cardClasses += 'bg-indigo-100/90 border-indigo-400 text-indigo-950 ring-2 ring-indigo-500 shadow-md scale-[1.02] z-10';
+                        } else if (isDimmed) {
+                          cardClasses += 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90';
+                        } else if (pairInfo.isPair) {
+                          cardClasses += `${stayColors.cardBorderBg} border-r-[3.5px] border-r-indigo-500`;
+                        } else {
+                          cardClasses += stayColors.cardBorderBg;
+                        }
+
+                        const tooltipTitle = `${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${
+                          pairInfo.isPair ? ` - 🔗 זוג כלבים (${pairInfo.isSecondary ? `שולם דרך ${pairInfo.siblingNames}` : `יחד עם ${pairInfo.siblingNames}`})` : ''
+                        }${
+                          stayColors.isReleasing ? ' (משתחרר ביום זה!)' : isEnded ? ' (שוחרר הביתה)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת בריזורט)' : ' (שוריין)'
+                        } - תשלום: ${
+                          b.isFreeStay 
+                            ? `שולם במלואו (דרך כרטיס ${pairInfo.siblingNames || 'ראשון'})` 
+                            : isPaid 
+                            ? `שולם במלואו (₪${b.totalPrice})` 
+                            : isDeposit 
+                            ? `שולמה מקדמה ₪${b.depositAmount} (יתרה ₪${remainingDebt})` 
+                            : `לא שולם (חוב ₪${remainingDebt || b.totalPrice})`
+                        }`;
+
                         return (
                           <div
                             key={b.id}
                             onClick={() => onSelectBooking(b, day.dateStr)}
-                            className={`px-2 py-1.5 rounded-xl border transition-all cursor-pointer text-xs font-black flex items-center justify-between shadow-2xs hover:shadow-xs gap-1 ${
-                              isMatch
-                                ? 'bg-amber-100 border-amber-400 text-amber-950 ring-2 ring-amber-400 shadow-md scale-[1.03]'
-                                : isDimmed
-                                ? 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90'
-                                : stayColors.cardBorderBg
-                            }`}
-                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' (משתחרר ביום זה!)' : isEnded ? ' (שוחרר הביתה)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת בריזורט)' : ' (שוריין)'} - תשלום: ${isPaid || b.isFreeStay ? 'שולם במלואו' : isDeposit ? `שולמה מקדמה ₪${b.depositAmount} (יתרה ₪${remainingDebt})` : `לא שולם (חוב ₪${remainingDebt || b.totalPrice})`}`}
+                            onMouseEnter={() => pairInfo.isPair && setHoveredHousehold(pairInfo.householdKey)}
+                            onMouseLeave={() => pairInfo.isPair && setHoveredHousehold(null)}
+                            className={cardClasses}
+                            title={tooltipTitle}
                           >
                             <span className="flex items-center gap-1 truncate min-w-0 flex-1">
                               {isTrainingBooking(b) ? (
@@ -891,12 +932,25 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                   className="w-3.5 h-3.5 object-contain shrink-0 rounded-full"
                                 />
                               ) : (
-                                <span className={`text-[11px] shrink-0 ${isMatch ? 'text-amber-700' : stayColors.iconClass}`}>🐾</span>
+                                <span className={`text-[11px] shrink-0 ${isMatch ? 'text-amber-700' : isPairHovered ? 'text-indigo-700' : stayColors.iconClass}`}>🐾</span>
                               )}
                               <span className="truncate text-[11px] sm:text-xs">
-                                <span className={isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
-                                <span className={isMatch ? 'text-amber-900 font-bold text-[10px]' : stayColors.ownerClass}>({b.ownerName})</span>
+                                <span className={isMatch ? 'text-amber-950 font-black' : isPairHovered ? 'text-indigo-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
+                                <span className={isMatch ? 'text-amber-900 font-bold text-[10px]' : isPairHovered ? 'text-indigo-900 font-bold text-[10px]' : stayColors.ownerClass}>({b.ownerName})</span>
                               </span>
+                              {pairInfo.isPair && (
+                                <span 
+                                  className={`text-[9px] px-1 py-0.2 rounded-md font-black flex items-center gap-0.5 shrink-0 shadow-2xs ${
+                                    isPairHovered
+                                      ? 'bg-indigo-600 text-white animate-pulse'
+                                      : 'bg-indigo-100/90 text-indigo-800 border border-indigo-200'
+                                  }`}
+                                  title={`זוג כלבים - ${pairInfo.isSecondary ? `שולם דרך ${pairInfo.siblingNames}` : `יחד עם ${pairInfo.siblingNames}`}`}
+                                >
+                                  <span className="text-[10px]">🔗</span>
+                                  <span className="hidden sm:inline">זוג</span>
+                                </span>
+                              )}
                             </span>
                             {isEnded ? (
                               <span className="text-[9px] bg-slate-200 text-slate-600 font-bold px-1 py-0.2 rounded flex items-center gap-0.5 shrink-0" title="שוחרר הביתה">
@@ -923,7 +977,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                       ? 'bg-amber-400'
                                       : 'bg-red-500'
                                   }`}
-                                  title={isPaid || b.isFreeStay ? `שולם במלואו (₪${b.totalPrice || 0})` : isDeposit ? `שולמה מקדמה ₪${b.depositAmount} (נותרו ₪${remainingDebt})` : `חוב פתוח ₪${remainingDebt || b.totalPrice}`}
+                                  title={
+                                    b.isFreeStay
+                                      ? `שולם במלואו (דרך כרטיס ${pairInfo.siblingNames || 'ראשון'})`
+                                      : isPaid
+                                      ? `שולם במלואו (₪${b.totalPrice || 0})`
+                                      : isDeposit
+                                      ? `שולמה מקדמה ₪${b.depositAmount} (נותרו ₪${remainingDebt})`
+                                      : `חוב פתוח ₪${remainingDebt || b.totalPrice}`
+                                  }
                                 />
                               </div>
                             )}
@@ -1019,17 +1081,20 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   <div className="space-y-1 mt-1 flex-1 overflow-y-auto max-h-[58px] no-scrollbar">
                     {dateBookings.slice(0, 2).map((b) => {
                       const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
-                      const isPaid = b.paymentStatus === 'fully_paid';
+                      const isPaid = b.paymentStatus === 'fully_paid' || b.isFreeStay;
                       const isDeposit = b.paymentStatus === 'deposit_paid';
                       const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                       const isDimmed = Boolean(searchQuery.trim() && !isMatch);
                       const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, dayObj.dateStr);
+                      const pairInfo = getBookingPairInfo(b, dateBookings);
 
                       let chipStyle = stayColors.monthChipBg;
                       if (isMatch) {
                         chipStyle = 'bg-amber-500 text-white ring-2 ring-amber-300 font-black shadow-md';
                       } else if (isDimmed) {
                         chipStyle = 'bg-slate-200/60 text-slate-400 opacity-30';
+                      } else if (pairInfo.isPair) {
+                        chipStyle += ' border-r-2 border-r-indigo-500';
                       }
 
                       return (
@@ -1040,7 +1105,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             onSelectBooking(b, dayObj.dateStr);
                           }}
                           className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between border cursor-pointer hover:scale-[1.02] transition-transform ${chipStyle}`}
-                          title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' - משתחרר ביום זה!' : isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
+                          title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${pairInfo.isPair ? ` - 🔗 זוג` : ''}${stayColors.isReleasing ? ' - משתחרר ביום זה!' : isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
                         >
                           <span className="truncate flex items-center gap-1 min-w-0">
                             {isTrainingBooking(b) ? (
@@ -1055,6 +1120,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             )}
                             <span className={`truncate ${isMatch ? 'text-white font-black' : stayColors.dogClass}`}>{b.dogName}</span>
                             <span className={`text-[9px] shrink-0 ${isMatch ? 'text-amber-100 font-medium' : stayColors.ownerClass}`}>({b.ownerName})</span>
+                            {pairInfo.isPair && (
+                              <span className="text-[9px] text-indigo-600 shrink-0 font-black" title="חלק מזוג כלבים">🔗</span>
+                            )}
                           </span>
                           <div className="flex items-center gap-0.5 shrink-0">
                             {isMatch && <span className="text-[9px]">⭐</span>}
@@ -1069,7 +1137,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                     ? 'bg-amber-400'
                                     : 'bg-red-500'
                                 }`}
-                                title={isPaid ? 'שולם מלא' : isDeposit ? 'שולמה מקדמה' : 'חוב פתוח'}
+                                title={isPaid ? (b.isFreeStay ? 'שולם במלואו (זוג)' : 'שולם מלא') : isDeposit ? 'שולמה מקדמה' : 'חוב פתוח'}
                               />
                             )}
                           </div>
@@ -1203,10 +1271,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     ) : (
                       dayBookings.map((b) => {
                         const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
-                        const isPaid = b.paymentStatus === 'fully_paid';
+                        const isPaid = b.paymentStatus === 'fully_paid' || b.isFreeStay;
                         const isDeposit = b.paymentStatus === 'deposit_paid';
                         const isArrival = b.startDate === day.dateStr;
                         const isDeparture = b.endDate === day.dateStr;
+                        const pairInfo = getBookingPairInfo(b, dayBookings);
 
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
@@ -1221,9 +1290,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 ? 'bg-amber-50/90 border-2 border-amber-400 text-amber-950 ring-2 ring-amber-400/80 shadow-md scale-[1.02]'
                                 : isDimmed
                                 ? 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90'
+                                : pairInfo.isPair
+                                ? `${stayColors.cardBorderBg} border-r-[3.5px] border-r-indigo-500`
                                 : stayColors.cardBorderBg
                             }`}
-                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${stayColors.isReleasing ? ' (משתחרר היום)' : isEnded ? ' (שוחרר)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת)' : ' (שוריין)'}`}
+                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${pairInfo.isPair ? ` - 🔗 זוג` : ''}${stayColors.isReleasing ? ' (משתחרר היום)' : isEnded ? ' (שוחרר)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת)' : ' (שוריין)'}`}
                           >
                             <div className="flex items-center justify-between font-bold">
                               <span className="flex items-center gap-1 min-w-0">
@@ -1241,6 +1312,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                   <span className={isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
                                   <span className={isMatch ? 'text-amber-900 font-bold text-[11px]' : stayColors.ownerClass}>({b.ownerName})</span>
                                 </span>
+                                {pairInfo.isPair && (
+                                  <span className="text-[9px] bg-indigo-100 text-indigo-800 px-1 py-0.2 rounded font-black flex items-center gap-0.5 shrink-0" title={`זוג כלבים יחד עם ${pairInfo.siblingNames}`}>
+                                    <span>🔗</span>
+                                    <span>זוג</span>
+                                  </span>
+                                )}
                               </span>
                               <span className="text-[10px] text-slate-400 font-normal">
                                 {isEnded ? '🏁 הסתיים' : getServiceTypeHebrew(b.serviceType)}
@@ -1263,7 +1340,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                   ? 'bg-amber-100 text-amber-800'
                                   : 'bg-red-100 text-red-800'
                               }`}>
-                                {isEnded ? 'הסתיים ושוחרר' : isPaid ? 'שולם מלא' : isDeposit ? `מקדמה ₪${b.depositAmount}` : 'חוב פתוח'}
+                                {isEnded ? 'הסתיים ושוחרר' : isPaid ? (b.isFreeStay ? 'שולם במלואו (זוג)' : 'שולם מלא') : isDeposit ? `מקדמה ₪${b.depositAmount}` : 'חוב פתוח'}
                               </span>
                             </div>
                           </div>

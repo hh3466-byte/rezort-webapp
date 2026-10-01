@@ -51,6 +51,7 @@ async function runQA() {
     {
       id: 'reg-staying',
       dogName: 'במבי (שוהה רגיל)',
+      dogBreed: 'מעורב',
       serviceType: 'boarding',
       startDate: '2026-09-25',
       endDate: '2026-10-05',
@@ -67,6 +68,7 @@ async function runQA() {
     {
       id: 'reg-entering',
       dogName: 'לואי (נכנס רגיל)',
+      dogBreed: 'פודל',
       serviceType: 'boarding',
       startDate: '2026-10-01',
       endDate: '2026-10-08',
@@ -83,6 +85,7 @@ async function runQA() {
     {
       id: 'reg-releasing',
       dogName: 'מקס (משתחרר רגיל)',
+      dogBreed: 'לברדור',
       serviceType: 'boarding',
       startDate: '2026-09-20',
       endDate: '2026-10-01',
@@ -99,6 +102,7 @@ async function runQA() {
     {
       id: 'train-staying',
       dogName: 'רוקי (שוהה אילוף)',
+      dogBreed: 'רועה גרמני',
       serviceType: 'training',
       startDate: '2026-08-15',
       endDate: '2026-10-25',
@@ -115,6 +119,7 @@ async function runQA() {
     {
       id: 'train-entering',
       dogName: 'בל (נכנסת אילוף)',
+      dogBreed: 'מלינואה',
       serviceType: 'training',
       startDate: '2026-10-01',
       endDate: '2026-12-10',
@@ -131,6 +136,7 @@ async function runQA() {
     {
       id: 'train-releasing',
       dogName: 'טוי (משתחרר אילוף)',
+      dogBreed: 'פומרניין',
       serviceType: 'training',
       startDate: '2026-07-23',
       endDate: '2026-10-01',
