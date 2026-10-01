@@ -32,6 +32,28 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Grow Create Dynamic Payment Link API Handler
+app.all('/api/grow-create-link', async (req, res) => {
+  try {
+    const handler = (await import('./api/grow-create-link.js')).default;
+    return handler(req, res);
+  } catch (err: any) {
+    console.error('Error handling /api/grow-create-link:', err);
+    res.status(500).json({ error: err?.message || 'Internal Server Error' });
+  }
+});
+
+// Grow Webhook API Handler
+app.all('/api/grow-webhook', async (req, res) => {
+  try {
+    const handler = (await import('./api/grow-webhook.js')).default;
+    return handler(req, res);
+  } catch (err: any) {
+    console.error('Error handling /api/grow-webhook:', err);
+    res.status(500).json({ error: err?.message || 'Internal Server Error' });
+  }
+});
+
 // Gemini Agent Speech & WhatsApp Parser API with Resilient Multi-Model Fallback
 app.post('/api/agent/parse', async (req, res) => {
   const { text, referenceDate, existingBookingsSummary } = req.body;

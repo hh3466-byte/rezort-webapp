@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   CreditCard, 
@@ -8,12 +8,16 @@ import {
   Check, 
   Sparkles,
   ExternalLink,
-  DollarSign
+  DollarSign,
+  Lock,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
-import { formatDateIL, calculateDaysCount } from '../utils/dateUtils';
+import { formatDateIL } from '../utils/dateUtils';
 import { cleanPhoneNumber, getFirstName, getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from '../services/notificationService';
+import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
 
 interface SendPaymentLinkModalProps {
   isOpen: boolean;
@@ -35,18 +39,21 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
   const currentDebt = Math.max(0, (Number(booking.totalPrice) || 0) - (Number(booking.depositAmount) || 0));
   const initialAmount = currentDebt > 0 ? currentDebt : Number(booking.totalPrice) || 0;
 
+  const defaultStaticLink = (
+    settings.growPaymentLink || 
+    settings.payboxPaymentLink || 
+    settings.payboxLink || 
+    'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg'
+  );
+
   const [amount, setAmount] = useState<number>(initialAmount);
-  const [customLink, setCustomLink] = useState<string>(() => {
-    return (
-      settings.growPaymentLink || 
-      settings.payboxPaymentLink || 
-      settings.payboxLink || 
-      'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg'
-    );
-  });
+  const [customLink, setCustomLink] = useState<string>(defaultStaticLink);
+  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
+  const [isLockedLink, setIsLockedLink] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [sendStatus, setSendStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isManuallyEdited, setIsManuallyEdited] = useState<boolean>(false);
 
   const cleanPhone = cleanPhoneNumber(booking.ownerPhone);
   const intlPhone = cleanPhone.startsWith('0') 
@@ -68,10 +75,12 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
   };
 
   // Construct official payment message
-  const buildDefaultMessage = (amt: number, rawLink: string) => {
+  const buildDefaultMessage = (amt: number, rawLink: string, locked: boolean) => {
     const formattedLink = formatLink(rawLink);
     const amountSection = amt > 0 ? `\n💰 *הסכום לתשלום:* ₪${amt}\n` : '';
-    const amountHint = amt > 0 ? ` (יש להזין ₪${amt} בעמוד התשלום)` : '';
+    const amountHint = locked 
+      ? ` (סכום ₪${amt} מעודכן ונעול לתשלום)` 
+      : (amt > 0 ? ` (יש להזין ₪${amt} בעמוד התשלום)` : '');
 
     return `היי ${firstName}! 🐾
 שמחים לעדכן שהמקום עבור *${booking.dogName}* (${serviceHebrew}) שוריין בריזורט לכלב לתאריכים:
@@ -79,7 +88,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 להשלמת השריון / הסדרת התשלום, יש ללחוץ על הקישור המאובטח${amountHint}:
 👉 ${formattedLink}
 
-💡 *לתשלום ב-Bit, Apple Pay או אשראי:* פשוט לוחצים על הקישור למעלה ובוחרים באמצעי התשלום הרצוי (אין צורך להעביר ידנית לטלפון או לחשבון בנק – התשלום נקלט אוטומטית עם קבלה מיידית למייל ולטלפון!).
+💡 *לתשלום ב-Bit, Apple Pay, Google Pay, PayBox או אשראי:* פשוט לוחצים על הקישור למעלה ובוחרים באמצעי התשלום הרצוי (אין צורך להעביר ידנית לחשבון בנק – התשלום נקלט ומעדכן את המערכת אוטומטית עם קבלה מיידית למייל ולטלפון!).
 
 ⏰ *שעות פעילות הריזורט לכלב בימים א-ה הן 09:30 - 18:30*
 • בשישי וערב חג: עד שעה 14:00, ובצאת השבת / החג (למחרת השבת / חג) משעה 09:30
@@ -89,25 +98,67 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 צוות הריזורט לכלב`;
   };
 
-  const [messageText, setMessageText] = useState<string>(() => buildDefaultMessage(initialAmount, customLink));
-  const [isManuallyEdited, setIsManuallyEdited] = useState<boolean>(false);
+  const [messageText, setMessageText] = useState<string>(() => buildDefaultMessage(initialAmount, defaultStaticLink, false));
+
+  // Auto-generate dynamic locked Grow link on mount or amount change
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const fetchDynamicLink = async (targetAmt: number) => {
+    if (!targetAmt || targetAmt <= 0) {
+      setCustomLink(defaultStaticLink);
+      setIsLockedLink(false);
+      if (!isManuallyEdited) {
+        setMessageText(buildDefaultMessage(targetAmt, defaultStaticLink, false));
+      }
+      return;
+    }
+
+    setIsGeneratingLink(true);
+    try {
+      const res = await createGrowDynamicPaymentLink({
+        amount: targetAmt,
+        bookingId: booking.id,
+        dogName: booking.dogName,
+        ownerName: booking.ownerName,
+        ownerPhone: booking.ownerPhone,
+        description: `שריון אירוח בריזורט לכלב - ${booking.dogName} (${stayDates})`
+      });
+
+      if (res && res.paymentUrl) {
+        setCustomLink(res.paymentUrl);
+        setIsLockedLink(res.isLocked);
+        if (!isManuallyEdited) {
+          setMessageText(buildDefaultMessage(targetAmt, res.paymentUrl, res.isLocked));
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to generate dynamic Grow link:', err);
+      setCustomLink(defaultStaticLink);
+      setIsLockedLink(false);
+    } finally {
+      setIsGeneratingLink(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDynamicLink(amount);
+  }, []);
 
   const handleAmountChange = (newAmt: number) => {
     setAmount(newAmt);
-    if (!isManuallyEdited) {
-      setMessageText(buildDefaultMessage(newAmt, customLink));
-    }
+    fetchDynamicLink(newAmt);
   };
 
   const handleLinkChange = (newLink: string) => {
     setCustomLink(newLink);
+    setIsLockedLink(false);
     if (!isManuallyEdited) {
-      setMessageText(buildDefaultMessage(amount, newLink));
+      setMessageText(buildDefaultMessage(amount, newLink, false));
     }
   };
 
   const handleResetToDefault = () => {
-    setMessageText(buildDefaultMessage(amount, customLink));
+    setMessageText(buildDefaultMessage(amount, customLink, isLockedLink));
     setIsManuallyEdited(false);
   };
 
@@ -245,16 +296,51 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 
           {/* Payment Link URL */}
           <div>
-            <label className="text-xs font-extrabold text-slate-800 block mb-1">
-              קישור לתשלום (Grow / Bit / אשראי):
-            </label>
-            <input
-              type="text"
-              value={customLink}
-              onChange={(e) => handleLinkChange(e.target.value)}
-              placeholder="https://pay.grow.link/..."
-              className="w-full bg-slate-50 text-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-300 focus:border-emerald-600 focus:bg-white focus:outline-none"
-            />
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                <span>קישור לתשלום (Grow / Bit / Apple Pay):</span>
+              </label>
+              {isGeneratingLink ? (
+                <span className="text-[11px] text-emerald-700 flex items-center gap-1 font-bold animate-pulse">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>מייצר קישור עם סכום נעול...</span>
+                </span>
+              ) : isLockedLink ? (
+                <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1 font-black">
+                  <Lock className="w-3 h-3 text-emerald-600" />
+                  <span>סכום נעול (₪{amount})</span>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fetchDynamicLink(amount)}
+                  className="text-[11px] text-slate-500 hover:text-emerald-700 flex items-center gap-1 cursor-pointer font-bold"
+                  title="נסה להפיק קישור עם סכום נעול מחדש"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>הפק קישור נעול</span>
+                </button>
+              )}
+            </div>
+            <div className="relative">
+              <input
+                type="text"
+                value={customLink}
+                onChange={(e) => handleLinkChange(e.target.value)}
+                placeholder="https://pay.grow.link/..."
+                className={`w-full text-xs px-3 py-2 rounded-xl border focus:outline-none transition-all ${
+                  isLockedLink 
+                    ? 'bg-emerald-50/40 border-emerald-300 text-emerald-950 font-medium focus:border-emerald-600 focus:bg-white' 
+                    : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-emerald-600 focus:bg-white'
+                }`}
+              />
+            </div>
+            {isLockedLink && (
+              <p className="text-[11px] text-emerald-700 font-bold mt-1 flex items-center gap-1">
+                <span>✓ הלקוח יפתח את הקישור ויראה ישירות ₪{amount} לתשלום מיידי (ללא צורך בהקלדה עצמאית).</span>
+              </p>
+            )}
           </div>
 
           {/* Editable Message Box */}

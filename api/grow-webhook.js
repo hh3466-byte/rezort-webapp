@@ -5,10 +5,11 @@
  * 
  * Logic:
  * 1. Receives incoming transaction event payload from Grow.
- * 2. Extracts: customer name, phone, amount, transaction ID, payment method.
- * 3. Matches existing booking in Supabase by phone / customer name.
+ * 2. Extracts: customer name, phone, amount, transaction ID, transactionTypeId (Bit, ApplePay, GooglePay, PayBox, Credit Card, Bank Transfer).
+ * 3. Matches existing booking in Supabase by cField1 (bookingId) / phone / customer name.
  * 4. Automatically updates deposit_amount, payment_status, and notes.
- * 5. Sends real-time notification to Manager (054-3200007).
+ * 5. Calls Grow approveTransaction to acknowledge receipt.
+ * 6. Sends real-time notification to Manager (054-3200007).
  * =========================================================================
  */
 
@@ -18,6 +19,7 @@ const GREEN_API_ID = "710722735421";
 const GREEN_API_TOKEN = "ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b";
 const MANAGER_PHONE = "0543200007";
 const ETTI_PHONE = "0524467314";
+const GROW_API_KEY = process.env.GROW_API_KEY || "hfBND9mlC28BGvUkwQBls9hypPUIoJIj4Sy6LyUH";
 
 function cleanPhoneNumber(phone) {
   if (!phone) return '';
@@ -60,12 +62,41 @@ export default async function handler(req, res) {
     const data = payload.data || payload;
     const amount = Number(data.sum || data.amount || data.total || data.payment_sum || 0);
     const fullName = (data.fullName || data.customer_name || data.payer_name || data.name || '').trim();
-    const rawPhone = data.phone || data.customer_phone || data.payer_phone || data.mobile || '';
+    const rawPhone = data.phone || data.payerPhone || data.customer_phone || data.payer_phone || data.mobile || '';
     const cleanPhone = cleanPhoneNumber(rawPhone);
     const transactionId = String(data.transactionId || data.asmachta || data.transaction_id || data.id || Date.now());
-    const paymentType = (data.paymentType || data.payment_method || data.type || 'אשראי').toLowerCase();
+    const paymentType = (data.paymentType || data.payment_method || data.type || '').toLowerCase();
+    const transactionTypeId = String(data.transactionTypeId || '');
     const customField = data.customFields || data.description || data.comments || '';
-    const methodDisplay = paymentType.includes('bit') ? 'Bit' : paymentType.includes('apple') ? 'ApplePay' : 'כרטיס אשראי';
+    const cField1 = String(data.cField1 || (data.customFields && data.customFields.cField1) || '').trim();
+
+    // Determine payment method and labels
+    let methodDisplay = 'כרטיס אשראי';
+    let dbPaymentMethod = 'credit_card';
+
+    if (transactionTypeId === '6' || paymentType.includes('bit')) {
+      methodDisplay = 'Bit';
+      dbPaymentMethod = 'bit';
+    } else if (transactionTypeId === '13' || paymentType.includes('apple')) {
+      methodDisplay = 'Apple Pay';
+      dbPaymentMethod = 'apple_pay';
+    } else if (transactionTypeId === '14' || paymentType.includes('google')) {
+      methodDisplay = 'Google Pay';
+      dbPaymentMethod = 'google_pay';
+    } else if (transactionTypeId === '5' || paymentType.includes('paybox')) {
+      methodDisplay = 'PayBox';
+      dbPaymentMethod = 'paybox';
+    } else if (transactionTypeId === '15' || paymentType.includes('bank') || data.payerBankAccountDetails) {
+      methodDisplay = 'העברה בנקאית';
+      dbPaymentMethod = 'bank_transfer';
+    }
+
+    // Parse bank details if present
+    let bankInfoStr = '';
+    const bankDetails = data.payerBankAccountDetails;
+    if (bankDetails && typeof bankDetails === 'object') {
+      bankInfoStr = ` (בנק ${bankDetails.bankNum || ''}, סניף ${bankDetails.branchNum || ''}, חשבון ${bankDetails.accountNum || ''} - ${bankDetails.accountName || ''})`;
+    }
 
     if (amount <= 0 && !fullName && !cleanPhone) {
       return res.status(200).json({ status: 'ignored', reason: 'empty_data' });
@@ -122,7 +153,13 @@ export default async function handler(req, res) {
 
     let matchedBooking = null;
 
-    if (cleanPhone && cleanPhone.length >= 7) {
+    // 1. Match by exact cField1 (booking ID)
+    if (cField1 && cField1.startsWith('b-')) {
+      matchedBooking = (bookings || []).find(b => b.id === cField1);
+    }
+
+    // 2. Match by phone
+    if (!matchedBooking && cleanPhone && cleanPhone.length >= 7) {
       const phoneSuffix = cleanPhone.slice(-7);
       matchedBooking = (bookings || []).find(b => {
         const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
@@ -130,6 +167,7 @@ export default async function handler(req, res) {
       });
     }
 
+    // 3. Match by customer name
     if (!matchedBooking && fullName) {
       const targetName = fullName.toLowerCase();
       matchedBooking = (bookings || []).find(b => {
@@ -160,18 +198,17 @@ export default async function handler(req, res) {
       const isFullyPaid = totalPrice > 0 && newDeposit >= (totalPrice - 1);
       const newPaymentStatus = isFullyPaid ? 'fully_paid' : 'deposit_paid';
 
-      const methodLabel = paymentType.includes('bit') ? 'Bit' : paymentType.includes('apple') ? 'ApplePay' : 'כרטיס אשראי';
-      const newNotes = `${curData.notes || matchedBooking.notes || ''} | נקלט תשלום ₪${amount.toLocaleString()} ב-Grow (${methodLabel} אסמכתא ${transactionId})`;
+      const newNotes = `${curData.notes || matchedBooking.notes || ''} | נקלט תשלום ₪${amount.toLocaleString()} ב-Grow (${methodDisplay}${bankInfoStr} אסמכתא ${transactionId})`;
 
       await supabase.from('bookings').update({
         deposit_amount: newDeposit,
         payment_status: newPaymentStatus,
-        payment_method: paymentType.includes('bit') ? 'bit' : 'credit_card',
+        payment_method: dbPaymentMethod,
         data: {
           ...curData,
           depositAmount: newDeposit,
           paymentStatus: newPaymentStatus,
-          paymentMethod: paymentType.includes('bit') ? 'bit' : 'credit_card',
+          paymentMethod: dbPaymentMethod,
           notes: newNotes
         },
         updated_at: new Date().toISOString()
@@ -185,11 +222,38 @@ export default async function handler(req, res) {
     // Send real-time WhatsApp alert to manager ONLY for verified Resort transactions
     const alertMsg = `💳 *התקבל תשלום ריזורט ב-GROW!*
 • *לקוח:* ${fullName || 'לא צוין'} (📞 ${cleanPhone || 'ללא טלפון'})
-• *סכום:* ₪${amount.toLocaleString()} (${methodDisplay})
+• *סכום:* ₪${amount.toLocaleString()} (${methodDisplay}${bankInfoStr})
 • *אסמכתא:* ${transactionId}
 • *סנכרון יומן:* ${matchSummary}`;
 
     await sendWhatsAppDirect(MANAGER_PHONE, alertMsg);
+
+    // Call Grow approveTransaction to acknowledge receipt if identifiers exist
+    if (data.processId && data.processToken && data.transactionId && data.transactionToken) {
+      try {
+        const approveEndpoint = 'https://sandbox.meshulam.co.il/api/light/server/1.0/approveTransaction';
+        await fetch(approveEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': GROW_API_KEY
+          },
+          body: JSON.stringify({
+            userId: data.userId || 'e1ceee55b717e60b',
+            pageCode: data.pageCode || '538cbf6f8827',
+            processId: data.processId,
+            processToken: data.processToken,
+            transactionId: data.transactionId,
+            transactionToken: data.transactionToken,
+            sum: amount,
+            fullName,
+            payerPhone: cleanPhone
+          })
+        });
+      } catch (appErr) {
+        console.warn('Grow approveTransaction warning:', appErr.message);
+      }
+    }
 
     return res.status(200).json({
       status: 'success',
