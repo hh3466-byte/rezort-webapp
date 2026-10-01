@@ -262,6 +262,59 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
     actionBlocks.push(`🏠 *כלבים הממתינים לשיבוץ מיקום לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
   }
 
+  // 4. Zero Deposit bookings holding spots
+  const zeroDepositUpcoming = activeBookings.filter(b => {
+    const price = Number(b.total_price || b.totalPrice) || 0;
+    const deposit = Number(b.deposit_amount || b.depositAmount) || 0;
+    const isFree = b.is_free_stay || b.isFreeStay;
+    const end = b.end_date || b.endDate || '';
+    return price > 0 && deposit === 0 && !isFree && end >= todayStr;
+  });
+  if (zeroDepositUpcoming.length > 0) {
+    const list = zeroDepositUpcoming.map((b, idx) => {
+      const phone = formatPhoneFormatted(b.owner_phone || b.ownerPhone || '');
+      const s = b.start_date || b.startDate;
+      const e = b.end_date || b.endDate;
+      const price = Number(b.total_price || b.totalPrice) || 0;
+      return `${idx + 1}. 🔴 *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${phone}) | ${formatDateIL(s)}–${formatDateIL(e)} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`;
+    }).join('\n');
+    actionBlocks.push(`🔴 *שריונים ללא מקדמה (₪0) שתופסים מקום ביומן (${zeroDepositUpcoming.length}):*\n${list}`);
+  }
+
+  // 5. Pricing & calculation discrepancies
+  const financialDiscrepancies = [];
+  activeBookings.forEach(b => {
+    const price = Number(b.total_price || b.totalPrice) || 0;
+    const deposit = Number(b.deposit_amount || b.depositAmount) || 0;
+    const isFree = b.is_free_stay || b.isFreeStay;
+    const dailyRate = Number(b.daily_rate || b.dailyRate) || 0;
+    const dog = (b.dog_name || b.dogName || '').trim();
+    const owner = (b.owner_name || b.ownerName || '').trim();
+    const sType = b.service_type || b.serviceType || '';
+    const pMode = b.pricing_mode || b.pricingMode || '';
+    const sDate = b.start_date || b.startDate;
+    const eDate = b.end_date || b.endDate;
+
+    if (pMode === 'daily' && sType !== 'training' && !isFree && price > 0 && dailyRate > 0 && sDate && eDate) {
+      const startMs = new Date(sDate).getTime();
+      const endMs = new Date(eDate).getTime();
+      const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+      const expected = days * dailyRate;
+      if (Math.abs(price - expected) > 1) {
+        financialDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
+      }
+    }
+
+    const isMultiDog = dog.includes(' ו') || dog.includes(' + ') || dog.includes(' and ');
+    if (isMultiDog && pMode !== 'period' && sType !== 'training' && !isFree) {
+      financialDiscrepancies.push(`🐶🐶 תמחור זוג כלבים: *${dog}* (${owner}) | נדרש לוודא שהתמחור מוגדר כ'מחיר פיקס/לתקופה' הכולל את שני הכלבים.`);
+    }
+  });
+
+  if (financialDiscrepancies.length > 0) {
+    actionBlocks.push(`💰 *אי-התאמות כספיות / תמחור שדורש בדיקה:*\n• ${financialDiscrepancies.join('\n• ')}`);
+  }
+
   let extraActionSections = '';
   if (actionBlocks.length > 0) {
     extraActionSections = '\n\n🚨 *אורות אדומים ופעולות דחופות:*\n' + actionBlocks.join('\n\n');

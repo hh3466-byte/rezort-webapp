@@ -1,5 +1,5 @@
 import { defaultSettings } from './src/data/initialData';
-import { calculateDaysCount, addDays, getTodayStr, checkRangeOccupancy } from './src/utils/dateUtils';
+import { calculateDaysCount, addDays, getTodayStr, checkRangeOccupancy, sortBookingsForDate, getBookingsForDate } from './src/utils/dateUtils';
 import { parseWithClientHeuristic } from './src/services/agentService';
 import { extractCustomers } from './src/utils/storage';
 import { Booking, ResortSettings } from './src/types';
@@ -43,6 +43,117 @@ async function runQA() {
   const trainingEnd = addDays(today, 70);
   const days70 = calculateDaysCount(today, trainingEnd);
   assert(days70 === 70, '70-day training process range calculated correctly', `Got ${days70}`);
+
+  // --- 2a. CALENDAR DIARY SORTING ORDER TEST ---
+  console.log('\n--- 2a. CALENDAR DIARY SORTING ORDER TEST ---');
+  const testDate = '2026-10-01';
+  const sampleBookings: Booking[] = [
+    {
+      id: 'reg-staying',
+      dogName: 'במבי (שוהה רגיל)',
+      serviceType: 'boarding',
+      startDate: '2026-09-25',
+      endDate: '2026-10-05',
+      totalPrice: 1000,
+      depositAmount: 500,
+      paymentStatus: 'deposit_paid',
+      stayStatus: 'checked_in',
+      vaccinationValid: true,
+      ownerName: 'בעלים 1',
+      ownerPhone: '050-1111111',
+      createdAt: '',
+      updatedAt: ''
+    },
+    {
+      id: 'reg-entering',
+      dogName: 'לואי (נכנס רגיל)',
+      serviceType: 'boarding',
+      startDate: '2026-10-01',
+      endDate: '2026-10-08',
+      totalPrice: 1200,
+      depositAmount: 600,
+      paymentStatus: 'deposit_paid',
+      stayStatus: 'booked',
+      vaccinationValid: true,
+      ownerName: 'בעלים 2',
+      ownerPhone: '050-2222222',
+      createdAt: '',
+      updatedAt: ''
+    },
+    {
+      id: 'reg-releasing',
+      dogName: 'מקס (משתחרר רגיל)',
+      serviceType: 'boarding',
+      startDate: '2026-09-20',
+      endDate: '2026-10-01',
+      totalPrice: 1500,
+      depositAmount: 1500,
+      paymentStatus: 'fully_paid',
+      stayStatus: 'checked_in',
+      vaccinationValid: true,
+      ownerName: 'בעלים 3',
+      ownerPhone: '050-3333333',
+      createdAt: '',
+      updatedAt: ''
+    },
+    {
+      id: 'train-staying',
+      dogName: 'רוקי (שוהה אילוף)',
+      serviceType: 'training',
+      startDate: '2026-08-15',
+      endDate: '2026-10-25',
+      totalPrice: 6500,
+      depositAmount: 3000,
+      paymentStatus: 'deposit_paid',
+      stayStatus: 'checked_in',
+      vaccinationValid: true,
+      ownerName: 'בעלים 4',
+      ownerPhone: '050-4444444',
+      createdAt: '',
+      updatedAt: ''
+    },
+    {
+      id: 'train-entering',
+      dogName: 'בל (נכנסת אילוף)',
+      serviceType: 'training',
+      startDate: '2026-10-01',
+      endDate: '2026-12-10',
+      totalPrice: 6500,
+      depositAmount: 2000,
+      paymentStatus: 'deposit_paid',
+      stayStatus: 'booked',
+      vaccinationValid: true,
+      ownerName: 'בעלים 5',
+      ownerPhone: '050-5555555',
+      createdAt: '',
+      updatedAt: ''
+    },
+    {
+      id: 'train-releasing',
+      dogName: 'טוי (משתחרר אילוף)',
+      serviceType: 'training',
+      startDate: '2026-07-23',
+      endDate: '2026-10-01',
+      totalPrice: 6500,
+      depositAmount: 6500,
+      paymentStatus: 'fully_paid',
+      stayStatus: 'checked_in',
+      vaccinationValid: true,
+      ownerName: 'בעלים 6',
+      ownerPhone: '050-6666666',
+      createdAt: '',
+      updatedAt: ''
+    }
+  ];
+
+  const sortedForDate = getBookingsForDate(sampleBookings, testDate);
+  assert(sortedForDate.length === 6, 'All 6 active bookings retrieved for date');
+  assert(sortedForDate[0].id === 'reg-releasing', '1st: Regular dog releasing today is at the top of the list', sortedForDate[0].id);
+  assert(sortedForDate[1].id === 'reg-entering', '2nd: Regular dog entering today is immediately after', sortedForDate[1].id);
+  assert(sortedForDate[2].id === 'reg-staying', '3rd: Regular dog staying continuously is after entering dogs', sortedForDate[2].id);
+  assert(sortedForDate[3].id === 'train-releasing', '4th: Training dog releasing today is at top of training section', sortedForDate[3].id);
+  assert(sortedForDate[4].id === 'train-entering', '5th: Training dog entering today is immediately after in training section', sortedForDate[4].id);
+  assert(sortedForDate[5].id === 'train-staying', '6th: Training dog staying continuously is at bottom of training section', sortedForDate[5].id);
 
   // --- 2b. BOARDING RATE TESTS (ISOLATION & INTACT MALE: 230 NIS, NO DISCOUNTS) ---
   console.log('\n--- 2b. BOARDING RATE RULES (ISOLATION / AGGRESSIVE & INTACT MALE) ---');

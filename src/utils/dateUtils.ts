@@ -126,16 +126,58 @@ export function sortBookingsWithTrainingLast<T extends Booking>(bookingsList: T[
     if (aTrain !== bTrain) {
       return aTrain - bTrain; // 0 (non-training / boarding) comes first, 1 (training) comes last
     }
-    return 0;
+    return (a.dogName || '').localeCompare(b.dogName || '', 'he');
   });
 }
 
 /**
- * Get list of bookings for a specific date (training dogs sorted at the bottom)
+ * Sorts bookings array for a specific date:
+ * 1. Non-training dogs first (top section), training dogs last (bottom section).
+ * 2. Within each section:
+ *    - Releasing on that day (endDate === dateStr) at the top of the list
+ *    - Entering on that day (startDate === dateStr && endDate !== dateStr) immediately after
+ *    - Continuing stay (startDate < dateStr && endDate > dateStr)
+ */
+export function sortBookingsForDate<T extends Booking>(bookingsList: T[], dateStr: string): T[] {
+  return [...bookingsList].sort((a, b) => {
+    // 1. Top tier: Non-training dogs first (0), Training dogs last (1)
+    const aTrain = isTrainingBooking(a) ? 1 : 0;
+    const bTrain = isTrainingBooking(b) ? 1 : 0;
+    if (aTrain !== bTrain) {
+      return aTrain - bTrain;
+    }
+
+    // 2. Sub tier for the specific date:
+    // Priority 1: Releasing / departing on dateStr (endDate === dateStr)
+    // Priority 2: Entering / arriving on dateStr (startDate === dateStr)
+    // Priority 3: Continuing stay (startDate < dateStr && endDate > dateStr)
+    // Priority 4: Other
+    const getPriority = (b: Booking) => {
+      if (b.endDate === dateStr) return 1;
+      if (b.startDate === dateStr) return 2;
+      if (b.startDate < dateStr && b.endDate > dateStr) return 3;
+      return 4;
+    };
+
+    const prioA = getPriority(a);
+    const prioB = getPriority(b);
+    if (prioA !== prioB) {
+      return prioA - prioB;
+    }
+
+    // 3. Secondary stable alphabetical sort by dog name
+    return (a.dogName || '').localeCompare(b.dogName || '', 'he');
+  });
+}
+
+/**
+ * Get list of bookings for a specific date:
+ * - Top section: Regular dogs (releasing first, entering next, staying last)
+ * - Bottom section: Training dogs (releasing first, entering next, staying last)
  */
 export function getBookingsForDate(bookings: Booking[], dateStr: string): Booking[] {
   const dayBookings = bookings.filter(b => isBookingOnDate(b, dateStr));
-  return sortBookingsWithTrainingLast(dayBookings);
+  return sortBookingsForDate(dayBookings, dateStr);
 }
 
 /**
@@ -150,9 +192,9 @@ export function getDailyBreakdown(bookings: Booking[], dateStr: string) {
 
   return {
     total: dayBookings.length,
-    arrivals: sortBookingsWithTrainingLast(arrivals),
-    departures: sortBookingsWithTrainingLast(departures),
-    staying: sortBookingsWithTrainingLast(staying),
+    arrivals: sortBookingsForDate(arrivals, dateStr),
+    departures: sortBookingsForDate(departures, dateStr),
+    staying: sortBookingsForDate(staying, dateStr),
     all: dayBookings
   };
 }

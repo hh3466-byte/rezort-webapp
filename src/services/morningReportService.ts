@@ -333,6 +333,51 @@ export function formatTomorrowOverviewReport(
     actionBlocks.push(`📞 *תקלות טלפונים ותאריכים:*\n${list}`);
   }
 
+  // 5. Zero Deposit bookings holding spots
+  const zeroDepositUpcoming = activeBookings.filter(b => {
+    const price = Number(b.totalPrice) || 0;
+    const deposit = Number(b.depositAmount) || 0;
+    const isFree = b.isFreeStay;
+    return price > 0 && deposit === 0 && !isFree && b.endDate >= todayStr;
+  });
+  if (zeroDepositUpcoming.length > 0) {
+    const list = zeroDepositUpcoming.map((b, idx) => {
+      const phone = formatPhoneFormatted(b.ownerPhone || '');
+      return `${idx + 1}. 🔴 *${b.dogName}* (${b.ownerName} - 📞 ${phone}) | ${formatDateIL(b.startDate)}–${formatDateIL(b.endDate)} | ₪0 מקדמה (חוב: ₪${Number(b.totalPrice).toLocaleString()})`;
+    }).join('\n');
+    actionBlocks.push(`🔴 *שריונים ללא מקדמה (₪0) שתופסים מקום ביומן (${zeroDepositUpcoming.length}):*\n${list}`);
+  }
+
+  // 6. Pricing & calculation discrepancies
+  const financialDiscrepancies: string[] = [];
+  activeBookings.forEach(b => {
+    const price = Number(b.totalPrice) || 0;
+    const deposit = Number(b.depositAmount) || 0;
+    const isFree = b.isFreeStay;
+    const dailyRate = Number(b.dailyRate) || 0;
+    const dog = (b.dogName || '').trim();
+    const owner = (b.ownerName || '').trim();
+
+    if (b.pricingMode === 'daily' && b.serviceType !== 'training' && !isFree && price > 0 && dailyRate > 0) {
+      const startMs = new Date(b.startDate).getTime();
+      const endMs = new Date(b.endDate).getTime();
+      const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+      const expected = days * dailyRate;
+      if (Math.abs(price - expected) > 1) {
+        financialDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
+      }
+    }
+
+    const isMultiDog = dog.includes(' ו') || dog.includes(' + ') || dog.includes(' and ');
+    if (isMultiDog && b.pricingMode !== 'period' && b.serviceType !== 'training' && !isFree) {
+      financialDiscrepancies.push(`🐶🐶 תמחור זוג כלבים: *${dog}* (${owner}) | נדרש לוודא שהתמחור מוגדר כ'מחיר פיקס/לתקופה' הכולל את שני הכלבים.`);
+    }
+  });
+
+  if (financialDiscrepancies.length > 0) {
+    actionBlocks.push(`💰 *אי-התאמות כספיות / תמחור שדורש בדיקה:*\n• ${financialDiscrepancies.join('\n• ')}`);
+  }
+
   let extraActionSections = '';
   if (actionBlocks.length > 0) {
     extraActionSections = '\n\n🚨 *אורות אדומים:*\n' + actionBlocks.join('\n\n');
@@ -529,17 +574,53 @@ export async function sendTomorrowOverviewToShmulik(
     }
   }
 
+  let effectiveBookings = bookings;
+  if (!effectiveBookings || effectiveBookings.length === 0) {
+    try {
+      const { data: remoteBookings } = await supabase.from('bookings').select('*');
+      if (remoteBookings && remoteBookings.length > 0) {
+        effectiveBookings = remoteBookings.map((row: any) => {
+          const rowData = (row.data && typeof row.data === 'object') ? row.data : {};
+          return {
+            ...rowData,
+            id: row.id || rowData.id,
+            dogName: row.dog_name || rowData.dogName || '',
+            dogBreed: row.dog_breed || rowData.dogBreed || '',
+            dogGender: row.dog_gender || rowData.dogGender || undefined,
+            ownerName: row.owner_name || rowData.ownerName || '',
+            ownerPhone: row.owner_phone || rowData.ownerPhone || '',
+            ownerEmail: row.owner_email || rowData.ownerEmail || '',
+            serviceType: row.service_type || rowData.serviceType || 'boarding',
+            startDate: row.start_date || rowData.startDate || '',
+            endDate: row.end_date || rowData.endDate || '',
+            totalPrice: Number(row.total_price ?? rowData.totalPrice ?? 0),
+            depositAmount: Number(row.deposit_amount ?? rowData.depositAmount ?? 0),
+            paymentStatus: row.payment_status || rowData.paymentStatus || 'unpaid',
+            stayStatus: row.stay_status || rowData.stayStatus || 'booked',
+            kennelNumber: row.kennel_number !== undefined ? row.kennel_number : rowData.kennelNumber,
+            notes: row.notes || rowData.notes || '',
+            vaccinationValid: Boolean(row.vaccination_valid ?? rowData.vaccinationValid ?? true),
+            createdAt: row.created_at || rowData.createdAt || new Date().toISOString(),
+            updatedAt: row.updated_at || rowData.updatedAt || new Date().toISOString(),
+          };
+        });
+      }
+    } catch (e) {
+      console.warn('Could not fetch fallback bookings from Supabase:', e);
+    }
+  }
+
   // Fetch unanswered WhatsApp chats
   let unansweredChats: UnansweredChatSummary[] = [];
   try {
-    unansweredChats = await fetchUnansweredChatsSummary(settings, bookings);
+    unansweredChats = await fetchUnansweredChatsSummary(settings, effectiveBookings);
   } catch {}
 
   const managerPhone = cleanPhoneNumber(settings?.whatsappNotificationPhone || '0506336896');
   const adminCopyPhone = '0543200007';
   const reportText = formatTomorrowOverviewReport(
     settings?.managerName || 'שמוליק',
-    bookings,
+    effectiveBookings,
     settings,
     intakeRequests,
     today,

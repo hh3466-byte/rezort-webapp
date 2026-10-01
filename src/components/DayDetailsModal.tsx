@@ -305,13 +305,11 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
           </div>
         )}
 
-        {/* Sections in dynamic priority order */}
+        {/* Sections in dynamic priority order: Departures (משתחררים) first, Arrivals (נכנסים) second, Staying (שוהים) third */}
         <div className="space-y-5">
           {isStayingTarget
-            ? [renderStayingSection(), renderArrivalsSection(), renderDeparturesSection()]
-            : isDepartureTarget
-            ? [renderDeparturesSection(), renderArrivalsSection(), renderStayingSection()]
-            : [renderArrivalsSection(), renderStayingSection(), renderDeparturesSection()]}
+            ? [renderStayingSection(), renderDeparturesSection(), renderArrivalsSection()]
+            : [renderDeparturesSection(), renderArrivalsSection(), renderStayingSection()]}
         </div>
 
       </div>
