@@ -76,9 +76,10 @@ export const ManagerLoginGate: React.FC<ManagerLoginGateProps> = ({
         <div className="flex flex-col items-center gap-2">
           <div className="relative">
             <img 
-              src="/resort-logo.svg" 
+              src="/resort-official-logo.jpg" 
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
               alt="הריזורט לכלב" 
-              className="w-16 h-16 object-contain drop-shadow-md" 
+              className="w-16 h-16 object-contain drop-shadow-md rounded-full border border-amber-300/70" 
             />
             <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-emerald-700 text-white rounded-full flex items-center justify-center shadow-md ring-2 ring-white">
               <Lock className="w-3.5 h-3.5" />

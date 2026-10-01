@@ -321,10 +321,11 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                     <div className="flex flex-wrap items-center gap-2.5">
                       {isTrainingBooking(b) ? (
                         <img
-                          src="/resort-logo.svg"
+                          src="/resort-official-logo.jpg"
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
                           alt="אילוף"
                           title="כלב בתהליך אילוף"
-                          className="w-5 h-5 object-contain shrink-0 rounded-full"
+                          className="w-5 h-5 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs"
                         />
                       ) : (
                         <span className="text-xl shrink-0">🐾</span>

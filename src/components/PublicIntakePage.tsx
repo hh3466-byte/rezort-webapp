@@ -713,11 +713,12 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
             </div>
           )}
 
-          <div className="inline-flex items-center justify-center p-3 bg-white rounded-3xl shadow-sm border border-slate-100">
+          <div className="inline-flex items-center justify-center p-2 bg-white rounded-3xl shadow-sm border border-amber-300">
             <img 
-              src="/resort-logo.svg" 
+              src="/resort-official-logo.jpg" 
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
               alt="לוגו הריזורט לכלב" 
-              className="w-16 h-16 object-contain drop-shadow-xs" 
+              className="w-16 h-16 object-contain rounded-full drop-shadow-xs" 
             />
           </div>
 

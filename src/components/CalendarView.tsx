@@ -943,10 +943,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             <span className="flex items-center gap-1 truncate min-w-0 flex-1">
                               {isTrainingBooking(b) ? (
                                 <img
-                                  src="/resort-logo.svg"
+                                  src="/resort-official-logo.jpg"
+                                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
                                   alt="אילוף"
                                   title="כלב בתהליך אילוף"
-                                  className="w-3.5 h-3.5 object-contain shrink-0 rounded-full"
+                                  className="w-3.5 h-3.5 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs"
                                 />
                               ) : (
                                 <span className={`text-[11px] shrink-0 ${isMatch ? 'text-amber-700' : isHovered ? 'text-indigo-700' : stayColors.iconClass}`}>🐾</span>
@@ -1134,10 +1135,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           <span className="truncate flex items-center gap-1 min-w-0">
                             {isTrainingBooking(b) ? (
                               <img
-                                src="/resort-logo.svg"
+                                src="/resort-official-logo.jpg"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
                                 alt="אילוף"
                                 title="כלב בתהליך אילוף"
-                                className="w-3 h-3 object-contain shrink-0 rounded-full"
+                                className="w-3 h-3 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs"
                               />
                             ) : (
                               <span className="text-[10px] shrink-0">🐾</span>
@@ -1344,10 +1346,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               <span className="flex items-center gap-1 min-w-0">
                                 {isTrainingBooking(b) ? (
                                   <img
-                                    src="/resort-logo.svg"
+                                    src="/resort-official-logo.jpg"
+                                    onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
                                     alt="אילוף"
                                     title="כלב בתהליך אילוף"
-                                    className="w-3.5 h-3.5 object-contain shrink-0 rounded-full"
+                                    className="w-3.5 h-3.5 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs"
                                   />
                                 ) : (
                                   <Dog className={`w-3 h-3 shrink-0 ${isMatch ? 'text-amber-700' : isHovered ? 'text-indigo-700' : stayColors.iconClass}`} />
@@ -1540,10 +1543,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           <div className="flex items-center gap-2">
                             {isTrainingBooking(booking) ? (
                               <img
-                                src="/resort-logo.svg"
+                                src="/resort-official-logo.jpg"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
                                 alt="אילוף"
                                 title="כלב בתהליך אילוף"
-                                className="w-5 h-5 object-contain shrink-0 rounded-full"
+                                className="w-5 h-5 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs"
                               />
                             ) : (
                               <span className={`text-base shrink-0 ${isHovered ? 'text-indigo-600' : ''}`}>🐾</span>
@@ -1591,7 +1595,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             <span className="inline-block bg-slate-100 text-slate-700 text-xs font-bold px-2.5 py-0.5 rounded-lg">
                               {isTrainingBooking(booking) ? (
                                 <span className="inline-flex items-center gap-1">
-                                  <img src="/resort-logo.svg" alt="אילוף" className="w-3.5 h-3.5 object-contain inline rounded-full" />
+                                  <img src="/resort-official-logo.jpg" onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }} alt="אילוף" className="w-3.5 h-3.5 object-contain inline rounded-full border border-amber-300/60" />
                                   <span>באילוף</span>
                                 </span>
                               ) : (

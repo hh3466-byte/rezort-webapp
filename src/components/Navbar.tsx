@@ -73,7 +73,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full overflow-hidden bg-white p-1 shadow-lg shadow-black/30 shrink-0 border border-amber-200/40 flex items-center justify-center">
               <img 
-                src="/resort-logo.svg" 
+                src="/resort-official-logo.jpg" 
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
                 alt="הריזורט לכלב" 
                 className="w-full h-full object-contain"
               />
@@ -288,7 +289,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="font-extrabold text-slate-900 text-base flex items-center gap-2">
             <div className="w-9 h-9 rounded-full overflow-hidden bg-white p-0.5 border border-amber-300 shadow-xs flex items-center justify-center">
               <img 
-                src="/resort-logo.svg" 
+                src="/resort-official-logo.jpg" 
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
                 alt="הריזורט לכלב" 
                 className="w-full h-full object-contain"
               />

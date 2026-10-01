@@ -1747,7 +1747,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                           <tr key={b.id} className="hover:bg-slate-50/70 transition-colors">
                             <td className="p-2.5 font-bold text-slate-900">
                               <div className="flex items-center gap-1.5">
-                                <img src="/resort-logo.svg" alt="אילוף" className="w-4 h-4 object-contain shrink-0 rounded-full" />
+                                <img src="/resort-official-logo.jpg" onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }} alt="אילוף" className="w-4 h-4 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs" />
                                 <span>{b.dogName}</span>
                                 <span className="text-slate-500 font-normal">({b.ownerName})</span>
                                 {isCompleted && (
@@ -1851,7 +1851,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                       {/* RIGHT: Dog Name (Owner Name), Dates, Phone & WhatsApp */}
                       <div className="lg:w-64 space-y-2 text-right shrink-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <img src="/resort-logo.svg" alt="אילוף" className="w-5 h-5 object-contain shrink-0 rounded-full" />
+                          <img src="/resort-official-logo.jpg" onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }} alt="אילוף" className="w-5 h-5 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs" />
                           <span className="font-black text-lg text-slate-900">
                             {b.dogName}
                           </span>

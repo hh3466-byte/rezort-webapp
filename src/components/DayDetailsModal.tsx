@@ -441,10 +441,11 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
           <div className="flex flex-wrap items-center gap-2">
             {isTrainingBooking(booking) ? (
               <img
-                src="/resort-logo.svg"
+                src="/resort-official-logo.jpg"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
                 alt="אילוף"
                 title="כלב בתהליך אילוף"
-                className="w-5 h-5 object-contain shrink-0 rounded-full"
+                className="w-5 h-5 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs"
               />
             ) : (
               <span className="text-base shrink-0">🐾</span>

@@ -331,7 +331,7 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
                   className="bg-slate-100 hover:bg-emerald-50 hover:border-emerald-300 border border-slate-200 rounded-xl px-2.5 py-1 text-xs text-slate-800 font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-2xs"
                 >
                   {isTrainingBooking(b) ? (
-                    <img src="/resort-logo.svg" alt="אילוף" title="כלב בתהליך אילוף" className="w-3.5 h-3.5 object-contain shrink-0 rounded-full" />
+                    <img src="/resort-official-logo.jpg" onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }} alt="אילוף" title="כלב בתהליך אילוף" className="w-3.5 h-3.5 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs" />
                   ) : (
                     <span>🐾</span>
                   )}

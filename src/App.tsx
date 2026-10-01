@@ -1131,9 +1131,10 @@ export default function App() {
         <header className="flex flex-col items-center justify-center text-center pt-2 pb-1">
           <div className="flex items-center justify-center gap-3">
             <img 
-              src="/resort-logo.svg" 
+              src="/resort-official-logo.jpg" 
+              onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
               alt="לוגו הריזורט לכלב" 
-              className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow-xs hover:scale-105 transition-transform shrink-0" 
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain rounded-full border border-amber-300/70 drop-shadow-xs hover:scale-105 transition-transform shrink-0" 
             />
             <div>
               <h1 className="text-2xl sm:text-3xl font-black text-[#0f4c3a] tracking-tight flex items-center justify-center gap-2">

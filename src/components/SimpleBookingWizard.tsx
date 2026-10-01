@@ -800,7 +800,8 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
           <div className="text-center space-y-1">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white p-1 shadow-md border border-amber-300 mb-1">
               <img 
-                src="/resort-logo.svg" 
+                src="/resort-official-logo.jpg" 
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }}
                 alt="הריזורט לכלב" 
                 className="w-full h-full object-contain"
               />

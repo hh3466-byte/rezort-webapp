@@ -293,7 +293,7 @@ export const KennelFeedingBoard: React.FC<KennelFeedingBoardProps> = ({
                 <div className="min-w-0 flex-1">
                   <div className="font-black text-slate-900 text-sm flex items-center gap-1.5 flex-wrap">
                     {isTrainingBooking(b) ? (
-                      <img src="/resort-logo.svg" alt="אילוף" title="כלב בתהליך אילוף" className="w-4 h-4 object-contain shrink-0 rounded-full" />
+                      <img src="/resort-official-logo.jpg" onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }} alt="אילוף" title="כלב בתהליך אילוף" className="w-4 h-4 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs" />
                     ) : (
                       <span>🐾</span>
                     )}
@@ -886,7 +886,7 @@ const DogKennelCard: React.FC<DogKennelCardProps> = ({
         <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             {isTrainingBooking(dog) ? (
-              <img src="/resort-logo.svg" alt="אילוף" title="כלב בתהליך אילוף" className="w-5 h-5 object-contain shrink-0 rounded-full" />
+              <img src="/resort-official-logo.jpg" onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/resort-logo.svg'; }} alt="אילוף" title="כלב בתהליך אילוף" className="w-5 h-5 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs" />
             ) : (
               <span>🐾</span>
             )}
