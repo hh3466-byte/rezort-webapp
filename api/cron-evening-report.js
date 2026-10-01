@@ -108,14 +108,28 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
     return start <= tomorrowStr && end >= tomorrowStr;
   }));
 
-  const maxCapacity = Number(settings.max_capacity || settings.maxCapacity) || 10;
-  const occupancyPercent = maxCapacity > 0 ? Math.round((endOfDayDogs.length / maxCapacity) * 100) : 0;
-  const growPaymentLink = settings.growPaymentLink || settings.grow_payment_link || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
-
   const isTraining = (b) => {
     const s = b.service_type || b.serviceType || '';
     return s === 'training' || s === 'day_training' || s === 'combined';
   };
+
+  // Count actual dog heads (including pairs like "לולה וברנדי", "סקובי וג'ינג'ס")
+  const countDogs = (list) => list.reduce((sum, b) => {
+    const name = (b.dog_name || b.dogName || '').trim();
+    const notes = (b.notes || '').trim();
+    if (name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes(' ועוד ') || name.includes('&')) return sum + 2;
+    if (notes.includes('2 כלבים') || notes.includes('שני כלבים') || notes.includes('זוג כלבים') || notes.includes('2 כלבות') || notes.includes('שתי כלבות')) return sum + 2;
+    return sum + 1;
+  }, 0);
+
+  const presentDogsCount = countDogs(presentDaytimeDogs);
+  const incomingDogsCount = countDogs(incomingDogs);
+  const departingDogsCount = countDogs(departingDogs);
+  const endOfDayDogsCount = countDogs(endOfDayDogs);
+
+  const maxCapacity = Number(settings.max_capacity || settings.maxCapacity) || 10;
+  const occupancyPercent = maxCapacity > 0 ? Math.round((endOfDayDogsCount / maxCapacity) * 100) : 0;
+  const growPaymentLink = settings.growPaymentLink || settings.grow_payment_link || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
 
   const incomingBoarding = incomingDogs.filter(b => !isTraining(b));
   const incomingTraining = incomingDogs.filter(b => isTraining(b));
@@ -123,6 +137,8 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
   const departingTraining = departingDogs.filter(b => isTraining(b));
   const endOfDayBoarding = endOfDayDogs.filter(b => !isTraining(b));
   const endOfDayTraining = endOfDayDogs.filter(b => isTraining(b));
+  const endOfDayBoardingCount = countDogs(endOfDayBoarding);
+  const endOfDayTrainingCount = countDogs(endOfDayTraining);
 
   const formatDogItem = (b, index, isInc) => {
     const dogName = b.dog_name || b.dogName || 'כלב';
@@ -360,24 +376,24 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
 
   return `📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾
 📅 יום ${dayName}, ${formattedDate} | הפקה: 19:00
+
+🐾 *נוכחות כללית במתחם מחר:* ${presentDogsCount} כלבים${presentDogsCount !== presentDaytimeDogs.length ? ` (${presentDaytimeDogs.length} הזמנות, כולל זוגות)` : ''}
 ${regardsStatusSection}
-🟢 *סה״כ כלבים שנכנסים מחר: ${incomingDogs.length}* (🏨 ${incomingBoarding.length} | 🎓 ${incomingTraining.length})
+🟢 *סה״כ כלבים שנכנסים מחר: ${incomingDogsCount}* (🏨 ${incomingBoarding.length} | 🎓 ${incomingTraining.length})
 ${incomingSection}
 
-🔴 *סה״כ כלבים שמשתחררים מחר: ${departingDogs.length}* (🏨 ${departingBoarding.length} | 🎓 ${departingTraining.length})
+🔴 *סה״כ כלבים שמשתחררים מחר: ${departingDogsCount}* (🏨 ${departingBoarding.length} | 🎓 ${departingTraining.length})
 ${departingSection}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
-🐕 *כמה כלבים יהיו לי מחר בסוף היום: ${endOfDayDogs.length} כלבים ללינה*
-• 🏨 *פנסיון ללינה (${endOfDayBoarding.length}):* ${boardingOvernightNames.join(', ') || '0 כלבים'}
-• 🎓 *אילוף ללינה (${endOfDayTraining.length}):* ${trainingOvernightNames.join(', ') || '0 כלבים'}
+🐕 *כמה כלבים יהיו לי מחר בסוף היום: ${endOfDayDogsCount} כלבים ללינה*
+• 🏨 *פנסיון ללינה (${endOfDayBoardingCount}):* ${boardingOvernightNames.join(', ') || '0 כלבים'}
+• 🎓 *אילוף ללינה (${endOfDayTrainingCount}):* ${trainingOvernightNames.join(', ') || '0 כלבים'}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-📊 *סה״כ כלבים שנמצאים מחר: ${presentDaytimeDogs.length} כלבים*
-
 📈 *סיכום תפוסת לינה מחר:*
-• *${endOfDayDogs.length} מתוך ${maxCapacity} מקומות* (${occupancyPercent}% תפוסה)
-${endOfDayDogs.length >= maxCapacity ? '• 🔥 *תפוסה מלאה בריזורט!*' : `• נותרו עוד *${maxCapacity - endOfDayDogs.length}* מקומות פנויים.`}${extraActionSections}
+• *${endOfDayDogsCount} מתוך ${maxCapacity} מקומות* (${occupancyPercent}% תפוסה)
+${endOfDayDogsCount >= maxCapacity ? '• 🔥 *תפוסה מלאה בריזורט!*' : `• נותרו עוד *${maxCapacity - endOfDayDogsCount}* מקומות פנויים.`}${extraActionSections}
 
 שיהיה יום מוצלח, פורה ושקט! ❤️🐶🐾`;
 }

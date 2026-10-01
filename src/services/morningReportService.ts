@@ -105,8 +105,22 @@ export function formatTomorrowOverviewReport(
   // Dogs present during daytime tomorrow
   const presentDaytimeDogs = deduplicateBookings(activeBookings.filter(b => b.startDate <= tomorrowStr && b.endDate >= tomorrowStr));
 
+  // Count actual dog heads (including multi-dog pairs like "לולה וברנדי", "סקובי וג'ינג'ס")
+  const countDogs = (list: Booking[]) => list.reduce((sum, b) => {
+    const name = (b.dogName || '').trim();
+    const notes = (b.notes || '').trim();
+    if (name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes(' ועוד ') || name.includes('&')) return sum + 2;
+    if (notes.includes('2 כלבים') || notes.includes('שני כלבים') || notes.includes('זוג כלבים') || notes.includes('2 כלבות') || notes.includes('שתי כלבות')) return sum + 2;
+    return sum + 1;
+  }, 0);
+
+  const presentDogsCount = countDogs(presentDaytimeDogs);
+  const incomingDogsCount = countDogs(incomingDogs);
+  const departingDogsCount = countDogs(departingDogs);
+  const endOfDayDogsCount = countDogs(endOfDayDogs);
+
   const maxCapacity = Number(settings.maxCapacity) || 10;
-  const occupancyPercent = maxCapacity > 0 ? Math.round((endOfDayDogs.length / maxCapacity) * 100) : 0;
+  const occupancyPercent = maxCapacity > 0 ? Math.round((endOfDayDogsCount / maxCapacity) * 100) : 0;
   const growPaymentLink = settings.growPaymentLink || settings.payboxPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
 
   const isTrainingBooking = (b: Booking) => {
@@ -116,9 +130,11 @@ export function formatTomorrowOverviewReport(
 
   const endOfDayBoarding = endOfDayDogs.filter(b => !isTrainingBooking(b));
   const endOfDayTraining = endOfDayDogs.filter(b => isTrainingBooking(b));
+  const endOfDayBoardingCount = countDogs(endOfDayBoarding);
+  const endOfDayTrainingCount = countDogs(endOfDayTraining);
 
-  const boardingOvernightLine = `   • פנסיון: ${endOfDayBoarding.length} כלבים${endOfDayBoarding.length > 0 ? ` (${endOfDayBoarding.map(b => b.dogName).join(', ')})` : ''}`;
-  const trainingOvernightLine = `   • אילוף: ${endOfDayTraining.length} כלבים${endOfDayTraining.length > 0 ? ` (${endOfDayTraining.map(b => b.dogName).join(', ')})` : ''}`;
+  const boardingOvernightLine = `   • פנסיון: ${endOfDayBoardingCount} כלבים${endOfDayBoarding.length > 0 ? ` (${endOfDayBoarding.map(b => b.dogName).join(', ')})` : ''}`;
+  const trainingOvernightLine = `   • אילוף: ${endOfDayTrainingCount} כלבים${endOfDayTraining.length > 0 ? ` (${endOfDayTraining.map(b => b.dogName).join(', ')})` : ''}`;
 
   const formatDogItem = (b: Booking, index: number, isIncoming: boolean) => {
     const dogName = b.dogName || 'כלב';
@@ -393,20 +409,22 @@ export function formatTomorrowOverviewReport(
 
   return `📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾
 📅 יום ${dayName}, ${formattedDate}
+
+🐾 *נוכחות כללית במתחם מחר:* ${presentDogsCount} כלבים${presentDogsCount !== presentDaytimeDogs.length ? ` (${presentDaytimeDogs.length} הזמנות, כולל זוגות)` : ''}
 ${regardsStatusLine}
-🟢 *כניסות מחר (${incomingDogs.length}):*
+🟢 *כניסות מחר (${incomingDogsCount} כלבים):*
 ${incomingSection}
 
-🔴 *שחרורים מחר (${departingDogs.length}):*
+🔴 *שחרורים מחר (${departingDogsCount} כלבים):*
 ${departingSection}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
-🐕 *בסוף היום: ${endOfDayDogs.length} כלבים ללינה*
+🐕 *בסוף היום: ${endOfDayDogsCount} כלבים ללינה*
 ${boardingOvernightLine}
 ${trainingOvernightLine}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
-📊 *תפוסת לינה:* ${endOfDayDogs.length}/${maxCapacity} מקומות (${occupancyPercent}%)${highlightsSection}${extraActionSections}
+📊 *תפוסת לינה:* ${endOfDayDogsCount}/${maxCapacity} מקומות (${occupancyPercent}%)${highlightsSection}${extraActionSections}
 
 שיהיה יום מוצלח ושקט! ❤️🐶🐾`;
 }
