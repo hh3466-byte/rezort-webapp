@@ -161,6 +161,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [focusedDate, setFocusedDate] = useState<string>(todayStr);
   const [greetingModalDate, setGreetingModalDate] = useState<string | null>(null);
   const [hoveredHousehold, setHoveredHousehold] = useState<string | null>(null);
+  const [hoveredBookingId, setHoveredBookingId] = useState<string | null>(null);
 
   // Search state for Shmulik (חיפוש ביומן לפי שם כלב או בעלים)
   const [searchQuery, setSearchQuery] = useState('');
@@ -873,7 +874,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                         // Pair detection & connected UI styling
                         const pairInfo = getBookingPairInfo(b, dayBookings);
-                        const isPairHovered = hoveredHousehold === pairInfo.householdKey && pairInfo.isPair;
+                        const isPairHovered = Boolean(hoveredHousehold && hoveredHousehold === pairInfo.householdKey && pairInfo.isPair);
+                        const isSingleHovered = Boolean(hoveredBookingId && hoveredBookingId === b.id && !pairInfo.isPair);
                         const prevSibling = bIdx > 0 && getBookingPairInfo(dayBookings[bIdx - 1], dayBookings).householdKey === pairInfo.householdKey && pairInfo.isPair;
                         const nextSibling = bIdx < dayBookings.length - 1 && getBookingPairInfo(dayBookings[bIdx + 1], dayBookings).householdKey === pairInfo.householdKey && pairInfo.isPair;
 
@@ -892,6 +894,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           cardClasses += 'bg-amber-100 border-amber-400 text-amber-950 ring-2 ring-amber-400 shadow-md scale-[1.03]';
                         } else if (isPairHovered) {
                           cardClasses += 'bg-indigo-100/90 border-indigo-400 text-indigo-950 ring-2 ring-indigo-500 shadow-md scale-[1.02] z-10';
+                        } else if (isSingleHovered) {
+                          cardClasses += 'bg-emerald-100/90 border-emerald-400 text-emerald-950 ring-2 ring-emerald-500 shadow-md scale-[1.02] z-10';
                         } else if (isDimmed) {
                           cardClasses += 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90';
                         } else if (pairInfo.isPair) {
@@ -918,8 +922,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           <div
                             key={b.id}
                             onClick={() => onSelectBooking(b, day.dateStr)}
-                            onMouseEnter={() => pairInfo.isPair && setHoveredHousehold(pairInfo.householdKey)}
-                            onMouseLeave={() => pairInfo.isPair && setHoveredHousehold(null)}
+                            onMouseEnter={() => {
+                              setHoveredBookingId(b.id);
+                              if (pairInfo.isPair) {
+                                setHoveredHousehold(pairInfo.householdKey);
+                              }
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredBookingId(null);
+                              setHoveredHousehold(null);
+                            }}
                             className={cardClasses}
                             title={tooltipTitle}
                           >
@@ -932,11 +944,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                   className="w-3.5 h-3.5 object-contain shrink-0 rounded-full"
                                 />
                               ) : (
-                                <span className={`text-[11px] shrink-0 ${isMatch ? 'text-amber-700' : isPairHovered ? 'text-indigo-700' : stayColors.iconClass}`}>🐾</span>
+                                <span className={`text-[11px] shrink-0 ${isMatch ? 'text-amber-700' : isPairHovered ? 'text-indigo-700' : isSingleHovered ? 'text-emerald-700' : stayColors.iconClass}`}>🐾</span>
                               )}
                               <span className="truncate text-[11px] sm:text-xs">
-                                <span className={isMatch ? 'text-amber-950 font-black' : isPairHovered ? 'text-indigo-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
-                                <span className={isMatch ? 'text-amber-900 font-bold text-[10px]' : isPairHovered ? 'text-indigo-900 font-bold text-[10px]' : stayColors.ownerClass}>({b.ownerName})</span>
+                                <span className={isMatch ? 'text-amber-950 font-black' : isPairHovered ? 'text-indigo-950 font-black' : isSingleHovered ? 'text-emerald-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
+                                <span className={isMatch ? 'text-amber-900 font-bold text-[10px]' : isPairHovered ? 'text-indigo-900 font-bold text-[10px]' : isSingleHovered ? 'text-emerald-900 font-bold text-[10px]' : stayColors.ownerClass}>({b.ownerName})</span>
                               </span>
                             </span>
                             {isEnded ? (
@@ -1074,10 +1086,16 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       const isDimmed = Boolean(searchQuery.trim() && !isMatch);
                       const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, dayObj.dateStr);
                       const pairInfo = getBookingPairInfo(b, dateBookings);
+                      const isPairHovered = Boolean(hoveredHousehold && hoveredHousehold === pairInfo.householdKey && pairInfo.isPair);
+                      const isSingleHovered = Boolean(hoveredBookingId && hoveredBookingId === b.id && !pairInfo.isPair);
 
                       let chipStyle = stayColors.monthChipBg;
                       if (isMatch) {
                         chipStyle = 'bg-amber-500 text-white ring-2 ring-amber-300 font-black shadow-md';
+                      } else if (isPairHovered) {
+                        chipStyle = 'bg-indigo-600 text-white ring-2 ring-indigo-300 font-black shadow-md scale-[1.03] z-10';
+                      } else if (isSingleHovered) {
+                        chipStyle = 'bg-emerald-600 text-white ring-2 ring-emerald-300 font-black shadow-md scale-[1.03] z-10';
                       } else if (isDimmed) {
                         chipStyle = 'bg-slate-200/60 text-slate-400 opacity-30';
                       } else if (pairInfo.isPair) {
@@ -1091,7 +1109,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             e.stopPropagation();
                             onSelectBooking(b, dayObj.dateStr);
                           }}
-                          className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between border cursor-pointer hover:scale-[1.02] transition-transform ${chipStyle}`}
+                          onMouseEnter={() => {
+                            setHoveredBookingId(b.id);
+                            if (pairInfo.isPair) {
+                              setHoveredHousehold(pairInfo.householdKey);
+                            }
+                          }}
+                          onMouseLeave={() => {
+                            setHoveredBookingId(null);
+                            setHoveredHousehold(null);
+                          }}
+                          className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between border cursor-pointer hover:scale-[1.02] transition-all ${chipStyle}`}
                           title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${pairInfo.isPair ? ` - 🔗 זוג` : ''}${stayColors.isReleasing ? ' - משתחרר ביום זה!' : isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
                         >
                           <span className="truncate flex items-center gap-1 min-w-0">
@@ -1105,8 +1133,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             ) : (
                               <span className="text-[10px] shrink-0">🐾</span>
                             )}
-                            <span className={`truncate ${isMatch ? 'text-white font-black' : stayColors.dogClass}`}>{b.dogName}</span>
-                            <span className={`text-[9px] shrink-0 ${isMatch ? 'text-amber-100 font-medium' : stayColors.ownerClass}`}>({b.ownerName})</span>
+                            <span className={`truncate ${isMatch || isPairHovered || isSingleHovered ? 'text-white font-black' : stayColors.dogClass}`}>{b.dogName}</span>
+                            <span className={`text-[9px] shrink-0 ${isMatch || isPairHovered || isSingleHovered ? 'text-white/90 font-medium' : stayColors.ownerClass}`}>({b.ownerName})</span>
                           </span>
                           <div className="flex items-center gap-0.5 shrink-0">
                             {isMatch && <span className="text-[9px]">⭐</span>}
@@ -1260,24 +1288,43 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         const isArrival = b.startDate === day.dateStr;
                         const isDeparture = b.endDate === day.dateStr;
                         const pairInfo = getBookingPairInfo(b, dayBookings);
+                        const isPairHovered = Boolean(hoveredHousehold && hoveredHousehold === pairInfo.householdKey && pairInfo.isPair);
+                        const isSingleHovered = Boolean(hoveredBookingId && hoveredBookingId === b.id && !pairInfo.isPair);
 
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
                         const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, day.dateStr);
 
+                        let cardClasses = `border rounded-xl p-2 text-xs transition-all cursor-pointer shadow-2xs `;
+                        if (isMatch) {
+                          cardClasses += 'bg-amber-50/90 border-2 border-amber-400 text-amber-950 ring-2 ring-amber-400/80 shadow-md scale-[1.02]';
+                        } else if (isPairHovered) {
+                          cardClasses += 'bg-indigo-100/90 border-indigo-400 text-indigo-950 ring-2 ring-indigo-500 shadow-md scale-[1.02] z-10';
+                        } else if (isSingleHovered) {
+                          cardClasses += 'bg-emerald-100/90 border-emerald-400 text-emerald-950 ring-2 ring-emerald-500 shadow-md scale-[1.02] z-10';
+                        } else if (isDimmed) {
+                          cardClasses += 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90';
+                        } else if (pairInfo.isPair) {
+                          cardClasses += `${stayColors.cardBorderBg} border-r-[3.5px] border-r-indigo-500`;
+                        } else {
+                          cardClasses += stayColors.cardBorderBg;
+                        }
+
                         return (
                           <div
                             key={b.id}
                             onClick={() => onSelectBooking(b)}
-                            className={`border rounded-xl p-2 text-xs transition-all cursor-pointer shadow-2xs ${
-                              isMatch
-                                ? 'bg-amber-50/90 border-2 border-amber-400 text-amber-950 ring-2 ring-amber-400/80 shadow-md scale-[1.02]'
-                                : isDimmed
-                                ? 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90'
-                                : pairInfo.isPair
-                                ? `${stayColors.cardBorderBg} border-r-[3.5px] border-r-indigo-500`
-                                : stayColors.cardBorderBg
-                            }`}
+                            onMouseEnter={() => {
+                              setHoveredBookingId(b.id);
+                              if (pairInfo.isPair) {
+                                setHoveredHousehold(pairInfo.householdKey);
+                              }
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredBookingId(null);
+                              setHoveredHousehold(null);
+                            }}
+                            className={cardClasses}
                             title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${pairInfo.isPair ? ` - 🔗 זוג` : ''}${stayColors.isReleasing ? ' (משתחרר היום)' : isEnded ? ' (שוחרר)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת)' : ' (שוריין)'}`}
                           >
                             <div className="flex items-center justify-between font-bold">
@@ -1290,11 +1337,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                     className="w-3.5 h-3.5 object-contain shrink-0 rounded-full"
                                   />
                                 ) : (
-                                  <Dog className={`w-3 h-3 shrink-0 ${isMatch ? 'text-amber-700' : stayColors.iconClass}`} />
+                                  <Dog className={`w-3 h-3 shrink-0 ${isMatch ? 'text-amber-700' : isPairHovered ? 'text-indigo-700' : isSingleHovered ? 'text-emerald-700' : stayColors.iconClass}`} />
                                 )}
                                 <span className="truncate">
-                                  <span className={isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
-                                  <span className={isMatch ? 'text-amber-900 font-bold text-[11px]' : stayColors.ownerClass}>({b.ownerName})</span>
+                                  <span className={isMatch ? 'text-amber-950 font-black' : isPairHovered ? 'text-indigo-950 font-black' : isSingleHovered ? 'text-emerald-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
+                                  <span className={isMatch ? 'text-amber-900 font-bold text-[11px]' : isPairHovered ? 'text-indigo-900 font-bold text-[10px]' : isSingleHovered ? 'text-emerald-900 font-bold text-[10px]' : stayColors.ownerClass}>({b.ownerName})</span>
                                 </span>
                               </span>
                               <span className="text-[10px] text-slate-400 font-normal">
@@ -1438,18 +1485,38 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === booking.id));
                   const isDimmed = Boolean(searchQuery.trim() && !isMatch);
                   const stayColors = getStayStatusColors(booking.stayStatus, booking.endDate, todayStr, booking.startDate, focusedDate);
+                  const pairInfo = getBookingPairInfo(booking, dayBreakdown.all);
+                  const isPairHovered = Boolean(hoveredHousehold && hoveredHousehold === pairInfo.householdKey && pairInfo.isPair);
+                  const isSingleHovered = Boolean(hoveredBookingId && hoveredBookingId === booking.id && !pairInfo.isPair);
+
+                  let cardClasses = `rounded-xl p-3.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs flex flex-col justify-between `;
+                  if (isMatch) {
+                    cardClasses += 'bg-amber-50/90 border-2 border-amber-400 ring-2 ring-amber-300 shadow-md scale-[1.01]';
+                  } else if (isPairHovered) {
+                    cardClasses += 'bg-indigo-50/90 border-2 border-indigo-400 ring-2 ring-indigo-300 shadow-md scale-[1.01]';
+                  } else if (isSingleHovered) {
+                    cardClasses += 'bg-emerald-50/90 border-2 border-emerald-400 ring-2 ring-emerald-300 shadow-md scale-[1.01]';
+                  } else if (isDimmed) {
+                    cardClasses += 'bg-white/60 border border-slate-200 opacity-30 hover:opacity-90';
+                  } else {
+                    cardClasses += stayColors.cardBorderBg;
+                  }
 
                   return (
                     <div
                       key={booking.id}
                       onClick={() => onSelectBooking(booking)}
-                      className={`rounded-xl p-3.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs flex flex-col justify-between ${
-                        isMatch
-                          ? 'bg-amber-50/90 border-2 border-amber-400 ring-2 ring-amber-300 shadow-md scale-[1.01]'
-                          : isDimmed
-                          ? 'bg-white/60 border border-slate-200 opacity-30 hover:opacity-90'
-                          : stayColors.cardBorderBg
-                      }`}
+                      onMouseEnter={() => {
+                        setHoveredBookingId(booking.id);
+                        if (pairInfo.isPair) {
+                          setHoveredHousehold(pairInfo.householdKey);
+                        }
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredBookingId(null);
+                        setHoveredHousehold(null);
+                      }}
+                      className={cardClasses}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
@@ -1462,10 +1529,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 className="w-5 h-5 object-contain shrink-0 rounded-full"
                               />
                             ) : (
-                              <span className="text-base shrink-0">🐾</span>
+                              <span className={`text-base shrink-0 ${isPairHovered ? 'text-indigo-600' : isSingleHovered ? 'text-emerald-600' : ''}`}>🐾</span>
                             )}
-                            <span className={`font-black text-base ${isMatch ? 'text-amber-950 font-black' : stayColors.dogClass}`}>{booking.dogName}</span>
-                            <span className={`text-xs font-bold ${isMatch ? 'text-amber-900 font-bold' : stayColors.ownerClass}`}>({booking.ownerName})</span>
+                            <span className={`font-black text-base ${isMatch ? 'text-amber-950 font-black' : isPairHovered ? 'text-indigo-950 font-black' : isSingleHovered ? 'text-emerald-950 font-black' : stayColors.dogClass}`}>{booking.dogName}</span>
+                            <span className={`text-xs font-bold ${isMatch ? 'text-amber-900 font-bold' : isPairHovered ? 'text-indigo-900 font-bold' : isSingleHovered ? 'text-emerald-900 font-bold' : stayColors.ownerClass}`}>({booking.ownerName})</span>
                             {booking.dogBreed && (
                               <span className="text-xs text-slate-500 font-normal">({booking.dogBreed})</span>
                             )}
