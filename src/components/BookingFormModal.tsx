@@ -33,6 +33,7 @@ interface BookingFormModalProps {
   onClose: () => void;
   onSave: (booking: Booking) => void;
   onDeleteBooking?: (bookingId: string) => void;
+  onOpenSendPaymentLink?: (booking: Booking) => void;
 }
 
 export const BookingFormModal: React.FC<BookingFormModalProps> = ({
@@ -42,6 +43,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   onClose,
   onSave,
   onDeleteBooking,
+  onOpenSendPaymentLink,
 }) => {
   const todayStr = getTodayStr();
 
@@ -55,6 +57,13 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   const [serviceType, setServiceType] = useState<ServiceType>(initialData?.serviceType || 'boarding');
   const [startDate, setStartDate] = useState(initialData?.startDate || todayStr);
   const [endDate, setEndDate] = useState(initialData?.endDate || addDays(todayStr, 3));
+
+  // Stay extension detection & tracking
+  const isEditing = Boolean(initialData?.id);
+  const initialEndDate = initialData?.endDate || '';
+  const initialTotalPrice = Number(initialData?.totalPrice) || 0;
+  const initialDepositAmount = Number(initialData?.depositAmount) || 0;
+  const [showExtensionPricePrompt, setShowExtensionPricePrompt] = useState(false);
   
   // Pricing mode: Per Day vs Fixed Period
   const [pricingMode, setPricingMode] = useState<'daily' | 'period'>(() => {
@@ -146,6 +155,19 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
     return 'free';
   });
   const [linkedMainDogName, setLinkedMainDogName] = useState<string>(initialData?.linkedDogName || '');
+
+  // Stay extension calculations
+  const isExtended = Boolean(
+    isEditing &&
+    initialEndDate &&
+    endDate > initialEndDate &&
+    serviceType === 'boarding' &&
+    !isFreeStay
+  );
+  const extraDays = isExtended ? Math.max(0, calculateDaysCount(initialEndDate, endDate) - 1) : 0;
+  const effectiveDailyRate = dailyRate > 0 ? dailyRate : (initialData?.dailyRate || settings.defaultDailyRateBoarding || 180);
+  const extraPrice = extraDays * effectiveDailyRate;
+  const suggestedTotalPrice = initialTotalPrice + extraPrice;
 
   // Voice dictation state inside modal (DEFAULT is voice dictation enabled)
   const [voiceMode, setVoiceMode] = useState<'voice' | 'manual'>('voice');
@@ -340,6 +362,18 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
     // Placement is optional during intake/booking - can be assigned later
     setPlacementError('');
 
+    // Safeguard: Check if stay is extended without price update
+    if (
+      isExtended &&
+      extraDays > 0 &&
+      totalPrice <= initialTotalPrice &&
+      !isFreeStay &&
+      !showExtensionPricePrompt
+    ) {
+      setShowExtensionPricePrompt(true);
+      return;
+    }
+
     const calcDebt = Math.max(0, Number(totalPrice) - Number(depositAmount));
     if (stayStatus === 'checked_out' && calcDebt > 0 && Number(depositAmount) < Number(totalPrice) && !showDebtCheckoutConfirm) {
       setShowDebtCheckoutConfirm(true);
@@ -357,14 +391,17 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
     doSave();
   };
 
-  const doSave = (customDeposit?: number, customPaymentStatus?: PaymentStatus) => {
+  const doSave = (customDeposit?: number, customPaymentStatus?: PaymentStatus, customTotalPrice?: number) => {
+    const finalTotalPrice = isFreeStay ? 0 : (customTotalPrice !== undefined ? Number(customTotalPrice) : (Number(totalPrice) || 0));
     const finalDeposit = isFreeStay ? 0 : (customDeposit !== undefined ? Number(customDeposit) : (Number(depositAmount) || 0));
     let finalPaymentStatus: PaymentStatus = isFreeStay ? 'fully_paid' : (customPaymentStatus || 'unpaid');
     if (!isFreeStay && !customPaymentStatus) {
-      if (finalDeposit >= totalPrice && totalPrice > 0) {
+      if (finalDeposit >= finalTotalPrice && finalTotalPrice > 0) {
         finalPaymentStatus = 'fully_paid';
       } else if (finalDeposit > 0) {
         finalPaymentStatus = 'deposit_paid';
+      } else {
+        finalPaymentStatus = 'unpaid';
       }
     }
 
@@ -412,7 +449,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       pricingMode,
       startDate,
       endDate,
-      totalPrice: isFreeStay ? 0 : (Number(totalPrice) || 0),
+      totalPrice: isFreeStay ? 0 : finalTotalPrice,
       dailyRate: isFreeStay ? 0 : (Number(dailyRate) || 0),
       depositAmount: finalDeposit,
       paymentStatus: finalPaymentStatus,
@@ -1020,6 +1057,55 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               </button>
             </div>
 
+            {/* Real-time Stay Extension Alert Banner */}
+            {isExtended && extraDays > 0 && (
+              <div className="mt-3 p-3.5 bg-amber-50 border-2 border-amber-300 rounded-2xl space-y-2.5 shadow-2xs animate-in fade-in">
+                <div className="flex items-start justify-between gap-2 flex-wrap sm:flex-nowrap">
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-xl shrink-0">🔔</span>
+                    <div>
+                      <div className="text-xs font-black text-amber-950 flex items-center gap-1.5 flex-wrap">
+                        <span>זוהתה הארכת שהייה ב-{extraDays} {extraDays === 1 ? 'יום' : 'ימים'}!</span>
+                        <span className="text-[10px] bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full font-bold">
+                          {formatDateIL(initialEndDate)} ➔ {formatDateIL(endDate)}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-amber-900 font-medium mt-0.5">
+                        תוספת מומלצת: <strong>₪{extraPrice.toLocaleString()}</strong> ({extraDays} ימים × ₪{effectiveDailyRate}/יום) | מקדמה ששולמה בעבר: <strong>₪{depositAmount.toLocaleString()}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 flex items-center gap-2">
+                    {totalPrice < suggestedTotalPrice ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTotalPrice(suggestedTotalPrice);
+                          setPricingMode('daily');
+                        }}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white rounded-xl text-xs font-black shadow-xs cursor-pointer flex items-center gap-1 transition-all"
+                      >
+                        <span>⚡ עדכן סה"כ לתשלום ל-₪{suggestedTotalPrice.toLocaleString()}</span>
+                      </button>
+                    ) : (
+                      <span className="bg-emerald-100 text-emerald-900 border border-emerald-300 px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>סה"כ מעודכן: ₪{totalPrice.toLocaleString()}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {totalPrice === suggestedTotalPrice && depositAmount < suggestedTotalPrice && (
+                  <div className="pt-2 border-t border-amber-200/80 flex items-center justify-between text-xs text-amber-950 font-bold">
+                    <span>יתרת חוב להסדרה עבור ההארכה: <strong className="text-rose-700 font-mono text-sm">₪{(suggestedTotalPrice - depositAmount).toLocaleString()}</strong></span>
+                    <span className="text-[11px] text-amber-800 font-normal">הסטטוס ביומן יוגדר כמקדמה/חוב פתוח עם יתרה</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* If Training: Dedicated Estimated Days Input */}
             {serviceType === 'training' && (
               <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
@@ -1556,26 +1642,65 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
             )}
 
             {/* Calculated Remaining Debt & Resulting Color Status */}
-            <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
-              <span className="text-slate-600 font-medium">
+            <div className="pt-2 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <span className="text-slate-700 font-medium">
                 יתרה לתשלום:{' '}
-                <span className={`font-bold ${remainingDebt > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                  ₪{remainingDebt}
+                <span className={`font-black font-mono text-sm ${remainingDebt > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                  ₪{remainingDebt.toLocaleString()}
                 </span>
               </span>
 
-              <div>
-                {remainingDebt === 0 && totalPrice > 0 ? (
-                  <span className="bg-green-500 text-white px-2.5 py-0.5 rounded-lg font-bold shadow-xs">
-                    🟢 ירוק מלא (שולם)
+              <div className="flex items-center gap-2 flex-wrap">
+                {onOpenSendPaymentLink && initialData?.id && remainingDebt > 0 && !isFreeStay && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentBooking: Booking = {
+                        id: initialData.id!,
+                        dogName: dogName.trim(),
+                        dogBreed: dogBreed.trim(),
+                        dogGender,
+                        ownerName: ownerName.trim(),
+                        ownerPhone: ownerPhone.trim(),
+                        ownerEmail: ownerEmail.trim(),
+                        serviceType,
+                        pricingMode,
+                        startDate,
+                        endDate,
+                        totalPrice: isFreeStay ? 0 : totalPrice,
+                        dailyRate: isFreeStay ? 0 : dailyRate,
+                        depositAmount: isFreeStay ? 0 : depositAmount,
+                        paymentStatus: depositAmount >= totalPrice ? 'fully_paid' : depositAmount > 0 ? 'deposit_paid' : 'unpaid',
+                        paymentMethod,
+                        stayStatus,
+                        createdAt: initialData.createdAt || new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                      };
+                      onOpenSendPaymentLink(currentBooking);
+                    }}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-black shadow-2xs flex items-center gap-1 cursor-pointer transition-all"
+                    title="שלח קישור לתשלום מאובטח בוואטסאפ ללקוח"
+                  >
+                    <span>📲</span>
+                    <span>שלח קישור תשלום בוואטסאפ (יתרה ₪{remainingDebt.toLocaleString()})</span>
+                  </button>
+                )}
+
+                {isFreeStay ? (
+                  <span className="bg-emerald-100 border border-emerald-300 text-emerald-900 px-2.5 py-0.5 rounded-lg font-black shadow-xs">
+                    🟢 אירוח בחינם / מוסדר (₪0)
+                  </span>
+                ) : remainingDebt === 0 && totalPrice > 0 ? (
+                  <span className="bg-emerald-600 text-white px-2.5 py-0.5 rounded-lg font-black shadow-xs">
+                    🟢 שולם במלואו
                   </span>
                 ) : depositAmount > 0 ? (
-                  <span className="border-2 border-dashed border-green-500 bg-green-50 text-green-800 px-2.5 py-0.5 rounded-lg font-bold">
-                    🟡 ירוק מקווקו (מקדמה)
+                  <span className="border-2 border-dashed border-amber-500 bg-amber-50 text-amber-900 px-2.5 py-0.5 rounded-lg font-black">
+                    🟡 שולמה מקדמה (יתרה ₪{remainingDebt.toLocaleString()})
                   </span>
                 ) : (
-                  <span className="bg-red-500 text-white px-2.5 py-0.5 rounded-lg font-bold shadow-xs">
-                    🔴 אדום (חוב פתוח)
+                  <span className="bg-rose-600 text-white px-2.5 py-0.5 rounded-lg font-black shadow-xs">
+                    🔴 חוב פתוח (טרם שולם)
                   </span>
                 )}
               </div>
@@ -2018,6 +2143,82 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                     className="px-5 py-2 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-700 text-white shadow-xs cursor-pointer active:scale-95"
                   >
                     אשר ושמור ביטול
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Extension Price Prompt Dialog */}
+          {showExtensionPricePrompt && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in" dir="rtl">
+              <div className="bg-white border-2 border-amber-400 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 text-slate-900">
+                <div className="flex items-center gap-2.5 text-amber-800 font-black text-lg border-b border-amber-100 pb-3">
+                  <span className="text-2xl">⚠️</span>
+                  <span>הארכת שהייה: עדכון סה"כ לתשלום</span>
+                </div>
+
+                <div className="text-sm text-slate-700 space-y-2.5">
+                  <p>
+                    השהייה של <strong>{dogName || 'הכלב'}</strong> הוארכה ב-<strong>{extraDays} {extraDays === 1 ? 'יום' : 'ימים'}</strong> (מתאריך {formatDateIL(initialEndDate)} עד {formatDateIL(endDate)}).
+                  </p>
+                  
+                  <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600 font-medium">סה"כ לתשלום כרגע בטופס:</span>
+                      <span className="font-bold font-mono">₪{totalPrice.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-amber-900">
+                      <span className="font-medium">תוספת עבור ההארכה ({extraDays} ימים × ₪{effectiveDailyRate}):</span>
+                      <span className="font-bold font-mono">+₪{extraPrice.toLocaleString()}</span>
+                    </div>
+                    <div className="pt-2 border-t border-amber-200 flex items-center justify-between font-black text-amber-950 text-sm">
+                      <span>סה"כ מומלץ מעודכן:</span>
+                      <span className="font-mono text-base">₪{suggestedTotalPrice.toLocaleString()}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-600 flex items-center justify-between pt-1">
+                      <span>מקדמה שכבר שולמה: ₪{depositAmount.toLocaleString()}</span>
+                      <span className="font-bold text-rose-700">יתרת חוב להסדרה: ₪{Math.max(0, suggestedTotalPrice - depositAmount).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowExtensionPricePrompt(false);
+                      setTotalPrice(suggestedTotalPrice);
+                      setPricingMode('daily');
+                      doSave(
+                        depositAmount,
+                        depositAmount < suggestedTotalPrice ? (depositAmount > 0 ? 'deposit_paid' : 'unpaid') : 'fully_paid',
+                        suggestedTotalPrice
+                      );
+                    }}
+                    className="w-full py-2.5 px-4 rounded-xl text-xs font-black bg-amber-600 hover:bg-amber-700 active:scale-95 text-white shadow-xs cursor-pointer flex items-center justify-center gap-1.5 transition-all"
+                  >
+                    <span>⚡ עדכן סה"כ ל-₪{suggestedTotalPrice.toLocaleString()} ושמור</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowExtensionPricePrompt(false);
+                      doSave();
+                    }}
+                    className="w-full py-2 px-4 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer"
+                  >
+                    השאר ₪{totalPrice.toLocaleString()} ושמור ללא שינוי מחיר
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowExtensionPricePrompt(false)}
+                    className="w-full py-1 text-xs text-slate-500 hover:text-slate-800 text-center cursor-pointer"
+                  >
+                    חזור לעריכה
                   </button>
                 </div>
               </div>

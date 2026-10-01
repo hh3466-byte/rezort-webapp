@@ -2247,6 +2247,7 @@ export default function App() {
           onClose={() => setBookingFormModal({ isOpen: false, initialData: null })}
           onSave={handleSaveBookingForm}
           onDeleteBooking={handleDeleteBooking}
+          onOpenSendPaymentLink={(b) => setPaymentLinkBooking(b)}
         />
       )}
 
