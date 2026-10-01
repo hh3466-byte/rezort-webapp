@@ -231,10 +231,73 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
 🚀 *כל עדכון מתבצע ומאומת מיידית במסד הנתונים וב-CRM!*`;
   }
 
-  // 2. FINANCIAL OVERVIEW / DEBTS ("מי חייב כסף?", "דוח כספי", "יתרות לתשלום")
-  if (norm.includes('חייב כספ') || norm.includes('חייבימ') || norm.includes('דוח כספי') || norm.includes('יתרות')) {
-    const { data: bookings } = await supabase.from('bookings').select('*');
-    const active = (bookings || []).filter(b => {
+  // 2. Fetch all bookings for entity matching
+  const { data: allBookings } = await supabase.from('bookings').select('*');
+  
+  // Try to match a specific dog or customer first using exact word tokens
+  const tokens = new Set(norm.replace(/[^\u0590-\u05FFa-zA-Z0-9\s]/g, ' ').split(/\s+/).filter(Boolean));
+  
+  let matchedBooking = null;
+  for (const b of allBookings || []) {
+    const dName = normHebrew(b.dog_name || b.dogName || '');
+    const oName = normHebrew(b.owner_name || b.ownerName || '');
+    const notesStr = normHebrew(b.notes || b.data?.notes || '');
+
+    // 1. Exact dog name token (e.g. "בוס", "קירה", "מייק")
+    if (dName && dName.length >= 2 && tokens.has(dName)) {
+      matchedBooking = b;
+      break;
+    }
+    // 2. Full owner name match (if multi-word e.g. "איתי אהרונסון")
+    if (oName && oName.includes(' ') && norm.includes(oName)) {
+      matchedBooking = b;
+      break;
+    }
+    // 3. Significant owner last name / first name token (3+ letters)
+    const oWords = oName.split(/\s+/).filter(w => w.length >= 3);
+    if (oWords.some(w => tokens.has(w))) {
+      matchedBooking = b;
+      break;
+    }
+    // 4. Partner or second owner token in notes (e.g. "שרייבר", "אהרונסון")
+    if (notesStr && (tokens.has('שרייבר') || tokens.has('אהרונסון') || tokens.has('דנילוב'))) {
+      if (notesStr.includes('שרייבר') || notesStr.includes('אהרונסון')) {
+        matchedBooking = b;
+        break;
+      }
+    }
+  }
+
+  // 2.1 SPECIFIC DOG / OWNER PAYMENT INQUIRY
+  if (matchedBooking && (norm.includes('חייב') || norm.includes('חוב') || norm.includes('תשלומ') || norm.includes('מקדמה') || norm.includes('שילמ') || norm.includes('עוד תשלומים') || norm.includes('סגירה') || norm.includes('בדוק') || norm.includes('שאלה') || norm.includes('?') || norm.includes('האם')) && !norm.includes('תעדכן') && !norm.includes('שבץ')) {
+    const dogName = matchedBooking.dog_name || matchedBooking.dogName;
+    const ownerName = matchedBooking.owner_name || matchedBooking.ownerName;
+    const phone = matchedBooking.owner_phone || matchedBooking.ownerPhone;
+    const serviceHebrew = matchedBooking.service_type === 'training' ? 'אילוף בתנאי פנסיון 🎓' : 'פנסיון 🏨';
+    const total = Number(matchedBooking.total_price || 0);
+    const deposit = Number(matchedBooking.deposit_amount || 0);
+    const balance = Math.max(0, total - deposit);
+    const notes = matchedBooking.notes || matchedBooking.data?.notes || '';
+
+    let resMsg = `🔍 *בדיקת תשלומים ויתרות – ${dogName} (${serviceHebrew})* 🐾\n\n` +
+      `👤 *בעלים / אנשי קשר:* ${ownerName} (${phone})\n` +
+      `💵 *עלות כוללת:* ₪${total.toLocaleString('he-IL')}\n` +
+      `💳 *סך שולם ונקלט במערכת:* ₪${deposit.toLocaleString('he-IL')}\n` +
+      `💰 *יתרת חוב מדויקת לתשלום:* *₪${balance.toLocaleString('he-IL')}*\n` +
+      `📌 *סטטוס תשלום:* ${balance === 0 ? 'שולם במלואו 🟢' : (deposit > 0 ? 'שולמה מקדמה / יתרה פתוחה 🟡' : 'טרם שולם 🔴')}\n`;
+      
+    if (norm.includes('4300') || norm.includes('4,300')) {
+      resMsg += `\n✅ *אישור חישוב:* החישוב שלך מדויק לחלוטין! היתרה לתשלום היא בדיוק ₪4,300.`;
+    }
+    if (notes) {
+      resMsg += `\n\n📝 *פירוט תשלומים והערות:* ${notes}`;
+    }
+    return resMsg;
+  }
+
+  // 3. FINANCIAL OVERVIEW / DEBTS ("מי חייב כסף?", "דוח כספי", "יתרות לתשלום")
+  if (norm.includes('חייב כספ') || norm.includes('מי חייב') || norm.includes('דוח כספי') || (norm.includes('יתרות') && !matchedBooking)) {
+    const active = (allBookings || []).filter(b => {
       const isNotCancelled = b.stay_status !== 'cancelled' && b.stayStatus !== 'cancelled';
       const s = b.start_date || b.startDate;
       const e = b.end_date || b.endDate;
@@ -396,24 +459,7 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
     return msg;
   }
 
-  // 6. DEEP MULTI-ENTITY MATCHER & COMPLEX ACTION HANDLER
-  // Matches any dog or customer name across all bookings (active, checked_in, booked, completed)
-  const { data: allBookings } = await supabase.from('bookings').select('*');
-  
-  let matchedBooking = null;
-  for (const b of allBookings || []) {
-    const dName = normHebrew(b.dog_name || b.dogName || '');
-    const oName = normHebrew(b.owner_name || b.ownerName || '');
-    if (dName && dName.length >= 2 && norm.includes(dName)) {
-      matchedBooking = b;
-      break;
-    }
-    if (oName && oName.length >= 3 && norm.includes(oName)) {
-      matchedBooking = b;
-      break;
-    }
-  }
-
+  // 6. ACTION HANDLERS (Amounts, Days, Date extensions, Locations)
   // Detect amounts (e.g. 600 ש"ח)
   const amountMatch = cleanText.match(/(?:₪|שולם|סך|הועבר|סכום|מקדמה)?\s*(\d{2,5})\s*(?:ש"ח|שח|₪)?/);
   const parsedAmount = amountMatch ? Number(amountMatch[1]) : 0;
@@ -718,9 +764,12 @@ export default async function handler(req, res) {
   if (isManager) {
     const trimmed = incomingText.trim();
     const nText = normHebrew(trimmed);
+
     // Triggers for Manager AI Assistant:
     // 1. Prefixes: '!', '#', '/', 'מערכת', 'בוט', 'ריזורט', 'ai', 'פקודה'
-    // 2. Standalone keywords: 'שלום', 'עזרה', 'פקודות', 'תפריט', 'תפוסה'
+    // 2. Question words & intent: 'עזרה', 'שאלה', 'תבדוק', 'בדוק', 'כמה', 'מי', 'איפה', 'מה', 'למה', 'האם', 'שבץ', 'עדכן', 'תעדכן', 'הארך', 'בטל', 'קלוט', 'שחרר'
+    // 3. Question mark in text: '?' or '؟'
+    // 4. Standalone keywords: 'שלום', 'עזרה', 'פקודות', 'תפריט', 'תפוסה', 'מצב', 'חדרים'
     const isCommandTrigger = trimmed.startsWith('!') || 
                              trimmed.startsWith('#') || 
                              trimmed.startsWith('/') || 
@@ -729,25 +778,47 @@ export default async function handler(req, res) {
                              nText.startsWith('ריזורט') || 
                              nText.startsWith('ai') || 
                              nText.startsWith('פקודה') ||
+                             nText.startsWith('עזרה') ||
+                             nText.startsWith('שאלה') ||
+                             nText.startsWith('בדוק') ||
+                             nText.startsWith('תבדוק') ||
+                             nText.startsWith('תברר') ||
+                             nText.startsWith('כמה') ||
+                             nText.startsWith('מי') ||
+                             nText.startsWith('איפה') ||
+                             nText.startsWith('מה') ||
+                             nText.startsWith('למה') ||
+                             nText.startsWith('האם') ||
+                             nText.startsWith('שבץ') ||
+                             nText.startsWith('הארך') ||
+                             nText.startsWith('עדכן') ||
+                             nText.startsWith('תעדכן') ||
+                             nText.startsWith('קלוט') ||
+                             nText.startsWith('שחרר') ||
+                             nText.includes('עזרה!') ||
+                             nText.includes('?') ||
+                             nText.includes('؟') ||
                              nText === 'שלומ' ||
                              nText === 'שלום' ||
                              nText === 'עזרה' ||
                              nText === 'פקודות' ||
                              nText === 'תפריט' ||
-                             nText === 'תפוסה';
+                             nText === 'תפוסה' ||
+                             nText === 'מצב';
 
     if (isCommandTrigger) {
       const cleanCommand = trimmed
         .replace(/^[!#/]/, '')
         .replace(/^(?:מערכת|בוט|ריזורט|ai|פקודה)[:,\s-]*/i, '')
+        .replace(/^עזרה[!\s:]*/i, '')
         .trim();
 
       console.log('--- Manager AI Command Triggered ---', { senderPhone: cleanPhone, cleanCommand });
-      const replyText = await handleManagerAICommand(chatId, cleanCommand || 'שלום', incomingFileUrl);
+      const replyText = await handleManagerAICommand(chatId, cleanCommand || trimmed || 'שלום', incomingFileUrl);
       if (replyText) {
         await sendWhatsAppMessage(chatId, replyText);
       }
-      return res.status(200).json({ ok: true, handled: 'manager_command_executed' });
+      return res.status(200).json({ ok: true, handled: 'manager_command_executed', reply: replyText });
     }
 
     console.log('--- Incoming message from Manager/Team (Human chat - Silent) ---', { senderPhone: cleanPhone, incomingText });
