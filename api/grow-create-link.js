@@ -85,8 +85,8 @@ export default async function handler(req, res) {
           }
         }
       ],
-      // 1=Credit Card, 6=Bit, 13=Apple Pay, 14=Google Pay, 5=PayBox (excl. 15 Bank Transfer to avoid confusion)
-      transactionType: [1, 6, 13, 14, 5],
+      // 1=Credit Card, 6=Bit, 13=Apple Pay, 14=Google Pay, 5=PayBox, 15=Bank Transfer (Managed via Grow with auto-invoice)
+      transactionType: [1, 6, 13, 14, 5, 15],
       successUrl,
       notifyUrl,
       cField1: bookingId || `b-${Date.now()}`,
