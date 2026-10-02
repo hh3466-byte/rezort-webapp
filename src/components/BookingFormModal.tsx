@@ -437,6 +437,8 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       }
     }
 
+    const effectiveEndDate = (stayStatus === 'checked_out' && endDate > todayStr) ? todayStr : endDate;
+
     const booking: Booking = {
       id: initialData?.id || `b-${Date.now()}`,
       dogName: dogName.trim(),
@@ -448,7 +450,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       serviceType,
       pricingMode,
       startDate,
-      endDate,
+      endDate: effectiveEndDate,
       totalPrice: isFreeStay ? 0 : finalTotalPrice,
       dailyRate: isFreeStay ? 0 : (Number(dailyRate) || 0),
       depositAmount: finalDeposit,

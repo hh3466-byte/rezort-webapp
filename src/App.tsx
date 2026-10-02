@@ -883,18 +883,25 @@ export default function App() {
 
   // Save from BookingFormModal (Add / Edit)
   const handleSaveBookingForm = async (booking: Booking) => {
+    const today = getTodayStr();
+    const effectiveEndDate = (booking.stayStatus === 'checked_out' && booking.endDate > today) ? today : booking.endDate;
+    const normalizedBooking: Booking = {
+      ...booking,
+      endDate: effectiveEndDate
+    };
+
     // Instant optimistic state update
     setBookings(prev => {
-      const exists = prev.some(b => b.id === booking.id);
+      const exists = prev.some(b => b.id === normalizedBooking.id);
       if (exists) {
-        return prev.map(b => b.id === booking.id ? booking : b);
+        return prev.map(b => b.id === normalizedBooking.id ? normalizedBooking : b);
       }
-      return [...prev, booking];
+      return [...prev, normalizedBooking];
     });
     setBookingFormModal({ isOpen: false, initialData: null });
-    showToast(`💾 ההזמנה של ${booking.dogName} נשמרה וסונכרנה בענן`);
+    showToast(`💾 ההזמנה של ${normalizedBooking.dogName} נשמרה וסונכרנה בענן`);
     try {
-      await saveBookingToDb(booking);
+      await saveBookingToDb(normalizedBooking);
     } catch (err: any) {
       console.error('Failed to sync booking to cloud:', err);
       showToast(`⚠️ שגיאה בשמירה בענן: ${err?.message || 'נסה שוב'}`);
@@ -953,8 +960,11 @@ export default function App() {
   const handleToggleStayStatus = async (bookingId: string, newStatus: Booking['stayStatus']) => {
     const booking = bookings.find(b => b.id === bookingId);
     if (booking) {
+      const today = getTodayStr();
+      const effectiveEndDate = (newStatus === 'checked_out' && booking.endDate > today) ? today : booking.endDate;
       const updated: Booking = {
         ...booking,
+        endDate: effectiveEndDate,
         stayStatus: newStatus,
         updatedAt: new Date().toISOString()
       };
