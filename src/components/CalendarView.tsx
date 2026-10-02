@@ -1292,7 +1292,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         אין כלבים רשומים ליום זה
                       </div>
                     ) : (
-                      dayBookings.map((b) => {
+                      dayBookings.map((b, bIdx) => {
                         const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                         const isPaid = b.paymentStatus === 'fully_paid' || b.isFreeStay;
                         const isDeposit = b.paymentStatus === 'deposit_paid';
@@ -1306,11 +1306,24 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           (hoveredHousehold && hoveredHousehold === pairInfo.householdKey && pairInfo.isPair)
                         );
 
+                        const prevSibling = bIdx > 0 && getBookingPairInfo(dayBookings[bIdx - 1], dayBookings).householdKey === pairInfo.householdKey && pairInfo.isPair;
+                        const nextSibling = bIdx < dayBookings.length - 1 && getBookingPairInfo(dayBookings[bIdx + 1], dayBookings).householdKey === pairInfo.householdKey && pairInfo.isPair;
+
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
                         const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, day.dateStr);
 
-                        let cardClasses = `border rounded-xl p-2 text-xs transition-all cursor-pointer shadow-2xs `;
+                        let cardClasses = `border p-2 text-xs transition-all cursor-pointer shadow-2xs relative `;
+                        if (prevSibling && nextSibling) {
+                          cardClasses += 'rounded-md ';
+                        } else if (prevSibling) {
+                          cardClasses += 'rounded-xl rounded-t-xs -mt-0.5 ';
+                        } else if (nextSibling) {
+                          cardClasses += 'rounded-xl rounded-b-xs ';
+                        } else {
+                          cardClasses += 'rounded-xl ';
+                        }
+
                         if (isMatch) {
                           cardClasses += 'bg-amber-50/90 border-2 border-amber-400 text-amber-950 ring-2 ring-amber-400/80 shadow-md scale-[1.02] z-20';
                         } else if (isHovered) {

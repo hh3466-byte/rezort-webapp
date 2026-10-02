@@ -144,26 +144,87 @@ export interface BookingPairInfo {
   totalInGroup: number;
 }
 
-export function getBookingPairInfo(booking: Booking, allBookingsInContext: Booking[]): BookingPairInfo {
-  const cleanPhone = (booking.ownerPhone || '').replace(/\D/g, '');
-  const householdKey = cleanPhone.length >= 7 
-    ? `phone_${cleanPhone}` 
-    : `owner_${(booking.ownerName || '').trim().toLowerCase()}`;
+/**
+ * Determines whether two booking records belong to the same household/pair of dogs.
+ */
+export function areBookingsInSameHousehold(a: Booking, b: Booking): boolean {
+  if (!a || !b) return false;
+  if (a.id && b.id && a.id === b.id) return true;
 
-  const siblings = allBookingsInContext.filter(other => {
+  // 1. Match by phone number (if both have valid numbers >= 7 digits)
+  const cleanPhoneA = (a.ownerPhone || '').replace(/\D/g, '');
+  const cleanPhoneB = (b.ownerPhone || '').replace(/\D/g, '');
+  if (cleanPhoneA.length >= 7 && cleanPhoneB.length >= 7 && cleanPhoneA === cleanPhoneB) {
+    return true;
+  }
+
+  // 2. Match by owner name (if both have owner name >= 2 chars)
+  const cleanOwnerA = (a.ownerName || '').trim().toLowerCase();
+  const cleanOwnerB = (b.ownerName || '').trim().toLowerCase();
+  if (cleanOwnerA.length >= 2 && cleanOwnerB.length >= 2 && cleanOwnerA === cleanOwnerB) {
+    return true;
+  }
+
+  // 3. Match by explicit linkedDogName
+  const dogA = (a.dogName || '').trim().toLowerCase();
+  const dogB = (b.dogName || '').trim().toLowerCase();
+  const linkedA = (a.linkedDogName || '').trim().toLowerCase();
+  const linkedB = (b.linkedDogName || '').trim().toLowerCase();
+  if (
+    (linkedA && dogB && linkedA === dogB) ||
+    (linkedB && dogA && linkedB === dogA)
+  ) {
+    return true;
+  }
+
+  // 4. Match by explicit notes linking dogs
+  const notesA = (a.notes || '').toLowerCase();
+  const notesB = (b.notes || '').toLowerCase();
+  if (
+    (dogB.length >= 2 && (notesA.includes(`זוג עם ${dogB}`) || notesA.includes(`שולם יחד עם ${dogB}`) || notesA.includes(`כרטיס ${dogB}`))) ||
+    (dogA.length >= 2 && (notesB.includes(`זוג עם ${dogA}`) || notesB.includes(`שולם יחד עם ${dogA}`) || notesB.includes(`כרטיס ${dogA}`)))
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+export function getBookingPairInfo(booking: Booking, allBookingsInContext: Booking[]): BookingPairInfo {
+  if (!booking) {
+    return {
+      isPair: false,
+      householdKey: '',
+      siblings: [],
+      siblingNames: '',
+      isPrimary: false,
+      isSecondary: false,
+      indexInGroup: 0,
+      totalInGroup: 1
+    };
+  }
+
+  const siblings = (allBookingsInContext || []).filter(other => {
     if (other.id === booking.id) return false;
-    const otherClean = (other.ownerPhone || '').replace(/\D/g, '');
-    if (cleanPhone.length >= 7 && otherClean.length >= 7) {
-      return cleanPhone === otherClean;
-    }
-    return (other.ownerName || '').trim().toLowerCase() === (booking.ownerName || '').trim().toLowerCase();
+    return areBookingsInSameHousehold(booking, other);
   });
 
   const isPair = siblings.length > 0;
   const siblingNames = siblings.map(s => s.dogName).filter(Boolean).join(', ');
-  
-  // Sort group to determine primary vs secondary
-  const group = [booking, ...siblings].sort((a, b) => {
+
+  const fullGroup = [booking, ...siblings].sort((a, b) => (a.id || '').localeCompare(b.id || ''));
+
+  // Deterministic canonical householdKey for everyone in this group
+  const canonicalOwner = fullGroup.map(x => (x.ownerName || '').trim().toLowerCase()).find(Boolean) || '';
+  const canonicalPhone = fullGroup.map(x => (x.ownerPhone || '').replace(/\D/g, '')).find(p => p.length >= 7) || '';
+  const canonicalId = fullGroup[0]?.id || 'unknown';
+
+  const householdKey = canonicalOwner 
+    ? `owner_${canonicalOwner}` 
+    : (canonicalPhone ? `phone_${canonicalPhone}` : `group_${canonicalId}`);
+
+  // Sort group to determine primary vs secondary (Paid first, then alphabetical)
+  const group = [...fullGroup].sort((a, b) => {
     const aFree = (a.isFreeStay || (a as any).is_free_stay) ? 1 : 0;
     const bFree = (b.isFreeStay || (b as any).is_free_stay) ? 1 : 0;
     if (aFree !== bFree) return aFree - bFree;
@@ -181,8 +242,8 @@ export function getBookingPairInfo(booking: Booking, allBookingsInContext: Booki
     siblingNames,
     isPrimary,
     isSecondary,
-    indexInGroup,
-    totalInGroup: siblings.length + 1
+    indexInGroup: indexInGroup >= 0 ? indexInGroup : 0,
+    totalInGroup: fullGroup.length
   };
 }
 
@@ -223,13 +284,8 @@ export function sortBookingsForDate<T extends Booking>(bookingsList: T[], dateSt
       return prioA - prioB;
     }
 
-    // 3. Pair / Household grouping (same owner / phone always together)
-    const cleanPhoneA = (a.ownerPhone || '').replace(/\D/g, '');
-    const cleanPhoneB = (b.ownerPhone || '').replace(/\D/g, '');
-    const isSamePhone = cleanPhoneA.length >= 7 && cleanPhoneA === cleanPhoneB;
-    const isSameOwner = (a.ownerName || '').trim().toLowerCase() === (b.ownerName || '').trim().toLowerCase();
-
-    if (isSamePhone || isSameOwner) {
+    // 3. Pair / Household grouping (same household always sorted together)
+    if (areBookingsInSameHousehold(a, b)) {
       // Within the same pair/household:
       // Primary / paid dog first (isFreeStay === false before isFreeStay === true)
       const aFree = (a.isFreeStay || (a as any).is_free_stay) ? 1 : 0;

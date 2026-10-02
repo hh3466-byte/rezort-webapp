@@ -1,22 +1,39 @@
-const SUPABASE_URL = 'https://ydlynqqmulojhrxbfjsc.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ';
+const fs = require('fs');
+const { createClient } = require('@supabase/supabase-js');
 
-async function inspectPairs() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/bookings?select=*`, {
-    headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
-  });
-  const data = await res.json();
-  
-  const pairBookings = data.filter(b => {
-    const name = (b.dog_name || '').trim();
-    return name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes('&') || name.includes(' and ');
-  });
+const envContent = fs.readFileSync('.env', 'utf8');
+const env = {};
+envContent.split('\n').forEach(line => {
+  const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+  if (match) {
+    let val = (match[2] || '').trim();
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    env[match[1]] = val;
+  }
+});
 
-  console.log(`Found ${pairBookings.length} paired bookings in DB:\n`);
-  pairBookings.forEach(b => {
-    console.log(JSON.stringify(b, null, 2));
-    console.log('--------------------------------------------------');
-  });
+const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
+
+async function check() {
+  const { data: list } = await supabase.from('bookings').select('*').or('dog_name.ilike.%סקובי%,dog_name.ilike.%ג%ינגס%,dog_name.ilike.%גינגס%,dog_name.ilike.%לולה%,dog_name.ilike.%ברנדי%');
+  for (const b of (list || [])) {
+    console.log({
+      id: b.id,
+      dog_name: b.dog_name,
+      owner_name: b.owner_name,
+      owner_phone: b.owner_phone,
+      start_date: b.start_date,
+      end_date: b.end_date,
+      total_price: b.total_price,
+      deposit_amount: b.deposit_amount,
+      payment_status: b.payment_status,
+      stay_status: b.stay_status,
+      isFreeStay: b.data?.isFreeStay,
+      linkedDogName: b.data?.linkedDogName,
+      notes: b.notes
+    });
+  }
 }
-
-inspectPairs();
+check();
