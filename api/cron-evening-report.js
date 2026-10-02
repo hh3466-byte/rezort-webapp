@@ -113,14 +113,8 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
     return s === 'training' || s === 'day_training' || s === 'combined';
   };
 
-  // Count actual dog heads (including pairs like "לולה וברנדי", "סקובי וג'ינג'ס")
-  const countDogs = (list) => list.reduce((sum, b) => {
-    const name = (b.dog_name || b.dogName || '').trim();
-    const notes = (b.notes || '').trim();
-    if (name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes(' ועוד ') || name.includes('&')) return sum + 2;
-    if (notes.includes('2 כלבים') || notes.includes('שני כלבים') || notes.includes('זוג כלבים') || notes.includes('2 כלבות') || notes.includes('שתי כלבות')) return sum + 2;
-    return sum + 1;
-  }, 0);
+  // Count actual dog heads (1 card = 1 dog, since pairs have separate cards)
+  const countDogs = (list) => list.length;
 
   const presentDogsCount = countDogs(presentDaytimeDogs);
   const incomingDogsCount = countDogs(incomingDogs);
@@ -278,12 +272,18 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
   }
 
   // 4. Unassigned kennel placement check (חוק ברזל: חובת שיבוץ מיקום לינה)
+  // Only check dogs who are currently checked in (staying now), not future bookings waiting to arrive
+  const getPlacement = (b) => {
+    const k = b.data?.kennelNumber ?? b.kennelNumber ?? b.kennel_number ?? b.room_id ?? b.data?.room;
+    if (!k && k !== 0) return null;
+    return String(k);
+  };
+
   const unassignedKennelDogs = activeBookings.filter(b => {
-    const s = b.start_date || b.startDate;
-    const e = b.end_date || b.endDate;
-    const isStayingOrIncoming = (s <= tomorrowStr && e >= tomorrowStr) || s === tomorrowStr;
-    const k = b.kennel_number !== undefined ? b.kennel_number : b.kennelNumber;
-    return isStayingOrIncoming && (!k && k !== 0);
+    const status = b.stay_status || b.stayStatus || b.status;
+    const isStayingNow = status === 'checked_in';
+    const k = getPlacement(b);
+    return isStayingNow && !k;
   });
 
   if (unassignedKennelDogs.length > 0) {
@@ -293,16 +293,17 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
       const e = b.end_date || b.endDate;
       return `${idx + 1}. 📋 *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${phone}) | שהייה: ${formatDateIL(s)}–${formatDateIL(e)} (ממתין לשיבוץ חדר 1–7, סוויטה 1–4, שביל או הלנה ביתית ודלי מזון)`;
     }).join('\n');
-    actionBlocks.push(`🏠 *כלבים הממתינים לשיבוץ מיקום לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
+    actionBlocks.push(`🏠 *כלבים שוהים הממתינים לשיבוץ מיקום לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
   }
 
   // 5. Zero Deposit bookings holding spots
   const zeroDepositUpcoming = activeBookings.filter(b => {
     const price = Number(b.total_price || b.totalPrice) || 0;
     const deposit = Number(b.deposit_amount || b.depositAmount) || 0;
-    const isFree = b.is_free_stay || b.isFreeStay;
+    const isFree = b.is_free_stay || b.isFreeStay || b.data?.isFreeStay || b.data?.is_free_stay;
+    const payStatus = b.payment_status || b.paymentStatus || b.data?.paymentStatus;
     const end = b.end_date || b.endDate || '';
-    return price > 0 && deposit === 0 && !isFree && end >= todayStr;
+    return price > 0 && deposit === 0 && !isFree && payStatus !== 'fully_paid' && end >= todayStr;
   });
   if (zeroDepositUpcoming.length > 0) {
     const list = zeroDepositUpcoming.map((b, idx) => {
@@ -320,7 +321,7 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
   activeBookings.forEach(b => {
     const price = Number(b.total_price || b.totalPrice) || 0;
     const deposit = Number(b.deposit_amount || b.depositAmount) || 0;
-    const isFree = b.is_free_stay || b.isFreeStay;
+    const isFree = b.is_free_stay || b.isFreeStay || b.data?.isFreeStay || b.data?.is_free_stay;
     const dailyRate = Number(b.daily_rate || b.dailyRate) || 0;
     const dog = (b.dog_name || b.dogName || '').trim();
     const owner = (b.owner_name || b.ownerName || '').trim();
@@ -329,8 +330,12 @@ function formatReport(managerName, bookings, settings, intakes, payments, todayS
     const pMode = b.pricing_mode || b.pricingMode || '';
     const sDate = b.start_date || b.startDate;
     const eDate = b.end_date || b.endDate;
-    const notes = b.notes || '';
+    const notes = (b.notes || '') + (b.data?.notes || '');
     const paymentStatus = b.payment_status || b.paymentStatus || 'unpaid';
+
+    // Ignore settled/approved agreements
+    const isExplicitlyApproved = notes.includes('אושר') || notes.includes('הסדר סגור') || notes.includes('שולם במלואו במזומן');
+    if (isExplicitlyApproved || isFree) return;
 
     let days = 1;
     if (sDate && eDate) {

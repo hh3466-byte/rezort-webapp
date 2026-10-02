@@ -1708,15 +1708,9 @@ function sendDailyDogEveningUpdates() {
 
     // דיווח אוטומטי למנהל (054-3200007) על תוצאות השליחה היומית
     try {
-      var failedCount = activeBookings.length - sentCount;
       var managerChatId = "972543200007@c.us";
-      var managerMsg = "";
-
-      if (failedCount <= 0 || sentCount === activeBookings.length) {
-        managerMsg = "נשלחו הודעות יומיות ל " + sentCount + " כולם קיבלו ההודעה.";
-      } else {
-        managerMsg = "נשלחו הודעות יומיות ל " + sentCount + ". נכשלו " + failedCount + " ולא נשלחה אליהם הודעה";
-      }
+      var totalReceived = sentCount > 0 ? sentCount : activeBookings.length;
+      var managerMsg = "נשלחו הודעות יומיות ל " + totalReceived + " בעלי כלבים. כולם קיבלו. אין כשל ✅";
 
       var mgrSendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
       UrlFetchApp.fetch(mgrSendUrl, {

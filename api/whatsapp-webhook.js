@@ -45,7 +45,54 @@ function getIntakeFormMessage(phone, senderName) {
 מיד שנתפנה נעבור על פרטי השאלון ונחזור אליכם לשיחה בנוגע לתשובות לתיאום סופי. 🐕🤍`;
 }
 
-// Anti-spam cooldown memory (6 hours per phone)
+function getClosedHoursNewLeadMessage(phone, senderName) {
+  const cleanPhone = (phone || '').replace(/\D/g, '');
+  const nameParam = senderName ? `&name=${encodeURIComponent(senderName.trim())}` : '';
+  const phoneParam = cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : '';
+  const link = `https://rezort-webapp.vercel.app/?request=true${phoneParam}${nameParam}`;
+
+  return `${CLOSED_WEEKEND_HOLIDAY_MSG}
+
+🐶 במידה ופניתם לבדיקת זמינות וקליטת כלב חדש, נשמח אם תמלאו בינתיים שאלון קליטה קצר (דקה אחת):
+👉 \u200E${link}
+וניצור איתכם קשר מיד עם פתיחת שירות הלקוחות! 🐾🤍`;
+}
+
+async function canSendAutoReplyToClient(cleanPhone) {
+  try {
+    const { data: sData } = await supabase.from('settings').select('data').eq('id', 'resort_config');
+    const curData = sData?.[0]?.data || {};
+    const autoReplyHistory = curData.autoReplyHistory || {};
+
+    const lastSentMs = autoReplyHistory[cleanPhone];
+    const nowMs = Date.now();
+
+    // 24 hours cooldown (86,400,000 ms)
+    if (lastSentMs && (nowMs - lastSentMs) < 24 * 60 * 60 * 1000) {
+      return false;
+    }
+
+    // Clean old history entries (> 7 days) and save current
+    const cleanedHistory = {};
+    for (const [p, ts] of Object.entries(autoReplyHistory)) {
+      if (nowMs - ts < 7 * 24 * 60 * 60 * 1000) {
+        cleanedHistory[p] = ts;
+      }
+    }
+    cleanedHistory[cleanPhone] = nowMs;
+
+    await supabase.from('settings').update({
+      data: { ...curData, autoReplyHistory: cleanedHistory }
+    }).eq('id', 'resort_config');
+
+    return true;
+  } catch (err) {
+    console.warn('Error in canSendAutoReplyToClient:', err);
+    return false;
+  }
+}
+
+// Anti-spam cooldown memory (fallback)
 const cooldownMap = global._resortWaCooldown || (global._resortWaCooldown = new Map());
 
 async function sendWhatsAppMessage(chatId, message) {
@@ -59,6 +106,21 @@ async function sendWhatsAppMessage(chatId, message) {
     return res.ok;
   } catch (err) {
     console.error('Error sending WhatsApp message via Green-API:', err);
+    return false;
+  }
+}
+
+async function sendWhatsAppFile(chatId, urlFile, fileName, caption) {
+  try {
+    const url = `https://api.green-api.com/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, urlFile, fileName: fileName || 'video.mp4', caption: caption || '' })
+    });
+    return res.ok;
+  } catch (err) {
+    console.error('Error sending WhatsApp file via Green-API:', err);
     return false;
   }
 }
@@ -697,51 +759,84 @@ export default async function handler(req, res) {
   // 3. Special handling for Hila the Trainer (0526908943)
   const isHila = cleanPhone.includes('526908943');
   if (isHila) {
-    console.log('--- Incoming message from Hila the Trainer ---', { incomingText, incomingFileUrl });
+    const isVideo = payload.typeWebhook === 'incomingMessageReceived' && (
+      payload.messageData?.typeMessage === 'videoMessage' ||
+      incomingFileUrl.toLowerCase().includes('.mp4') ||
+      msgData.fileMessageData?.mimeType?.startsWith('video/')
+    );
 
-    // Send immediate query to Shmulik (050-6336896) and Manager (054-3200007)
-    const alertRecipients = ['972506336896@c.us', '972543200007@c.us'];
-    let alertMsg = `🐾 *התקבלה קבלה/הודעה מהילה המאלפת (Halodog)*\n`;
-    if (incomingText) alertMsg += `\n📄 *פרטי הודעה/קבלה:* "${incomingText}"`;
-    if (incomingFileUrl) alertMsg += `\n📷 *צורפה תמונת קבלה לתיוק*`;
-    alertMsg += `\n\n❓ *האם שולם בפועל וכמה?*\nנא לשתף כאן אישור תשלום ביט / צילום מסך או לרשום "שולם 1000 בביט" כדי שאתייק אותו במערכת ואסגור את החשבון.`;
+    const isReceiptCandidate = !isVideo && (
+      payload.messageData?.typeMessage === 'imageMessage' ||
+      incomingFileUrl.toLowerCase().includes('.jpg') ||
+      incomingFileUrl.toLowerCase().includes('.jpeg') ||
+      incomingFileUrl.toLowerCase().includes('.png') ||
+      incomingFileUrl.toLowerCase().includes('.pdf') ||
+      /קבלה|חשבונית|תשלום|שולם|העברה|ביט/i.test(incomingText)
+    );
 
-    for (const rec of alertRecipients) {
-      await sendWhatsAppMessage(rec, alertMsg);
+    console.log('--- Incoming message from Hila the Trainer ---', { incomingText, incomingFileUrl, isVideo, isReceiptCandidate });
+
+    if (isVideo) {
+      console.log('Hila sent a training video. Forwarding directly to Raz (054-3180407)...');
+      const razChatId = '972543180407@c.us';
+      if (incomingFileUrl) {
+        await sendWhatsAppFile(
+          razChatId, 
+          incomingFileUrl, 
+          'hila_training_video.mp4', 
+          `🎬 סרטון אילוף חדש מהילה המאלפת (Halodog) 🐾${incomingText ? `\n"${incomingText}"` : ''}`
+        );
+      } else if (incomingText) {
+        await sendWhatsAppMessage(razChatId, `🎬 הודעה מהילה המאלפת (Halodog) בנוגע לסרטונים:\n"${incomingText}"`);
+      }
+      return res.status(200).json({ ok: true, handled: 'hila_training_video_forwarded_to_raz' });
     }
 
-    // Save pending receipt to Supabase settings
-    try {
-      const { data: sData } = await supabase.from('settings').select('data').eq('id', 'resort_config');
-      const curData = sData?.[0]?.data || {};
-      const curReceipts = Array.isArray(curData.trainerReceipts) ? curData.trainerReceipts : [];
-      const detectedNum = (incomingText.match(/(?:קבלה|מס'|מספר)\s*[:#]?\s*(\d+)/i) || [])[1] || `הילה-${Date.now().toString().slice(-4)}`;
-      const detectedAmount = (incomingText.match(/(?:₪|סך|סכום|שולם)?\s*(\d{3,4})/i) || [])[1];
-      const newReceipt = {
-        id: `rcpt-${Date.now()}`,
-        receiptNumber: detectedNum,
-        receiptDate: new Date().toISOString().substring(0, 10),
-        totalAmount: detectedAmount ? Number(detectedAmount) : 1000,
-        paymentMethod: 'ביט',
-        rawLineText: incomingText || 'תמונת קבלה מוואטסאפ',
-        receiptImageUrl: incomingFileUrl,
-        allocations: [],
-        isPaidActually: false,
-        managerQuerySent: true,
-        managerQuerySentAt: new Date().toISOString(),
-        status: 'pending_payment',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      curReceipts.unshift(newReceipt);
-      await supabase.from('settings').update({
-        data: { ...curData, trainerReceipts: curReceipts }
-      }).eq('id', 'resort_config');
-    } catch (dbErr) {
-      console.warn('Error saving Hila receipt to Supabase:', dbErr);
+    if (isReceiptCandidate) {
+      // Send immediate query strictly to Manager (054-3200007) for accounting & filing
+      const managerChatId = '972543200007@c.us';
+      let alertMsg = `🐾 *התקבלה קבלה מהילה המאלפת (Halodog) להנהלת חשבונות*\n`;
+      if (incomingText) alertMsg += `\n📄 *פרטי הודעה/קבלה:* "${incomingText}"`;
+      if (incomingFileUrl) alertMsg += `\n📷 *צורפה תמונת קבלה לתיוק*`;
+      alertMsg += `\n\n❓ *האם שולם בפועל וכמה?*\nנא לשתף כאן אישור תשלום ביט / צילום מסך או לרשום "שולם 1000 בביט" כדי שאתייק אותו במערכת ואסגור את החשבון.`;
+
+      await sendWhatsAppMessage(managerChatId, alertMsg);
+
+      // Save pending receipt to Supabase settings
+      try {
+        const { data: sData } = await supabase.from('settings').select('data').eq('id', 'resort_config');
+        const curData = sData?.[0]?.data || {};
+        const curReceipts = Array.isArray(curData.trainerReceipts) ? curData.trainerReceipts : [];
+        const detectedNum = (incomingText.match(/(?:קבלה|מס'|מספר)\s*[:#]?\s*(\d+)/i) || [])[1] || `הילה-${Date.now().toString().slice(-4)}`;
+        const detectedAmount = (incomingText.match(/(?:₪|סך|סכום|שולם)?\s*(\d{3,4})/i) || [])[1];
+        const newReceipt = {
+          id: `rcpt-${Date.now()}`,
+          receiptNumber: detectedNum,
+          receiptDate: new Date().toISOString().substring(0, 10),
+          totalAmount: detectedAmount ? Number(detectedAmount) : 1000,
+          paymentMethod: 'ביט',
+          rawLineText: incomingText || 'תמונת קבלה מוואטסאפ',
+          receiptImageUrl: incomingFileUrl,
+          allocations: [],
+          isPaidActually: false,
+          managerQuerySent: true,
+          managerQuerySentAt: new Date().toISOString(),
+          status: 'pending_payment',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        curReceipts.unshift(newReceipt);
+        await supabase.from('settings').update({
+          data: { ...curData, trainerReceipts: curReceipts }
+        }).eq('id', 'resort_config');
+      } catch (dbErr) {
+        console.warn('Error saving Hila receipt to Supabase:', dbErr);
+      }
+
+      return res.status(200).json({ ok: true, handled: 'hila_receipt_notified_manager' });
     }
 
-    return res.status(200).json({ ok: true, handled: 'hila_notified_manager' });
+    return res.status(200).json({ ok: true, handled: 'hila_text_received' });
   }
 
   // 4. Authorized Manager / Resort Team Handling (Manager 0543200007, Shmulik 0506336896, Raz 0543180407, Etti 0524467314)
@@ -815,14 +910,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, handled: 'manager_silent_human_chat' });
   }
 
-  // 5. Anti-spam / Cooldown check for regular clients (don't reply more than once every 6 hours)
-  const nowMs = Date.now();
-  const lastSent = cooldownMap.get(cleanPhone);
-  if (lastSent && (nowMs - lastSent) < 6 * 60 * 60 * 1000) {
-    return res.status(200).json({ ok: true, reason: 'cooldown active' });
-  }
-
-  // 6. Determine Israel Time & Status
+  // 5. Determine Israel Time & Closed/Open Status
   const now = new Date();
   const israelDateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" }); // YYYY-MM-DD
   const israelTimeStr = now.toLocaleTimeString("en-GB", { timeZone: "Asia/Jerusalem", hour: '2-digit', minute: '2-digit' });
@@ -842,37 +930,49 @@ export default async function handler(req, res) {
   const isHolidayClosed = await checkIsShabbatOrHoliday(israelDateStr);
   const isClosedHours = isWeekendClosed || isHolidayClosed;
 
-  // 7. Check client status (Existing vs New)
+  // 6. Check client status (Existing vs New)
   const isExisting = await isExistingClient(phoneSuffix);
 
-  // Set cooldown mark
-  cooldownMap.set(cleanPhone, nowMs);
-
-  // 8. Action decision for regular clients
+  // 7. Weekend / Holiday Closed Hours: Send EXACTLY ONE notice per 24 hours
   if (isClosedHours) {
+    const canSend = await canSendAutoReplyToClient(cleanPhone);
+    if (!canSend) {
+      console.log('--- Cooldown active in closed hours (Silent) ---', { cleanPhone, isExisting });
+      return res.status(200).json({ ok: true, reason: 'closed_hours_cooldown_active', cleanPhone });
+    }
+
     if (isExisting) {
-      // Existing client in closed hours: send closed message
+      console.log('--- Sending single closed hours notice to existing client ---', { cleanPhone });
       await sendWhatsAppMessage(chatId, CLOSED_WEEKEND_HOLIDAY_MSG);
     } else {
-      // New client in closed hours: send closed message + intake form message
-      await sendWhatsAppMessage(chatId, CLOSED_WEEKEND_HOLIDAY_MSG);
-      await new Promise(r => setTimeout(r, 1200));
-      await sendWhatsAppMessage(chatId, getIntakeFormMessage(cleanPhone, senderName));
+      console.log('--- Sending single closed hours notice + intake link to new lead ---', { cleanPhone });
+      await sendWhatsAppMessage(chatId, getClosedHoursNewLeadMessage(cleanPhone, senderName));
     }
-  } else {
-    // Normal Business Hours
-    if (!isExisting) {
-      // New client in open hours: send ONLY intake form message
-      await sendWhatsAppMessage(chatId, getIntakeFormMessage(cleanPhone, senderName));
-    }
-    // Existing client in open hours: no auto-reply (human answers)
+
+    return res.status(200).json({ ok: true, sent: true, mode: 'closed_hours_single_notice', isExisting, cleanPhone });
   }
+
+  // 8. Normal Business Hours
+  if (isExisting) {
+    // Existing clients in open hours: 100% silent, Shmulik & team answer directly in CRM
+    console.log('--- Incoming message from existing client in business hours (Silent) ---', { cleanPhone, incomingText });
+    return res.status(200).json({ ok: true, handled: 'existing_client_open_hours_silent', phoneSuffix });
+  }
+
+  // New lead in business hours: Send EXACTLY ONE intake questionnaire per 24h
+  const canSend = await canSendAutoReplyToClient(cleanPhone);
+  if (!canSend) {
+    console.log('--- Cooldown active for lead in business hours (Silent) ---', { cleanPhone });
+    return res.status(200).json({ ok: true, reason: 'lead_open_hours_cooldown_active', cleanPhone });
+  }
+
+  console.log('--- Sending intake form to new client lead in business hours ---', { cleanPhone, senderName });
+  await sendWhatsAppMessage(chatId, getIntakeFormMessage(cleanPhone, senderName));
 
   return res.status(200).json({
     ok: true,
     sent: true,
-    isClosedHours,
-    isExisting,
-    phoneSuffix
+    mode: 'open_hours_lead_intake',
+    cleanPhone
   });
 }

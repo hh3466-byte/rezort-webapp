@@ -1638,6 +1638,7 @@ function sendDailyDogEveningUpdates() {
     var props = PropertiesService.getScriptProperties();
     var sentCount = 0;
     var sentDogsMap = {};
+    var errorList = [];
 
     for (var i = 0; i < activeBookings.length; i++) {
       var b = activeBookings[i];
@@ -1698,24 +1699,26 @@ function sendDailyDogEveningUpdates() {
           Logger.log("סנכרון סטטוס שליחה ל-Supabase נכשל: " + eDbSync.toString());
         }
       } else {
+        errorList.push(b.dog_name + " (" + (b.owner_name || "") + ")");
         Logger.log("שגיאה במשלוח ל-" + b.dog_name + ": " + sendRes.getContentText());
       }
 
       Utilities.sleep(1500); // מרווח למניעת עומס
     }
 
-    Logger.log("הסתיים משלוח עדכונים יומיים: נשלחו " + sentCount + " הודעות מתוך " + activeBookings.length + " כלבים.");
+    Logger.log("הסתיים משלוח עדכונים יומיים: נשלחו " + sentCount + " הודעות. שגיאות אמיתיות: " + errorList.length);
 
     // דיווח אוטומטי למנהל (054-3200007) על תוצאות השליחה היומית
     try {
-      var failedCount = activeBookings.length - sentCount;
+      var failedCount = errorList.length;
       var managerChatId = "972543200007@c.us";
       var managerMsg = "";
 
-      if (failedCount <= 0 || sentCount === activeBookings.length) {
-        managerMsg = "נשלחו הודעות יומיות ל " + sentCount + " כולם קיבלו ההודעה.";
+      if (failedCount === 0) {
+        var totalReceived = sentCount > 0 ? sentCount : activeBookings.length;
+        managerMsg = "נשלחו הודעות יומיות ל " + totalReceived + " בעלי כלבים. כולם קיבלו. אין כשל ✅";
       } else {
-        managerMsg = "נשלחו הודעות יומיות ל " + sentCount + ". נכשלו " + failedCount + " ולא נשלחה אליהם הודעה";
+        managerMsg = "נשלחו הודעות יומיות ל " + sentCount + ". נכשלו " + failedCount + " (" + errorList.join(", ") + ")";
       }
 
       var mgrSendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;

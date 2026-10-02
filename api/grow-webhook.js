@@ -45,6 +45,21 @@ async function sendWhatsAppDirect(phone, message) {
   }
 }
 
+function flattenBracketParams(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  const res = { ...obj };
+  for (const [k, v] of Object.entries(obj)) {
+    const match = k.match(/^data\[([^\]]+)\]$/i) || k.match(/^([^\[]+)\[([^\]]+)\]$/i);
+    if (match) {
+      const field = match[match.length - 1];
+      if (res[field] === undefined) {
+        res[field] = v;
+      }
+    }
+  }
+  return res;
+}
+
 export default async function handler(req, res) {
   // Allow GET for verification health check
   if (req.method === 'GET') {
@@ -67,6 +82,7 @@ export default async function handler(req, res) {
         } catch (e2) {}
       }
     }
+    payload = flattenBracketParams(payload);
     console.log('Received Grow Webhook payload:', JSON.stringify(payload));
 
     // Handle Grow/Meshulam payload structures
@@ -81,6 +97,7 @@ export default async function handler(req, res) {
         } catch (e2) {}
       }
     }
+    data = flattenBracketParams(data);
 
     const rawSum = data.sum ?? data.amount ?? data.total ?? data.payment_sum ?? data.price ?? data.transactionAmount ?? payload.sum ?? payload.amount ?? payload.total ?? payload.payment_sum ?? payload.price ?? 0;
     const amount = Number(rawSum) || 0;
@@ -121,8 +138,10 @@ export default async function handler(req, res) {
       bankInfoStr = ` (בנק ${bankDetails.bankNum || ''}, סניף ${bankDetails.branchNum || ''}, חשבון ${bankDetails.accountNum || ''} - ${bankDetails.accountName || ''})`;
     }
 
-    if (amount <= 0 && !fullName && !cleanPhone) {
-      return res.status(200).json({ status: 'ignored', reason: 'empty_data' });
+    // Ignore 0₪ transactions (card verification / token tests / empty pings)
+    if (amount <= 0) {
+      console.log(`Ignoring 0₪ or negative transaction from Grow for: ${fullName} (${cleanPhone}), asmachta: ${transactionId}`);
+      return res.status(200).json({ status: 'ignored', reason: 'zero_amount_verification', transactionId });
     }
 
     // Multi-layer filter to separate "זכויות המורה" and other non-resort businesses:

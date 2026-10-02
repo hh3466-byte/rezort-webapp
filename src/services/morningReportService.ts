@@ -106,14 +106,8 @@ export function formatTomorrowOverviewReport(
   // Dogs present during daytime tomorrow
   const presentDaytimeDogs = deduplicateBookings(activeBookings.filter(b => b.startDate <= tomorrowStr && b.endDate >= tomorrowStr));
 
-  // Count actual dog heads (including multi-dog pairs like "לולה וברנדי", "סקובי וג'ינג'ס")
-  const countDogs = (list: Booking[]) => list.reduce((sum, b) => {
-    const name = (b.dogName || '').trim();
-    const notes = (b.notes || '').trim();
-    if (name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes(' ועוד ') || name.includes('&')) return sum + 2;
-    if (notes.includes('2 כלבים') || notes.includes('שני כלבים') || notes.includes('זוג כלבים') || notes.includes('2 כלבות') || notes.includes('שתי כלבות')) return sum + 2;
-    return sum + 1;
-  }, 0);
+  // Count actual dog heads (1 card = 1 dog, since pairs have separate cards)
+  const countDogs = (list: Booking[]) => list.length;
 
   const presentDogsCount = countDogs(presentDaytimeDogs);
   const incomingDogsCount = countDogs(incomingDogs);

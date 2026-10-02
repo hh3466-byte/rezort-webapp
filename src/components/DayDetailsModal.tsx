@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import { Booking, ResortSettings } from '../types';
-import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr, isTrainingBooking } from '../utils/dateUtils';
+import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr, isTrainingBooking, getBookingPairInfo } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage, cleanPhoneNumber } from '../utils/whatsappUtils';
 import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
@@ -120,6 +120,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
             <DogBookingCard
               key={b.id}
               booking={b}
+              allBookings={bookings}
               settings={settings}
               isHighlighted={b.id === highlightedBookingId}
               onSelect={() => onSelectBooking(b)}
@@ -127,6 +128,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
               onMarkPaid={() => onMarkAsPaid(b.id)}
               onOpenPayment={() => onOpenPaymentModal(b)}
               onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
+              onToggleStayStatus={onToggleStayStatus}
               onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
               onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
               onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
@@ -157,6 +159,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
             <DogBookingCard
               key={b.id}
               booking={b}
+              allBookings={bookings}
               settings={settings}
               isHighlighted={b.id === highlightedBookingId}
               onSelect={() => onSelectBooking(b)}
@@ -164,6 +167,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
               onMarkPaid={() => onMarkAsPaid(b.id)}
               onOpenPayment={() => onOpenPaymentModal(b)}
               onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
+              onToggleStayStatus={onToggleStayStatus}
               onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
               onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
               onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
@@ -194,6 +198,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
             <DogBookingCard
               key={b.id}
               booking={b}
+              allBookings={bookings}
               settings={settings}
               isHighlighted={b.id === highlightedBookingId}
               onSelect={() => onSelectBooking(b)}
@@ -201,6 +206,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
               onMarkPaid={() => onMarkAsPaid(b.id)}
               onOpenPayment={() => onOpenPaymentModal(b)}
               onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(b)}
+              onToggleStayStatus={onToggleStayStatus}
               onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
               onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
               onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
@@ -331,6 +337,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
 
 interface DogBookingCardProps {
   booking: Booking;
+  allBookings?: Booking[];
   settings: ResortSettings;
   isHighlighted?: boolean;
   onSelect: () => void;
@@ -338,6 +345,7 @@ interface DogBookingCardProps {
   onMarkPaid: () => void;
   onOpenPayment: () => void;
   onOpenSendPaymentLink?: () => void;
+  onToggleStayStatus?: (bookingId: string, newStatus: Booking['stayStatus']) => void;
   onInitiateRelease?: () => void;
   onToggleReviewRequest?: () => void;
   onOpenVoucher?: () => void;
@@ -346,6 +354,7 @@ interface DogBookingCardProps {
 
 const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   booking,
+  allBookings,
   settings,
   isHighlighted,
   onSelect,
@@ -353,6 +362,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   onMarkPaid,
   onOpenPayment,
   onOpenSendPaymentLink,
+  onToggleStayStatus,
   onInitiateRelease,
   onToggleReviewRequest,
   onOpenVoucher,
@@ -372,10 +382,26 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
     actionType === 'departure' ? booking.endDate : todayStr
   );
 
+  const isFree = Boolean(booking.isFreeStay || (booking as any).is_free_stay);
+
+  // Accurate Pair Detection
+  const pairInfo = allBookings && allBookings.length > 0 ? getBookingPairInfo(booking, allBookings) : null;
+  const hasExplicitPairNotes = Boolean(
+    booking.notes && (
+      booking.notes.includes('זוג כלבים') || 
+      booking.notes.includes('2 כלבים') || 
+      booking.notes.includes('כלב שני') || 
+      booking.notes.includes('כלב נוסף') || 
+      booking.notes.includes('שולם דרך')
+    )
+  );
+  const isPairDog = Boolean((pairInfo && pairInfo.isPair) || booking.linkedDogName || hasExplicitPairNotes);
+  const isSecondaryDog = Boolean((pairInfo && pairInfo.isSecondary) || booking.linkedDogName || (booking.notes && (booking.notes.includes('שולם דרך') || booking.notes.includes('כלב שני'))));
+
   // Status color styles matching design
   let paymentBorder = isEnded 
     ? 'border-slate-200 bg-slate-50/70 text-slate-600 opacity-80' 
-    : (booking.isFreeStay || (booking as any).is_free_stay)
+    : isFree
     ? 'border-emerald-300 bg-emerald-50/40'
     : 'border-red-300 bg-red-50/40';
 
@@ -383,17 +409,23 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
     <span className="text-[11px] bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
       <span>🏁 הסתיים ושוחרר</span>
     </span>
-  ) : (booking.isFreeStay || (booking as any).is_free_stay) ? (
-    <span className="text-[11px] bg-emerald-600 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-xs whitespace-nowrap">
-      <span>🎁 שולם במלואו (דרך {booking.linkedDogName || 'כרטיס ראשון'})</span>
-    </span>
+  ) : isFree ? (
+    isSecondaryDog ? (
+      <span className="text-[11px] bg-emerald-600 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-xs whitespace-nowrap">
+        <span>🎁 שולם במלואו (דרך {booking.linkedDogName || (pairInfo && pairInfo.siblingNames) || 'כרטיס ראשון'})</span>
+      </span>
+    ) : (
+      <span className="text-[11px] bg-emerald-600 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-xs whitespace-nowrap">
+        <span>🎁 אירוח ללא תשלום (חינם)</span>
+      </span>
+    )
   ) : (
     <span className="text-[11px] bg-red-500 text-white px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-xs whitespace-nowrap">
       <span>לא שולם (חוב ₪{remainingDebt.toLocaleString('he-IL')})</span>
     </span>
   );
 
-  if (!isEnded && !booking.isFreeStay && !(booking as any).is_free_stay) {
+  if (!isEnded && !isFree) {
     if (booking.paymentStatus === 'fully_paid' || (remainingDebt === 0 && roundedTotal > 0)) {
       paymentBorder = 'border-green-300 bg-green-50/40';
       paymentTag = (
@@ -410,13 +442,6 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
       );
     }
   }
-
-  const isPairDog = Boolean(
-    booking.isFreeStay || 
-    (booking as any).is_free_stay || 
-    booking.linkedDogName || 
-    (booking.notes && (booking.notes.includes('זוג כלבים') || booking.notes.includes('2 כלבים') || booking.notes.includes('שולם דרך')))
-  );
 
   const handleSendWhatsApp = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -461,7 +486,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             {isPairDog && (
               <span className="text-xs bg-indigo-100 text-indigo-900 border border-indigo-300 px-2.5 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs">
                 <span>🔗</span>
-                <span>{booking.isFreeStay || (booking as any).is_free_stay ? `זוג כלבים (שולם דרך ${booking.linkedDogName || 'כרטיס ראשון'})` : 'זוג כלבים'}</span>
+                <span>{isSecondaryDog ? `זוג כלבים (שולם דרך ${booking.linkedDogName || (pairInfo && pairInfo.siblingNames) || 'כרטיס ראשון'})` : `זוג כלבים${pairInfo && pairInfo.siblingNames ? ` (יחד עם ${pairInfo.siblingNames})` : ''}`}</span>
               </span>
             )}
             {booking.dogBreed && (
@@ -576,6 +601,22 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
           <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
           <span>ערוך</span>
         </button>
+
+        {/* Check-in Button for Booked/Arriving Dogs */}
+        {booking.stayStatus === 'booked' && onToggleStayStatus && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleStayStatus(booking.id, 'checked_in');
+            }}
+            title="סמן שהכלב נכנס ונקלט כעת בפועל בריזורט"
+            className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+          >
+            <CheckCircle className="w-3.5 h-3.5" />
+            <span>קלוט לריזורט (צ'ק-אין) 🐾</span>
+          </button>
+        )}
 
         {/* Release Dog Button */}
         {!isEnded && onInitiateRelease && (

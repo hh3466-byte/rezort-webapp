@@ -393,14 +393,15 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
   activeBookings.filter(b => (b.end_date || b.endDate) >= todayStr).forEach(b => {
     const price = Number(b.total_price || b.totalPrice) || 0;
     const dep = Number(b.deposit_amount || b.depositAmount) || 0;
-    const isFree = b.is_free_stay || b.isFreeStay;
+    const isFree = b.is_free_stay || b.isFreeStay || b.data?.isFreeStay || b.data?.is_free_stay;
+    const payStatus = b.payment_status || b.paymentStatus || b.data?.paymentStatus;
     const dog = b.dog_name || b.dogName;
     const owner = b.owner_name || b.ownerName;
     const phone = b.owner_phone || b.ownerPhone || '';
     const start = b.start_date || b.startDate;
     const end = b.end_date || b.endDate;
 
-    if (price > 0 && dep === 0 && !isFree) {
+    if (price > 0 && dep === 0 && !isFree && payStatus !== 'fully_paid') {
       const line = `🔴 *${dog}* (${owner} - ${phone}) | ${formatDateIL(start)} עד ${formatDateIL(end)} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`;
       if (!redLights.zeroDepositHolding.includes(line)) {
         redLights.zeroDepositHolding.push(line);
@@ -434,14 +435,13 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     }
   }
 
-  // 7. Check for unassigned dogs (Informational only - per AGENTS.md rule 4, assignment can be done later via top drawer)
+  // 7. Check for unassigned dogs (Informational only for currently checked-in dogs)
   const unassignedKennels = [];
   activeBookings.filter(b => {
-    const s = b.start_date || b.startDate;
-    const e = b.end_date || b.endDate;
-    return s <= todayStr && e >= todayStr;
+    const status = b.stay_status || b.stayStatus || b.status;
+    return status === 'checked_in';
   }).forEach(b => {
-    const k = b.kennel_number !== undefined ? b.kennel_number : b.kennelNumber;
+    const k = b.data?.kennelNumber ?? b.kennelNumber ?? b.kennel_number ?? b.room_id ?? b.data?.room;
     if (!k && k !== 0) {
       const dog = b.dog_name || b.dogName || 'כלב';
       const owner = b.owner_name || b.ownerName || 'בעלים';

@@ -156,6 +156,13 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   });
   const [freeStayReason, setFreeStayReason] = useState<'free' | 'second_dog'>('free');
   const [linkedMainDogName, setLinkedMainDogName] = useState<string>(initialData?.linkedDogName || '');
+  const [stayStatus, setStayStatus] = useState<StayStatus>(() => {
+    if (initialData?.stayStatus) return initialData.stayStatus;
+    if (initialData?.startDate && initialData.startDate <= todayStr && (!initialData.endDate || initialData.endDate >= todayStr)) {
+      return 'checked_in';
+    }
+    return 'booked';
+  });
 
   // Step 3 State: Service, Dates, Times & Extras
   const [serviceType, setServiceType] = useState<ServiceType>(initialData?.serviceType || 'boarding');
@@ -636,7 +643,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       depositAmount: isFreeStay ? 0 : depositAmount,
       paymentStatus: finalPaymentStatus,
       paymentMethod,
-      stayStatus: initialData?.stayStatus || 'booked',
+      stayStatus: stayStatus,
       ownerAddress: ownerAddress.trim() || undefined,
       ownerCoordinates: ownerCoordinates,
       placementNotes: placementNotes.trim() || undefined,
@@ -3093,6 +3100,44 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Stay Status: Checked-in vs Booked */}
+              <div className="bg-slate-50/90 border border-slate-200 p-3.5 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-800">
+                    🐾 מצב קליטה ושהות בריזורט:
+                  </span>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                    stayStatus === 'checked_in' ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-100 text-purple-800'
+                  }`}>
+                    {stayStatus === 'checked_in' ? '🟢 שוהה כעת בריזורט (נקלט)' : '🟣 שוריין (טרם נכנס)'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStayStatus('checked_in')}
+                    className={`p-2.5 rounded-xl text-xs font-black transition-all cursor-pointer border flex items-center justify-center gap-1.5 ${
+                      stayStatus === 'checked_in'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50 hover:border-emerald-300'
+                    }`}
+                  >
+                    <span>🐕 שוהה כעת (נקלט בצ'ק-אין)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStayStatus('booked')}
+                    className={`p-2.5 rounded-xl text-xs font-black transition-all cursor-pointer border flex items-center justify-center gap-1.5 ${
+                      stayStatus === 'booked'
+                        ? 'bg-purple-700 text-white border-purple-700 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-purple-50 hover:border-purple-300'
+                    }`}
+                  >
+                    <span>📅 שוריין / עתידי (טרם נכנס)</span>
+                  </button>
+                </div>
               </div>
 
               {/* Step 4 Action Buttons */}
