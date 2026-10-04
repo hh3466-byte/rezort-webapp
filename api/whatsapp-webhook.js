@@ -21,6 +21,8 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { run1830SanityAudit } from './cron-sanity-check.js';
+import { formatReport } from './cron-evening-report.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ydlynqqmulojhrxbfjsc.supabase.co";
 const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
@@ -262,15 +264,72 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
   const norm = normHebrew(cleanText);
   const todayIso = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
 
-  // 1. HELP & MENU
+  // 1. SANITY REPORT (18:30 דוח שפיות יומית ובקרת אירועים)
+  if (norm.includes('שפיות') || norm.includes('דווח שפיות') || norm.includes('דוח שפיות') || norm.includes('בדיקת שפיות') || norm.includes('18:30') || (norm.includes('דוח') && norm.includes('אירועים'))) {
+    const { data: bookings } = await supabase.from('bookings').select('*');
+    const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
+    const { data: intakes } = await supabase.from('intake_requests').select('*');
+    const { data: growPayments } = await supabase.from('grow_incoming_payments').select('*');
+    const sRow = settingsRows?.[0] || {};
+    const settings = { ...sRow, ...(sRow.data || {}) };
+
+    const { reportText } = run1830SanityAudit(
+      bookings || [],
+      settings,
+      intakes || [],
+      [],
+      todayIso,
+      growPayments || []
+    );
+
+    return reportText;
+  }
+
+  // 2. TOMORROW OVERVIEW (19:00 דוח מה קורה מחר)
+  if (norm.includes('מה קורה מחר') || norm.includes('סקירת מחר') || norm.includes('דוח 19:00') || norm.includes('דוח ערב') || (norm.includes('מחר') && (norm.includes('דוח') || norm.includes('סקירה') || norm.includes('מי מגיע') || norm.includes('מי משתחרר')))) {
+    const { data: bookings } = await supabase.from('bookings').select('*');
+    const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
+    const { data: intakes } = await supabase.from('intake_requests').select('*');
+    const { data: growPayments } = await supabase.from('grow_incoming_payments').select('*');
+    const sRow = settingsRows?.[0] || {};
+    const settings = { ...sRow, ...(sRow.data || {}) };
+
+    const report = formatReport('מנהל', bookings || [], settings, intakes || [], growPayments || [], todayIso, []);
+    return report;
+  }
+
+  // 3. PENDING INTAKE QUESTIONNAIRES ("שאלונים", "שאלוני קליטה", "שאלונים ממתינים")
+  if ((norm.includes('שאלונ') || norm.includes('שאלוני קליטה') || norm.includes('לידים')) && !norm.includes('תעדכן') && !norm.includes('שבץ')) {
+    const { data: intakes } = await supabase.from('intake_requests').select('*');
+    const pending = (intakes || []).filter(r => r.status === 'pending' || r.status === 'in_progress' || r.status === 'payment_requested');
+    if (pending.length === 0) {
+      return `📋 *שאלוני קליטה:*\n✅ אין שאלוני קליטה שממתינים לטיפול כרגע. כל השאלונים אושרו או נסגרו.`;
+    }
+    let msg = `📋 *שאלוני קליטה שממתינים לטיפול (${pending.length}):*\n\n`;
+    pending.forEach((r, idx) => {
+      const dog = r.dogName || r.dog_name || 'כלב';
+      const owner = r.ownerName || r.owner_name || 'בעלים';
+      const phone = r.ownerPhone || r.owner_phone || '';
+      const s = r.startDate || r.start_date || '';
+      const e = r.endDate || r.end_date || '';
+      let statusBadge = '🔴 לבדיקה';
+      if (r.status === 'in_progress') statusBadge = '🟡 בתהליך';
+      else if (r.status === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
+      msg += `${idx + 1}. ${statusBadge}: *${dog}* (${owner} - 📞 ${phone})\n   🗓️ מיועד: ${formatDateIL(s)} ⬅️ ${formatDateIL(e)}\n`;
+    });
+    return msg;
+  }
+
+  // 4. HELP & MENU (Only if strictly asking for help or general greeting)
   if (norm === 'עזרה' || norm === 'פקודות' || norm === 'תפריט' || norm === 'היי' || norm === 'שלום' || norm === 'help' || norm === 'הוראות' || norm === 'מה אתה יודע לעשות') {
     return `👋 *שלום מנהל! ברוך הבא למערכת ה-AI בוואטסאפ של הריזורט לכלב* 🐾
 
 המערכת מחוברת ישירות ל-Supabase ומסונכרנת בזמן אמת. תוכל לרשום כל בקשה בשפה חופשית לחלוטין:
 
 📊 *דוחות ותפוסה:*
-• "כמה כלבים שוהים כרגע?"
+• "דוח שפיות יומית" / "מה עם דוח שפיות?"
 • "מה קורה מחר?" / "מי משתחרר מחר?" / "מי מגיע מחר?"
+• "כמה כלבים שוהים כרגע?"
 • "מי חייב כסף?" / "דוח כספי"
 
 🛏️ *שיבוץ חדרים ובירור מיקום:*
@@ -288,7 +347,7 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
 • "קלוט את שון" / "שחרר את ברונו" / "בטל שהייה"
 
 🔍 *חיפוש ושאלונים:*
-• "חפש לקוח ישראל מנדל" / "שאלונים ממתינים"
+• "חפש לקוח ישראל מנדל" / "שאלוני קליטה"
 
 🚀 *כל עדכון מתבצע ומאומת מיידית במסד הנתונים וב-CRM!*`;
   }
@@ -330,18 +389,44 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
     }
   }
 
-  // 2.1 SPECIFIC DOG / OWNER PAYMENT INQUIRY (Direct and concise answer only)
+  // 2.1 GENERAL TRAINER / TRAINING INQUIRY ("עלות אילוף", "הילה", "קבלות מאלפת", "תשלומי הילה")
+  if (norm.includes('הילה') || norm.includes('מאלפת') || (norm.includes('אילוף') && !matchedBooking) || norm.includes('קבלת הילה') || norm.includes('תשלומי הילה')) {
+    return `🐾 *הסכם וניהול תשלומי מאלפת (הילה קירזנר - Halodog):*\n\n` +
+      `• *עלות אילוף כוללת להילה:* *₪1,500 לכלב באילוף* (3 שלבים שווים של ₪500: 1/3, 2/3, 3/3).\n\n` +
+      `📋 *תמונת מצב כלבי אילוף וקבלות:*\n` +
+      `1. *תיאו* (איל שקל) – קבלה 20056 (1/3 - ₪500 שולם) | קבלה 20061 (2/3 - ₪500 שולם בביט 04/10) | נותר שלב 3/3 (₪500)\n` +
+      `2. *בוס* (איתי אהרונסון) – קבלה 20061 (1/3 - ₪500 שולם בביט 04/10) | נותר שלב 2/3 (₪500) ושלב 3/3 (₪500)\n` +
+      `3. *ג'וי* (ירוס ביקאיה) – הושלם ושולם במלואו להילה (3/3 - ₪1,500) ✅\n` +
+      `4. *לונה* (רונן מלמוד) – קבלה 20057 (1/3 - ₪500 שולם) | נותרו שלבים 2/3 ו-3/3\n\n` +
+      `📑 *קבלה 20061* (סך ₪1,000 עבור תיאו 2/3 ובוס 1/3) שולמה במלואה בביט (אישור 1078-8325-73347) ✅`;
+  }
+
+  // 2.2 SPECIFIC DOG / OWNER PAYMENT INQUIRY (Direct and accurate dynamic answer)
   if (matchedBooking && (norm.includes('חייב') || norm.includes('חוב') || norm.includes('תשלומ') || norm.includes('מקדמה') || norm.includes('שילמ') || norm.includes('עוד תשלומים') || norm.includes('סגירה') || norm.includes('בדוק') || norm.includes('שאלה') || norm.includes('?') || norm.includes('האם')) && !norm.includes('תעדכן') && !norm.includes('שבץ')) {
     const dogName = matchedBooking.dog_name || matchedBooking.dogName;
+    const ownerName = matchedBooking.owner_name || matchedBooking.ownerName;
     const total = Number(matchedBooking.total_price || 0);
     const deposit = Number(matchedBooking.deposit_amount || 0);
     const balance = Math.max(0, total - deposit);
+    const isTraining = matchedBooking.service_type === 'training' || (matchedBooking.notes && matchedBooking.notes.includes('אילוף'));
+    const serviceLabel = isTraining ? 'חבילת אילוף ואירוח' : 'שהייה ואירוח בפנסיון';
 
-    let resMsg = `כן, בדיוק:\n` +
-      `• *${dogName}* – עלות אילוף כוללת: ₪${total.toLocaleString('he-IL')}\n` +
-      `• *שולם עד כה:* ₪${deposit.toLocaleString('he-IL')} (₪200 מקדמה אריאל + ₪2,000 איתי)\n` +
-      `• *תשלומים נוספים:* אין.\n` +
-      `• *יתרת חוב לתשלום:* *₪${balance.toLocaleString('he-IL')}*`;
+    let paymentBreakdown = `₪${deposit.toLocaleString('he-IL')}`;
+    if (balance === 0) {
+      paymentBreakdown += ` (שולם במלואו 100% ✅)`;
+    } else {
+      paymentBreakdown += ` (יתרה לתשלום: ₪${balance.toLocaleString('he-IL')})`;
+    }
+
+    let resMsg = `📋 *פרטי תשלום עבור ${dogName} (${ownerName}):*\n` +
+      `• *סוג שירות:* ${serviceLabel}\n` +
+      `• *עלות כוללת ללקוח:* ₪${total.toLocaleString('he-IL')}\n` +
+      `• *שולם עד כה:* ${paymentBreakdown}\n` +
+      `• *יתרת חוב לקוח:* *₪${balance.toLocaleString('he-IL')}*`;
+
+    if (isTraining) {
+      resMsg += `\n\n🐾 *תשלום למאלפת הילה (Halodog):* ₪1,500 לכלב (3 שלבים של ₪500 כל אחד).`;
+    }
 
     return resMsg;
   }
@@ -765,42 +850,33 @@ export default async function handler(req, res) {
       msgData.fileMessageData?.mimeType?.startsWith('video/')
     );
 
-    const isReceiptCandidate = !isVideo && (
+    const isImage = payload.typeWebhook === 'incomingMessageReceived' && (
       payload.messageData?.typeMessage === 'imageMessage' ||
       incomingFileUrl.toLowerCase().includes('.jpg') ||
       incomingFileUrl.toLowerCase().includes('.jpeg') ||
       incomingFileUrl.toLowerCase().includes('.png') ||
-      incomingFileUrl.toLowerCase().includes('.pdf') ||
-      /קבלה|חשבונית|תשלום|שולם|העברה|ביט/i.test(incomingText)
+      msgData.fileMessageData?.mimeType?.startsWith('image/')
     );
 
-    console.log('--- Incoming message from Hila the Trainer ---', { incomingText, incomingFileUrl, isVideo, isReceiptCandidate });
+    const isExplicitReceipt = /קבלה|חשבונית|חשבונית\s*מס|מס'\s*קבלה|דוח\s*תשלום|הנהלת\s*חשבונות/i.test(incomingText) ||
+      incomingFileUrl.toLowerCase().includes('.pdf') ||
+      msgData.fileMessageData?.mimeType?.includes('pdf');
 
-    if (isVideo) {
-      console.log('Hila sent a training video. Forwarding directly to Raz (054-3180407)...');
-      const razChatId = '972543180407@c.us';
-      if (incomingFileUrl) {
-        await sendWhatsAppFile(
-          razChatId, 
-          incomingFileUrl, 
-          'hila_training_video.mp4', 
-          `🎬 סרטון אילוף חדש מהילה המאלפת (Halodog) 🐾${incomingText ? `\n"${incomingText}"` : ''}`
-        );
-      } else if (incomingText) {
-        await sendWhatsAppMessage(razChatId, `🎬 הודעה מהילה המאלפת (Halodog) בנוגע לסרטונים:\n"${incomingText}"`);
-      }
-      return res.status(200).json({ ok: true, handled: 'hila_training_video_forwarded_to_raz' });
-    }
+    console.log('--- Incoming message from Hila the Trainer ---', { incomingText, incomingFileUrl, isVideo, isImage, isExplicitReceipt });
 
-    if (isReceiptCandidate) {
-      // Send immediate query strictly to Manager (054-3200007) for accounting & filing
+    // A. Explicit Receipts / Invoices -> Routed directly to Manager (054-3200007)
+    if (isExplicitReceipt) {
       const managerChatId = '972543200007@c.us';
       let alertMsg = `🐾 *התקבלה קבלה מהילה המאלפת (Halodog) להנהלת חשבונות*\n`;
       if (incomingText) alertMsg += `\n📄 *פרטי הודעה/קבלה:* "${incomingText}"`;
-      if (incomingFileUrl) alertMsg += `\n📷 *צורפה תמונת קבלה לתיוק*`;
       alertMsg += `\n\n❓ *האם שולם בפועל וכמה?*\nנא לשתף כאן אישור תשלום ביט / צילום מסך או לרשום "שולם 1000 בביט" כדי שאתייק אותו במערכת ואסגור את החשבון.`;
 
-      await sendWhatsAppMessage(managerChatId, alertMsg);
+      if (incomingFileUrl) {
+        const fileName = incomingFileUrl.toLowerCase().includes('.pdf') ? 'receipt_hila.pdf' : 'receipt_hila.jpg';
+        await sendWhatsAppFile(managerChatId, incomingFileUrl, fileName, alertMsg);
+      } else {
+        await sendWhatsAppMessage(managerChatId, alertMsg);
+      }
 
       // Save pending receipt to Supabase settings
       try {
@@ -815,7 +891,7 @@ export default async function handler(req, res) {
           receiptDate: new Date().toISOString().substring(0, 10),
           totalAmount: detectedAmount ? Number(detectedAmount) : 1000,
           paymentMethod: 'ביט',
-          rawLineText: incomingText || 'תמונת קבלה מוואטסאפ',
+          rawLineText: incomingText || 'מסמך קבלה מוואטסאפ',
           receiptImageUrl: incomingFileUrl,
           allocations: [],
           isPaidActually: false,
@@ -834,6 +910,23 @@ export default async function handler(req, res) {
       }
 
       return res.status(200).json({ ok: true, handled: 'hila_receipt_notified_manager' });
+    }
+
+    // B. Media (Photos and Videos of dogs / training) -> Routed directly to Raz (054-3180407)
+    if (isVideo || isImage) {
+      console.log('Hila sent dog/training media (photo/video). Forwarding directly to Raz (054-3180407)...');
+      const razChatId = '972543180407@c.us';
+      const isVid = isVideo;
+      const defaultFileName = isVid ? 'hila_training_video.mp4' : 'hila_dog_photo.jpg';
+      const captionPrefix = isVid ? '🎬 סרטון אילוף חדש מהילה המאלפת (Halodog) 🐾' : '📸 תמונה חדשה מהילה המאלפת (Halodog) 🐾';
+      const caption = incomingText ? `${captionPrefix}\n"${incomingText}"` : captionPrefix;
+
+      if (incomingFileUrl) {
+        await sendWhatsAppFile(razChatId, incomingFileUrl, defaultFileName, caption);
+      } else if (incomingText) {
+        await sendWhatsAppMessage(razChatId, `📸 הודעה מהילה המאלפת (Halodog) בנוגע למדיה:\n"${incomingText}"`);
+      }
+      return res.status(200).json({ ok: true, handled: 'hila_media_forwarded_to_raz' });
     }
 
     return res.status(200).json({ ok: true, handled: 'hila_text_received' });

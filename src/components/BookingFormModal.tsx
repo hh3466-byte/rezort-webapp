@@ -1675,6 +1675,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                         paymentStatus: depositAmount >= totalPrice ? 'fully_paid' : depositAmount > 0 ? 'deposit_paid' : 'unpaid',
                         paymentMethod,
                         stayStatus,
+                        vaccinationValid: vaccinationValid !== undefined ? vaccinationValid : true,
                         createdAt: initialData.createdAt || new Date().toISOString(),
                         updatedAt: new Date().toISOString(),
                       };

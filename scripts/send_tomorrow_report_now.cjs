@@ -295,16 +295,6 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
     const sDate = b.start_date || b.startDate;
     const eDate = b.end_date || b.endDate;
 
-    if (pMode === 'daily' && sType !== 'training' && !isFree && price > 0 && dailyRate > 0 && sDate && eDate) {
-      const startMs = new Date(sDate).getTime();
-      const endMs = new Date(eDate).getTime();
-      const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
-      const expected = days * dailyRate;
-      if (Math.abs(price - expected) > 1) {
-        financialDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
-      }
-    }
-
     const isMultiDog = dog.includes(' ו') || dog.includes(' + ') || dog.includes(' and ');
     if (isMultiDog && pMode !== 'period' && sType !== 'training' && !isFree) {
       financialDiscrepancies.push(`🐶🐶 תמחור זוג כלבים: *${dog}* (${owner}) | נדרש לוודא שהתמחור מוגדר כ'מחיר פיקס/לתקופה' הכולל את שני הכלבים.`);

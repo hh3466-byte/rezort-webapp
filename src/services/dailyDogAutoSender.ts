@@ -50,9 +50,15 @@ function buildEveningManagerSummaryMessage(
   let reviewLine = '';
   if (sentReviews.length > 0) {
     const clientList = sentReviews.map(b => `${b.dogName || 'כלב'} (${b.ownerName || 'בעלים'})`).join(', ');
-    reviewLine = `• *בקשות חוות דעת ומועדון VIP (19:00):* נשלחו בקשות חוות דעת ומועדון VIP סה"כ ${sentReviews.length} הודעות והאירוע הסתיים בהצלחה (${clientList}). אין כשל`;
+    reviewLine = `• *בקשות חוות דעת ומועדון VIP:* נשלחו בקשות חוות דעת ומועדון VIP סה"כ ${sentReviews.length} הודעות והאירוע הסתיים בהצלחה (${clientList}). אין כשל`;
   } else {
-    reviewLine = `• *בקשות חוות דעת ומועדון VIP (19:00):* נשלחו סה"כ 0 הודעות (לא היו שחרורים מתאימים היום) והאירוע הסתיים בהצלחה. אין כשל`;
+    const now = new Date();
+    const isSat = now.getDay() === 6;
+    if (isSat && (now.getHours() < 20 || (now.getHours() === 20 && now.getMinutes() < 15))) {
+      reviewLine = `• *בקשות חוות דעת ומועדון VIP:* מתוזמנות למוצאי שבת (20:15). טרם שוגרו.`;
+    } else {
+      reviewLine = `• *בקשות חוות דעת ומועדון VIP:* נשלחו סה"כ 0 הודעות (לא היו שחרורים מתאימים) והאירוע הסתיים בהצלחה. אין כשל`;
+    }
   }
 
   let skippedLine = '';

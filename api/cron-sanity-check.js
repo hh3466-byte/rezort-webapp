@@ -160,6 +160,8 @@ async function fetchGreenApiChats(id, token, count = 80) {
 function matchGrowPaymentsForBooking(b, growPayments = []) {
   const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
   const bName = (b.owner_name || b.ownerName || '').trim().toLowerCase();
+  const notes = (b.notes || '') + (b.data?.notes || '');
+  const emergencyPhone = cleanPhoneNumber(b.emergency_contact || b.emergencyContact || '');
   const matched = new Map();
 
   (growPayments || []).forEach(p => {
@@ -168,10 +170,12 @@ function matchGrowPaymentsForBooking(b, growPayments = []) {
     const ref = String(p.reference_id || p.referenceId || p.id || '');
     const amount = Number(p.amount) || 0;
 
-    const isPhoneMatch = bPhone.length >= 7 && pPhone.length >= 7 && (bPhone.slice(-7) === pPhone.slice(-7));
-    const isNameMatch = bName && (pName.includes(bName) || bName.includes(pName));
+    const isPhoneMatch = (bPhone.length >= 7 && pPhone.length >= 7 && (bPhone.slice(-7) === pPhone.slice(-7))) ||
+                         (emergencyPhone.length >= 7 && pPhone.length >= 7 && (emergencyPhone.slice(-7) === pPhone.slice(-7)));
+    const isNameMatch = bName && pName && (bName.includes(pName) || pName.includes(bName));
+    const isRefMatch = ref && notes.includes(ref);
 
-    if (isPhoneMatch || isNameMatch) {
+    if (isPhoneMatch || isNameMatch || isRefMatch) {
       matched.set(ref || `grow-${Math.random()}`, { ref, amount });
     }
   });
@@ -275,14 +279,6 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
       redLights.paymentDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${deposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}! (דורש קיבוע סה"כ ל-₪${deposit.toLocaleString()} כמחיר תקופה/פיקס או בדיקת זיכוי)`);
     }
 
-    // 2. Pricing mismatch when daily mode is active
-    if (pricingMode === 'daily' && b.service_type !== 'training' && b.serviceType !== 'training' && !isFree && price > 0 && dailyRate > 0) {
-      const expected = days * dailyRate;
-      if (Math.abs(price - expected) > 1) {
-        redLights.paymentDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
-      }
-    }
-
     // 3. Multi-dog booking without period pricing
     const isMultiDog = dog.includes(' ו') || dog.includes(' + ') || dog.includes(' and ');
     if (isMultiDog && pricingMode !== 'period' && b.service_type !== 'training' && b.serviceType !== 'training' && !isFree) {
@@ -305,30 +301,26 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
       redLights.paymentDiscrepancies.push(`🎁 אירוח חינם עם חיוב כספי: *${dog}* (${owner}) סומן כחינם אך מופיעים סכומים (סה"כ ₪${price.toLocaleString()}, שולם ₪${deposit.toLocaleString()})`);
     }
 
-    // 6. Abnormal low average daily rate on long boarding stays (indicates unbilled extension)
-    const isBoarding = (b.service_type || b.serviceType) === 'boarding';
-    if (isBoarding && !isFree && price > 0 && days >= 10 && (price / days) < 125) {
-      redLights.paymentDiscrepancies.push(`⚠️ תמחור יומי נמוך מהתקן לשהות ממושכת: *${dog}* (${owner} - 📞 ${phone}) | שהות של ${days} ימים תומחרה ב-₪${price.toLocaleString()} (~₪${Math.round(price / days)}/יום, מתחת ל-₪150/יום) | נדרש לוודא האם הוארכו תאריכים ללא עדכון מחיר כולל או גביית תוספת!`);
-    }
-
-    // 7. Stay extension mentioned in notes with open debt
+    // 6. Stay extension mentioned in notes with open debt
     const isExtension = notes.includes('הוארך') || notes.includes('הארכה') || notes.includes('עודכן מוואטסאפ');
     if (isExtension && price > deposit && !isFree) {
       redLights.paymentDiscrepancies.push(`💰 שהות מוארכת עם יתרת חוב פתוחה: *${dog}* (${owner} - 📞 ${phone}) | שהות הוארכה עד ${formatDateIL(end)}, נותרה יתרה לגבייה: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
     }
 
-    // 8. Active staying dog with open debt
+    // 7. Active staying dog with open debt
     const isCurrentlyStaying = start <= todayStr && end >= todayStr && (b.stay_status || b.stayStatus) !== 'checked_out';
     if (isCurrentlyStaying && price > deposit && !isFree) {
       redLights.paymentDiscrepancies.push(`💰 כלב שוהה כעת בריזורט עם יתרת חוב: *${dog}* (${owner} - 📞 ${phone}) | שוהה עד ${formatDateIL(end)}, נותרה יתרה לתשלום: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
     }
 
-    // 9. Cross-reconcile against live Grow transactions
+    // 8. Cross-reconcile against live Grow transactions
+    const isFullyPaidAndClosed = paymentStatus === 'fully_paid' && deposit >= price && deposit > 0;
+    const isVerifiedInNotes = notes.includes('שולם במלואו') || notes.includes('אסמכתא');
     const { totalGrowPaid } = matchGrowPaymentsForBooking(b, growPayments);
     const pMethod = b.payment_method || b.paymentMethod || d.paymentMethod || '';
     const isGrowMethod = pMethod === 'bit' || pMethod === 'grow' || pMethod === 'credit_card' || pMethod === 'grow_invoice' || notes.includes('Grow') || notes.includes('Bit') || notes.includes('אסמכתא');
 
-    if (isGrowMethod && totalGrowPaid > 0 && deposit > totalGrowPaid + 10) {
+    if (!isFullyPaidAndClosed && !isVerifiedInNotes && isGrowMethod && totalGrowPaid > 0 && deposit > totalGrowPaid + 10) {
       redLights.paymentDiscrepancies.push(`🚨 פער סליקת Grow: *${dog}* (${owner} - 📞 ${phone}) | נרשם ביומן ששולם ₪${deposit.toLocaleString()}, אך ב-Grow נסלקו בפועל ₪${totalGrowPaid.toLocaleString()} בלבד! (חסרים ₪${(deposit - totalGrowPaid).toLocaleString()})`);
     } else if (totalGrowPaid > 0 && deposit === 0 && !isFree && end >= todayStr) {
       redLights.paymentDiscrepancies.push(`💡 תשלום Grow שלא הוזן ליומן: *${dog}* (${owner}) | נקלטו ב-Grow ₪${totalGrowPaid.toLocaleString()} אך ביומן רשום ₪0 מקדמה.`);
@@ -564,14 +556,19 @@ export default async function handler(req, res) {
     const sRow = settingsRows?.[0] || {};
     const settings = { ...sRow, ...(sRow.data || {}) };
 
-    if (!isForced && settings.last1830SanitySentDate === todayStr) {
+    // Evening window check: 18:00 onwards
+    const todayEveningStartMs = new Date(`${todayStr}T18:00:00+03:00`).getTime();
+    const lastSentTimestampMs = settings.last1830SanitySentTimestamp ? new Date(settings.last1830SanitySentTimestamp).getTime() : 0;
+    const sentTodayEvening = settings.last1830SanitySentDate === todayStr && lastSentTimestampMs >= todayEveningStartMs;
+
+    if (!isForced && sentTodayEvening) {
       return res.status(200).json({ status: 'already_sent', date: todayStr });
     }
 
     const greenId = settings.greenApiIdInstance;
     const greenToken = settings.greenApiToken;
 
-    // Additional Ironclad Guard: Check directly in Green-API manager chat history
+    // Additional Ironclad Guard: Check directly in Green-API manager chat history (only for evening messages sent after 18:00)
     if (!isForced && greenId && greenToken) {
       try {
         const histResp = await fetch(`https://api.green-api.com/waInstance${greenId}/getChatHistory/${greenToken}`, {
@@ -582,16 +579,14 @@ export default async function handler(req, res) {
         if (histResp.ok) {
           const hist = await histResp.json();
           if (Array.isArray(hist)) {
-            const now = new Date();
-            const startOfDayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-            const alreadySentInChat = hist.some(m => {
+            const alreadySentInEveningChat = hist.some(m => {
               if (m.type !== 'outgoing') return false;
               const msgTime = (m.timestamp || 0) * 1000;
-              if (msgTime < startOfDayMs) return false;
+              if (msgTime < todayEveningStartMs) return false;
               const text = m.textMessage || m.extendedTextMessage?.text || '';
               return text.includes('דוח בדיקת שפיות יומית');
             });
-            if (alreadySentInChat) {
+            if (alreadySentInEveningChat) {
               return res.status(200).json({ status: 'already_sent_in_chat', date: todayStr });
             }
           }

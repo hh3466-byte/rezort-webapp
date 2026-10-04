@@ -610,7 +610,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
               e.stopPropagation();
               onToggleStayStatus(booking.id, 'checked_in');
             }}
-            title="סמן שהכלב נכנס ונקלט כעת בפועל בריזורט"
+            title="סמן שהכלב נכנס ונקלט כעת בפועל בריזורט (צ'ק-אין מהיר)"
             className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
           >
             <CheckCircle className="w-3.5 h-3.5" />
@@ -618,19 +618,43 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
           </button>
         )}
 
-        {/* Release Dog Button */}
-        {!isEnded && onInitiateRelease && (
+        {/* Quick Check-Out / Release Dog Button */}
+        {booking.stayStatus === 'checked_in' && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              onInitiateRelease();
+              const remaining = Number(booking.totalPrice || 0) - Number(booking.depositAmount || 0);
+              if (remaining <= 0 || booking.isFreeStay || booking.paymentStatus === 'fully_paid') {
+                if (onToggleStayStatus) {
+                  onToggleStayStatus(booking.id, 'checked_out');
+                } else if (onInitiateRelease) {
+                  onInitiateRelease();
+                }
+              } else if (onInitiateRelease) {
+                onInitiateRelease();
+              }
             }}
-            title="שחרר כלב הביתה (בודק חוב פתוח ומאפשר לסמן כשולם ולסגור שחרור)"
-            className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+            title="שחרר כלב הביתה (צ'ק-אאוט מהיר)"
+            className="bg-sky-600 hover:bg-sky-700 active:scale-95 text-white text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
           >
             <Home className="w-3.5 h-3.5" />
-            <span>שחרר הביתה</span>
+            <span>שחרר הביתה (צ'ק-אאוט) 🏁</span>
+          </button>
+        )}
+
+        {/* Revert Check-out to Checked-in if needed */}
+        {booking.stayStatus === 'checked_out' && onToggleStayStatus && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleStayStatus(booking.id, 'checked_in');
+            }}
+            title="החזר כלב למצב שוהה בריזורט"
+            className="bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer border border-slate-300 shadow-2xs"
+          >
+            <span>↩️ החזר לשהייה</span>
           </button>
         )}
 

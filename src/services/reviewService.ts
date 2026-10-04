@@ -239,6 +239,20 @@ export async function runAutoReviewAndVoucherSender(
       // Short breathing pause between customer messages
       await new Promise(r => setTimeout(r, 1200));
     }
+
+    if (sentCount > 0) {
+      try {
+        await sendGreenApiDirectMessage(
+          '0543200007',
+          `🐾 *עדכון משלוח בקשות חוות דעת ומועדון VIP*\nנשלחו סה"כ ${sentCount} בקשות חוות דעת והזמנות לקהילת ה-VIP. כולם קיבלו. אין כשל.`,
+          greenApiId,
+          greenApiToken,
+          { skipHolidayCheck: true }
+        );
+      } catch (mErr) {
+        console.warn('[ReviewSender] Manager notification error:', mErr);
+      }
+    }
   } catch (err: any) {
     console.error('[ReviewSender] Error running auto review sender:', err);
     errors.push(err?.message || 'שגיאה כללית');

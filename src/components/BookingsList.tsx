@@ -40,6 +40,7 @@ interface BookingsListProps {
   onOpenSendPaymentLink?: (booking: Booking) => void;
   onOpenNewBooking: () => void;
   onInitiateRelease?: (booking: Booking) => void;
+  onToggleStayStatus?: (bookingId: string, newStatus: Booking['stayStatus']) => void;
   onToggleReviewRequest?: (booking: Booking) => void;
 }
 
@@ -54,6 +55,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
   onOpenSendPaymentLink,
   onOpenNewBooking,
   onInitiateRelease,
+  onToggleStayStatus,
   onToggleReviewRequest,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -441,19 +443,58 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                         </button>
                       )}
 
-                      {/* Release Dog Button */}
-                      {b.stayStatus !== 'checked_out' && b.stayStatus !== 'cancelled' && onInitiateRelease && (
+                      {/* Quick Check-in Button for Booked Dogs */}
+                      {b.stayStatus === 'booked' && onToggleStayStatus && (
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            onInitiateRelease(b);
+                            onToggleStayStatus(b.id, 'checked_in');
                           }}
-                          title="שחרר כלב הביתה (בדיקת חוב וסגירת שחרור)"
-                          className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 shadow-xs transition-all cursor-pointer"
+                          title="סמן שהכלב נכנס ונקלט כעת בריזורט (צ'ק-אין מהיר)"
+                          className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 shadow-xs transition-all cursor-pointer"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>קלוט (צ'ק-אין) 🐾</span>
+                        </button>
+                      )}
+
+                      {/* Quick Check-Out / Release Dog Button for Staying Dogs */}
+                      {b.stayStatus === 'checked_in' && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (remainingDebt <= 0 || b.isFreeStay || b.paymentStatus === 'fully_paid') {
+                              if (onToggleStayStatus) {
+                                onToggleStayStatus(b.id, 'checked_out');
+                              } else if (onInitiateRelease) {
+                                onInitiateRelease(b);
+                              }
+                            } else if (onInitiateRelease) {
+                              onInitiateRelease(b);
+                            }
+                          }}
+                          title="שחרר כלב הביתה (צ'ק-אאוט מהיר)"
+                          className="bg-sky-600 hover:bg-sky-700 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 shadow-xs transition-all cursor-pointer"
                         >
                           <Home className="w-4 h-4" />
-                          <span>שחרור</span>
+                          <span>שחרור (צ'ק-אאוט) 🏁</span>
+                        </button>
+                      )}
+
+                      {/* Revert check-out to staying if needed */}
+                      {b.stayStatus === 'checked_out' && onToggleStayStatus && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleStayStatus(b.id, 'checked_in');
+                          }}
+                          title="החזר כלב למצב שוהה בריזורט"
+                          className="bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 text-xs font-bold px-2.5 py-1.5 rounded-xl border border-slate-300 flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                        >
+                          <span>↩️ החזר לשהייה</span>
                         </button>
                       )}
 

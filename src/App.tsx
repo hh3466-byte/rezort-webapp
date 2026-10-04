@@ -184,6 +184,10 @@ export default function App() {
   }>({ actionType: 'open_settings' });
 
   const handleOpenSettingsWithAuth = () => {
+    if (isManagerAuthenticated) {
+      setIsSettingsOpen(true);
+      return;
+    }
     setManagerAuthContext({
       actionType: 'open_settings',
       title: 'אישור מנהל נדרש 🔒',
@@ -2043,6 +2047,7 @@ export default function App() {
               onDeleteBooking={handleDeleteBooking}
               onOpenNewBooking={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
               onInitiateRelease={handleInitiateRelease}
+              onToggleStayStatus={handleToggleStayStatus}
               onToggleReviewRequest={handleToggleReviewRequest}
             />
           )}
@@ -2665,6 +2670,8 @@ export default function App() {
         bookings={bookings}
         settings={settings}
         onSelectBooking={(b) => setSelectedDateForDetails(b.startDate)}
+        onToggleStayStatus={handleToggleStayStatus}
+        onInitiateRelease={handleInitiateRelease}
         onOpenDailyDogUpdates={() => setIsDailyDogUpdatesOpen(true)}
         onOpenTomorrowOverview={() => setIsTomorrowOverviewModalOpen(true)}
       />

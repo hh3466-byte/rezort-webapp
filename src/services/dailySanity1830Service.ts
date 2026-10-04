@@ -43,14 +43,18 @@ export function formatKennelName(k?: string | number): string {
   return `מתחם ${s}`;
 }
 
-export function countDogsInBooking(b: Booking): number {
+export function countDogsInBooking(b: Booking, allList: Booking[] = []): number {
   const name = (b.dogName || '').trim();
-  const notes = (b.notes || '').trim();
-  if (name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes(' ועוד ') || name.includes('&')) {
-    return 2;
-  }
-  if (notes.includes('2 כלבים') || notes.includes('שני כלבים') || notes.includes('זוג כלבים') || notes.includes('2 כלבות') || notes.includes('שתי כלבות')) {
-    return 2;
+  const isMultiName = name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes('&') || name.includes(' ועוד ');
+  if (isMultiName) {
+    const p = cleanPhoneNumber(b.ownerPhone || '');
+    const oName = (b.ownerName || '').trim();
+    const hasOther = allList.some(other => 
+      other.id !== b.id &&
+      other.stayStatus !== 'cancelled' &&
+      ((p && cleanPhoneNumber(other.ownerPhone || '') === p) || (oName && (other.ownerName || '').trim() === oName))
+    );
+    if (!hasOther) return 2;
   }
   return 1;
 }
@@ -66,6 +70,8 @@ export function matchGrowPaymentsForBooking(
   const bPhone = cleanPhoneNumber(booking.ownerPhone || '');
   const bName = (booking.ownerName || '').trim().toLowerCase();
   const bDog = (booking.dogName || '').trim().toLowerCase();
+  const notes = (booking.notes || '') + ((booking as any).data?.notes || '');
+  const emergencyPhone = cleanPhoneNumber(booking.emergencyContact || '');
 
   const matched = new Map<string, { ref: string; amount: number; date?: string; method?: string }>();
 
@@ -75,7 +81,8 @@ export function matchGrowPaymentsForBooking(
     const tDog = (t.dogName || '').trim().toLowerCase();
     const isNameMatch = bName && (tName.includes(bName) || bName.includes(tName));
     const isDogMatch = bDog && tDog && (tDog.includes(bDog) || bDog.includes(tDog));
-    if (isNameMatch || (isDogMatch && bName)) {
+    const isRefMatch = t.ref && notes.includes(t.ref);
+    if (isNameMatch || (isDogMatch && bName) || isRefMatch) {
       matched.set(t.ref, {
         ref: t.ref,
         amount: Number(t.amount) || 0,
@@ -92,10 +99,12 @@ export function matchGrowPaymentsForBooking(
     const ref = String(p.reference_id || p.referenceId || p.id || '');
     const amount = Number(p.amount) || 0;
 
-    const isPhoneMatch = bPhone.length >= 7 && pPhone.length >= 7 && (bPhone.slice(-7) === pPhone.slice(-7));
+    const isPhoneMatch = (bPhone.length >= 7 && pPhone.length >= 7 && (bPhone.slice(-7) === pPhone.slice(-7))) ||
+                         (emergencyPhone.length >= 7 && pPhone.length >= 7 && (emergencyPhone.slice(-7) === pPhone.slice(-7)));
     const isNameMatch = bName && (pName.includes(bName) || bName.includes(pName));
+    const isRefMatch = ref && notes.includes(ref);
 
-    if (isPhoneMatch || isNameMatch) {
+    if (isPhoneMatch || isNameMatch || isRefMatch) {
       matched.set(ref || `grow-${Math.random()}`, {
         ref,
         amount,
@@ -199,8 +208,18 @@ export function run1830SanityAudit(
 
       const p1 = cleanPhoneNumber(b1.ownerPhone || '');
       const p2 = cleanPhoneNumber(b2.ownerPhone || '');
-      // If different owners in the same kennel
-      if (p1 !== p2 && b1.ownerName !== b2.ownerName) {
+      const o1 = (b1.ownerName || '').trim();
+      const o2 = (b2.ownerName || '').trim();
+      const d1 = (b1.dogName || '').trim();
+      const d2 = (b2.dogName || '').trim();
+      const link1 = b1.linkedDogName || (b1 as any).linked_dog_name || '';
+      const link2 = b2.linkedDogName || (b2 as any).linked_dog_name || '';
+
+      const isSameOwner = (p1 && p2 && p1 === p2) || (o1 && o2 && o1 === o2);
+      const isLinked = (link1 && link1 === d2) || (link2 && link2 === d1);
+
+      // If different owners and not a linked pair in the same kennel
+      if (!isSameOwner && !isLinked) {
         const kName = formatKennelName(b1.kennelNumber);
         redLights.roomCollisions.push(`🚨 התנגשות ב${kName}: *${b1.dogName}* (${b1.ownerName}) ו-*${b2.dogName}* (${b2.ownerName}) משובצים לאותו מתחם בתאריכים חופפים (${formatDateIL(b1.startDate)}-${formatDateIL(b1.endDate)})!`);
       }
@@ -229,24 +248,36 @@ export function run1830SanityAudit(
   });
 
   // ==========================================
-  // DEEP CHECK 5: Overcapacity Alert (בקרת תפוסת שיא)
+  // DEEP CHECK 5: Overcapacity Alert (בקרת תפוסת שיא - עד 15 כלבים)
   // ==========================================
   const stayingBookingsToday = activeBookings.filter(b => b.startDate <= todayStr && b.endDate >= todayStr && b.stayStatus !== 'checked_out');
-  const totalStayingDogsCount = stayingBookingsToday.reduce((sum, b) => sum + countDogsInBooking(b), 0);
-  if (totalStayingDogsCount >= 14) {
-    redLights.overcapacity.push(`⚠️ תפוסת שיא בריזורט: *${totalStayingDogsCount} כלבים* שוהים כעת (סף התרעת עומס: 14 כלבים)!`);
+  const totalStayingDogsCount = stayingBookingsToday.reduce((sum, b) => sum + countDogsInBooking(b, stayingBookingsToday), 0);
+  if (totalStayingDogsCount >= 15) {
+    redLights.overcapacity.push(`⚠️ תפוסת שיא בריזורט: *${totalStayingDogsCount} כלבים* שוהים כעת (תפוסה מלאה / קיבולת שיא: 15 כלבים)!`);
   }
 
   // ==========================================
-  // DEEP CHECK 6: Multi-Dog Discrepancy (זיהוי 2 כלבים בשם יחיד)
+  // DEEP CHECK 6: Multi-Dog Discrepancy (זיהוי 2 כלבים הרשומים ככרטיס יחיד במקום 2 כרטיסים נפרדים לפי חוק 8)
   // ==========================================
   activeBookings.filter(b => b.endDate >= todayStr).forEach(b => {
     const name = (b.dogName || '').trim();
     const notes = (b.notes || '').trim();
     const isMultiDogMentioned = notes.includes('2 כלבים') || notes.includes('שני כלבים') || notes.includes('זוג כלבים') || notes.includes('2 כלבות') || notes.includes('שתי כלבות');
-    const isMultiName = name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes('&');
-    if (isMultiDogMentioned && !isMultiName) {
-      redLights.multiDogDiscrepancies.push(`🐶🐶 חשד ל-2 כלבים בשם יחיד: *${name}* (${b.ownerName}) - ההערות מעידות על 2 כלבים, אך בשם מופיע כלב יחיד!`);
+    const isMultiName = name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes('&') || name.includes(' ועוד ');
+    
+    const p = cleanPhoneNumber(b.ownerPhone || '');
+    const oName = (b.ownerName || '').trim();
+    const linkName = b.linkedDogName || (b as any).linked_dog_name || '';
+
+    const hasPartnerCard = activeBookings.some(other => 
+      other.id !== b.id &&
+      other.stayStatus !== 'cancelled' &&
+      ((p && cleanPhoneNumber(other.ownerPhone || '') === p) || (oName && (other.ownerName || '').trim() === oName) || (linkName && other.dogName === linkName)) &&
+      other.startDate <= b.endDate && other.endDate >= b.startDate
+    );
+
+    if ((isMultiDogMentioned || isMultiName) && !hasPartnerCard) {
+      redLights.multiDogDiscrepancies.push(`🐶🐶 חשד ל-2 כלבים הרשומים ככרטיס בודד: *${name}* (${b.ownerName}) - נדרש לפצל ל-2 כרטיסי שהייה נפרדים לפי חוק 8!`);
     }
   });
 
@@ -259,11 +290,11 @@ export function run1830SanityAudit(
     const endMs = new Date(b.endDate).getTime();
     const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
     const notes = (b.notes || '').toLowerCase();
-    const isTrainingMentioned = notes.includes('אילוף') || notes.includes('מאלף') || notes.includes('אימון');
+    const isTrainingMentioned = notes.includes('אילוף') || notes.includes('מאלף') || notes.includes('אימון') || notes.includes('הילה');
 
-    if (b.serviceType === 'boarding' && (price >= 3500 || days >= 21 || isTrainingMentioned)) {
+    if (b.serviceType === 'boarding' && (isTrainingMentioned || (price >= 4500 && days >= 25 && price / days >= 200))) {
       redLights.trainingDiscrepancies.push(`🎓 חשד לאילוף שסווג כפנסיון: *${b.dogName}* (${b.ownerName}) | שהות ${days} ימים / ₪${price.toLocaleString()} | נדרש לוודא סיווג!`);
-    } else if (b.serviceType === 'training' && price > 0 && price < 2500 && days < 10) {
+    } else if (b.serviceType === 'training' && price > 0 && price < 2500 && days < 10 && !isTrainingMentioned) {
       redLights.trainingDiscrepancies.push(`🎓 תמחור/משך אילוף חריג: *${b.dogName}* (${b.ownerName}) | מסווג כאילוף אך מחיר ₪${price.toLocaleString()} / ${days} ימים נמוך מהתקן!`);
     }
   });
@@ -333,13 +364,7 @@ export function run1830SanityAudit(
       redLights.paymentDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${deposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}! (דורש קיבוע סה"כ ל-₪${deposit.toLocaleString()} כמחיר תקופה/פיקס או בדיקת זיכוי)`);
     }
 
-    // 2. Pricing mismatch when daily mode is active
-    if (b.pricingMode === 'daily' && b.serviceType !== 'training' && !isFree && price > 0 && dailyRate > 0) {
-      const expected = days * dailyRate;
-      if (Math.abs(price - expected) > 1) {
-        redLights.paymentDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
-      }
-    }
+    const pricingMode = b.pricingMode || 'period';
 
     // 3. Multi-dog booking without period pricing
     const isMultiDog = dog.includes(' ו') || dog.includes(' + ') || dog.includes(' and ');
@@ -363,10 +388,7 @@ export function run1830SanityAudit(
       redLights.paymentDiscrepancies.push(`🎁 אירוח חינם עם חיוב כספי: *${dog}* (${owner}) סומן כחינם אך מופיעים סכומים (סה"כ ₪${price.toLocaleString()}, שולם ₪${deposit.toLocaleString()})`);
     }
 
-    // 6. Abnormal low average daily rate on long stays (indicates unbilled extended days)
-    if (b.serviceType === 'boarding' && !isFree && price > 0 && days >= 10 && (price / days) < 125) {
-      redLights.paymentDiscrepancies.push(`⚠️ תמחור יומי נמוך מהתקן לשהות ממושכת: *${dog}* (${owner} - 📞 ${phone}) | שהות של ${days} ימים תומחרה ב-₪${price.toLocaleString()} (~₪${Math.round(price / days)}/יום, מתחת ל-₪150/יום) | נדרש לוודא האם הוארכו תאריכים ללא עדכון מחיר כולל או גביית תוספת!`);
-    }
+
 
     // 7. Stay extension mentioned in notes with open balance
     const isExtension = notes.includes('הוארך') || notes.includes('הארכה') || notes.includes('עודכן מוואטסאפ');
@@ -524,21 +546,28 @@ export function run1830SanityAudit(
   // 7. Payment Discrepancies & Stale Debts Check (Cross-reconciles against static ledger & live Grow payments)
   activeBookings.filter(b => b.endDate >= todayStr).forEach(b => {
     const deposit = Number(b.depositAmount) || 0;
+    const price = Number(b.totalPrice) || 0;
+    const notes = (b.notes || '') + ((b as any).data?.notes || '');
+    const isFullyPaidAndClosed = b.paymentStatus === 'fully_paid' && deposit >= price && deposit > 0;
+    const isVerifiedInNotes = notes.includes('שולם במלואו') || notes.includes('אסמכתא');
+
     const { totalGrowPaid } = matchGrowPaymentsForBooking(b, VERIFIED_GROW_LEDGER, growPayments);
 
+    const pmStr = (b.paymentMethod || '') as string;
     const isGrowPaymentMethod =
-      b.paymentMethod === 'bit' ||
-      b.paymentMethod === 'grow' ||
-      b.paymentMethod === 'credit_card' ||
-      b.paymentMethod === 'grow_invoice' ||
-      (b.notes && (b.notes.includes('Grow') || b.notes.includes('Bit') || b.notes.includes('אסמכתא')));
+      pmStr === 'bit' ||
+      pmStr === 'grow' ||
+      pmStr === 'credit_card' ||
+      pmStr === 'grow_invoice' ||
+      pmStr === 'credit' ||
+      (notes && (notes.includes('Grow') || notes.includes('Bit') || notes.includes('אסמכתא')));
 
     // If booking claims a Grow payment that is higher than actual cleared Grow transactions
-    if (isGrowPaymentMethod && totalGrowPaid > 0 && deposit > totalGrowPaid + 10) {
+    if (!isFullyPaidAndClosed && !isVerifiedInNotes && isGrowPaymentMethod && totalGrowPaid > 0 && deposit > totalGrowPaid + 10) {
       redLights.paymentDiscrepancies.push(`🚨 פער סליקת Grow: *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | נרשם ביומן ששולם ₪${deposit.toLocaleString()}, אך ב-Grow נסלקו בפועל ₪${totalGrowPaid.toLocaleString()} בלבד! (חסרים ₪${(deposit - totalGrowPaid).toLocaleString()})`);
     } else if (totalGrowPaid > 0 && deposit === 0 && !b.isFreeStay) {
       redLights.paymentDiscrepancies.push(`💡 תשלום Grow שלא הוזן ליומן: *${b.dogName}* (${b.ownerName}) | נקלטו ב-Grow ₪${totalGrowPaid.toLocaleString()} אך ביומן רשום ₪0 מקדמה.`);
-    } else if (totalGrowPaid > 0 && totalGrowPaid !== deposit && Math.abs(totalGrowPaid - deposit) > 10 && !isGrowPaymentMethod) {
+    } else if (!isFullyPaidAndClosed && !isVerifiedInNotes && totalGrowPaid > 0 && totalGrowPaid !== deposit && Math.abs(totalGrowPaid - deposit) > 10 && !isGrowPaymentMethod) {
       redLights.paymentDiscrepancies.push(`💳 *${b.dogName}* (${b.ownerName}): נקלטו ב-Grow ₪${totalGrowPaid.toLocaleString()} אך ביומן רשום ₪${deposit.toLocaleString()}`);
     }
   });

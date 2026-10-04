@@ -71,6 +71,38 @@ export function isRealTrainingBooking(b: Booking): boolean {
  */
 const INITIAL_TRAINER_RECEIPTS: TrainerReceipt[] = [
   {
+    id: 'receipt-20061',
+    receiptNumber: '20061',
+    receiptDate: '2026-10-04',
+    totalAmount: 1000,
+    paymentMethod: 'ביט',
+    rawLineText: 'תשלום 2/3 תיאו תשלום 1/3 בוס',
+    receiptImageUrl: 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/32c8eeac-10f4-491e-a65d-11d975565f21.jpg',
+    allocations: [
+      {
+        bookingId: 'b-1788685190273',
+        dogName: 'תיאו',
+        stage: '2/3',
+        amount: 500,
+      },
+      {
+        bookingId: 'b-1789732108163',
+        dogName: 'בוס',
+        stage: '1/3',
+        amount: 500,
+      },
+    ],
+    isPaidActually: true, // שולם בביט ₪1,000 - אישור 1078-8325-73347
+    paidDate: '2026-10-04',
+    bitConfirmationNumber: '1078-8325-73347',
+    paymentConfirmationNotes: 'העברת ביט ₪1,000 להילה (אישור 1078-8325-73347) עבור תיאו 2/3 ובוס 1/3',
+    managerQuerySent: true,
+    managerQuerySentAt: '2026-10-04T07:30:59Z',
+    status: 'paid',
+    createdAt: '2026-10-04T07:30:59Z',
+    updatedAt: '2026-10-04T10:50:00Z',
+  },
+  {
     id: 'receipt-20057',
     receiptNumber: '20057',
     receiptDate: '2026-09-22',

@@ -29,6 +29,8 @@ interface MobileTodayDashboardModalProps {
   bookings: Booking[];
   settings: ResortSettings;
   onSelectBooking?: (booking: Booking) => void;
+  onToggleStayStatus?: (bookingId: string, newStatus: Booking['stayStatus']) => void;
+  onInitiateRelease?: (booking: Booking) => void;
   onOpenDailyDogUpdates?: () => void;
   onOpenTomorrowOverview?: () => void;
 }
@@ -39,6 +41,8 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
   bookings,
   settings,
   onSelectBooking,
+  onToggleStayStatus,
+  onInitiateRelease,
   onOpenDailyDogUpdates,
   onOpenTomorrowOverview
 }) => {
@@ -182,8 +186,26 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
                         </div>
                       </div>
 
-                      {/* Fast Action Buttons: Phone Call & WhatsApp */}
+                      {/* Fast Action Buttons: Check-in, Phone Call & WhatsApp */}
                       <div className="flex items-center gap-1.5 shrink-0">
+                        {booking.stayStatus === 'booked' && onToggleStayStatus && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleStayStatus(booking.id, 'checked_in');
+                            }}
+                            title="קלוט כלב כעת בריזורט (צ'ק-אין מהיר)"
+                            className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-xl flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                          >
+                            <span>קלוט 🐾</span>
+                          </button>
+                        )}
+                        {booking.stayStatus === 'checked_in' && (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-1 rounded-lg border border-emerald-200">
+                            🟢 נקלט
+                          </span>
+                        )}
                         {booking.ownerPhone && (
                           <>
                             <a
@@ -277,8 +299,34 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
                         </div>
                       </div>
 
-                      {/* Fast Action Buttons */}
+                      {/* Fast Action Buttons: Check-out, Phone Call & WhatsApp */}
                       <div className="flex items-center gap-1.5 shrink-0">
+                        {booking.stayStatus === 'checked_in' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (remainingDebt <= 0 || booking.isFreeStay || booking.paymentStatus === 'fully_paid') {
+                                if (onToggleStayStatus) {
+                                  onToggleStayStatus(booking.id, 'checked_out');
+                                } else if (onInitiateRelease) {
+                                  onInitiateRelease(booking);
+                                }
+                              } else if (onInitiateRelease) {
+                                onInitiateRelease(booking);
+                              }
+                            }}
+                            title="שחרר כלב הביתה (צ'ק-אאוט מהיר)"
+                            className="bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-bold text-[11px] px-2.5 py-1.5 rounded-xl flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                          >
+                            <span>שחרר 🏁</span>
+                          </button>
+                        )}
+                        {booking.stayStatus === 'checked_out' && (
+                          <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-1 rounded-lg border border-slate-300">
+                            ✓ שוחרר
+                          </span>
+                        )}
                         {booking.ownerPhone && (
                           <>
                             <a

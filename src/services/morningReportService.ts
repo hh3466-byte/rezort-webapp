@@ -384,58 +384,56 @@ export function formatTomorrowOverviewReport(
       financialDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${deposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}!`);
     }
 
-    // 2. Daily mode mismatch
-    if (b.pricingMode === 'daily' && b.serviceType !== 'training' && !isFree && price > 0 && dailyRate > 0) {
-      const expected = days * dailyRate;
-      if (Math.abs(price - expected) > 1) {
-        financialDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
-      }
-    }
-
-    // 3. Multi-dog booking without period pricing
+    // 2. Multi-dog booking without period pricing
     const isMultiDog = dog.includes(' ו') || dog.includes(' + ') || dog.includes(' and ');
     if (isMultiDog && b.pricingMode !== 'period' && b.serviceType !== 'training' && !isFree) {
       financialDiscrepancies.push(`🐶🐶 תמחור זוג כלבים: *${dog}* (${owner}) | נדרש לוודא שהתמחור מוגדר כ'מחיר פיקס/לתקופה' הכולל את שני הכלבים.`);
     }
 
-    // 4. Status inconsistency (marked fully_paid but deposit < price)
+    // 3. Status inconsistency (marked fully_paid but deposit < price)
     if (!isFree && price > 0) {
       if (deposit > 0 && deposit < price && paymentStatus === 'fully_paid') {
         financialDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך קיימת יתרת חוב של ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
       }
     }
 
-    // 5. Abnormal low average daily rate on long boarding stays (indicates unbilled extension)
-    if (b.serviceType === 'boarding' && !isFree && price > 0 && days >= 10 && (price / days) < 125) {
-      financialDiscrepancies.push(`⚠️ תמחור יומי נמוך מהתקן לשהות ממושכת: *${dog}* (${owner} - 📞 ${phone}) | שהות של ${days} ימים תומחרה ב-₪${price.toLocaleString()} (~₪${Math.round(price / days)}/יום, מתחת ל-₪150/יום) | נדרש לוודא האם הוארכו תאריכים ללא עדכון מחיר`);
-    }
-
-    // 6. Stay extension mentioned in notes with open debt
+    // 4. Stay extension mentioned in notes with open debt
     const isExtension = notes.includes('הוארך') || notes.includes('הארכה') || notes.includes('עודכן מוואטסאפ');
     if (isExtension && price > deposit && !isFree) {
       financialDiscrepancies.push(`💰 שהות מוארכת עם יתרת חוב פתוחה: *${dog}* (${owner} - 📞 ${phone}) | שהות הוארכה עד ${formatDateIL(b.endDate)}, נותרה יתרה לגבייה: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
     }
 
-    // 7. Active staying dog with open debt
+    // 5. Active staying dog with open debt
     const isCurrentlyStaying = b.startDate <= todayStr && b.endDate >= todayStr && b.stayStatus !== 'checked_out';
     if (isCurrentlyStaying && price > deposit && !isFree) {
       financialDiscrepancies.push(`💰 כלב שוהה כעת בריזורט עם יתרת חוב: *${dog}* (${owner} - 📞 ${phone}) | שוהה עד ${formatDateIL(b.endDate)}, נותרה יתרה לתשלום: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
     }
 
-    // 8. Live Grow clearing reconciliation
-    const bCleanPhone = cleanPhoneNumber(b.ownerPhone || '');
-    const bName = (b.ownerName || '').trim().toLowerCase();
-    const matchedGrow = (growPayments || []).filter(p => {
-      const pPhone = cleanPhoneNumber(p.customer_phone || p.customerPhone || '');
-      const pName = (p.customer_name || p.customerName || '').trim().toLowerCase();
-      return (bCleanPhone && pPhone && bCleanPhone.slice(-7) === pPhone.slice(-7)) || (bName && pName && (bName.includes(pName) || pName.includes(bName)));
-    });
-    const totalGrow = matchedGrow.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    const pMethod = b.paymentMethod || '';
-    const isGrowMethod = pMethod === 'bit' || pMethod === 'grow' || pMethod === 'credit_card' || pMethod === 'grow_invoice' || notes.includes('Grow') || notes.includes('Bit') || notes.includes('אסמכתא');
+    // 6. Live Grow clearing reconciliation (only for unverified open balances)
+    const isFullyPaidAndClosed = paymentStatus === 'fully_paid' && deposit >= price && deposit > 0;
+    const isVerifiedInNotes = notes.includes('שולם במלואו') || notes.includes('אסמכתא');
+    if (!isFullyPaidAndClosed && !isVerifiedInNotes) {
+      const bCleanPhone = cleanPhoneNumber(b.ownerPhone || '');
+      const bName = (b.ownerName || '').trim().toLowerCase();
+      const emergencyContact = (b.emergencyContact || '');
+      const emergencyPhone = cleanPhoneNumber(emergencyContact);
+      const matchedGrow = (growPayments || []).filter(p => {
+        const pPhone = cleanPhoneNumber(p.customer_phone || p.customerPhone || '');
+        const pName = (p.customer_name || p.customerName || '').trim().toLowerCase();
+        const pRef = String(p.reference_id || p.referenceId || p.id || '');
+        const phoneMatch = (bCleanPhone && pPhone && bCleanPhone.slice(-7) === pPhone.slice(-7)) ||
+                           (emergencyPhone && pPhone && emergencyPhone.slice(-7) === pPhone.slice(-7));
+        const nameMatch = bName && pName && (bName.includes(pName) || pName.includes(bName));
+        const refMatch = pRef && notes.includes(pRef);
+        return phoneMatch || nameMatch || refMatch;
+      });
+      const totalGrow = matchedGrow.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      const pMethod = (b.paymentMethod || '') as string;
+      const isGrowMethod = pMethod === 'bit' || pMethod === 'grow' || pMethod === 'credit_card' || pMethod === 'grow_invoice' || pMethod === 'credit' || notes.includes('Grow') || notes.includes('Bit') || notes.includes('אסמכתא');
 
-    if (isGrowMethod && totalGrow > 0 && deposit > totalGrow + 10) {
-      financialDiscrepancies.push(`🚨 פער סליקת Grow: *${dog}* (${owner} - 📞 ${phone}) | ביומן רשום ששולם ₪${deposit.toLocaleString()}, אך ב-Grow נסלקו בפועל ₪${totalGrow.toLocaleString()} בלבד! (חסרים ₪${(deposit - totalGrow).toLocaleString()})`);
+      if (isGrowMethod && totalGrow > 0 && deposit > totalGrow + 10) {
+        financialDiscrepancies.push(`🚨 פער סליקת Grow: *${dog}* (${owner} - 📞 ${phone}) | ביומן רשום ששולם ₪${deposit.toLocaleString()}, אך ב-Grow נסלקו בפועל ₪${totalGrow.toLocaleString()} בלבד! (חסרים ₪${(deposit - totalGrow).toLocaleString()})`);
+      }
     }
   });
 

@@ -64,7 +64,7 @@ interface HeaderMetricModalProps {
   onEditBooking: (booking: Booking) => void;
   onMarkAsPaid: (bookingId: string) => void;
   onOpenPaymentModal: (booking: Booking) => void;
-  onToggleStayStatus?: (bookingId: string, current: StayStatus) => void;
+  onToggleStayStatus?: (bookingId: string, newStatus: Booking['stayStatus']) => void;
   onInitiateRelease?: (booking: Booking) => void;
   onUpdateBooking?: (booking: Booking) => void;
   onUpdateBookings?: (bookings: Booking[]) => void;
@@ -2223,16 +2223,51 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         </button>
                       )}
 
-                      {/* Release Dog Button */}
-                      {b.stayStatus !== 'checked_out' && b.stayStatus !== 'cancelled' && onInitiateRelease && (
+                      {/* Quick Check-in Button for Booked Dogs */}
+                      {b.stayStatus === 'booked' && onToggleStayStatus && (
                         <button
                           type="button"
-                          onClick={() => onInitiateRelease(b)}
-                          className="bg-amber-500 hover:bg-amber-600 active:scale-98 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
-                          title="שחרר כלב (בדיקת חוב וסגירת שחרור)"
+                          onClick={() => onToggleStayStatus(b.id, 'checked_in')}
+                          className="bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                          title="סמן שהכלב נכנס ונקלט כעת בריזורט (צ'ק-אין מהיר)"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          <span>קלוט (צ'ק-אין) 🐾</span>
+                        </button>
+                      )}
+
+                      {/* Quick Check-Out / Release Dog Button for Staying Dogs */}
+                      {b.stayStatus === 'checked_in' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (remainingDebt <= 0 || b.isFreeStay || b.paymentStatus === 'fully_paid') {
+                              if (onToggleStayStatus) {
+                                onToggleStayStatus(b.id, 'checked_out');
+                              } else if (onInitiateRelease) {
+                                onInitiateRelease(b);
+                              }
+                            } else if (onInitiateRelease) {
+                              onInitiateRelease(b);
+                            }
+                          }}
+                          className="bg-sky-600 hover:bg-sky-700 active:scale-98 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                          title="שחרר כלב הביתה (צ'ק-אאוט מהיר)"
                         >
                           <Home className="w-3.5 h-3.5" />
-                          <span>שחרור</span>
+                          <span>שחרור (צ'ק-אאוט) 🏁</span>
+                        </button>
+                      )}
+
+                      {/* Revert check-out to staying if needed */}
+                      {b.stayStatus === 'checked_out' && onToggleStayStatus && (
+                        <button
+                          type="button"
+                          onClick={() => onToggleStayStatus(b.id, 'checked_in')}
+                          title="החזר כלב למצב שוהה בריזורט"
+                          className="bg-slate-100 hover:bg-slate-200 active:scale-98 text-slate-700 text-xs font-bold px-2 py-1.5 rounded-xl border border-slate-300 flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                        >
+                          <span>↩️ החזר לשהייה</span>
                         </button>
                       )}
 

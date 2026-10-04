@@ -107,11 +107,13 @@ export function formatClientPaymentLinkMessage(
 צוות הריזורט לכלב`;
   }
 
-  const isLocked = paymentLink.includes('sandbox.grow.link') || (paymentLink.includes('pay.grow.link') && !paymentLink.includes('MjcyNjk'));
-  const amountInstruction = isLocked ? ` (הסכום ₪${agreedAmount} מעודכן ונעול לתשלום)` : (agreedAmount > 0 ? ` (יש להזין ₪${agreedAmount} בעמוד התשלום)` : '');
+  const isLocked = paymentLink.includes('sandbox.grow.link') || (paymentLink.includes('pay.grow.link') && !paymentLink.includes('MjcyNjk')) || paymentLink.includes('grow.link/c');
+  const amountInstruction = isLocked 
+    ? ` (הסכום ₪${agreedAmount.toLocaleString('he-IL')} מעודכן ונעול לתשלום)` 
+    : (agreedAmount > 0 ? ` (סכום מוסכם: ₪${agreedAmount.toLocaleString('he-IL')})` : '');
 
   return `היי ${firstName}, שמחנו לשוחח! 🐾🐶
-שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר ${stayText}.${amountSection}
+שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר ${stayText}.${agreedAmount > 0 ? ` (סכום מוסכם: ₪${agreedAmount.toLocaleString('he-IL')})` : ''}
 להשלמת השריון, יש ללחוץ על הקישור המאובטח${amountInstruction}:
 👉 \u200E${paymentLink}
 
@@ -122,7 +124,7 @@ export function formatClientPaymentLinkMessage(
 • מעבר לשעות הפעילות (לפני 09:30 ואחרי 18:30), ובסופי שבוע וחגים על הבעלים להתגבר ולהתאפק! בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐾
 
 בברכה חמה,
-צוות הריזורט לכלב 🐕🤍`;
+שמוליק וצוות הריזורט לכלב 🐕🤍`;
 }
 
 /**

@@ -3102,19 +3102,27 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 )}
               </div>
 
-              {/* Stay Status: Checked-in vs Booked */}
+              {/* Stay Status: Checked-in vs Booked vs Checked-out */}
               <div className="bg-slate-50/90 border border-slate-200 p-3.5 rounded-2xl space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-slate-800">
                     🐾 מצב קליטה ושהות בריזורט:
                   </span>
                   <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                    stayStatus === 'checked_in' ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-100 text-purple-800'
+                    stayStatus === 'checked_in' 
+                      ? 'bg-emerald-100 text-emerald-800' 
+                      : stayStatus === 'checked_out'
+                      ? 'bg-sky-100 text-sky-800'
+                      : 'bg-purple-100 text-purple-800'
                   }`}>
-                    {stayStatus === 'checked_in' ? '🟢 שוהה כעת בריזורט (נקלט)' : '🟣 שוריין (טרם נכנס)'}
+                    {stayStatus === 'checked_in' 
+                      ? '🟢 שוהה כעת בריזורט (נקלט)' 
+                      : stayStatus === 'checked_out'
+                      ? '🔵 שוחרר הביתה (צ\'ק-אאוט)'
+                      : '🟣 שוריין (טרם נכנס)'}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setStayStatus('checked_in')}
@@ -3124,7 +3132,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                         : 'bg-white text-slate-700 border-slate-200 hover:bg-emerald-50 hover:border-emerald-300'
                     }`}
                   >
-                    <span>🐕 שוהה כעת (נקלט בצ'ק-אין)</span>
+                    <span>🐕 שוהה (צ'ק-אין)</span>
                   </button>
                   <button
                     type="button"
@@ -3135,7 +3143,18 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                         : 'bg-white text-slate-700 border-slate-200 hover:bg-purple-50 hover:border-purple-300'
                     }`}
                   >
-                    <span>📅 שוריין / עתידי (טרם נכנס)</span>
+                    <span>📅 שוריין / עתידי</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStayStatus('checked_out')}
+                    className={`p-2.5 rounded-xl text-xs font-black transition-all cursor-pointer border flex items-center justify-center gap-1.5 ${
+                      stayStatus === 'checked_out'
+                        ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-sky-50 hover:border-sky-300'
+                    }`}
+                  >
+                    <span>🏁 שוחרר (צ'ק-אאוט)</span>
                   </button>
                 </div>
               </div>

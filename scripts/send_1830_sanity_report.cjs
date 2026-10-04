@@ -256,11 +256,19 @@ async function run1830Audit() {
     return `מתחם ${s}`;
   }
 
-  function countDogsInBooking(b) {
+  function countDogsInBooking(b, allList = []) {
     const name = (b.dog_name || b.dogName || '').trim();
-    const notes = (b.notes || '').trim();
-    if (name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes('&')) return 2;
-    if (notes.includes('2 כלבים') || notes.includes('שני כלבים') || notes.includes('זוג כלבים') || notes.includes('2 כלבות') || notes.includes('שתי כלבות')) return 2;
+    const isMultiName = name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes('&') || name.includes(' ועוד ');
+    if (isMultiName) {
+      const p = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+      const oName = (b.owner_name || b.ownerName || '').trim();
+      const hasOther = (allList || []).some(other => 
+        other.id !== b.id &&
+        (other.stay_status || other.stayStatus) !== 'cancelled' &&
+        ((p && cleanPhoneNumber(other.owner_phone || other.ownerPhone || '') === p) || (oName && (other.owner_name || other.ownerName || '').trim() === oName))
+      );
+      if (!hasOther) return 2;
+    }
     return 1;
   }
 
@@ -292,7 +300,17 @@ async function run1830Audit() {
       if (s1 <= e2 && e1 >= s2) {
         const p1 = cleanPhoneNumber(b1.owner_phone || b1.ownerPhone || '');
         const p2 = cleanPhoneNumber(b2.owner_phone || b2.ownerPhone || '');
-        if (p1 !== p2) {
+        const o1 = (b1.owner_name || b1.ownerName || '').trim();
+        const o2 = (b2.owner_name || b2.ownerName || '').trim();
+        const d1 = (b1.dog_name || b1.dogName || '').trim();
+        const d2 = (b2.dog_name || b2.dogName || '').trim();
+        const link1 = b1.linked_dog_name || b1.linkedDogName || b1.data?.linkedDogName || '';
+        const link2 = b2.linked_dog_name || b2.linkedDogName || b2.data?.linkedDogName || '';
+
+        const isSameOwner = (p1 && p2 && p1 === p2) || (o1 && o2 && o1 === o2);
+        const isLinked = (link1 && link1 === d2) || (link2 && link2 === d1);
+
+        if (!isSameOwner && !isLinked) {
           const kName = formatKennelName(k1);
           redLights.roomCollisions.push(`🚨 התנגשות ב${kName}: *${b1.dog_name || b1.dogName}* (${b1.owner_name || b1.ownerName}) ו-*${b2.dog_name || b2.dogName}* (${b2.owner_name || b2.ownerName}) משובצים לאותו מתחם בתאריכים חופפים!`);
         }
@@ -315,37 +333,51 @@ async function run1830Audit() {
     redLights.expiredGhostBookings.push(`👻 שריון עבר שטרם נסגר: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName}) | תאריכים ${formatDateIL(b.start_date || b.startDate)}-${formatDateIL(b.end_date || b.endDate)} עברו, נדרש שחרור או ארכיון.`);
   });
 
-  // 5. Overcapacity Alert
+  // 5. Overcapacity Alert (Peak capacity 15 dogs)
   const stayingToday = activeBookings.filter(b => (b.start_date || b.startDate) <= todayStr && (b.end_date || b.endDate) >= todayStr && (b.stay_status || b.stayStatus) !== 'checked_out');
-  const totalStaying = stayingToday.reduce((sum, b) => sum + countDogsInBooking(b), 0);
-  if (totalStaying >= 14) {
-    redLights.overcapacity.push(`⚠️ תפוסת שיא בריזורט: *${totalStaying} כלבים* שוהים כעת (סף התרעת עומס: 14 כלבים)!`);
+  const totalStaying = stayingToday.reduce((sum, b) => sum + countDogsInBooking(b, stayingToday), 0);
+  if (totalStaying >= 15) {
+    redLights.overcapacity.push(`⚠️ תפוסת שיא בריזורט: *${totalStaying} כלבים* שוהים כעת (תפוסה מלאה / קיבולת שיא: 15 כלבים)!`);
   }
 
-  // 6. Multi-Dog Discrepancy
+  // 6. Multi-Dog Discrepancy (Only alert if 2 dogs are crammed into a SINGLE card without a partner card per Rule 8)
   activeBookings.filter(b => (b.end_date || b.endDate) >= todayStr).forEach(b => {
     const name = (b.dog_name || b.dogName || '').trim();
     const notes = (b.notes || '').trim();
     const isMultiDogMentioned = notes.includes('2 כלבים') || notes.includes('שני כלבים') || notes.includes('זוג כלבים') || notes.includes('2 כלבות') || notes.includes('שתי כלבות');
-    const isMultiName = name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes('&');
-    if (isMultiDogMentioned && !isMultiName) {
-      redLights.multiDogDiscrepancies.push(`🐶🐶 חשד ל-2 כלבים בשם יחיד: *${name}* (${b.owner_name || b.ownerName}) - ההערות מעידות על 2 כלבים, אך בשם מופיע כלב יחיד!`);
+    const isMultiName = name.includes(' ו') || name.includes(' ו-') || name.includes(' + ') || name.includes('&') || name.includes(' ועוד ');
+    
+    const p = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+    const oName = (b.owner_name || b.ownerName || '').trim();
+    const linkName = b.linked_dog_name || b.linkedDogName || b.data?.linkedDogName || '';
+    const s = b.start_date || b.startDate;
+    const e = b.end_date || b.endDate;
+
+    const hasPartnerCard = activeBookings.some(other => 
+      other.id !== b.id &&
+      (other.stay_status || other.stayStatus) !== 'cancelled' &&
+      ((p && cleanPhoneNumber(other.owner_phone || other.ownerPhone || '') === p) || (oName && (other.owner_name || other.ownerName || '').trim() === oName) || (linkName && (other.dog_name || other.dogName) === linkName)) &&
+      (other.start_date || other.startDate) <= e && (other.end_date || other.endDate) >= s
+    );
+
+    if ((isMultiDogMentioned || isMultiName) && !hasPartnerCard) {
+      redLights.multiDogDiscrepancies.push(`🐶🐶 חשד ל-2 כלבים הרשומים ככרטיס בודד: *${name}* (${b.owner_name || b.ownerName}) - נדרש לפצל ל-2 כרטיסי שהייה נפרדים לפי חוק 8!`);
     }
   });
 
-  // 7. Training vs Boarding Discrepancy
+  // 7. Training vs Boarding Discrepancy (Do NOT flag normal long stays without training keywords)
   activeBookings.filter(b => (b.end_date || b.endDate) >= todayStr).forEach(b => {
     const price = Number(b.total_price || b.totalPrice) || 0;
     const startMs = new Date(b.start_date || b.startDate).getTime();
     const endMs = new Date(b.end_date || b.endDate).getTime();
     const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
     const notes = (b.notes || '').toLowerCase();
-    const isTrainingMentioned = notes.includes('אילוף') || notes.includes('מאלף') || notes.includes('אימון');
+    const isTrainingMentioned = notes.includes('אילוף') || notes.includes('מאלף') || notes.includes('אימון') || notes.includes('הילה');
     const sType = b.service_type || b.serviceType || 'boarding';
 
-    if (sType === 'boarding' && (price >= 3500 || days >= 21 || isTrainingMentioned)) {
+    if (sType === 'boarding' && (isTrainingMentioned || (price >= 4500 && days >= 25 && price / days >= 200))) {
       redLights.trainingDiscrepancies.push(`🎓 חשד לאילוף שסווג כפנסיון: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName}) | שהות ${days} ימים / ₪${price.toLocaleString()} | נדרש לוודא סיווג!`);
-    } else if (sType === 'training' && price > 0 && price < 2500 && days < 10) {
+    } else if (sType === 'training' && price > 0 && price < 2500 && days < 10 && !isTrainingMentioned) {
       redLights.trainingDiscrepancies.push(`🎓 תמחור/משך אילוף חריג: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName}) | מסווג כאילוף אך מחיר ₪${price.toLocaleString()} / ${days} ימים נמוך מהתקן!`);
     }
   });
@@ -396,27 +428,20 @@ async function run1830Audit() {
     const deposit = Number(b.deposit_amount ?? b.depositAmount ?? d.depositAmount ?? 0);
     const isFree = Boolean(b.is_free_stay || b.isFreeStay || d.isFreeStay || (b.notes && (b.notes.includes('חינם') || b.notes.includes('כלב נוסף') || b.notes.includes('כלב שני'))));
     const dailyRate = Number(d.dailyRate ?? b.dailyRate ?? 0);
-    const pricingMode = d.pricingMode || b.pricingMode || (b.service_type === 'training' || b.serviceType === 'training' ? 'period' : 'daily');
+    const s = b.start_date || b.startDate;
+    const e = b.end_date || b.endDate;
+    let days = 1;
+    if (s && e) {
+      const startMs = new Date(s).getTime();
+      const endMs = new Date(e).getTime();
+      days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+    }
+    const pricingMode = d.pricingMode || (dailyRate > 0 && Math.abs(price - (days * dailyRate)) <= 1 ? 'daily' : 'period');
     const paymentStatus = b.payment_status || b.paymentStatus || d.paymentStatus || 'unpaid';
 
     // 1. Negative balance / Deposit > Total Price
     if (deposit > price && !isFree && price > 0) {
       redLights.paymentDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${deposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}! (דורש קיבוע סה"כ ל-₪${deposit.toLocaleString()} כמחיר תקופה/פיקס או בדיקת זיכוי)`);
-    }
-
-    // 2. Pricing mismatch when daily mode is active
-    if (pricingMode === 'daily' && b.service_type !== 'training' && b.serviceType !== 'training' && !isFree && price > 0 && dailyRate > 0) {
-      const s = b.start_date || b.startDate;
-      const e = b.end_date || b.endDate;
-      if (s && e) {
-        const startMs = new Date(s).getTime();
-        const endMs = new Date(e).getTime();
-        const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
-        const expected = days * dailyRate;
-        if (Math.abs(price - expected) > 1) {
-          redLights.paymentDiscrepancies.push(`⚠️ פער תמחור בחישוב יומי: *${dog}* (${owner}) | תעריף ₪${dailyRate} x ${days} ימים = ₪${expected.toLocaleString()}, אך סה"כ נקבע ל-₪${price.toLocaleString()} (יש להגדיר כמחיר פיקס/לתקופה כדי למנוע דריסה בעריכה)`);
-        }
-      }
     }
 
     // 3. Multi-dog booking without period pricing
