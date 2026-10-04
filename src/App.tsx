@@ -77,10 +77,11 @@ import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
 import { MobileTodayDashboardModal } from './components/MobileTodayDashboardModal';
 import { KennelFeedingBoard } from './components/KennelFeedingBoard';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
-import { initDailyDogAutoSender } from './services/dailyDogAutoSender';
-import { initTomorrowOverviewScheduler, init1830SanityScheduler } from './services/morningReportService';
+import { initDailyDogAutoSender, runAutoDailyDogUpdates } from './services/dailyDogAutoSender';
+import { initTomorrowOverviewScheduler, init1830SanityScheduler, sendTomorrowOverviewToShmulik } from './services/morningReportService';
 import { initOrangeFollowUpScheduler } from './services/orangeFollowUpService';
-import { initAutoReviewScheduler } from './services/reviewService';
+import { initAutoReviewScheduler, runAutoReviewAndVoucherSender } from './services/reviewService';
+import { send1830SanityReportToShmulik } from './services/dailySanity1830Service';
 import { initFeedingReminderScheduler } from './services/feedingReminderService';
 import { fetchNewCrmChatsCount } from './services/whatsappCrmService';
 
@@ -974,15 +975,50 @@ export default function App() {
   const [isLinkDeviceModalOpen, setIsLinkDeviceModalOpen] = useState(false);
   const [greenApiStatus, setGreenApiStatus] = useState<'authorized' | 'notAuthorized' | 'unknown'>('unknown');
 
+  // Handler called whenever Green-API transitions back to 'authorized'
+  const handleAfterReconnection = useCallback(async () => {
+    try {
+      console.log('[Reconnection] WhatsApp reconnected! Checking pending messages & reports...');
+      
+      // 1. Dispatch missed evening regards (if within allowed hours <= 20:30 or morning catch-up)
+      const regardsRes = await runAutoDailyDogUpdates(bookings, settings, intakeRequests, showToast);
+      
+      // 2. Dispatch missed review requests & VIP vouchers (if within allowed hours <= 20:30)
+      const reviewRes = await runAutoReviewAndVoucherSender(bookings, settings, showToast);
+      
+      // 3. Check if today's 18:30 Sanity Report was missed
+      const today = getTodayStr();
+      const adminKey = `admin_1830_sanity_${today}`;
+      if (typeof window !== 'undefined' && !localStorage.getItem(adminKey)) {
+        const now = new Date();
+        if (now.getHours() >= 18 && (now.getHours() > 18 || now.getMinutes() >= 30)) {
+          await send1830SanityReportToShmulik(bookings, settings, intakeRequests);
+        }
+      }
+
+      if (regardsRes.sentCount > 0 || reviewRes.sentCount > 0) {
+        showToast(`🎉 וואטסאפ חובר בהצלחה! הושלם משלוח ${regardsRes.sentCount} ד״ש ו-${reviewRes.sentCount} בקשות חוות דעת שהמתינו.`);
+      }
+    } catch (err) {
+      console.warn('Error running post-reconnection dispatch:', err);
+    }
+  }, [bookings, settings, intakeRequests]);
+
   // Real-time Green-API WhatsApp connection monitoring
   useEffect(() => {
     let isMounted = true;
+    let prevStatus = 'unknown';
     const checkGreenApi = async () => {
       try {
         const res = await fetch('/api/link-device?json=true');
         if (res.ok && isMounted) {
           const data = await res.json();
-          setGreenApiStatus(data.state === 'authorized' ? 'authorized' : 'notAuthorized');
+          const newStatus = data.state === 'authorized' ? 'authorized' : 'notAuthorized';
+          if (prevStatus === 'notAuthorized' && newStatus === 'authorized') {
+            handleAfterReconnection();
+          }
+          prevStatus = newStatus;
+          setGreenApiStatus(newStatus);
         }
       } catch (e) {
         // network error / offline
@@ -994,7 +1030,7 @@ export default function App() {
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [handleAfterReconnection]);
 
   // Toggle Stay Status (Check-in / Check-out)
   const handleToggleStayStatus = async (bookingId: string, newStatus: Booking['stayStatus']) => {
@@ -2506,6 +2542,7 @@ export default function App() {
         isOpen={isLinkDeviceModalOpen}
         onClose={() => setIsLinkDeviceModalOpen(false)}
         settings={settings}
+        onReconnected={handleAfterReconnection}
       />
 
       {/* Intake Requests Modal (Client Online Inquiries) */}
@@ -2796,6 +2833,8 @@ export default function App() {
         onInitiateRelease={handleInitiateRelease}
         onOpenDailyDogUpdates={() => setIsDailyDogUpdatesOpen(true)}
         onOpenTomorrowOverview={() => setIsTomorrowOverviewModalOpen(true)}
+        onOpenLinkDevice={() => setIsLinkDeviceModalOpen(true)}
+        greenApiStatus={greenApiStatus}
       />
 
       {/* Mobile Bottom Navigation Bar (Fixed for thumb reach - sm:hidden) */}

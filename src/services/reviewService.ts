@@ -100,7 +100,10 @@ export function isReviewSendEligibleNow(): { eligible: boolean; reason?: string 
   }
 
   // Weekdays (Sunday-Thursday): Eligible hours 10:00 to 20:30
-  if (hour < 10 || hour >= 21) {
+  if (hour < 10 || hour > 20 || (hour === 20 && minute > 30)) {
+    if (hour >= 20) {
+      return { eligible: false, reason: 'מאוחר מדי (לאחר 20:30) – בקשות חוות דעת ומועדון VIP יישלחו מחר בבוקר החל מ-10:00' };
+    }
     return { eligible: false, reason: `מחוץ לשעות השליחה (השעה הנוכחית: ${hour}:${String(minute).padStart(2, '0')}, שעות מורשות בימי חול: 10:00-20:30)` };
   }
 

@@ -33,6 +33,8 @@ interface MobileTodayDashboardModalProps {
   onInitiateRelease?: (booking: Booking) => void;
   onOpenDailyDogUpdates?: () => void;
   onOpenTomorrowOverview?: () => void;
+  onOpenLinkDevice?: () => void;
+  greenApiStatus?: string;
 }
 
 export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps> = ({
@@ -44,7 +46,9 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
   onToggleStayStatus,
   onInitiateRelease,
   onOpenDailyDogUpdates,
-  onOpenTomorrowOverview
+  onOpenTomorrowOverview,
+  onOpenLinkDevice,
+  greenApiStatus,
 }) => {
   const todayStr = getTodayStr();
 
@@ -136,6 +140,25 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
         {/* Scrollable Content Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
           
+          {/* Disconnection Warning inside Mobile Today Dashboard */}
+          {greenApiStatus === 'notAuthorized' && onOpenLinkDevice && (
+            <div 
+              onClick={onOpenLinkDevice}
+              className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white rounded-2xl p-3.5 shadow-md flex items-center justify-between gap-3 border border-red-400 cursor-pointer active:scale-98 transition-all animate-in slide-in-from-top duration-200"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping shrink-0" />
+                <div>
+                  <strong className="text-xs font-black block">🚨 הוואטסאפ מנותק כרגע!</strong>
+                  <span className="text-[11px] text-red-100 font-medium">לחץ כאן להוראות חיבור מחדש ב-10 שניות</span>
+                </div>
+              </div>
+              <span className="bg-white text-red-700 font-black text-[11px] px-2.5 py-1.5 rounded-xl shrink-0 shadow-xs">
+                חבר עכשיו 📲
+              </span>
+            </div>
+          )}
+
           {/* 1. ARRIVALS (נכנסים היום) */}
           <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-2xs space-y-2.5">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
