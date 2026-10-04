@@ -74,7 +74,6 @@ export default async function handler(req, res) {
         });
       }
 
-
       // If not authorized, fetch QR code
       const qrRes = await fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/qr/${token}`, { signal: controller.signal })
         .then(r => r.json())
@@ -131,20 +130,15 @@ export default async function handler(req, res) {
     </div>
     
     <h1>חיבור וואטסאפ הריזורט 🐾</h1>
-    <p class="sub">טלפון הריזורט הרשמי: <strong style="color:#ffffff;">054-8765888</strong></p>
+    <p class="sub">טלפון הריזורט הרשמי בלבד: <strong style="color:#ffffff;">054-8765888</strong></p>
 
     <div id="connectedView" style="display: none; padding: 25px 0;">
       <div style="font-size: 56px; margin-bottom: 12px;" id="connectedEmoji">🎉</div>
-      <h2 id="connectedTitle" style="color: #4ade80; font-size: 20px; margin-bottom: 8px;">הוואטסאפ מקושר ופעיל!</h2>
-      <p id="connectedDesc" style="color: #cbd5e1; font-size: 14px; margin-bottom: 20px;">כל ההודעות האוטומטיות והדוחות יוצאים כסדרם.</p>
+      <h2 id="connectedTitle" style="color: #4ade80; font-size: 20px; margin-bottom: 8px;">וואטסאפ הריזורט מקושר ופעיל!</h2>
+      <p id="connectedDesc" style="color: #cbd5e1; font-size: 14px; margin-bottom: 20px;">כל ההודעות האוטומטיות והדוחות יוצאים כסדרם ממספר 054-8765888.</p>
       
-      <div id="wrongPhoneWarning" style="display:none; background: rgba(239,68,68,0.15); border: 1px solid #ef4444; border-radius: 16px; padding: 14px; text-align: right; margin-bottom: 16px; font-size: 13px; color: #fca5a5;">
-        ⚠️ <strong>שים לב:</strong> המערכת מקושרת כרגע למספר <span id="currentPhoneText" style="font-weight:bold; color:#fff;"></span>.
-        כדי שכל ההודעות ייצאו מטלפון הריזורט (054-8765888), יש לנתק ולסרוק עם טלפון הריזורט.
-      </div>
-
       <button onclick="logoutDevice()" class="btn-logout">
-        <span>🔄 נתק מכשיר זה וחבר מחדש את 054-8765888</span>
+        <span>🔄 נתק מכשיר זה וסרוק מחדש את 054-8765888</span>
       </button>
     </div>
 
@@ -171,7 +165,7 @@ export default async function handler(req, res) {
 
   <script>
     async function logoutDevice() {
-      if (!confirm('האם ברצונך לנתק את המכשיר הנוכחי ולפתוח סריקת ברקוד חדשה לטלפון הריזורט (054-8765888)?')) return;
+      if (!confirm('האם ברצונך לנתק את המכשיר ולפתוח סריקת ברקוד חדשה לטלפון הריזורט (054-8765888)?')) return;
       document.getElementById('badgeText').textContent = 'מנתק מכשיר...';
       try {
         await fetch('/api/link-device?action=logout&json=true');
@@ -191,25 +185,13 @@ export default async function handler(req, res) {
         const badgeText = document.getElementById('badgeText');
         const pulseDot = document.getElementById('pulseDot');
 
-        if (isAuth) {
-          if (data.isResortPhone) {
-            badge.className = 'badge badge-connected';
-            badgeText.textContent = 'מחובר לטלפון הריזורט (054-8765888) ✅';
-            pulseDot.style.background = '#22c55e';
-            document.getElementById('connectedEmoji').textContent = '🎉';
-            document.getElementById('connectedTitle').textContent = 'וואטסאפ הריזורט מקושר ופעיל!';
-            document.getElementById('connectedTitle').style.color = '#4ade80';
-            document.getElementById('wrongPhoneWarning').style.display = 'none';
-          } else {
-            badge.className = 'badge badge-warning';
-            badgeText.textContent = 'מחובר ל-' + (data.connectedPhone || 'טלפון אחר') + ' (דרוש מעבר ל-054-8765888)';
-            pulseDot.style.background = '#f59e0b';
-            document.getElementById('connectedEmoji').textContent = '⚠️';
-            document.getElementById('connectedTitle').textContent = 'מחובר לטלפון פרטי (' + (data.connectedPhone || '') + ')';
-            document.getElementById('connectedTitle').style.color = '#fbbf24';
-            document.getElementById('currentPhoneText').textContent = data.connectedPhone || 'שמוליק';
-            document.getElementById('wrongPhoneWarning').style.display = 'block';
-          }
+        if (isAuth && data.isResortPhone) {
+          badge.className = 'badge badge-connected';
+          badgeText.textContent = 'מחובר לטלפון הריזורט (054-8765888) ✅';
+          pulseDot.style.background = '#22c55e';
+          document.getElementById('connectedEmoji').textContent = '🎉';
+          document.getElementById('connectedTitle').textContent = 'וואטסאפ הריזורט מקושר ופעיל!';
+          document.getElementById('connectedTitle').style.color = '#4ade80';
 
           document.getElementById('scanView').style.display = 'none';
           document.getElementById('connectedView').style.display = 'block';
@@ -232,4 +214,7 @@ export default async function handler(req, res) {
     setInterval(checkStatus, 3500);
   </script>
 </body>
-</html>
+</html>`;
+
+  return res.status(200).send(html);
+}
