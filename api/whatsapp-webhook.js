@@ -299,9 +299,22 @@ async function handleManagerAICommand(chatId, cleanText, fileUrl = '') {
   }
 
   // 3. PENDING INTAKE QUESTIONNAIRES ("שאלונים", "שאלוני קליטה", "שאלונים ממתינים")
-  if ((norm.includes('שאלונ') || norm.includes('שאלוני קליטה') || norm.includes('לידים')) && !norm.includes('תעדכן') && !norm.includes('שבץ')) {
-    const { data: intakes } = await supabase.from('intake_requests').select('*');
-    const pending = (intakes || []).filter(r => r.status === 'pending' || r.status === 'in_progress' || r.status === 'payment_requested');
+  const isIntakeQuery = (
+    norm === 'שאלונים' || 
+    norm === 'שאלוני קליטה' || 
+    norm.includes('שאלונים ממתינים') || 
+    norm.includes('דוח שאלונים') || 
+    norm.includes('כמה שאלונים') ||
+    norm.startsWith('מה עם שאלונים') ||
+    norm.startsWith('הצג שאלונים')
+  ) && cleanText.length < 60 && !norm.includes('תעדכן') && !norm.includes('שבץ');
+
+  if (isIntakeQuery) {
+    const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
+    const sRow = settingsRows?.[0] || {};
+    const { data: intakesTable } = await supabase.from('intake_requests').select('*');
+    const allIntakes = sRow.data?.intakeRequests || sRow.intake_forms || intakesTable || [];
+    const pending = (allIntakes || []).filter(r => r.status === 'pending' || r.status === 'in_progress' || r.status === 'payment_requested');
     if (pending.length === 0) {
       return `📋 *שאלוני קליטה:*\n✅ אין שאלוני קליטה שממתינים לטיפול כרגע. כל השאלונים אושרו או נסגרו.`;
     }
