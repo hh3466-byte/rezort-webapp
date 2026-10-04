@@ -54,8 +54,10 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
           }
           return isAuth ? 'authorized' : 'notAuthorized';
         });
-        if (data.qrBase64) {
+        if (data.qrBase64 && typeof data.qrBase64 === 'string' && data.qrBase64.startsWith('iVBOR')) {
           setQrBase64(data.qrBase64);
+        } else if (isAuth) {
+          setQrBase64(null);
         }
       }
     } catch (e) {

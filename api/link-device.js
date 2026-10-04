@@ -83,11 +83,14 @@ export default async function handler(req, res) {
         .catch(() => ({}));
       clearTimeout(timeout);
 
+      const isQr = qrRes.type === 'qrCode' && qrRes.message && qrRes.message.startsWith('iVBOR');
+      const isAlreadyLogged = qrRes.type === 'alreadyLogged' || stateRes.stateInstance === 'authorized';
+
       const result = {
-        state: stateRes.stateInstance || 'notAuthorized',
+        state: isAlreadyLogged ? 'authorized' : (stateRes.stateInstance || 'notAuthorized'),
         connectedPhone: null,
-        isResortPhone: false,
-        qrBase64: qrRes.message || null,
+        isResortPhone: true,
+        qrBase64: isQr ? qrRes.message : null,
         qrType: qrRes.type || null
       };
       cachedStatus = result;
