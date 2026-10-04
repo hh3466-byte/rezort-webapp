@@ -568,11 +568,11 @@ export async function saveOrUpdateGreenApiContact(
   }
   const chatId = `${intlPhone}@c.us`;
 
-  const cleanOwner = (ownerName || '').trim();
-  const cleanDog = (dogName || '').trim();
+  const cleanOwner = (ownerName || '').replace(/^(\[חדש\]|🆕)\s*/, '').trim();
+  const cleanDog = (dogName || '').replace(/^[()]+|[()]+$/g, '').trim();
 
-  // Prefix 🆕 for new leads, clean name for confirmed/returning
-  const firstName = isNew ? `🆕 ${cleanOwner}` : cleanOwner;
+  // Prefix [חדש] for new leads, clean name for confirmed/returning
+  const firstName = isNew ? `[חדש] ${cleanOwner}` : cleanOwner;
   const lastName = cleanDog ? `(${cleanDog})` : '';
 
   const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '7107';
