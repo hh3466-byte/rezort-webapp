@@ -540,3 +540,82 @@ export async function addGreenApiGroupParticipant(
   }
 }
 
+/**
+ * Automatically creates or updates a contact in WhatsApp & device phonebook via Green-API
+ * Formats:
+ * - New intake lead: "🆕 [Owner Name]" (last name: "([Dog Name])")
+ * - Confirmed booking: "[Owner Name]" (last name: "([Dog Name])")
+ */
+export async function saveOrUpdateGreenApiContact(
+  phoneNumber: string,
+  ownerName: string,
+  dogName?: string,
+  isNew: boolean = true,
+  idInstance?: string,
+  apiToken?: string
+): Promise<{ success: boolean; error?: string }> {
+  const cleanId = (idInstance || '710722735421').trim();
+  const cleanTok = (apiToken || 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b').trim();
+  
+  const cleanP = cleanPhoneNumber(phoneNumber);
+  if (!cleanP) return { success: false, error: 'Invalid phone number' };
+
+  let intlPhone = cleanP;
+  if (intlPhone.startsWith('0')) {
+    intlPhone = '972' + intlPhone.substring(1);
+  } else if (intlPhone.startsWith('5') && intlPhone.length === 9) {
+    intlPhone = '972' + intlPhone;
+  }
+  const chatId = `${intlPhone}@c.us`;
+
+  const cleanOwner = (ownerName || '').trim();
+  const cleanDog = (dogName || '').trim();
+
+  // Prefix 🆕 for new leads, clean name for confirmed/returning
+  const firstName = isNew ? `🆕 ${cleanOwner}` : cleanOwner;
+  const lastName = cleanDog ? `(${cleanDog})` : '';
+
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '7107';
+  const addUrl = `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/addContact/${cleanTok}`;
+  const editUrl = `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/editContact/${cleanTok}`;
+
+  try {
+    const addRes = await fetch(addUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId,
+        firstName,
+        lastName,
+        saveInAddressbook: true
+      })
+    });
+
+    if (addRes.ok) {
+      return { success: true };
+    }
+
+    // If addContact returned 400 (contact already exists), update contact details
+    const editRes = await fetch(editUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chatId,
+        firstName,
+        lastName,
+        saveInAddressbook: true
+      })
+    });
+
+    if (editRes.ok) {
+      return { success: true };
+    }
+
+    const errText = await editRes.text();
+    return { success: false, error: errText };
+  } catch (err: any) {
+    return { success: false, error: err.message || String(err) };
+  }
+}
+
+

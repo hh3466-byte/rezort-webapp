@@ -3,7 +3,7 @@ import { ResortSettings, ServiceType, IntakeRequest, AdditionalDogIntake, RESORT
 import { addDays, getTodayStr, calculateDaysCount, getDayNameHebrew, formatDateIL } from '../utils/dateUtils';
 import { cleanPhoneNumber, isValidIsraeliPhone, formatIsraeliPhoneDisplay } from '../utils/whatsappUtils';
 import { saveIntakeRequestToDb, findVoucherByCode, findDaycarePassByCode, verifyCustomerByPhone, PhoneVerificationResult } from '../services/dbService';
-import { sendResortEmailNotification, sendResortWhatsAppNotification, formatIntakeNotification } from '../services/notificationService';
+import { sendResortEmailNotification, sendResortWhatsAppNotification, formatIntakeNotification, saveOrUpdateGreenApiContact } from '../services/notificationService';
 import { 
   CheckCircle2, 
   Send, 
@@ -624,7 +624,19 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       // 1. Save to Supabase and LocalStorage
       await saveIntakeRequestToDb(newRequest);
 
-      // 2. Send instant email notification to shinshin1964@gmail.com
+      // 2. Automatically sync contact to WhatsApp (e.g. "🆕 ישראל ישראלי (רקס)")
+      try {
+        await saveOrUpdateGreenApiContact(
+          ownerPhone.trim(),
+          ownerName.trim(),
+          dogName.trim(),
+          !phoneCheckResult?.isKnown
+        );
+      } catch (cErr) {
+        console.warn('Could not auto-save Green-API contact:', cErr);
+      }
+
+      // 3. Send instant email notification to shinshin1964@gmail.com
       const allDogsNames = [dogName, ...additionalDogs.map(d => d.dogName)].filter(Boolean).join(' ו-');
       const emailSubject = isCallbackOnly
         ? `📞 בקשת שיחה חוזרת מלקוח: ${allDogsNames} (${ownerName} - ${ownerPhone})`
@@ -636,7 +648,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
         freeText.trim()
       );
 
-      // 3. Fallback WhatsApp notification
+      // 4. Fallback WhatsApp notification
       sendResortWhatsAppNotification(formatIntakeNotification(newRequest), settings);
 
       setIsSubmitted(true);
