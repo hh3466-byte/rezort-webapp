@@ -250,17 +250,18 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [rejectPromptRequest, setRejectPromptRequest] = useState<IntakeRequest | null>(null);
   const [rejectMessageText, setRejectMessageText] = useState<string>('');
   const [isProcessingReject, setIsProcessingReject] = useState<boolean>(false);
-  const [customPrices, setCustomPrices] = useState<Record<string, number>>({});
+  const [customPrices, setCustomPrices] = useState<Record<string, number | string>>({});
   const [showEditOccupancy, setShowEditOccupancy] = useState<boolean>(false);
 
-  const handleUpdatePrice = async (req: IntakeRequest, newPrice: number) => {
-    setCustomPrices(prev => ({ ...prev, [req.id]: newPrice }));
-    if (onSaveRequest && newPrice >= 0 && newPrice !== req.depositRequested) {
+  const handleUpdatePrice = async (req: IntakeRequest, newPrice: number | string) => {
+    const numPrice = typeof newPrice === 'string' ? (Number(newPrice.replace(/\D/g, '')) || 0) : newPrice;
+    setCustomPrices(prev => ({ ...prev, [req.id]: numPrice }));
+    if (onSaveRequest && numPrice >= 0 && numPrice !== req.depositRequested) {
       try {
         await onSaveRequest({
           ...req,
-          depositRequested: newPrice,
-          calculatedPrice: newPrice
+          depositRequested: numPrice,
+          calculatedPrice: numPrice
         });
       } catch (err) {
         console.error('Error saving edited price:', err);
@@ -538,7 +539,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
         }
       ).totalPrice;
     }
-    const effectiveAmount = customPrices[request.id] ?? (request.depositRequested && request.depositRequested > 0 ? request.depositRequested : calculatedDefault);
+    const effectiveAmount = Number(customPrices[request.id] ?? (request.depositRequested && request.depositRequested > 0 ? request.depositRequested : calculatedDefault)) || 0;
     setPaymentAmount(String(effectiveAmount));
     const fallbackLink = settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
     setCustomPaymentLink(fallbackLink);
@@ -584,7 +585,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
           }
         ).totalPrice;
       }
-      const numAmount = customPrices[req.id] ?? (req.depositRequested && req.depositRequested > 0 ? req.depositRequested : calculatedDefault);
+      const numAmount = Number(customPrices[req.id] ?? (req.depositRequested && req.depositRequested > 0 ? req.depositRequested : calculatedDefault)) || 0;
       
       let linkToUse = (settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg').trim();
       
@@ -1400,17 +1401,25 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         <div className="inline-flex items-center bg-white border border-slate-300 hover:border-emerald-500 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 rounded-xl px-3 py-1 shadow-2xs transition-all">
                           <span className="text-sm font-bold text-slate-500 ml-1">₪</span>
                           <input
-                            type="number"
-                            min={0}
-                            step={10}
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             value={currentReqPrice}
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => {
-                              const val = Number(e.target.value);
-                              setCustomPrices(prev => ({ ...prev, [req.id]: val }));
+                              const raw = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+                              setCustomPrices(prev => ({ ...prev, [req.id]: raw }));
                             }}
                             onBlur={(e) => {
-                              const val = Number(e.target.value);
+                              const raw = String(customPrices[req.id] ?? currentReqPrice).replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+                              const val = raw === '' ? 0 : Number(raw);
+                              setCustomPrices(prev => ({ ...prev, [req.id]: val }));
                               handleUpdatePrice(req, val);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                (e.target as HTMLInputElement).blur();
+                              }
                             }}
                             className="w-20 font-mono font-black text-base sm:text-lg text-slate-900 bg-transparent text-center focus:outline-none"
                             title="לחץ לעריכת הסכום"
@@ -2907,10 +2916,15 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 </label>
                 <div className="relative">
                   <input
-                    type="number"
-                    min={0}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={paymentAmount}
-                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+                      setPaymentAmount(raw);
+                    }}
                     placeholder="לדוגמה: 500"
                     className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-blue-500 rounded-xl px-4 py-2.5 text-base font-black font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   />

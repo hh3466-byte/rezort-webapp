@@ -1002,20 +1002,31 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
     let prevStatus = 'unknown';
+    let consecutiveFails = 0;
+
     const checkGreenApi = async () => {
       try {
         const res = await fetch('/api/link-device?json=true');
         if (res.ok && isMounted) {
           const data = await res.json();
-          const newStatus = data.state === 'authorized' ? 'authorized' : 'notAuthorized';
-          if (prevStatus === 'notAuthorized' && newStatus === 'authorized') {
-            handleAfterReconnection();
+          if (data.state === 'authorized') {
+            consecutiveFails = 0;
+            if (prevStatus === 'notAuthorized') {
+              handleAfterReconnection();
+            }
+            prevStatus = 'authorized';
+            setGreenApiStatus('authorized');
+          } else if (data.state === 'notAuthorized') {
+            consecutiveFails++;
+            // Require 2 consecutive checks before raising a disconnect alert to eliminate false alarms
+            if (consecutiveFails >= 2) {
+              prevStatus = 'notAuthorized';
+              setGreenApiStatus('notAuthorized');
+            }
           }
-          prevStatus = newStatus;
-          setGreenApiStatus(newStatus);
         }
       } catch (e) {
-        // network error / offline
+        // network error / offline - ignore momentary lag
       }
     };
     checkGreenApi();

@@ -11,12 +11,25 @@ export default async function handler(req, res) {
       const token = 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b';
       
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
+      const timeout = setTimeout(() => controller.abort(), 8000);
 
-      const [stateRes, qrRes] = await Promise.all([
-        fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/getStateInstance/${token}`, { signal: controller.signal }).then(r => r.json()).catch(() => ({})),
-        fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/qr/${token}`, { signal: controller.signal }).then(r => r.json()).catch(() => ({}))
-      ]);
+      const stateRes = await fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/getStateInstance/${token}`, { signal: controller.signal })
+        .then(r => r.json())
+        .catch(() => ({}));
+
+      if (stateRes && stateRes.stateInstance === 'authorized') {
+        clearTimeout(timeout);
+        return res.status(200).json({
+          state: 'authorized',
+          qrBase64: null,
+          qrType: null
+        });
+      }
+
+      // If not authorized, fetch QR code
+      const qrRes = await fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/qr/${token}`, { signal: controller.signal })
+        .then(r => r.json())
+        .catch(() => ({}));
       clearTimeout(timeout);
 
       return res.status(200).json({
@@ -25,7 +38,7 @@ export default async function handler(req, res) {
         qrType: qrRes.type || null
       });
     } catch (e) {
-      return res.status(200).json({ state: 'notAuthorized', qrBase64: null });
+      return res.status(200).json({ state: 'unknown', qrBase64: null });
     }
   }
 
