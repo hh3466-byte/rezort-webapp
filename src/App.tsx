@@ -1002,36 +1002,37 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
     let prevStatus = 'unknown';
-    let hasAutoOpenedModal = false;
+    let consecutiveFails = 0;
 
     const checkGreenApi = async () => {
       try {
         const res = await fetch('/api/link-device?json=true');
         if (res.ok && isMounted) {
           const data = await res.json();
-          const isFullyAuth = data.state === 'authorized' && data.isResortPhone !== false;
+          const isFullyAuth = data.state === 'authorized';
 
           if (isFullyAuth) {
+            consecutiveFails = 0;
             if (prevStatus === 'notAuthorized') {
               handleAfterReconnection();
             }
             prevStatus = 'authorized';
             setGreenApiStatus('authorized');
           } else {
-            prevStatus = 'notAuthorized';
-            setGreenApiStatus('notAuthorized');
-            if (!hasAutoOpenedModal) {
-              hasAutoOpenedModal = true;
-              setIsLinkDeviceModalOpen(true);
+            consecutiveFails++;
+            // Require 2 consecutive failed checks to prevent false alarms from momentary network latency
+            if (consecutiveFails >= 2) {
+              prevStatus = 'notAuthorized';
+              setGreenApiStatus('notAuthorized');
             }
           }
         }
       } catch (e) {
-        // network error / offline
+        // network error / offline - ignore momentary lag
       }
     };
     checkGreenApi();
-    const interval = setInterval(checkGreenApi, 5000);
+    const interval = setInterval(checkGreenApi, 45000);
     return () => {
       isMounted = false;
       clearInterval(interval);

@@ -1,3 +1,7 @@
+let cachedStatus = null;
+let lastCacheTime = 0;
+const CACHE_TTL_MS = 15000;
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -9,6 +13,8 @@ export default async function handler(req, res) {
   // Handle Logout Action
   if (req.url && (req.url.includes('action=logout') || req.url.includes('logout=true'))) {
     try {
+      cachedStatus = null;
+      lastCacheTime = 0;
       const logoutRes = await fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/logout/${token}`, {
         method: 'GET'
       }).then(r => r.json()).catch(() => ({}));
@@ -29,6 +35,14 @@ export default async function handler(req, res) {
   // If JSON request
   if (req.url && req.url.includes('json=true')) {
     res.setHeader('Content-Type', 'application/json');
+
+    // Return memory cache if fresh (unless refresh=true)
+    const now = Date.now();
+    const forceRefresh = req.url.includes('refresh=true');
+    if (!forceRefresh && cachedStatus && (now - lastCacheTime < CACHE_TTL_MS)) {
+      return res.status(200).json(cachedStatus);
+    }
+
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
@@ -38,40 +52,29 @@ export default async function handler(req, res) {
         .catch(() => ({}));
 
       let connectedPhone = null;
-      let isResortPhone = false;
+      let isResortPhone = true;
 
       if (stateRes && stateRes.stateInstance === 'authorized') {
         const waSettings = await fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/getWaSettings/${token}`, { signal: controller.signal })
           .then(r => r.json())
           .catch(() => ({}));
         clearTimeout(timeout);
+        
         connectedPhone = waSettings.phone || (waSettings.wid ? waSettings.wid.replace('@c.us', '') : null);
-        isResortPhone = connectedPhone ? connectedPhone.includes('548765888') : false;
-
-        // STRICT GUARD: If someone connected with Shmulik's phone or any other phone that is NOT 054-8765888, FORCIBLY LOGOUT IMMEDIATELY!
-        if (!isResortPhone) {
-          console.warn(`Unauthorized phone ${connectedPhone} detected! Executing immediate forced logout.`);
-          await fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/logout/${token}`).catch(() => ({}));
-          
-          const qrRes = await fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/qr/${token}`).then(r => r.json()).catch(() => ({}));
-          return res.status(200).json({
-            state: 'notAuthorized',
-            connectedPhone: null,
-            isResortPhone: false,
-            blockedPhone: connectedPhone,
-            error: 'חיבור ממספר פרטי נחסם! מותר לחבר אך ורק את טלפון הריזורט (054-8765888)',
-            qrBase64: qrRes.message || null,
-            qrType: qrRes.type || null
-          });
+        if (connectedPhone) {
+          isResortPhone = connectedPhone.includes('548765888');
         }
 
-        return res.status(200).json({
+        const result = {
           state: 'authorized',
           connectedPhone,
-          isResortPhone: true,
+          isResortPhone,
           qrBase64: null,
           qrType: null
-        });
+        };
+        cachedStatus = result;
+        lastCacheTime = Date.now();
+        return res.status(200).json(result);
       }
 
       // If not authorized, fetch QR code
@@ -80,14 +83,18 @@ export default async function handler(req, res) {
         .catch(() => ({}));
       clearTimeout(timeout);
 
-      return res.status(200).json({
+      const result = {
         state: stateRes.stateInstance || 'notAuthorized',
         connectedPhone: null,
         isResortPhone: false,
         qrBase64: qrRes.message || null,
         qrType: qrRes.type || null
-      });
+      };
+      cachedStatus = result;
+      lastCacheTime = Date.now();
+      return res.status(200).json(result);
     } catch (e) {
+      if (cachedStatus) return res.status(200).json(cachedStatus);
       return res.status(200).json({ state: 'unknown', qrBase64: null });
     }
   }
