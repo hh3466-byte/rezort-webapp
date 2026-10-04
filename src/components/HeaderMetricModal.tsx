@@ -553,7 +553,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
         title = '🎓 כלבים בתהליך אילוף פעיל';
         filteredItems = allTrainingBookings.filter(b => {
           if (b.isTrainingCompleted) return false;
-          if (b.startDate > '2026-09-30') return false; // עתידיים באוקטובר
+          if (b.startDate > todayStr && b.stayStatus !== 'checked_in') return false; // עתידיים שטרם נכנסו
           if (trainingFilter === 'full') return b.serviceType === 'training';
           if (trainingFilter === 'day') return b.serviceType === 'day_training';
           return true;

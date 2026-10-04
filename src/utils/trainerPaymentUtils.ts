@@ -1,4 +1,5 @@
 import { Booking, TrainerPaymentStage, TrainerReceipt, TrainerStageType } from '../types';
+import { getTodayStr } from './dateUtils';
 
 export const HILA_TRAINER_INFO = {
   name: 'הילה קירזנר',
@@ -209,9 +210,11 @@ export function getTrainerReceipts(): TrainerReceipt[] {
           return r;
         });
 
-      // Ensure both 20056 and 20057 exist in the list
-      if (!cleaned.some(r => r.receiptNumber === '20057')) {
-        cleaned.unshift(INITIAL_TRAINER_RECEIPTS[0]);
+      // Ensure all standard initial receipts (20061, 20057, 20056) exist
+      for (const initR of INITIAL_TRAINER_RECEIPTS) {
+        if (!cleaned.some(r => r.receiptNumber === initR.receiptNumber || r.id === initR.id)) {
+          cleaned.unshift(initR);
+        }
       }
       return cleaned;
     }
@@ -451,8 +454,9 @@ export function getDeduplicatedTrainingBookings(bookings: Booking[]): Booking[] 
 export function computeTrainerMetrics(bookings: Booking[], receipts: TrainerReceipt[]) {
   const trainingBookings = getDeduplicatedTrainingBookings(bookings);
 
-  // Active training dogs are active right now (3 dogs: Joy, Luna, Theo)
-  const activeTrainingDogs = trainingBookings.filter(b => !b.isTrainingCompleted && b.startDate <= '2026-09-30');
+  const today = typeof window !== 'undefined' ? getTodayStr() : new Date().toISOString().substring(0, 10);
+  // Active training dogs are active right now (e.g. Joy, Luna, Theo, Boss)
+  const activeTrainingDogs = trainingBookings.filter(b => !b.isTrainingCompleted && (b.startDate <= today || b.stayStatus === 'checked_in'));
   const completedTrainingDogs = trainingBookings.filter(b => b.isTrainingCompleted);
 
   // Total paid actually from receipts
