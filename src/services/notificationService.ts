@@ -307,6 +307,31 @@ export async function sendGreenApiDirectMessage(
   }
 
   const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
+  const stateUrl = clusterPrefix 
+    ? `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/getStateInstance/${cleanTok}`
+    : `https://api.green-api.com/waInstance${cleanId}/getStateInstance/${cleanTok}`;
+
+  // Pre-flight check: Make sure Green-API WhatsApp session is actually authorized
+  try {
+    const stateController = new AbortController();
+    const stateTimer = setTimeout(() => stateController.abort(), 6000);
+    const stateRes = await fetch(stateUrl, { signal: stateController.signal });
+    clearTimeout(stateTimer);
+    if (stateRes.ok) {
+      const stateData = await stateRes.json();
+      const state = stateData?.stateInstance;
+      if (state && state !== 'authorized') {
+        return {
+          success: false,
+          error: `חשבון הוואטסאפ (Green-API) אינו מחובר כרגע (סטטוס: ${state}). יש להשתמש בכפתור "פתח בוואטסאפ 📱" או לסרוק מחדש קוד QR בהגדרות.`
+        };
+      }
+    }
+  } catch (stateErr) {
+    // If state check times out, proceed to send attempt
+    console.warn('[Green-API Pre-flight] Could not verify instance state:', stateErr);
+  }
+
   const primaryUrl = clusterPrefix 
     ? `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/sendMessage/${cleanTok}`
     : `https://api.green-api.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
@@ -350,6 +375,41 @@ export async function sendGreenApiDirectMessage(
   }
 
   return firstAttempt;
+}
+
+/**
+ * Get QR code base64 from Green-API to reconnect WhatsApp
+ */
+export async function getGreenApiQrCode(
+  idInstance?: string,
+  apiToken?: string
+): Promise<{ success: boolean; qrBase64?: string; message?: string }> {
+  const cleanId = (idInstance || '').trim() || DEFAULT_GREEN_API_ID;
+  const cleanTok = (apiToken || '').trim() || DEFAULT_GREEN_API_TOKEN;
+  if (!cleanId || !cleanTok) {
+    return { success: false, message: 'חסרים פרטי חיבור Green-API' };
+  }
+
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
+  const qrUrl = clusterPrefix 
+    ? `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/qr/${cleanTok}`
+    : `https://api.green-api.com/waInstance${cleanId}/qr/${cleanTok}`;
+
+  try {
+    const res = await fetch(qrUrl);
+    if (!res.ok) {
+      return { success: false, message: `שגיאה בקבלת QR (קוד ${res.status})` };
+    }
+    const data = await res.json();
+    if (data.type === 'qrCode' && data.message) {
+      return { success: true, qrBase64: `data:image/png;base64,${data.message}` };
+    } else if (data.type === 'alreadyLogged') {
+      return { success: true, message: 'החשבון כבר מחובר ומאושר בוואטסאפ (alreadyLogged) 🟢' };
+    }
+    return { success: false, message: data.message || 'לא התקבל קוד QR' };
+  } catch (err: any) {
+    return { success: false, message: 'שגיאת תקשורת: ' + (err.message || String(err)) };
+  }
 }
 
 /**

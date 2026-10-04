@@ -20,7 +20,7 @@ import { exportDataAsJSON, importDataFromJSON } from '../utils/exportUtils';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './ExtremeChangeModal';
 import { ManagerAuthModal } from './ManagerAuthModal';
 import { testSystemNotification } from '../utils/soundUtils';
-import { testGreenApiConnection } from '../services/notificationService';
+import { testGreenApiConnection, getGreenApiQrCode } from '../services/notificationService';
 
 interface SettingsModalProps {
   settings: ResortSettings;
@@ -80,6 +80,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [testingGreenApi, setTestingGreenApi] = useState(false);
   const [greenApiStatus, setGreenApiStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrState, setQrState] = useState<{ success?: boolean; qrBase64?: string; message?: string } | null>(null);
 
   const [extremeAlert, setExtremeAlert] = useState<{
     isOpen: boolean;
@@ -615,29 +617,54 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
-                  <button
-                    type="button"
-                    disabled={testingGreenApi || !formData.greenApiIdInstance || !formData.greenApiToken}
-                    onClick={async () => {
-                      setTestingGreenApi(true);
-                      setGreenApiStatus(null);
-                      try {
-                        const res = await testGreenApiConnection(
-                          formData.greenApiIdInstance || '',
-                          formData.greenApiToken || '',
-                          formData.whatsappNotificationPhone || formData.managerPhone
-                        );
-                        setGreenApiStatus({ success: res.success, message: res.message });
-                      } catch (err: any) {
-                        setGreenApiStatus({ success: false, message: 'שגיאה בבדיקת חיבור: ' + (err.message || String(err)) });
-                      } finally {
-                        setTestingGreenApi(false);
-                      }
-                    }}
-                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
-                  >
-                    {testingGreenApi ? <span>בודק חיבור...</span> : <span>בדוק חיבור Green-API</span>}
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      disabled={testingGreenApi || !formData.greenApiIdInstance || !formData.greenApiToken}
+                      onClick={async () => {
+                        setTestingGreenApi(true);
+                        setGreenApiStatus(null);
+                        try {
+                          const res = await testGreenApiConnection(
+                            formData.greenApiIdInstance || '',
+                            formData.greenApiToken || '',
+                            formData.whatsappNotificationPhone || formData.managerPhone
+                          );
+                          setGreenApiStatus({ success: res.success, message: res.message });
+                        } catch (err: any) {
+                          setGreenApiStatus({ success: false, message: 'שגיאה בבדיקת חיבור: ' + (err.message || String(err)) });
+                        } finally {
+                          setTestingGreenApi(false);
+                        }
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+                    >
+                      {testingGreenApi ? <span>בודק חיבור...</span> : <span>בדוק חיבור Green-API</span>}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={qrLoading || !formData.greenApiIdInstance || !formData.greenApiToken}
+                      onClick={async () => {
+                        setQrLoading(true);
+                        setQrState(null);
+                        try {
+                          const res = await getGreenApiQrCode(
+                            formData.greenApiIdInstance || '',
+                            formData.greenApiToken || ''
+                          );
+                          setQrState(res);
+                        } catch (err: any) {
+                          setQrState({ success: false, message: 'שגיאה בטעינת קוד QR: ' + (err?.message || String(err)) });
+                        } finally {
+                          setQrLoading(false);
+                        }
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+                    >
+                      {qrLoading ? <span>טוען QR...</span> : <span>📱 סרוק קוד QR לחיבור וואטסאפ</span>}
+                    </button>
+                  </div>
 
                   {greenApiStatus && (
                     <div className={`text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 ${
@@ -645,6 +672,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }`}>
                       <span>{greenApiStatus.success ? '🟢' : '🔴'}</span>
                       <span>{greenApiStatus.message}</span>
+                    </div>
+                  )}
+
+                  {/* QR Code Container */}
+                  {qrState && (
+                    <div className="w-full bg-slate-900 text-white p-4 rounded-2xl border border-slate-700 flex flex-col items-center gap-3 animate-in fade-in">
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-bold text-xs text-amber-300">📱 חיבור וואטסאפ של הריזורט (סריקת QR)</span>
+                        <button
+                          type="button"
+                          onClick={() => setQrState(null)}
+                          className="text-slate-400 hover:text-white text-xs cursor-pointer"
+                        >
+                          ✕ סגור
+                        </button>
+                      </div>
+
+                      {qrState.qrBase64 ? (
+                        <div className="flex flex-col items-center gap-2 bg-white p-3 rounded-2xl">
+                          <img 
+                            src={qrState.qrBase64} 
+                            alt="Green API QR Code" 
+                            className="w-48 h-48 sm:w-56 sm:h-56 object-contain rounded-lg"
+                          />
+                          <p className="text-[11px] font-bold text-slate-800 text-center">
+                            פתחו וואטסאפ בטלפון של הריזורט ⟵ מכשירים מקושרים ⟵ סריקת קוד QR
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-slate-800 rounded-xl text-xs text-center text-slate-200 w-full">
+                          {qrState.message || 'אין קוד QR זמין כעת (ייתכן שהאינסטנס כבר מחובר)'}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
