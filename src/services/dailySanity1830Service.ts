@@ -305,7 +305,9 @@ export function run1830SanityAudit(
   activeBookings.filter(b => b.startDate >= todayStr && b.startDate <= in2DaysStr).forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
-    if (price > 0 && deposit === 0 && !b.isFreeStay) {
+    const growRecon = reconcileGrowPaymentsForBooking(b, growPayments);
+    const effectiveDeposit = Math.max(deposit, growRecon.totalGrowPaid);
+    if (price > 0 && effectiveDeposit === 0 && !b.isFreeStay) {
       redLights.urgentZeroDeposit.push(`🚨 כניסה דחופה ב-48 שעות הקרובות ללא מקדמה (₪0): *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | כניסה: ${formatDateIL(b.startDate)} | חוב: ₪${price.toLocaleString()}`);
     }
   });
@@ -316,7 +318,9 @@ export function run1830SanityAudit(
   activeBookings.filter(b => b.endDate === tomorrowStr && b.stayStatus !== 'checked_out').forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
-    const balance = price - deposit;
+    const growRecon = reconcileGrowPaymentsForBooking(b, growPayments);
+    const effectiveDeposit = Math.max(deposit, growRecon.totalGrowPaid);
+    const balance = Math.max(0, price - effectiveDeposit);
     if (balance > 0 && !b.isFreeStay) {
       redLights.tomorrowPendingBalances.push(`💰 יתרת חוב למשתחרר של מחר: *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | נותרה יתרה לתשלום: ₪${balance.toLocaleString()}`);
     }
@@ -354,14 +358,19 @@ export function run1830SanityAudit(
     const phone = b.ownerPhone || '';
     const notes = b.notes || '';
 
+    // Reconcile with live Grow payments to prevent false debt alerts
+    const growRecon = reconcileGrowPaymentsForBooking(b, growPayments);
+    const effectiveDeposit = Math.max(deposit, growRecon.totalGrowPaid);
+    const effectiveDebt = Math.max(0, price - effectiveDeposit);
+
     // Calculate stay duration
     const startMs = new Date(b.startDate).getTime();
     const endMs = new Date(b.endDate).getTime();
     const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
 
     // 1. Negative balance / Deposit > Total price
-    if (deposit > price && !isFree && price > 0) {
-      redLights.paymentDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${deposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}! (דורש קיבוע סה"כ ל-₪${deposit.toLocaleString()} כמחיר תקופה/פיקס או בדיקת זיכוי)`);
+    if (effectiveDeposit > price && !isFree && price > 0) {
+      redLights.paymentDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${effectiveDeposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}! (דורש קיבוע סה"כ ל-₪${effectiveDeposit.toLocaleString()} כמחיר תקופה/פיקס או בדיקת זיכוי)`);
     }
 
     const pricingMode = b.pricingMode || 'period';
@@ -374,32 +383,30 @@ export function run1830SanityAudit(
 
     // 4. Payment status vs amounts inconsistency
     if (!isFree && price > 0) {
-      if (deposit >= price && b.paymentStatus !== 'fully_paid') {
-        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) שילם מלוא הסכום (₪${deposit.toLocaleString()}) אך סטטוס מוגדר '${b.paymentStatus}' במקום 'fully_paid'`);
-      } else if (deposit === 0 && b.paymentStatus === 'fully_paid') {
+      if (effectiveDebt === 0 && b.paymentStatus !== 'fully_paid') {
+        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) שילם מלוא הסכום (₪${effectiveDeposit.toLocaleString()}) אך סטטוס מוגדר '${b.paymentStatus}' במקום 'fully_paid'`);
+      } else if (effectiveDeposit === 0 && b.paymentStatus === 'fully_paid') {
         redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך לא נרשמה מקדמה (₪0 מתוך ₪${price.toLocaleString()})`);
-      } else if (deposit > 0 && deposit < price && b.paymentStatus === 'fully_paid') {
-        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך קיימת יתרת חוב של ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
+      } else if (effectiveDeposit > 0 && effectiveDebt > 0 && b.paymentStatus === 'fully_paid') {
+        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך קיימת יתרת חוב של ₪${effectiveDebt.toLocaleString()} (שולם ₪${effectiveDeposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
       }
     }
 
     // 5. Free stay inconsistency
-    if (isFree && (price > 0 || deposit > 0)) {
-      redLights.paymentDiscrepancies.push(`🎁 אירוח חינם עם חיוב כספי: *${dog}* (${owner}) סומן כחינם אך מופיעים סכומים (סה"כ ₪${price.toLocaleString()}, שולם ₪${deposit.toLocaleString()})`);
+    if (isFree && (price > 0 || effectiveDeposit > 0)) {
+      redLights.paymentDiscrepancies.push(`🎁 אירוח חינם עם חיוב כספי: *${dog}* (${owner}) סומן כחינם אך מופיעים סכומים (סה"כ ₪${price.toLocaleString()}, שולם ₪${effectiveDeposit.toLocaleString()})`);
     }
-
-
 
     // 7. Stay extension mentioned in notes with open balance
     const isExtension = notes.includes('הוארך') || notes.includes('הארכה') || notes.includes('עודכן מוואטסאפ');
-    if (isExtension && price > deposit && !isFree) {
-      redLights.paymentDiscrepancies.push(`💰 שהות מוארכת עם יתרת חוב פתוחה: *${dog}* (${owner} - 📞 ${phone}) | שהות הוארכה עד ${formatDateIL(b.endDate)}, נותרה יתרה לגבייה: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
+    if (isExtension && effectiveDebt > 0 && !isFree) {
+      redLights.paymentDiscrepancies.push(`💰 שהות מוארכת עם יתרת חוב פתוחה: *${dog}* (${owner} - 📞 ${phone}) | שהות הוארכה עד ${formatDateIL(b.endDate)}, נותרה יתרה לגבייה: ₪${effectiveDebt.toLocaleString()} (שולם ₪${effectiveDeposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
     }
 
     // 8. Active staying dog with open debt
     const isCurrentlyStaying = b.startDate <= todayStr && b.endDate >= todayStr && b.stayStatus !== 'checked_out';
-    if (isCurrentlyStaying && price > deposit && !isFree) {
-      redLights.paymentDiscrepancies.push(`💰 כלב שוהה כעת בריזורט עם יתרת חוב: *${dog}* (${owner} - 📞 ${phone}) | שוהה עד ${formatDateIL(b.endDate)}, נותרה יתרה לתשלום: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
+    if (isCurrentlyStaying && effectiveDebt > 0 && !isFree) {
+      redLights.paymentDiscrepancies.push(`💰 כלב שוהה כעת בריזורט עם יתרת חוב: *${dog}* (${owner} - 📞 ${phone}) | שוהה עד ${formatDateIL(b.endDate)}, נותרה יתרה לתשלום: ₪${effectiveDebt.toLocaleString()} (שולם ₪${effectiveDeposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
     }
   });
 
