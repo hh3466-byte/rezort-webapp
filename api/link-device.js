@@ -48,14 +48,32 @@ export default async function handler(req, res) {
         connectedPhone = waSettings.phone || (waSettings.wid ? waSettings.wid.replace('@c.us', '') : null);
         isResortPhone = connectedPhone ? connectedPhone.includes('548765888') : false;
 
+        // STRICT GUARD: If someone connected with Shmulik's phone or any other phone that is NOT 054-8765888, FORCIBLY LOGOUT IMMEDIATELY!
+        if (!isResortPhone) {
+          console.warn(`Unauthorized phone ${connectedPhone} detected! Executing immediate forced logout.`);
+          await fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/logout/${token}`).catch(() => ({}));
+          
+          const qrRes = await fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/qr/${token}`).then(r => r.json()).catch(() => ({}));
+          return res.status(200).json({
+            state: 'notAuthorized',
+            connectedPhone: null,
+            isResortPhone: false,
+            blockedPhone: connectedPhone,
+            error: 'חיבור ממספר פרטי נחסם! מותר לחבר אך ורק את טלפון הריזורט (054-8765888)',
+            qrBase64: qrRes.message || null,
+            qrType: qrRes.type || null
+          });
+        }
+
         return res.status(200).json({
           state: 'authorized',
           connectedPhone,
-          isResortPhone,
+          isResortPhone: true,
           qrBase64: null,
           qrType: null
         });
       }
+
 
       // If not authorized, fetch QR code
       const qrRes = await fetch(`https://${cluster}.api.greenapi.com/waInstance${idInstance}/qr/${token}`, { signal: controller.signal })

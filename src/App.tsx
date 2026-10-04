@@ -1002,40 +1002,43 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
     let prevStatus = 'unknown';
-    let consecutiveFails = 0;
+    let hasAutoOpenedModal = false;
 
     const checkGreenApi = async () => {
       try {
         const res = await fetch('/api/link-device?json=true');
         if (res.ok && isMounted) {
           const data = await res.json();
-          if (data.state === 'authorized') {
+          const isFullyAuth = data.state === 'authorized' && data.isResortPhone !== false;
+
+          if (isFullyAuth) {
             consecutiveFails = 0;
             if (prevStatus === 'notAuthorized') {
               handleAfterReconnection();
             }
             prevStatus = 'authorized';
             setGreenApiStatus('authorized');
-          } else if (data.state === 'notAuthorized') {
-            consecutiveFails++;
-            // Require 2 consecutive checks before raising a disconnect alert to eliminate false alarms
-            if (consecutiveFails >= 2) {
-              prevStatus = 'notAuthorized';
-              setGreenApiStatus('notAuthorized');
+          } else {
+            prevStatus = 'notAuthorized';
+            setGreenApiStatus('notAuthorized');
+            if (!hasAutoOpenedModal) {
+              hasAutoOpenedModal = true;
+              setIsLinkDeviceModalOpen(true);
             }
           }
         }
       } catch (e) {
-        // network error / offline - ignore momentary lag
+        // network error / offline
       }
     };
     checkGreenApi();
-    const interval = setInterval(checkGreenApi, 60000);
+    const interval = setInterval(checkGreenApi, 5000);
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
   }, [handleAfterReconnection]);
+
 
   // Toggle Stay Status (Check-in / Check-out)
   const handleToggleStayStatus = async (bookingId: string, newStatus: Booking['stayStatus']) => {
