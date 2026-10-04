@@ -230,6 +230,14 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'ignored', reason: 'non_resort_transaction' });
     }
 
+    // Prevent duplicate processing of the same transaction
+    const existingPayment = transactionId ? (await supabase.from('grow_incoming_payments').select('id, created_at').eq('reference_id', String(transactionId)).maybeSingle()).data : null;
+    
+    if (existingPayment) {
+      console.log(`Transaction ${transactionId} was already processed earlier at ${existingPayment.created_at}. Suppressing duplicate alert.`);
+      return res.status(200).json({ status: 'already_processed', transactionId });
+    }
+
     let matchSummary = '';
 
     if (matchedBooking) {
@@ -256,9 +264,14 @@ export default async function handler(req, res) {
         updated_at: new Date().toISOString()
       }).eq('id', matchedBooking.id);
 
-      matchSummary = `עודכן בהזמנה של *${matchedBooking.dog_name || curData.dogName}* (${matchedBooking.owner_name || curData.ownerName}). סטטוס: ${isFullyPaid ? 'שולם במלואו ✅' : 'שולמה מקדמה 🟢'}`;
+      if (isFullyPaid) {
+        matchSummary = `עודכן בהזמנה של *${matchedBooking.dog_name || curData.dogName}* (${matchedBooking.owner_name || curData.ownerName}). סטטוס: שולם במלואו ✅ (₪${newDeposit.toLocaleString()})`;
+      } else {
+        const remaining = totalPrice > newDeposit ? totalPrice - newDeposit : 0;
+        matchSummary = `עודכן בהזמנה של *${matchedBooking.dog_name || curData.dogName}* (${matchedBooking.owner_name || curData.ownerName}). סטטוס: שולמה מקדמה 🟢 (₪${amount.toLocaleString()} מתוך ₪${totalPrice.toLocaleString()}${remaining > 0 ? ` | יתרה: ₪${remaining.toLocaleString()}` : ''})`;
+      }
     } else if (matchingIntake) {
-      matchSummary = `נקלטה מקדמה לשאלון קליטה של *${matchingIntake.dog_name || matchingIntake.dogName}* (${matchingIntake.owner_name || matchingIntake.ownerName}).`;
+      matchSummary = `נקלטה מקדמה לשאלון קליטה של *${matchingIntake.dog_name || matchingIntake.dogName}* (${matchingIntake.owner_name || matchingIntake.ownerName}). סטטוס: שולמה מקדמה 🟢 (₪${amount.toLocaleString()})`;
     }
 
     // Record in grow_incoming_payments table in Supabase
