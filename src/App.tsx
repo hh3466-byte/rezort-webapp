@@ -51,7 +51,7 @@ import { GrowPaymentsModal, LinkedPaymentDetails } from './components/GrowPaymen
 import { PaymentModal } from './components/PaymentModal';
 import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeChangeModal';
 import { ManagerAuthModal } from './components/ManagerAuthModal';
-import { WhatsAppAuthGate } from './components/WhatsAppAuthGate';
+import { ManagerLoginGate } from './components/ManagerLoginGate';
 import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2, LogOut, Lock, ArrowLeft, Search, BarChart3 } from 'lucide-react';
 import { formatPhoneForWhatsApp } from './utils/whatsappUtils';
 import { SettingsModal } from './components/SettingsModal';
@@ -151,31 +151,25 @@ export default function App() {
   const inProgressIntakeCount = intakeRequests.filter(r => isIntakeRequestInTreatment(r, bookings)).length;
   const pendingIntakeCount = newIntakeCount;
 
-  // Manager Authentication State (WhatsApp OTP / Authorized Device)
-  // Whitelist: User (054-3200007), Shmulik (054-8765888 / 050-6336896)
+  // Manager Authentication State (Free seamless access for Shmulik and team)
   const [isManagerAuthenticated, setIsManagerAuthenticated] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       if (sessionStorage.getItem('resort_manager_locked') === 'true') {
         return false;
       }
-      const isDeviceAuthorized = localStorage.getItem('resort_authorized_manager_device');
-      if (isDeviceAuthorized) {
-        return true;
-      }
-      return false;
+      return true;
     }
-    return false;
+    return true;
   });
   const [isStaffPreviewMode, setIsStaffPreviewMode] = useState(false);
 
   const handleManagerLogout = () => {
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('resort_manager_locked', 'true');
-      localStorage.removeItem('resort_authorized_manager_device');
     }
     setIsManagerAuthenticated(false);
     setIsStaffPreviewMode(false);
-    showToast('🔒 מערכת היומן ננעלה וההרשאה למכשיר בוטלה.');
+    showToast('🔒 מערכת היומן ננעלה.');
   };
 
   const [isManagerAuthOpen, setIsManagerAuthOpen] = useState(false);
@@ -1227,17 +1221,16 @@ export default function App() {
     );
   }
 
-  // 2. If device not authorized via WhatsApp OTP
+  // 2. If system is manually locked
   if (!isManagerAuthenticated) {
     return (
-      <WhatsAppAuthGate
-        settings={settings}
+      <ManagerLoginGate
         onSuccess={() => {
           if (typeof window !== 'undefined') {
             sessionStorage.removeItem('resort_manager_locked');
           }
           setIsManagerAuthenticated(true);
-          showToast('ברוך הבא! מכשירך אושר בהצלחה בוואטסאפ 🐾');
+          showToast('ברוך הבא! נעילת יומן שוחררה בהצלחה 🐾');
         }}
         onGoToPublicIntake={() => {
           setIsStaffPreviewMode(false);

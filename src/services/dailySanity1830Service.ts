@@ -305,7 +305,7 @@ export function run1830SanityAudit(
   activeBookings.filter(b => b.startDate >= todayStr && b.startDate <= in2DaysStr).forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
-    const growRecon = reconcileGrowPaymentsForBooking(b, growPayments);
+    const growRecon = matchGrowPaymentsForBooking(b, VERIFIED_GROW_LEDGER, growPayments);
     const effectiveDeposit = Math.max(deposit, growRecon.totalGrowPaid);
     if (price > 0 && effectiveDeposit === 0 && !b.isFreeStay) {
       redLights.urgentZeroDeposit.push(`🚨 כניסה דחופה ב-48 שעות הקרובות ללא מקדמה (₪0): *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | כניסה: ${formatDateIL(b.startDate)} | חוב: ₪${price.toLocaleString()}`);
@@ -318,7 +318,7 @@ export function run1830SanityAudit(
   activeBookings.filter(b => b.endDate === tomorrowStr && b.stayStatus !== 'checked_out').forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
-    const growRecon = reconcileGrowPaymentsForBooking(b, growPayments);
+    const growRecon = matchGrowPaymentsForBooking(b, VERIFIED_GROW_LEDGER, growPayments);
     const effectiveDeposit = Math.max(deposit, growRecon.totalGrowPaid);
     const balance = Math.max(0, price - effectiveDeposit);
     if (balance > 0 && !b.isFreeStay) {
@@ -359,7 +359,7 @@ export function run1830SanityAudit(
     const notes = b.notes || '';
 
     // Reconcile with live Grow payments to prevent false debt alerts
-    const growRecon = reconcileGrowPaymentsForBooking(b, growPayments);
+    const growRecon = matchGrowPaymentsForBooking(b, VERIFIED_GROW_LEDGER, growPayments);
     const effectiveDeposit = Math.max(deposit, growRecon.totalGrowPaid);
     const effectiveDebt = Math.max(0, price - effectiveDeposit);
 

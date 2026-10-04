@@ -17,6 +17,7 @@ export const ReportsModal: React.FC<ReportsModalProps> = ({
 }) => {
   const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
 
+  const todayStr = getTodayStr();
   const totalRevenue = activeBookings.reduce((sum, b) => sum + b.totalPrice, 0);
   const totalGrossCollected = activeBookings.reduce((sum, b) => sum + b.depositAmount, 0);
 
@@ -30,6 +31,8 @@ export const ReportsModal: React.FC<ReportsModalProps> = ({
     const d = (b as any).data || {};
     return sum + Number(b.refundAmount ?? d.refundAmount ?? 0);
   }, 0);
+
+  const totalNetCollected = Math.max(0, totalGrossCollected - totalRefunds);
 
   const totalOpenDebt = activeBookings
     .filter(b => b.startDate <= todayStr && !b.isFreeStay && b.paymentStatus !== 'fully_paid')
