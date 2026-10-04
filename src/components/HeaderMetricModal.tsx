@@ -200,6 +200,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
   const [trainingViewTab, setTrainingViewTab] = useState<'active' | 'completed' | 'trainer_payments'>(
     (initialMetricType as any) === 'hila_trainer' ? 'trainer_payments' : 'active'
   );
+  const [debtViewTab, setDebtViewTab] = useState<'active' | 'future'>('active');
   const [isTrainerReceiptModalOpen, setIsTrainerReceiptModalOpen] = useState(false);
   const [selectedReceiptForEdit, setSelectedReceiptForEdit] = useState<TrainerReceipt | undefined>(undefined);
   const [trainerReceipts, setTrainerReceipts] = useState<TrainerReceipt[]>(() => getTrainerReceipts());
@@ -564,21 +565,38 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       break;
 
     case 'debt': {
-      const debtItems = activeBookings.filter(b => {
+      const activeStayingDebts = activeBookings.filter(b => {
+        if (b.startDate > todayStr) return false;
+        if (b.isFreeStay || b.paymentStatus === 'fully_paid') return false;
         const debt = Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0));
-        return b.paymentStatus !== 'fully_paid' && debt > 0;
+        return debt > 0;
       });
-      const totalDebtSum = debtItems.reduce((acc, b) => {
+      const futureReservationDebts = activeBookings.filter(b => {
+        if (b.startDate <= todayStr) return false;
+        if (b.isFreeStay || b.paymentStatus === 'fully_paid') return false;
+        const debt = Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0));
+        return debt > 0;
+      });
+
+      const selectedDebts = debtViewTab === 'future' ? futureReservationDebts : activeStayingDebts;
+
+      const totalDebtSum = selectedDebts.reduce((acc, b) => {
         return acc + Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0));
       }, 0);
-      const totalDepositSum = debtItems.reduce((acc, b) => {
+      const totalDepositSum = selectedDebts.reduce((acc, b) => {
         return acc + (Number(b.depositAmount) || 0);
       }, 0);
-      title = 'הזמנות עם חוב פתוח לתשלום';
-      subtitle = `${debtItems.length} הזמנות פעילות עם חוב פתוח (יתרת חוב כוללת: ₪${totalDebtSum.toLocaleString('he-IL')} • שולמו מקדמות: ₪${totalDepositSum.toLocaleString('he-IL')})`;
+
+      if (debtViewTab === 'future') {
+        title = 'שריונים עתידיים (יתרה לתשלום בצ׳ק-אין)';
+        subtitle = `${futureReservationDebts.length} הזמנות עתידיות ששילמו מקדמה (יתרה לגבייה בכניסה: ₪${totalDebtSum.toLocaleString('he-IL')} • שולמו מקדמות: ₪${totalDepositSum.toLocaleString('he-IL')})`;
+      } else {
+        title = 'הזמנות עם חוב פתוח (כלבים שוהים בפועל / שהשתחררו)';
+        subtitle = `${activeStayingDebts.length} כלבים שוהים בפועל עם יתרת חוב לתשלום (יתרת חוב כוללת: ₪${totalDebtSum.toLocaleString('he-IL')} • שולמו מקדמות: ₪${totalDepositSum.toLocaleString('he-IL')})`;
+      }
       icon = <AlertCircle className="w-5 h-5 text-red-600" />;
       badgeColor = 'bg-red-50 text-red-700 border-red-200';
-      filteredItems = debtItems;
+      filteredItems = selectedDebts;
       break;
     }
 
@@ -1019,6 +1037,57 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   <span>📊 גרפים והשוואות</span>
                 </button>
 
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* DEBT TABS (Displayed when metricType === 'debt') */}
+        {metricType === 'debt' && (
+          <div className="p-3 sm:p-4 bg-red-50/70 border-b border-red-200/80 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2.5">
+              <div className="flex flex-wrap items-center gap-1.5 bg-white p-1 rounded-2xl border border-red-200 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setDebtViewTab('active')}
+                  className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                    debtViewTab === 'active'
+                      ? 'bg-red-700 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-red-900 hover:bg-red-50'
+                  }`}
+                >
+                  <AlertCircle className="w-4 h-4" />
+                  <span>🏠 חובות פעילים (שוהים כעת / משוחררים)</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    debtViewTab === 'active' ? 'bg-red-900 text-red-100' : 'bg-red-100 text-red-800'
+                  }`}>
+                    {activeBookings.filter(b => b.startDate <= todayStr && !b.isFreeStay && b.paymentStatus !== 'fully_paid' && Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0)) > 0).length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDebtViewTab('future')}
+                  className={`px-3 py-2 rounded-xl font-black text-xs transition-all cursor-pointer flex items-center gap-1.5 ${
+                    debtViewTab === 'future'
+                      ? 'bg-amber-600 text-white shadow-2xs'
+                      : 'text-slate-700 hover:text-amber-900 hover:bg-amber-50'
+                  }`}
+                >
+                  <Calendar className="w-4 h-4" />
+                  <span>📅 שריונים עתידיים (יתרה לתשלום בצ׳ק-אין)</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold ${
+                    debtViewTab === 'future' ? 'bg-amber-800 text-amber-100' : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {activeBookings.filter(b => b.startDate > todayStr && !b.isFreeStay && b.paymentStatus !== 'fully_paid' && Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0)) > 0).length}
+                  </span>
+                </button>
+              </div>
+
+              <div className="text-xs text-slate-600 font-medium">
+                {debtViewTab === 'active' 
+                  ? '💡 מוצגים רק כלבים שנמצאים בפועל בריזורט או שכבר יצאו עם יתרת חוב.'
+                  : '💡 שריונים עתידיים ששילמו מקדמה – יתרת התשלום נגבית בלחיצה על צ׳ק-אין בכניסה.'}
               </div>
             </div>
           </div>

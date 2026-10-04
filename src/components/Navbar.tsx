@@ -55,11 +55,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     .reduce((acc, b) => acc + b.depositAmount, 0);
 
   const openDebtTotal = bookings
-    .filter(b => b.stayStatus !== 'cancelled')
+    .filter(b => b.stayStatus !== 'cancelled' && b.startDate <= todayStr && !b.isFreeStay && b.paymentStatus !== 'fully_paid')
     .reduce((acc, b) => acc + Math.max(0, b.totalPrice - b.depositAmount), 0);
 
   const unpaidCount = bookings.filter(
-    b => b.stayStatus !== 'cancelled' && b.paymentStatus === 'unpaid'
+    b => b.stayStatus !== 'cancelled' && b.startDate <= todayStr && !b.isFreeStay && b.paymentStatus !== 'fully_paid' && Math.max(0, b.totalPrice - b.depositAmount) > 0
   ).length;
 
   return (

@@ -811,7 +811,18 @@ export default async function handler(req, res) {
   }
 
   const payload = req.body;
-  if (!payload || payload.typeWebhook !== 'incomingMessageReceived') {
+  if (!payload) {
+    return res.status(200).json({ ok: true, ignored: true });
+  }
+
+  // Handle Green-API connection state changes (e.g. authorized -> notAuthorized)
+  if (payload.typeWebhook === 'stateInstanceChanged') {
+    const newState = payload.stateInstance;
+    console.log('--- Green-API Connection State Changed Webhook ---', { newState, timestamp: payload.timestamp });
+    return res.status(200).json({ ok: true, handled: 'state_instance_changed', stateInstance: newState });
+  }
+
+  if (payload.typeWebhook !== 'incomingMessageReceived') {
     return res.status(200).json({ ok: true, ignored: true });
   }
 

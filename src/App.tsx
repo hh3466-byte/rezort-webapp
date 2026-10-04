@@ -63,6 +63,8 @@ import { SendPaymentLinkModal } from './components/SendPaymentLinkModal';
 import { IntakeRequestsModal, calculateBoardingRate } from './components/IntakeRequestsModal';
 import { isIntakeRequestNew, isIntakeRequestInTreatment } from './utils/intakeUtils';
 import { CheckoutDebtAlertModal } from './components/CheckoutDebtAlertModal';
+import { CheckinDebtAlertModal } from './components/CheckinDebtAlertModal';
+import { LinkDeviceModal } from './components/LinkDeviceModal';
 import { PublicIntakePage } from './components/PublicIntakePage';
 import { SendIntakeModal } from './components/SendIntakeModal';
 import { getDateShabbatOrHoliday, isCustomerMessagingRestrictedNow } from './utils/jewishCalendar';
@@ -566,14 +568,20 @@ export default function App() {
   }, [activeBookings, allGrowPayments, todayStr]);
   const maxRecentMiniRev = Math.max(1, ...recentMonthsMiniData.map(d => d.revenue));
 
+  // Open Debt: Count ONLY dogs that are currently staying or already completed/departed with unpaid debt.
+  // Exclude future bookings (startDate > todayStr) because their remaining balance is due at check-in!
   const openDebtTotal = activeBookings.reduce((acc, b) => {
-    if (b.paymentStatus === 'fully_paid') return acc;
+    if (b.startDate > todayStr) return acc;
+    if (b.isFreeStay || b.paymentStatus === 'fully_paid') return acc;
     const debt = Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0));
     return acc + debt;
   }, 0);
 
   const unpaidBookings = activeBookings.filter(b => 
-    b.paymentStatus !== 'fully_paid' && ((Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0) > 0)
+    b.startDate <= todayStr &&
+    !b.isFreeStay &&
+    b.paymentStatus !== 'fully_paid' && 
+    ((Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0) > 0)
   );
   const unpaidCount = unpaidBookings.length;
 
@@ -960,31 +968,99 @@ export default function App() {
     });
   };
 
+  // Checkin & Checkout Debt Warning Modal States
+  const [checkinDebtBooking, setCheckinDebtBooking] = useState<Booking | null>(null);
+  const [checkoutDebtBooking, setCheckoutDebtBooking] = useState<Booking | null>(null);
+  const [isLinkDeviceModalOpen, setIsLinkDeviceModalOpen] = useState(false);
+  const [greenApiStatus, setGreenApiStatus] = useState<'authorized' | 'notAuthorized' | 'unknown'>('unknown');
+
+  // Real-time Green-API WhatsApp connection monitoring
+  useEffect(() => {
+    let isMounted = true;
+    const checkGreenApi = async () => {
+      try {
+        const res = await fetch('/api/link-device?json=true');
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          setGreenApiStatus(data.state === 'authorized' ? 'authorized' : 'notAuthorized');
+        }
+      } catch (e) {
+        // network error / offline
+      }
+    };
+    checkGreenApi();
+    const interval = setInterval(checkGreenApi, 60000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   // Toggle Stay Status (Check-in / Check-out)
   const handleToggleStayStatus = async (bookingId: string, newStatus: Booking['stayStatus']) => {
     const booking = bookings.find(b => b.id === bookingId);
-    if (booking) {
-      const today = getTodayStr();
-      const effectiveEndDate = (newStatus === 'checked_out' && booking.endDate > today) ? today : booking.endDate;
-      const updated: Booking = {
-        ...booking,
-        endDate: effectiveEndDate,
-        stayStatus: newStatus,
-        updatedAt: new Date().toISOString()
-      };
+    if (!booking) return;
 
-      // Instant optimistic state update
-      setBookings(prev => prev.map(b => b.id === bookingId ? updated : b));
+    // Checkin Debt Warning: If checking in a dog that hasn't paid in full, alert Shmulik first!
+    if (newStatus === 'checked_in') {
+      const debt = Math.max(0, (Number(booking.totalPrice) || 0) - (Number(booking.depositAmount) || 0));
+      if (debt > 0 && !booking.isFreeStay && booking.paymentStatus !== 'fully_paid') {
+        setCheckinDebtBooking(booking);
+        return;
+      }
+    }
 
-      if (newStatus === 'checked_in') showToast('🐾 נקלט בהצלחה בריזורט');
-      if (newStatus === 'checked_out') showToast('🏡 שוחרר הביתה בהצלחה');
+    const today = getTodayStr();
+    const effectiveEndDate = (newStatus === 'checked_out' && booking.endDate > today) ? today : booking.endDate;
+    const updated: Booking = {
+      ...booking,
+      endDate: effectiveEndDate,
+      stayStatus: newStatus,
+      updatedAt: new Date().toISOString()
+    };
 
+    // Instant optimistic state update
+    setBookings(prev => prev.map(b => b.id === bookingId ? updated : b));
+
+    if (newStatus === 'checked_in') showToast('🐾 נקלט בהצלחה בריזורט');
+    if (newStatus === 'checked_out') showToast('🏡 שוחרר הביתה בהצלחה');
+
+    await saveBookingToDb(updated);
+  };
+
+  const handleMarkPaidAndCheckin = async (booking: Booking) => {
+    setCheckinDebtBooking(null);
+    const updated: Booking = {
+      ...booking,
+      depositAmount: Number(booking.totalPrice) || 0,
+      paymentStatus: 'fully_paid',
+      stayStatus: 'checked_in',
+      updatedAt: new Date().toISOString()
+    };
+    setBookings(prev => prev.map(b => b.id === booking.id ? updated : b));
+    showToast(`🐾 ${booking.dogName} נקלט בהצלחה וסומן כשולם במלואו`);
+    try {
       await saveBookingToDb(updated);
+    } catch (err) {
+      showToast(`⚠️ שגיאה בסנכרון קליטת ${booking.dogName} לענן`);
     }
   };
 
-  // Checkout Debt Warning & Release Modal State & Handlers
-  const [checkoutDebtBooking, setCheckoutDebtBooking] = useState<Booking | null>(null);
+  const handleConfirmCheckinWithDebt = async (booking: Booking) => {
+    setCheckinDebtBooking(null);
+    const updated: Booking = {
+      ...booking,
+      stayStatus: 'checked_in',
+      updatedAt: new Date().toISOString()
+    };
+    setBookings(prev => prev.map(b => b.id === booking.id ? updated : b));
+    showToast(`🐾 ${booking.dogName} נקלט לריזורט (יתרת חוב נותרה פתוחה לגבייה)`);
+    try {
+      await saveBookingToDb(updated);
+    } catch (err) {
+      showToast(`⚠️ שגיאה בסנכרון קליטת ${booking.dogName} לענן`);
+    }
+  };
 
   const handleInitiateRelease = (booking: Booking) => {
     setCheckoutDebtBooking(booking);
@@ -1141,6 +1217,31 @@ export default function App() {
       {/* Centered Main Layout Container */}
       <div className="max-w-[1560px] w-full mx-auto space-y-4">
         
+        {/* Real-time Green-API Disconnection Alert Banner */}
+        {greenApiStatus === 'notAuthorized' && (
+          <div className="bg-gradient-to-r from-red-600 via-rose-600 to-red-700 text-white px-4 py-2.5 rounded-2xl shadow-lg border border-red-400/50 flex flex-wrap items-center justify-between gap-3 animate-in slide-in-from-top duration-300">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+              </span>
+              <div>
+                <span className="font-black text-sm">🚨 שים לב: חיבור הוואטסאפ (Green-API) מנותק כרגע!</span>
+                <p className="text-xs text-red-100 font-medium mt-0.5">
+                  הודעות דוחות אוטומטיים ואישורי הגעה לא יוכלו לצאת עד לחיבור מחדש.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsLinkDeviceModalOpen(true)}
+              className="bg-white hover:bg-red-50 text-red-700 font-black text-xs px-3.5 py-2 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer shrink-0 flex items-center gap-1.5"
+            >
+              <span>חבר מחדש ב-10 שניות (QR / קוד) 📲</span>
+            </button>
+          </div>
+        )}
+
         {/* Top Centered Brand Header: Logo & Slogan */}
         <header className="flex flex-col items-center justify-center text-center pt-2 pb-1">
           <div className="flex items-center justify-center gap-3">
@@ -2371,6 +2472,20 @@ export default function App() {
         />
       )}
 
+      {/* Check-in Debt Warning & Check-in Modal */}
+      <CheckinDebtAlertModal
+        isOpen={!!checkinDebtBooking}
+        booking={checkinDebtBooking}
+        settings={settings}
+        onClose={() => setCheckinDebtBooking(null)}
+        onMarkPaidAndCheckin={handleMarkPaidAndCheckin}
+        onConfirmCheckinWithDebt={handleConfirmCheckinWithDebt}
+        onOpenPaymentModal={(b) => {
+          setCheckinDebtBooking(null);
+          setPaymentModalBooking(b);
+        }}
+      />
+
       {/* Checkout Debt Warning & Release Modal */}
       <CheckoutDebtAlertModal
         isOpen={!!checkoutDebtBooking}
@@ -2384,6 +2499,13 @@ export default function App() {
           setCheckoutDebtBooking(null);
           setPaymentModalBooking(b);
         }}
+      />
+
+      {/* Green-API Link Device Modal */}
+      <LinkDeviceModal
+        isOpen={isLinkDeviceModalOpen}
+        onClose={() => setIsLinkDeviceModalOpen(false)}
+        settings={settings}
       />
 
       {/* Intake Requests Modal (Client Online Inquiries) */}

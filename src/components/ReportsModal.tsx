@@ -31,8 +31,9 @@ export const ReportsModal: React.FC<ReportsModalProps> = ({
     return sum + Number(b.refundAmount ?? d.refundAmount ?? 0);
   }, 0);
 
-  const totalNetCollected = Math.max(0, totalGrossCollected - totalRefunds);
-  const totalOpenDebt = activeBookings.reduce((sum, b) => sum + Math.max(0, b.totalPrice - b.depositAmount), 0);
+  const totalOpenDebt = activeBookings
+    .filter(b => b.startDate <= todayStr && !b.isFreeStay && b.paymentStatus !== 'fully_paid')
+    .reduce((sum, b) => sum + Math.max(0, b.totalPrice - b.depositAmount), 0);
 
   // Service breakdown
   const serviceStats = {
