@@ -1012,7 +1012,6 @@ export default function App() {
           const isFullyAuth = data.state === 'authorized' && data.isResortPhone !== false;
 
           if (isFullyAuth) {
-            consecutiveFails = 0;
             if (prevStatus === 'notAuthorized') {
               handleAfterReconnection();
             }
