@@ -174,14 +174,26 @@ export async function runAutoDailyDogUpdates(
 
   console.log(`[AutoSender 20:00] מתחיל משלוח אוטומטי ל-${unsentDogs.length} כלבים שטרם עודכנו...`);
 
-  const processedDogsInBatch = new Set<string>();
-
+  // Group dogs by owner phone to send ONE combined evening update for dog pairs/families
+  const ownerGroups = new Map<string, Booking[]>();
   for (const b of unsentDogs) {
     const cleanPhone = cleanPhoneNumber(b.ownerPhone);
     if (!cleanPhone || cleanPhone.length < 9) continue;
-    const dogDedupKey = `${cleanPhone}_${(b.dogName || '').trim().toLowerCase()}`;
-    if (processedDogsInBatch.has(dogDedupKey)) continue;
-    processedDogsInBatch.add(dogDedupKey);
+    if (!ownerGroups.has(cleanPhone)) {
+      ownerGroups.set(cleanPhone, []);
+    }
+    ownerGroups.get(cleanPhone)!.push(b);
+  }
+
+  for (const [cleanPhone, dogGroup] of ownerGroups.entries()) {
+    const firstB = dogGroup[0];
+    const ownerName = firstB.ownerName || 'בעלים יקר';
+
+    // Combine all unique dog names for this owner
+    const uniqueDogNames = Array.from(new Set(dogGroup.map(b => (b.dogName || '').trim()).filter(Boolean)));
+    const combinedDogName = uniqueDogNames.length > 1 
+      ? uniqueDogNames.slice(0, -1).join(', ') + ' ו' + uniqueDogNames[uniqueDogNames.length - 1]
+      : (uniqueDogNames[0] || 'הכלב');
 
     // Cross reference intake for friendly/isolation status
     const intakeMatch = intakeRequests.find(r => {
@@ -189,23 +201,23 @@ export async function runAutoDailyDogUpdates(
       return reqPhone.slice(-7) === cleanPhone.slice(-7);
     });
 
-    const isTraining = isDogInTraining(
+    const isTraining = dogGroup.some(b => isDogInTraining(
       b.serviceType,
       b.notes,
       b.behaviorNotes,
       intakeMatch?.serviceType
-    );
+    ));
 
-    const isIsolation = isDogIsolationRequired(
+    const isIsolation = dogGroup.some(b => isDogIsolationRequired(
       b.notes,
       b.behaviorNotes,
       b.dailyRate,
       intakeMatch?.isFriendlyWithDogs
-    );
+    ));
 
     const { formattedText } = pickDailyDogTemplate(
-      b.ownerName,
-      b.dogName,
+      ownerName,
+      combinedDogName,
       isIsolation,
       [],
       isTraining
@@ -214,25 +226,27 @@ export async function runAutoDailyDogUpdates(
     try {
       const res = await sendGreenApiDirectMessage(cleanPhone, formattedText, greenApiId, greenApiToken);
       if (res.success) {
-        localStorage.setItem(`daily_dog_sent_${b.id}_${todayStr}`, 'true');
-        localStorage.setItem(`daily_dog_sent_${cleanPhone}_${(b.dogName || '').trim().toLowerCase()}_${todayStr}`, 'true');
-        // Persist to Supabase so NO other device or browser ever re-sends today!
-        try {
-          const updatedBooking: Booking = {
-            ...b,
-            lastDailyDogUpdateSent: todayStr
-          };
-          await saveBookingToDb(updatedBooking);
-        } catch (errDb) {
-          console.warn('[AutoSender] Failed to sync update state to DB:', errDb);
+        // Mark ALL dogs in this group as sent today in localStorage & DB
+        for (const b of dogGroup) {
+          localStorage.setItem(`daily_dog_sent_${b.id}_${todayStr}`, 'true');
+          localStorage.setItem(`daily_dog_sent_${cleanPhone}_${(b.dogName || '').trim().toLowerCase()}_${todayStr}`, 'true');
+          try {
+            const updatedBooking: Booking = {
+              ...b,
+              lastDailyDogUpdateSent: todayStr
+            };
+            await saveBookingToDb(updatedBooking);
+          } catch (errDb) {
+            console.warn('[AutoSender] Failed to sync update state to DB:', errDb);
+          }
         }
-        sentCount++;
-        console.log(`[AutoSender 20:00] נשלח בהצלחה ל-${b.dogName} (${b.ownerName}) [אילוף=${isTraining}, בידוד=${isIsolation}]`);
+        sentCount += dogGroup.length;
+        console.log(`[AutoSender 20:00] נשלח בהצלחה ל-${combinedDogName} (${ownerName}) [אילוף=${isTraining}, בידוד=${isIsolation}]`);
       } else {
-        errors.push(`שגיאה במשלוח ל-${b.dogName}: ${res.error || 'נכשל'}`);
+        errors.push(`שגיאה במשלוח ל-${combinedDogName}: ${res.error || 'נכשל'}`);
       }
     } catch (e: any) {
-      errors.push(`שגיאה במשלוח ל-${b.dogName}: ${e.message || String(e)}`);
+      errors.push(`שגיאה במשלוח ל-${combinedDogName}: ${e.message || String(e)}`);
     }
 
     // Interval to protect API limits

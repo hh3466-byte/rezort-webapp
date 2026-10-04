@@ -266,6 +266,24 @@ export const DEFAULT_GREEN_API_TOKEN = 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d2
 
 import { isCustomerMessagingRestrictedNow } from '../utils/jewishCalendar';
 
+const recentSentHashes = new Map<string, number>();
+
+function isRecentDuplicate(chatId: string, message: string): boolean {
+  const now = Date.now();
+  const key = `${chatId}::${message.trim()}`;
+  const lastTime = recentSentHashes.get(key);
+  if (lastTime && (now - lastTime) < 45000) { // 45 seconds anti-flood guard
+    return true;
+  }
+  recentSentHashes.set(key, now);
+  if (recentSentHashes.size > 200) {
+    for (const [k, t] of recentSentHashes.entries()) {
+      if (now - t > 300000) recentSentHashes.delete(k);
+    }
+  }
+  return false;
+}
+
 /**
  * Send direct message via Green-API and return result
  */
@@ -306,6 +324,14 @@ export async function sendGreenApiDirectMessage(
     intlPhone = '972' + intlPhone;
   }
 
+  const chatId = `${intlPhone}@c.us`;
+
+  // Anti-duplicate protection: Ignore identical duplicate sends within 45 seconds
+  if (isRecentDuplicate(chatId, message)) {
+    console.warn(`[Anti-Flood] Blocked duplicate identical message to ${chatId}`);
+    return { success: true };
+  }
+
   const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
   const stateUrl = clusterPrefix 
     ? `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/getStateInstance/${cleanTok}`
@@ -336,7 +362,6 @@ export async function sendGreenApiDirectMessage(
     ? `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/sendMessage/${cleanTok}`
     : `https://api.green-api.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
   const fallbackUrl = `https://api.green-api.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
-  const chatId = `${intlPhone}@c.us`;
 
   async function trySend(url: string, timeoutMs = 25000): Promise<{ success: boolean; error?: string }> {
     try {

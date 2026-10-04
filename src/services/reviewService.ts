@@ -152,43 +152,62 @@ export async function runAutoReviewAndVoucherSender(
   const errors: string[] = [];
 
   try {
+    // Group departed bookings by owner phone (or name) to send ONLY ONE unified VIP/review message per family!
+    const ownerGroups = new Map<string, Booking[]>();
     for (const b of departedBookings) {
-      const storageKey = `review_request_sent_${b.id}`;
-
-      // 1. Check if already handled in localStorage
-      if (typeof window !== 'undefined' && window.localStorage && localStorage.getItem(storageKey)) {
-        continue;
+      const cleanPhone = cleanPhoneNumber(b.ownerPhone);
+      const groupKey = cleanPhone || (b.ownerName || '').trim().toLowerCase();
+      if (!groupKey) continue;
+      if (!ownerGroups.has(groupKey)) {
+        ownerGroups.set(groupKey, []);
       }
+      ownerGroups.get(groupKey)!.push(b);
+    }
 
-      // 2. Check if already marked as sent in DB / notes
-      const notes = b.notes || '';
-      if (notes.includes('[סקר_נשלח]') || (b as any).reviewSentTimestamp) {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          localStorage.setItem(storageKey, 'already_sent');
-        }
-        continue;
-      }
-
-      // 3. Check if Shmulik cancelled review/voucher sending for this booking (הלקוח לא הסתדר)
-      const isExplicitlySkipped = b.skipReviewRequest === true || 
-                                  notes.includes('ללא_סקר') || 
-                                  notes.includes('[ללא_סקר]') || 
-                                  (b as any).skip_review_request === true;
+    for (const [groupKey, groupBookings] of ownerGroups.entries()) {
+      // 1. Check if any booking for this owner was explicitly skipped (הלקוח לא הסתדר)
+      const isExplicitlySkipped = groupBookings.some(b => 
+        b.skipReviewRequest === true || 
+        (b.notes || '').includes('ללא_סקר') || 
+        (b.notes || '').includes('[ללא_סקר]') || 
+        (b as any).skip_review_request === true
+      );
 
       if (isExplicitlySkipped) {
-        skippedCount++;
-        if (typeof window !== 'undefined' && window.localStorage) {
-          localStorage.setItem(storageKey, 'skipped');
-        }
+        skippedCount += groupBookings.length;
+        groupBookings.forEach(b => {
+          const storageKey = `review_request_sent_${b.id}`;
+          if (typeof window !== 'undefined' && window.localStorage) {
+            localStorage.setItem(storageKey, 'skipped');
+          }
+        });
         continue;
       }
 
-      const phone = cleanPhoneNumber(b.ownerPhone);
+      // 2. Check if all bookings in the group were already sent
+      const allAlreadySent = groupBookings.every(b => {
+        const storageKey = `review_request_sent_${b.id}`;
+        const locallySent = typeof window !== 'undefined' && window.localStorage && localStorage.getItem(storageKey);
+        const dbSent = (b.notes || '').includes('[סקר_נשלח]') || (b as any).reviewSentTimestamp;
+        return locallySent || dbSent;
+      });
+
+      if (allAlreadySent) {
+        continue;
+      }
+
+      const firstB = groupBookings[0];
+      const phone = cleanPhoneNumber(firstB.ownerPhone);
       if (!phone) continue;
 
-      const ownerName = b.ownerName || 'לקוח יקר';
-      const dogName = b.dogName || 'הכלב';
-      const reviewMsg = buildReviewAndVoucherMessage(ownerName, dogName);
+      const ownerName = firstB.ownerName || 'לקוח יקר';
+      // Combine all unique dog names for this owner (e.g. "סקובי וג'ינגס")
+      const uniqueDogNames = Array.from(new Set(groupBookings.map(b => (b.dogName || '').trim()).filter(Boolean)));
+      const combinedDogName = uniqueDogNames.length > 1 
+        ? uniqueDogNames.slice(0, -1).join(', ') + ' ו' + uniqueDogNames[uniqueDogNames.length - 1]
+        : (uniqueDogNames[0] || 'הכלב');
+
+      const reviewMsg = buildReviewAndVoucherMessage(ownerName, combinedDogName);
 
       const res = await sendGreenApiDirectMessage(
         phone,
@@ -198,7 +217,7 @@ export async function runAutoReviewAndVoucherSender(
         { skipHolidayCheck: false }
       );
 
-      // Automatically add client directly to the VIP Community group
+      // Automatically add client directly to the VIP Community group (only ONCE per family)
       try {
         await addGreenApiGroupParticipant(
           RESORT_COMMUNITY_GROUP_ID,
@@ -211,33 +230,37 @@ export async function runAutoReviewAndVoucherSender(
       }
 
       if (res.success) {
-        sentCount++;
+        sentCount += groupBookings.length;
         const nowIso = new Date().toISOString();
 
-        if (typeof window !== 'undefined' && window.localStorage) {
-          localStorage.setItem(storageKey, nowIso);
+        // Mark ALL bookings in the group as sent in localStorage & DB
+        for (const b of groupBookings) {
+          const storageKey = `review_request_sent_${b.id}`;
+          if (typeof window !== 'undefined' && window.localStorage) {
+            localStorage.setItem(storageKey, nowIso);
+          }
+
+          try {
+            const notes = b.notes || '';
+            const updatedNotes = notes.includes('[סקר_נשלח]') ? notes : `${notes} [סקר_נשלח]`.trim();
+            const updatedBooking: Booking = {
+              ...b,
+              notes: updatedNotes,
+              updatedAt: nowIso
+            };
+            await saveBookingToDb(updatedBooking);
+          } catch (dbErr) {
+            console.warn('[ReviewSender] Could not update booking notes in DB:', dbErr);
+          }
         }
 
-        // Update booking in Supabase DB with [סקר_נשלח] marker
-        try {
-          const updatedNotes = notes.includes('[סקר_נשלח]') ? notes : `${notes} [סקר_נשלח]`.trim();
-          const updatedBooking: Booking = {
-            ...b,
-            notes: updatedNotes,
-            updatedAt: nowIso
-          };
-          await saveBookingToDb(updatedBooking);
-        } catch (dbErr) {
-          console.warn('[ReviewSender] Could not update booking notes in DB:', dbErr);
-        }
-
-        showToast?.(`⭐ נשלחה בקשת חוות דעת וצורף/ה לקהילת ה-VIP: ${ownerName} (${dogName}) 🐾`);
+        showToast?.(`⭐ נשלחה בקשת חוות דעת וצורף/ה לקהילת ה-VIP: ${ownerName} (${combinedDogName}) 🐾`);
       } else {
         errors.push(`שגיאה בשליחה ל-${ownerName}: ${res.error || 'נכשלה'}`);
       }
 
       // Short breathing pause between customer messages
-      await new Promise(r => setTimeout(r, 1200));
+      await new Promise(r => setTimeout(r, 1500));
     }
 
     if (sentCount > 0) {
