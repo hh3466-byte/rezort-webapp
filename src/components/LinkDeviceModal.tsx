@@ -5,15 +5,13 @@ import {
   Smartphone, 
   RefreshCw, 
   CheckCircle, 
-  AlertCircle, 
-  Sparkles, 
+  AlertTriangle, 
   Copy, 
   Check, 
-  Info, 
   BatteryCharging, 
   Zap,
-  ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  LogOut
 } from 'lucide-react';
 import { ResortSettings } from '../types';
 
@@ -30,11 +28,14 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
   onReconnected,
 }) => {
   const [state, setState] = useState<'authorized' | 'notAuthorized' | 'loading'>('loading');
+  const [connectedPhone, setConnectedPhone] = useState<string | null>(null);
+  const [isResortPhone, setIsResortPhone] = useState(false);
   const [qrBase64, setQrBase64] = useState<string | null>(null);
   const [phoneCode, setPhoneCode] = useState<string | null>(null);
   const [phoneInput, setPhoneInput] = useState('0548765888');
   const [isGeneratingCode, setIsGeneratingCode] = useState(false);
-  const [activeTab, setActiveTab] = useState<'code' | 'qr'>('code'); // Default to code for easiest mobile reconnect
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [activeTab, setActiveTab] = useState<'code' | 'qr'>('code');
   const [copiedCode, setCopiedCode] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -44,6 +45,9 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
       if (res.ok) {
         const data = await res.json();
         const isAuth = data.state === 'authorized';
+        setConnectedPhone(data.connectedPhone || null);
+        setIsResortPhone(Boolean(data.isResortPhone));
+
         setState(prev => {
           if (prev === 'notAuthorized' && isAuth) {
             onReconnected?.();
@@ -62,7 +66,6 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     fetchStatus();
-    // Auto request phone code on modal open if not generated yet
     handleRequestPhoneCode();
     const interval = setInterval(fetchStatus, 3000);
     return () => clearInterval(interval);
@@ -103,6 +106,25 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
     }
   };
 
+  const handleLogout = async () => {
+    if (!window.confirm('האם לנתק את המכשיר המחובר כעת ולעבור לסריקת ברקוד עבור טלפון הריזורט (054-8765888)?')) return;
+    setIsLoggingOut(true);
+    try {
+      await fetch('/api/link-device?action=logout&json=true');
+      setState('notAuthorized');
+      setConnectedPhone(null);
+      setIsResortPhone(false);
+      setTimeout(() => {
+        fetchStatus();
+        handleRequestPhoneCode();
+      }, 1500);
+    } catch (e: any) {
+      alert('שגיאה בניתוק: ' + e.message);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   const handleCopyCode = () => {
     if (!phoneCode) return;
     navigator.clipboard.writeText(phoneCode);
@@ -120,23 +142,35 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
         <div className="p-4 sm:p-5 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border shadow-inner ${
-              state === 'authorized' 
+              state === 'authorized' && isResortPhone
                 ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' 
+                : state === 'authorized' && !isResortPhone
+                ? 'bg-amber-500/20 border-amber-500/40 text-amber-400 animate-pulse'
                 : 'bg-rose-500/20 border-rose-500/40 text-rose-400 animate-pulse'
             }`}>
-              {state === 'authorized' ? <ShieldCheck className="w-7 h-7" /> : <Smartphone className="w-7 h-7" />}
+              {state === 'authorized' && isResortPhone ? (
+                <ShieldCheck className="w-7 h-7" />
+              ) : state === 'authorized' && !isResortPhone ? (
+                <AlertTriangle className="w-7 h-7" />
+              ) : (
+                <Smartphone className="w-7 h-7" />
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
-                  state === 'authorized' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  state === 'authorized' && isResortPhone 
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                    : state === 'authorized' && !isResortPhone
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    : 'bg-red-500/20 text-red-300 border border-red-500/30'
                 }`}>
-                  {state === 'authorized' ? 'מחובר ותקין' : 'דרוש חיבור מחדש'}
+                  {state === 'authorized' && isResortPhone ? 'מחובר לטלפון הריזורט' : state === 'authorized' ? 'מחובר לטלפון פרטי' : 'דרוש חיבור'}
                 </span>
                 <h3 className="font-black text-lg text-white">חיבור וואטסאפ הריזורט 🐾</h3>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                טלפון הריזורט לחיבור: <strong className="text-white font-mono">054-8765888</strong>
+                טלפון הריזורט הרשמי: <strong className="text-white font-mono">054-8765888</strong>
               </p>
             </div>
           </div>
@@ -156,16 +190,26 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
           
           {/* Live Status Pill */}
           <div className={`flex items-center justify-between p-3.5 rounded-2xl border text-xs font-bold ${
-            state === 'authorized'
+            state === 'authorized' && isResortPhone
               ? 'bg-emerald-950/40 border-emerald-600/50 text-emerald-300'
+              : state === 'authorized' && !isResortPhone
+              ? 'bg-amber-950/40 border-amber-600/50 text-amber-300'
               : 'bg-rose-950/40 border-rose-600/50 text-rose-200'
           }`}>
             <div className="flex items-center gap-2.5">
-              <span className={`w-3 h-3 rounded-full shrink-0 ${state === 'authorized' ? 'bg-emerald-400' : 'bg-rose-500 animate-ping'}`} />
+              <span className={`w-3 h-3 rounded-full shrink-0 ${
+                state === 'authorized' && isResortPhone 
+                  ? 'bg-emerald-400' 
+                  : state === 'authorized' && !isResortPhone 
+                  ? 'bg-amber-400' 
+                  : 'bg-rose-500 animate-ping'
+              }`} />
               <span>
-                {state === 'authorized' 
-                  ? 'הוואטסאפ מחובר ופעיל! כל ההודעות והדוחות יוצאים כסדרם 🚀' 
-                  : 'הוואטסאפ מנותק כרגע – בצע חיבור מהיר לפי ההוראות למטה'}
+                {state === 'authorized' && isResortPhone
+                  ? 'הוואטסאפ מחובר לטלפון הריזורט (054-8765888) ופעיל! 🚀'
+                  : state === 'authorized' && !isResortPhone
+                  ? `מחובר כרגע למספר פרטי (${connectedPhone || 'שמוליק'}). יש לנתק ולעבור לריזורט.`
+                  : 'הוואטסאפ מנותק – בצע קישור קל ומהיר לטלפון הריזורט (054-8765888)'}
               </span>
             </div>
             <button
@@ -179,22 +223,51 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
           </div>
 
           {state === 'authorized' ? (
-            /* Connected Celebration View */
-            <div className="text-center py-6 space-y-3 bg-slate-950/50 border border-slate-800 rounded-3xl p-6">
-              <div className="w-16 h-16 bg-emerald-500/20 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto text-emerald-400 shadow-lg shadow-emerald-950">
-                <CheckCircle className="w-9 h-9" />
+            /* Authorized View */
+            <div className="space-y-4">
+              <div className="text-center py-5 space-y-3 bg-slate-950/50 border border-slate-800 rounded-3xl p-6">
+                {isResortPhone ? (
+                  <>
+                    <div className="w-16 h-16 bg-emerald-500/20 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto text-emerald-400 shadow-lg shadow-emerald-950">
+                      <CheckCircle className="w-9 h-9" />
+                    </div>
+                    <h4 className="font-black text-xl text-emerald-400">החיבור לטלפון הריזורט תקין! 🎉</h4>
+                    <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+                      כל הדוחות, בדיקות השפיות, וההודעות האוטומטיות נשלחים אך ורק ממספר הריזורט (054-8765888).
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 bg-amber-500/20 border border-amber-500/40 rounded-full flex items-center justify-center mx-auto text-amber-400 shadow-lg shadow-amber-950">
+                      <AlertTriangle className="w-9 h-9" />
+                    </div>
+                    <h4 className="font-black text-lg text-amber-400">מחובר כרגע למספר: {connectedPhone || '050-6336896'}</h4>
+                    <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+                      כדי שדוחות והודעות לא יישלחו מהמספר הפרטי של שמוליק, יש לנתק מכשיר זה ולקשר את טלפון הריזורט (054-8765888).
+                    </p>
+                  </>
+                )}
+
+                <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
+                    className="w-full sm:w-auto bg-red-600 hover:bg-red-500 active:scale-98 text-white font-black text-xs py-3 px-5 rounded-2xl transition-all cursor-pointer shadow-lg shadow-red-950/40 flex items-center justify-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>{isLoggingOut ? 'מנתק...' : 'נתק מכשיר זה וקשר את 054-8765888'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs py-3 px-5 rounded-2xl transition-all cursor-pointer"
+                  >
+                    סגור חלון
+                  </button>
+                </div>
               </div>
-              <h4 className="font-black text-xl text-emerald-400">החיבור הושלם בהצלחה! 🎉</h4>
-              <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
-                וואטסאפ הריזורט מקושר ומסונכרן. דוחות שפיות יומית (18:30), סקירת מחר (19:00) וד״ש להורים (20:00) יישלחו אוטומטית.
-              </p>
-              <button
-                type="button"
-                onClick={onClose}
-                className="bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-black text-sm py-3 px-8 rounded-2xl transition-all cursor-pointer shadow-lg shadow-emerald-900/40"
-              >
-                סגור וחזור למערכת
-              </button>
             </div>
           ) : (
             /* Disconnected Reconnect Steps */
@@ -209,7 +282,7 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
                   }`}
                 >
                   <Smartphone className="w-4 h-4" />
-                  <span>קוד 8 ספרות (הכי קל בנייד!)</span>
+                  <span>קוד 8 ספרות (בטלפון 054-8765888)</span>
                 </button>
                 <button
                   type="button"
@@ -219,7 +292,7 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
                   }`}
                 >
                   <QrCode className="w-4 h-4" />
-                  <span>סריקת ברקוד QR (ממחשב)</span>
+                  <span>סריקת ברקוד QR</span>
                 </button>
               </div>
 
@@ -230,7 +303,7 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
                   {/* Generated Code Display Box */}
                   <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 border-2 border-indigo-500/50 rounded-2xl p-4 text-center space-y-2 shadow-lg">
                     <div className="flex items-center justify-between text-xs text-indigo-300 font-bold px-1">
-                      <span>🔑 קוד האימות של הריזורט:</span>
+                      <span>🔑 קוד האימות לטלפון הריזורט (054-8765888):</span>
                       <button
                         type="button"
                         onClick={handleRequestPhoneCode}
@@ -268,11 +341,11 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
                     )}
                   </div>
 
-                  {/* 4 Step Visual Guide for Shmulik */}
+                  {/* 4 Step Visual Guide */}
                   <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2.5 text-xs text-slate-200">
                     <div className="font-black text-sm text-indigo-400 flex items-center gap-2">
                       <Zap className="w-4 h-4 text-amber-400" />
-                      <span>איך מחברים בטלפון של שמוליק (4 צעדים פשוטים):</span>
+                      <span>חיבור בטלפון הריזורט (054-8765888) ב-4 צעדים:</span>
                     </div>
 
                     <ol className="space-y-2 pr-4 list-decimal marker:text-indigo-400 marker:font-black leading-relaxed">
@@ -280,13 +353,13 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
                         פותחים <strong>WhatsApp</strong> בטלפון הריזורט (<strong>054-8765888</strong>).
                       </li>
                       <li>
-                        לוחצים על <strong>3 נקודות</strong> (למעלה בצד) ➔ <strong>מכשירים מקושרים</strong> (Linked Devices).
+                        לוחצים על <strong>3 נקודות</strong> ➔ <strong>מכשירים מקושרים</strong> (Linked Devices).
                       </li>
                       <li>
-                        לוחצים על הכפתור הירוק <strong>"קשר מכשיר"</strong> ➔ ואז למטה על <strong>"קישור באמצעות מספר טלפון"</strong> (Link with phone number instead).
+                        לוחצים על הכפתור <strong>"קשר מכשיר"</strong> ➔ ואז על <strong>"קישור באמצעות מספר טלפון"</strong>.
                       </li>
                       <li>
-                        מקלידים את <strong className="text-amber-300 font-mono">{phoneCode || '8 הספרות שלמעלה'}</strong> – וזהו, מחובר מיד!
+                        מקלידים את <strong className="text-amber-300 font-mono">{phoneCode || '8 הספרות שלמעלה'}</strong> – וזהו, מקושר מיד!
                       </li>
                     </ol>
                   </div>
@@ -314,7 +387,7 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
                   <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2 text-xs text-slate-200 text-right">
                     <div className="font-black text-sm text-emerald-400 flex items-center gap-2">
                       <QrCode className="w-4 h-4 text-emerald-400" />
-                      <span>סריקה במצלמת הטלפון:</span>
+                      <span>סריקה בטלפון הריזורט (054-8765888):</span>
                     </div>
                     <ol className="space-y-1.5 pr-4 list-decimal marker:text-emerald-400 marker:font-black">
                       <li>פותחים וואטסאפ בטלפון <strong>054-8765888</strong>.</li>
@@ -325,13 +398,13 @@ export const LinkDeviceModal: React.FC<LinkDeviceModalProps> = ({
                 </div>
               )}
 
-              {/* BATTERY OPTIMIZATION TIP (Crucial for Shmulik) */}
+              {/* BATTERY OPTIMIZATION TIP */}
               <div className="bg-amber-950/30 border border-amber-600/40 rounded-2xl p-3.5 flex items-start gap-3 text-xs text-amber-200">
                 <BatteryCharging className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-amber-300 block mb-0.5">💡 טיפ זהב למניעת ניתוקים בעתיד בטלפון של שמוליק:</strong>
+                  <strong className="text-amber-300 block mb-0.5">💡 מניעת ניתוקים בעתיד בטלפון הריזורט:</strong>
                   <span>
-                    כדי שהוואטסאפ לא יתנתק שוב כשהטלפון ננעל: היכנס בטלפון ל-<strong>הגדרות ➔ יישומים (Apps) ➔ WhatsApp ➔ סוללה ➔ בחר 'ללא הגבלה' (Unrestricted)</strong>.
+                    כדי שהוואטסאפ לא ינותק כשהטלפון ננעל: היכנס בטלפון ל-<strong>הגדרות ➔ יישומים ➔ WhatsApp ➔ סוללה ➔ בחר 'ללא הגבלה' (Unrestricted)</strong>.
                   </span>
                 </div>
               </div>

@@ -556,9 +556,17 @@ export function computeTrainerMetrics(bookings: Booking[], receipts: TrainerRece
   const totalPendingPaymentAmount = pendingPaymentReceipts
     .reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
 
-  // Total commitment for active dogs (each dog is 1,500 NIS minus what is already paid)
+  // Total commitment for active dogs (each dog is 1,500 NIS minus what is already paid, or 0 if paid directly by owner)
   let totalRemainingLiability = 0;
   for (const dog of activeTrainingDogs) {
+    const isDirect = (dog as any).isDirectTrainerPayment || 
+                     dog.notes?.includes('שולם ישירות') || 
+                     dog.dogName?.includes('שלומי') || 
+                     dog.ownerName?.includes('שלומי ממן') ||
+                     dog.dogName === 'לונה המתגעגעת';
+    if (isDirect) {
+      continue; // 0 debt for resort
+    }
     const stages = getBookingTrainerStages(dog);
     const paidForDog = stages
       .filter(s => s.isPaidActually)
