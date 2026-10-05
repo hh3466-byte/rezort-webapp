@@ -247,9 +247,8 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
   const unassignedKennelDogs = activeBookings.filter(b => {
     const s = b.start_date || b.startDate;
     const e = b.end_date || b.endDate;
-    const isStayingOrIncoming = (s <= tomorrowStr && e >= tomorrowStr) || s === tomorrowStr;
-    const k = b.kennel_number !== undefined ? b.kennel_number : b.kennelNumber;
-    return isStayingOrIncoming && (!k && k !== 0);
+    const k = b.kennel_number || b.kennelNumber || b.data?.kennelNumber || b.data?.kennel;
+    return isStayingOrIncoming && !k;
   });
 
   if (unassignedKennelDogs.length > 0) {

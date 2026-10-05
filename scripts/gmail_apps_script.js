@@ -457,12 +457,6 @@ function processResortEmails() {
     checkAndTriggerMotzeiShabbatDogUpdates();
   } catch (eM) {}
 
-  try {
-    sendDayAfterDepartureReviewRequests();
-  } catch (eRev) {
-    Logger.log("sendDayAfterDepartureReviewRequests error: " + eRev.toString());
-  }
-
   Logger.log("=== סיום ריצה: " + growCount + " תשלומי Grow נקלטו, " + morningDeletedCount + " חשבוניות מורנינג נמחקו, " + yanivDeletedCount + " מיילי יניב נמחקו ===");
 }
 
@@ -831,8 +825,9 @@ function sendDayAfterDepartureReviewRequests() {
       return;
     }
 
-    // וידוא שעות שליחה מורשות: בין 10:00 ל-19:30 בימי חול
-    if (hour < 10 || hour >= 20) {
+    // וידוא שעות שליחה מורשות: אך ורק בשעה 19:00 בערב (חלון 19:00–19:59) בימי חול
+    if (hour !== 19) {
+      Logger.log("השעה אינה 19:00 (שעה נוכחית: " + hour + ") - בקשות חוות דעת מתוזמנות ל-19:00 בערב בלבד.");
       return;
     }
 
@@ -1708,9 +1703,13 @@ function sendDailyDogEveningUpdates() {
 
     // דיווח אוטומטי למנהל (054-3200007) על תוצאות השליחה היומית
     try {
+      if (sentCount === 0) {
+        Logger.log("כל הכלבים כבר קיבלו הודעות מוקדם יותר היום. אין צורך בדיווח נוסף למנהל.");
+        return;
+      }
+
       var managerChatId = "972543200007@c.us";
-      var totalReceived = sentCount > 0 ? sentCount : activeBookings.length;
-      var managerMsg = "נשלחו הודעות יומיות ל " + totalReceived + " בעלי כלבים. כולם קיבלו. אין כשל ✅";
+      var managerMsg = "נשלחו הודעות יומיות ל " + sentCount + " בעלי כלבים נוספים. כולם קיבלו. אין כשל ✅";
 
       var mgrSendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
       UrlFetchApp.fetch(mgrSendUrl, {

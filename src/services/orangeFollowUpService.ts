@@ -168,67 +168,14 @@ export async function sendOrangeFollowUpBatch(
 }
 
 /**
- * Initializes the background 08:30 AM scheduler for orange button marketing follow-up
+ * Initializes the background 08:30 AM scheduler for orange button marketing follow-up (DISABLED per Rule 10)
  */
 export function initOrangeFollowUpScheduler(
-  getBookings: () => Booking[],
-  getSettings: () => ResortSettings,
-  getIntakeRequests: () => IntakeRequest[],
-  showToast?: (msg: string) => void
+  _getBookings: () => Booking[],
+  _getSettings: () => ResortSettings,
+  _getIntakeRequests: () => IntakeRequest[],
+  _showToast?: (msg: string) => void
 ): () => void {
-  if (orangeFollowUpInterval) {
-    clearInterval(orangeFollowUpInterval);
-  }
-
-  const checkAndRun = async () => {
-    if (isFollowUpRunning) return;
-    const today = getTodayStr();
-    const storageKey = `orange_followup_dispatched_${today}`;
-    if (localStorage.getItem(storageKey)) return;
-
-    const eligibility = isOrangeFollowUpEligibleNow();
-    if (!eligibility.eligible) return;
-
-    isFollowUpRunning = true;
-    try {
-      const res = await sendOrangeFollowUpBatch(
-        getBookings(),
-        getSettings(),
-        getIntakeRequests()
-      );
-
-      if (res.sentCount > 0) {
-        localStorage.setItem(storageKey, new Date().toISOString());
-        const names = res.results.filter(r => r.success).map(r => `${r.dogName} (${r.ownerName})`).join(', ');
-        showToast?.(`📲 נשלחה הודעת שיווק מתוזמנת (08:30) ל-${res.sentCount} פניות: ${names}. הפניות הועברו לארכיון ממתינים.`);
-
-        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-          try {
-            new Notification('📲 תזכורת שיווקית (08:30) נשלחה!', {
-              body: `נשלחה הודעת שיווק ל-${res.sentCount} פניות מהכפתור הכתום. אם לא יענו, הן יוסרו אוטומטית עד שיכתבו.`,
-              icon: '/favicon.ico'
-            });
-          } catch {}
-        }
-      } else if (res.candidateCount === 0) {
-        // No candidates needed sending today; mark checked
-        localStorage.setItem(storageKey, new Date().toISOString());
-      }
-    } catch (e) {
-      console.warn('Orange follow-up scheduler error:', e);
-    } finally {
-      isFollowUpRunning = false;
-    }
-  };
-
-  // Run immediately and check every 30 seconds
-  checkAndRun();
-  orangeFollowUpInterval = setInterval(checkAndRun, 30000);
-
-  return () => {
-    if (orangeFollowUpInterval) {
-      clearInterval(orangeFollowUpInterval);
-      orangeFollowUpInterval = null;
-    }
-  };
+  // Disabled: No automated marketing messages in the morning.
+  return () => {};
 }

@@ -13,6 +13,8 @@
  * =========================================================================
  */
 
+import { sendMetaPurchaseEvent } from './meta-capi.js';
+
 const SUPABASE_URL = "https://ydlynqqmulojhrxbfjsc.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
 const GREEN_API_ID = "710722735421";
@@ -290,6 +292,16 @@ export default async function handler(req, res) {
     } catch (eGrowIns) {
       console.error('Error recording grow_incoming_payments:', eGrowIns);
     }
+
+    // Report Purchase Conversion to Meta Conversions API (CAPI)
+    sendMetaPurchaseEvent({
+      phone: cleanPhone,
+      customerName: fullName,
+      amount: amount,
+      transactionId: transactionId,
+      currency: 'ILS',
+      eventSourceUrl: 'https://rezort-webapp.vercel.app/'
+    }).catch(capiErr => console.warn('Non-blocking Meta CAPI purchase event warning:', capiErr));
 
     // Send real-time WhatsApp alert to BOTH Manager (054-3200007) and Shmulik (050-6336896) ONLY for verified Resort transactions
     const alertMsg = `💳 *התקבל תשלום ריזורט ב-GROW!*

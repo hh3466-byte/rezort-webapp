@@ -651,6 +651,24 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       // 4. Fallback WhatsApp notification
       sendResortWhatsAppNotification(formatIntakeNotification(newRequest), settings);
 
+      // 5. Track Meta Pixel Conversion Events
+      try {
+        if (typeof window !== 'undefined' && (window as any).fbq) {
+          (window as any).fbq('track', 'CompleteRegistration', {
+            content_name: 'Dog Intake Form Submitted',
+            status: 'completed',
+            currency: 'ILS',
+            value: 0
+          });
+          (window as any).fbq('track', 'Lead', {
+            content_name: 'Dog Resort Intake Lead',
+            service_type: serviceType
+          });
+        }
+      } catch (fbErr) {
+        console.warn('Meta Pixel tracking error:', fbErr);
+      }
+
       setIsSubmitted(true);
     } catch (err) {
       console.error('Error submitting intake request:', err);

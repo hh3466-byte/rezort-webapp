@@ -51,8 +51,9 @@ export function buildReviewAndVoucherMessage(ownerName: string, dogName: string)
 
 /**
  * Checks if current time in Israel is eligible for sending review requests / vouchers:
- * 1. Sunday-Thursday between 10:00 and 19:30
- * 2. Strictly forbidden on Shabbat, Yom Kippur, and Jewish holidays
+ * 1. Sunday-Thursday strictly in the evening between 19:00 and 20:30 (Rule 1 in AGENTS.md)
+ * 2. On Motzei Shabbat / Motzei Chag: starting 40 minutes after Havdalah (around 20:15 - 22:00)
+ * 3. Strictly forbidden on Friday, during Shabbat/Chag, Yom Kippur, and outside allowed evening hours.
  */
 export function isReviewSendEligibleNow(): { eligible: boolean; reason?: string } {
   const now = new Date();
@@ -60,6 +61,11 @@ export function isReviewSendEligibleNow(): { eligible: boolean; reason?: string 
 
   if (restriction.isRestricted) {
     return { eligible: false, reason: restriction.reason };
+  }
+
+  // Motzei Shabbat / Motzei Chag window: reached 40 minutes after Havdalah!
+  if (restriction.isMotzeiShabbatEligibleNow) {
+    return { eligible: true };
   }
 
   const israelTz = 'Asia/Jerusalem';
@@ -99,12 +105,12 @@ export function isReviewSendEligibleNow(): { eligible: boolean; reason?: string 
     return { eligible: true };
   }
 
-  // Weekdays (Sunday-Thursday): Eligible hours 10:00 to 20:30
-  if (hour < 10 || hour > 20 || (hour === 20 && minute > 30)) {
+  // Weekdays (Sunday-Thursday): Eligible hours 19:00 to 20:30 strictly (Rule 1 in AGENTS.md)
+  if (hour < 19 || hour > 20 || (hour === 20 && minute > 30)) {
     if (hour >= 20) {
-      return { eligible: false, reason: 'מאוחר מדי (לאחר 20:30) – בקשות חוות דעת ומועדון VIP יישלחו מחר בבוקר החל מ-10:00' };
+      return { eligible: false, reason: 'מאוחר מדי (לאחר 20:30) – בקשות חוות דעת ומועדון VIP יישלחו מחר בערב ב-19:00' };
     }
-    return { eligible: false, reason: `מחוץ לשעות השליחה (השעה הנוכחית: ${hour}:${String(minute).padStart(2, '0')}, שעות מורשות בימי חול: 10:00-20:30)` };
+    return { eligible: false, reason: `מחוץ לשעות השליחה (השעה הנוכחית: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}, שעות מורשות בימי חול: 19:00-20:30 בלבד)` };
   }
 
   return { eligible: true };

@@ -92,8 +92,7 @@ export function isEveningUpdateEligibleNow(): { eligible: boolean; reason?: stri
   }
 
   // Regular business days (Sunday - Thursday):
-  // Evening window: 20:00 - 20:30
-  // Morning catch-up window (if reconnected in morning): 09:00 - 11:30
+  // Evening window: 20:00 - 20:30 strictly
   const israelTz = 'Asia/Jerusalem';
   const dtf = new Intl.DateTimeFormat('en-US', {
     timeZone: israelTz,
@@ -110,13 +109,12 @@ export function isEveningUpdateEligibleNow(): { eligible: boolean; reason?: stri
   }
 
   const isEveningWindow = (hour === 20 && minute <= 30);
-  const isMorningCatchUpWindow = (hour >= 9 && hour < 12);
 
-  if (!isEveningWindow && !isMorningCatchUpWindow) {
-    if (hour >= 20 && (hour > 20 || minute > 30)) {
-      return { eligible: false, reason: `מאוחר מדי (לאחר 20:30) – הודעות ד״ש להורים יישלחו מחר בבוקר החל מ-09:00` };
+  if (!isEveningWindow) {
+    if (hour > 20 || (hour === 20 && minute > 30)) {
+      return { eligible: false, reason: `מאוחר מדי (לאחר 20:30) – חלון שליחת ד״ש ערב הסתיים להיום` };
     }
-    return { eligible: false, reason: `מחוץ לשעות השליחה (השעה הנוכחית: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}, שעות מורשות: 20:00-20:30 או 09:00-11:30)` };
+    return { eligible: false, reason: `מחוץ לשעות השליחה (השעה הנוכחית: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}, שעות מורשות: 20:00-20:30 בלבד)` };
   }
 
   return { eligible: true };

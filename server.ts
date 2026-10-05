@@ -54,6 +54,28 @@ app.all('/api/grow-webhook', async (req, res) => {
   }
 });
 
+// Meta & Google Sheets Lead Webhook API Handler
+app.all('/api/lead-webhook', async (req, res) => {
+  try {
+    const handler = (await import('./api/lead-webhook.js')).default;
+    return handler(req, res);
+  } catch (err: any) {
+    console.error('Error handling /api/lead-webhook:', err);
+    res.status(500).json({ error: err?.message || 'Internal Server Error' });
+  }
+});
+
+// WhatsApp Webhook API Handler
+app.all('/api/whatsapp-webhook', async (req, res) => {
+  try {
+    const handler = (await import('./api/whatsapp-webhook.js')).default;
+    return handler(req, res);
+  } catch (err: any) {
+    console.error('Error handling /api/whatsapp-webhook:', err);
+    res.status(500).json({ error: err?.message || 'Internal Server Error' });
+  }
+});
+
 // Gemini Agent Speech & WhatsApp Parser API with Resilient Multi-Model Fallback
 app.post('/api/agent/parse', async (req, res) => {
   const { text, referenceDate, existingBookingsSummary } = req.body;

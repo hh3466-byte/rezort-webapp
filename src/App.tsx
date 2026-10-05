@@ -79,7 +79,6 @@ import { KennelFeedingBoard } from './components/KennelFeedingBoard';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
 import { initDailyDogAutoSender, runAutoDailyDogUpdates } from './services/dailyDogAutoSender';
 import { initTomorrowOverviewScheduler, init1830SanityScheduler, sendTomorrowOverviewToShmulik } from './services/morningReportService';
-import { initOrangeFollowUpScheduler } from './services/orangeFollowUpService';
 import { initAutoReviewScheduler, runAutoReviewAndVoucherSender } from './services/reviewService';
 import { send1830SanityReportToShmulik } from './services/dailySanity1830Service';
 import { initFeedingReminderScheduler } from './services/feedingReminderService';
@@ -440,18 +439,7 @@ export default function App() {
     return cleanup;
   }, [bookings, settings, intakeRequests]);
 
-  // 08:30 AM Orange Button (In-Progress) Marketing Follow-Up Scheduler
-  useEffect(() => {
-    const cleanup = initOrangeFollowUpScheduler(
-      () => bookings,
-      () => settings,
-      () => intakeRequests,
-      showToast
-    );
-    return cleanup;
-  }, [bookings, settings, intakeRequests]);
-
-  // Automatic Day-After-Departure VIP Voucher & Review Request Scheduler (Sent 1 day after departure)
+  // Automatic Day-After-Departure VIP Voucher & Review Request Scheduler (Sent at 19:00 after departure)
   useEffect(() => {
     const cleanup = initAutoReviewScheduler(
       () => bookings,
