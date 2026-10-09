@@ -26,6 +26,7 @@ import { getLearnedRefundReasons, saveLearnedRefundReason } from '../utils/refun
 import { TimeSchedulePicker } from './TimeSchedulePicker';
 import { normalizePlacementKey, getPlacementDisplayName } from '../utils/kennelUtils';
 import { verifyGrowPayment, fetchCustomerVerifiedGrowPayments, GrowVerificationResult } from '../services/growVerificationGatekeeper';
+import { IntakeAlertBanner } from './IntakeAlertBadges';
 
 interface BookingFormModalProps {
   initialData?: Partial<Booking> | null;
@@ -633,6 +634,21 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
             </div>
           </div>
         )}
+
+        {/* High-Visibility Irregularity & Medical Alert Banner */}
+        <IntakeAlertBanner
+          data={{
+            dogName,
+            dogGender,
+            isNeutered: dogGender === 'male_neutered' || dogGender === 'female_spayed',
+            isVaccinated: vaccinationValid,
+            specialDiet,
+            medications,
+            specialNeeds: notes,
+            notes
+          }}
+          className="mb-4"
+        />
 
         {/* The Form */}
         <form onSubmit={handleSubmit} className="space-y-4">

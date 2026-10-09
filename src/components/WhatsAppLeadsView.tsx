@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Booking, IntakeRequest, IntakeRequestStatus, ResortSettings } from '../types';
 import { DesktopWhatsAppAuditModal } from './DesktopWhatsAppAuditModal';
+import { IntakeAlertBanner } from './IntakeAlertBadges';
 import { cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
 import { formatDateIL } from '../utils/dateUtils';
 import { findCustomerPastDebt } from '../utils/pastDebtUtils';
@@ -512,6 +513,11 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
               </span>
             )}
           </div>
+
+          {/* Compact Intake Alerts pill tags */}
+          {chat.matchedIntake && (
+            <IntakeAlertBanner data={chat.matchedIntake} compact className="mt-1" />
+          )}
 
           {/* Timestamp & Smart Intent Badge */}
           <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
@@ -1376,6 +1382,13 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   )}
                   <span className="text-slate-300">|</span>
                   <span className="text-slate-500 text-[11px]">ללקוח זה כבר יש הזמנה רשמית – אין צורך בשאלון קליטה</span>
+                </div>
+              )}
+
+              {/* Intake Questionnaire Highlights & Irregularity Alert Banner */}
+              {selectedChat.matchedIntake && (
+                <div className="px-3 pt-2.5 shrink-0">
+                  <IntakeAlertBanner data={selectedChat.matchedIntake} />
                 </div>
               )}
 

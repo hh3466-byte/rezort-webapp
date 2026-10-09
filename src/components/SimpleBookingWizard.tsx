@@ -60,6 +60,7 @@ import { calculateBoardingRate } from '../utils/pricingUtils';
 import { parseVoiceOrWhatsAppText } from '../services/agentService';
 import { TimeSchedulePicker } from './TimeSchedulePicker';
 import { normalizePlacementKey, getPlacementDisplayName } from '../utils/kennelUtils';
+import { IntakeAlertBanner } from './IntakeAlertBadges';
 
 interface SimpleBookingWizardProps {
   isOpen: boolean;
@@ -406,6 +407,18 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     if (req.startDate) setStartDate(req.startDate);
     if (req.endDate) setEndDate(req.endDate);
     if (req.isVaccinated !== undefined) setVaccinationValid(req.isVaccinated);
+    if (req.dogGender) {
+      const isNeutered = req.isNeutered !== undefined ? req.isNeutered : true;
+      const g = req.dogGender === 'female'
+        ? (isNeutered ? 'female_spayed' : 'female_intact')
+        : (isNeutered ? 'male_neutered' : 'male_intact');
+      setDogGender(g);
+      if (g === 'male_intact' || req.isFriendlyWithDogs === 'no') {
+        setDailyRate(settings.defaultDailyRateIsolation || 230);
+      }
+    }
+    if (req.specialDiet) setSpecialDiet(req.specialDiet);
+    if (req.medications) setMedications(req.medications);
     if (req.additionalDogs && req.additionalDogs.length > 0) {
       const ad = req.additionalDogs[0];
       setSecondDog({
@@ -1144,25 +1157,30 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
                 {/* If intake questionnaire recognized for this phone number */}
                 {matchedIntakeRequest && (
-                  <div className="mt-2.5 p-3 rounded-xl bg-emerald-50/90 border-2 border-emerald-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2 animate-in fade-in">
-                    <div className="text-xs text-emerald-950">
-                      <div className="flex items-center gap-1.5 font-black text-emerald-800">
-                        <span className="text-sm">📥</span>
-                        <span>זוהה שאלון בקשת קליטה עבור {matchedIntakeRequest.ownerName} ({matchedIntakeRequest.dogName})!</span>
+                  <div className="mt-2.5 p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-300 space-y-2.5 animate-in fade-in">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="text-xs text-emerald-950">
+                        <div className="flex items-center gap-1.5 font-black text-emerald-800">
+                          <span className="text-sm">📥</span>
+                          <span>זוהה שאלון בקשת קליטה עבור {matchedIntakeRequest.ownerName} ({matchedIntakeRequest.dogName})!</span>
+                        </div>
+                        <div className="text-[11px] text-emerald-700 mt-0.5 font-medium">
+                          שירות: <strong>{matchedIntakeRequest.serviceType === 'boarding' ? 'פנסיון' : matchedIntakeRequest.serviceType === 'training' ? 'אילוף' : 'יומיות'}</strong> · 
+                          תאריכים: <strong className="text-emerald-900 font-bold">{formatDateIL(matchedIntakeRequest.startDate)} עד {formatDateIL(matchedIntakeRequest.endDate)}</strong>
+                        </div>
                       </div>
-                      <div className="text-[11px] text-emerald-700 mt-0.5 font-medium">
-                        שירות: <strong>{matchedIntakeRequest.serviceType === 'boarding' ? 'פנסיון' : matchedIntakeRequest.serviceType === 'training' ? 'אילוף' : 'יומיות'}</strong> · 
-                        תאריכים: <strong className="text-emerald-900 font-bold">{formatDateIL(matchedIntakeRequest.startDate)} עד {formatDateIL(matchedIntakeRequest.endDate)}</strong>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyIntakeRequest(matchedIntakeRequest)}
+                        className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5 shrink-0"
+                        title="החל את התאריכים ופרטי הכלב ישירות לתוך ההזמנה"
+                      >
+                        <span>⚡ טען תאריכים ופרטים מהשאלון</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleApplyIntakeRequest(matchedIntakeRequest)}
-                      className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer whitespace-nowrap flex items-center justify-center gap-1.5"
-                      title="החל את התאריכים ופרטי הכלב ישירות לתוך ההזמנה"
-                    >
-                      <span>⚡ טען תאריכים ופרטים מהשאלון</span>
-                    </button>
+
+                    {/* Prominent Irregularity Alerts for Matched Intake */}
+                    <IntakeAlertBanner data={matchedIntakeRequest} className="mt-1" />
                   </div>
                 )}
 
@@ -2086,6 +2104,20 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
           {/* ======================================================== */}
           {currentStep === 2 && (
             <div className="space-y-5 animate-in fade-in">
+              {/* High-Visibility Alerts Banner for Dog in Step 2 */}
+              <IntakeAlertBanner
+                data={{
+                  dogName,
+                  dogGender,
+                  isNeutered: dogGender === 'male_neutered' || dogGender === 'female_spayed',
+                  isVaccinated: vaccinationValid,
+                  specialDiet,
+                  medications,
+                  specialNeeds: notes,
+                  notes
+                }}
+              />
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Dog Name */}
                 <div className="space-y-1.5">
@@ -2185,7 +2217,12 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
-                    onClick={() => setDogGender('male_neutered')}
+                    onClick={() => {
+                      setDogGender('male_neutered');
+                      if (serviceType === 'boarding' && dailyRate === 230) {
+                        setDailyRate(settings.defaultDailyRateBoarding || 180);
+                      }
+                    }}
                     className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
                       dogGender === 'male_neutered'
                         ? 'bg-indigo-600 text-white font-bold'
@@ -2198,7 +2235,12 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setDogGender('female_spayed')}
+                    onClick={() => {
+                      setDogGender('female_spayed');
+                      if (serviceType === 'boarding' && dailyRate === 230) {
+                        setDailyRate(settings.defaultDailyRateBoarding || 180);
+                      }
+                    }}
                     className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
                       dogGender === 'female_spayed'
                         ? 'bg-indigo-600 text-white font-bold'
@@ -2211,30 +2253,56 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setDogGender('male_intact')}
+                    onClick={() => {
+                      setDogGender('male_intact');
+                      if (serviceType === 'boarding') {
+                        setDailyRate(settings.defaultDailyRateIsolation || 230);
+                      }
+                    }}
                     className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
                       dogGender === 'male_intact'
-                        ? 'bg-indigo-600 text-white font-bold'
-                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        ? 'bg-rose-600 text-white font-bold ring-2 ring-rose-400/40'
+                        : 'bg-red-50 border-red-200 text-red-900 hover:bg-red-100'
                     }`}
                   >
-                    <div className="text-xs font-bold">לא מסורס</div>
-                    <div className="text-[10px] opacity-80">(זכר)</div>
+                    <div className="text-xs font-bold">לא מסורס ⚠️</div>
+                    <div className="text-[10px] opacity-80">(זכר - ₪230)</div>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => setDogGender('female_intact')}
+                    onClick={() => {
+                      setDogGender('female_intact');
+                      if (serviceType === 'boarding' && dailyRate === 230) {
+                        setDailyRate(settings.defaultDailyRateBoarding || 180);
+                      }
+                    }}
                     className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
                       dogGender === 'female_intact'
-                        ? 'bg-indigo-600 text-white font-bold'
-                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                        ? 'bg-pink-600 text-white font-bold ring-2 ring-pink-400/40'
+                        : 'bg-pink-50 border-pink-200 text-pink-900 hover:bg-pink-100'
                     }`}
                   >
                     <div className="text-xs font-bold">לא מעוקרת</div>
                     <div className="text-[10px] opacity-80">(נקבה)</div>
                   </button>
                 </div>
+
+                {dogGender === 'male_intact' && (
+                  <div className="bg-red-50 border-2 border-red-300 rounded-xl p-2.5 text-xs text-red-950 font-bold flex items-center gap-2 animate-pulse mt-1.5">
+                    <span className="text-base">⚠️</span>
+                    <div>
+                      <div className="font-black text-red-900">זכר לא מסורס – תעריף בידוד/השגחה ₪230 ליום (ללא הנחת כמות)</div>
+                      <div className="text-[11px] text-red-800 font-normal mt-0.5">זכרים לא מסורסים דורשים הפרדת חצרות והשגחה אישית. התעריף עודכן אוטומטית ל-₪230 ליום.</div>
+                    </div>
+                  </div>
+                )}
+                {dogGender === 'female_intact' && (
+                  <div className="bg-pink-50 border border-pink-300 rounded-xl p-2 text-xs text-pink-950 font-medium flex items-center gap-1.5 mt-1.5">
+                    <span>🌸</span>
+                    <span>נקבה לא מעוקרת – יש לוודא מול הבעלים שאינה בתקופת ייחום בעת השהייה בריזורט.</span>
+                  </div>
+                )}
               </div>
 
               {/* Crate trained button */}

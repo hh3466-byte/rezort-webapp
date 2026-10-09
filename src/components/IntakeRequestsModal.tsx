@@ -6,6 +6,7 @@ import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
 import { getNextAllowedCommunicationDate, isShabbatOrHolidayRestricted } from '../utils/jewishCalendar';
 import { generateUnansweredFollowUpMarketingText } from '../services/whatsappCrmService';
 import { SendIntakeModal } from './SendIntakeModal';
+import { IntakeAlertBanner } from './IntakeAlertBadges';
 import { 
   X, 
   Phone, 
@@ -1200,6 +1201,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     </div>
                   )}
 
+                  {/* High-Visibility Intake Alerts Banner (Unneutered, Vaccines, Isolation, Meds, Diet, Problem Notes) */}
+                  <IntakeAlertBanner data={req} className="mb-3" />
+
                   {/* Card Top: Dog & Owner Header */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                     <div className="flex items-start gap-3.5">
@@ -1516,19 +1520,25 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                     );
                   })()}
 
-                  {/* Card Middle: Key Vetting Indicators */}
+                  {/* Card Middle: Key Vetting Indicators with High-Visibility Callout Colors */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 text-xs">
                     {/* Friendly with dogs */}
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
+                    <div className={`p-2.5 rounded-xl border text-right transition-all shadow-2xs ${
+                      req.isFriendlyWithDogs === 'yes'
+                        ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                        : req.isFriendlyWithDogs === 'no'
+                        ? 'bg-red-100 border-red-500 text-red-950 ring-2 ring-red-400/50 animate-pulse'
+                        : 'bg-amber-50 border-amber-300 text-amber-950 ring-1 ring-amber-300'
+                    }`}>
+                      <span className="text-[10px] text-slate-500 block font-bold mb-0.5">
                         מסתדר עם כלבים:
                       </span>
-                      <span className={`font-bold ${
-                        req.isFriendlyWithDogs === 'yes' ? 'text-emerald-700' :
-                        req.isFriendlyWithDogs === 'no' ? 'text-red-700' : 'text-amber-700'
+                      <span className={`font-black text-xs flex items-center gap-1 ${
+                        req.isFriendlyWithDogs === 'yes' ? 'text-emerald-800' :
+                        req.isFriendlyWithDogs === 'no' ? 'text-red-900 font-extrabold' : 'text-amber-900'
                       }`}>
                         {req.isFriendlyWithDogs === 'yes' ? 'חברותי 🟢' :
-                         req.isFriendlyWithDogs === 'no' ? 'חייב בידוד / תוקפני 🔴' : 'תלוי 🟡'}
+                         req.isFriendlyWithDogs === 'no' ? 'חייב בידוד! 🔴' : 'תלוי / זהיר 🟡'}
                       </span>
                     </div>
 
@@ -1571,7 +1581,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer hover:scale-[1.02] active:scale-98 shadow-2xs ${
                         req.isNeutered
                           ? 'bg-emerald-50/90 hover:bg-emerald-100 border-emerald-300 text-emerald-950'
-                          : 'bg-slate-50 hover:bg-amber-50 border-slate-200 text-slate-800'
+                          : req.dogGender !== 'female'
+                          ? 'bg-red-100 hover:bg-red-200 border-red-500 text-red-950 ring-2 ring-red-400/50 animate-pulse'
+                          : 'bg-amber-100 hover:bg-amber-200 border-amber-300 text-amber-950 ring-1 ring-amber-300'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-1">
@@ -1580,44 +1592,62 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         </span>
                         <span className="text-[9px] text-slate-400 font-mono">↺</span>
                       </div>
-                      <span className="font-black text-xs text-slate-900">
-                        {req.isNeutered ? 'כן ✂️' : 'לא'}
+                      <span className={`font-black text-xs ${
+                        req.isNeutered 
+                          ? 'text-emerald-800' 
+                          : req.dogGender !== 'female' 
+                          ? 'text-red-900 font-extrabold' 
+                          : 'text-amber-900 font-extrabold'
+                      }`}>
+                        {req.isNeutered ? 'כן ✂️' : (req.dogGender !== 'female' ? '❌ לא מסורס (₪230)' : '⚠️ לא מעוקרת')}
                       </span>
                     </button>
 
                     {/* Vaccinated */}
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
+                    <div className={`p-2.5 rounded-xl border text-right transition-all shadow-2xs ${
+                      req.isVaccinated
+                        ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                        : 'bg-red-100 border-red-500 text-red-950 ring-2 ring-red-500/50 animate-pulse'
+                    }`}>
+                      <span className="text-[10px] text-slate-500 block font-bold mb-0.5">
                         חיסונים בתוקף:
                       </span>
-                      <span className={`font-bold ${req.isVaccinated ? 'text-emerald-700' : 'text-red-600'}`}>
-                        {req.isVaccinated ? 'כן 💉' : 'חסר ⚠️'}
+                      <span className={`font-black text-xs ${req.isVaccinated ? 'text-emerald-800' : 'text-red-900 font-extrabold'}`}>
+                        {req.isVaccinated ? 'כן 💉' : '🚨 חסר חיסון! ⚠️'}
                       </span>
                     </div>
 
                     {/* House Trained */}
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
+                    <div className={`p-2.5 rounded-xl border text-right transition-all shadow-2xs ${
+                      req.isHouseTrained !== false
+                        ? 'bg-slate-50 border-slate-200 text-slate-900'
+                        : 'bg-amber-100 border-amber-400 text-amber-950 ring-1 ring-amber-300'
+                    }`}>
+                      <span className="text-[10px] text-slate-500 block font-bold mb-0.5">
                         מחונך לצרכים:
                       </span>
-                      <span className={`font-bold ${req.isHouseTrained !== false ? 'text-emerald-700' : 'text-amber-700'}`}>
-                        {req.isHouseTrained !== false ? 'כן 🚽' : 'לא ⚠️'}
+                      <span className={`font-black text-xs ${req.isHouseTrained !== false ? 'text-emerald-800' : 'text-amber-900 font-extrabold'}`}>
+                        {req.isHouseTrained !== false ? 'כן 🚽' : '⚠️ לא מחונך 🚽'}
                       </span>
                     </div>
 
                     {/* Treated for Parasites */}
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
+                    <div className={`p-2.5 rounded-xl border text-right transition-all shadow-2xs ${
+                      req.isTreatedParasites !== false
+                        ? 'bg-slate-50 border-slate-200 text-slate-900'
+                        : 'bg-orange-100 border-orange-400 text-orange-950 ring-1 ring-orange-300'
+                    }`}>
+                      <span className="text-[10px] text-slate-500 block font-bold mb-0.5">
                         נגד קרציות/פשפשים:
                       </span>
-                      <span className={`font-bold ${req.isTreatedParasites !== false ? 'text-emerald-700' : 'text-amber-700'}`}>
-                        {req.isTreatedParasites !== false ? 'מטופל 🛡️' : 'לא ⚠️'}
+                      <span className={`font-black text-xs ${req.isTreatedParasites !== false ? 'text-emerald-800' : 'text-orange-900 font-extrabold'}`}>
+                        {req.isTreatedParasites !== false ? 'מטופל 🛡️' : '⚠️ ללא טיפול 🐜'}
                       </span>
                     </div>
 
                     {/* Dog Size */}
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                      <span className="text-[10px] text-slate-400 block font-semibold mb-0.5">
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-500 block font-bold mb-0.5">
                         גודל כלב:
                       </span>
                       <span className="font-bold text-slate-800">
@@ -1629,18 +1659,39 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   </div>
 
                   {/* Special Needs, Client Notes & Shmulik Internal Notes */}
-                  {(req.specialNeeds || req.notes || req.internalNotes || (req.depositRequested && req.depositRequested > 0)) && (
+                  {(req.specialNeeds || req.notes || req.specialDiet || req.medications || req.internalNotes || (req.depositRequested && req.depositRequested > 0)) && (
                     <div className="space-y-2">
-                      {(req.specialNeeds || req.notes) && (
-                        <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-2.5 text-xs text-amber-950 space-y-1">
-                          {req.specialNeeds && (
-                            <div>
-                              <strong className="font-bold">🩺 צרכים מיוחדים/תרופות:</strong> {req.specialNeeds}
+                      {(req.specialNeeds || req.notes || req.specialDiet || req.medications) && (
+                        <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-300 rounded-2xl p-3 sm:p-3.5 text-xs text-amber-950 space-y-2 shadow-xs">
+                          <div className="font-black text-xs text-amber-900 border-b border-amber-200 pb-1 flex items-center gap-1.5">
+                            <span>📝 דגשי לקוח, תרופות והערות מיוחדות:</span>
+                          </div>
+
+                          {req.medications && (
+                            <div className="bg-white/95 p-2 rounded-xl border border-indigo-200 text-indigo-950 flex items-start gap-1.5">
+                              <span className="font-black shrink-0">💊 תרופות:</span>
+                              <span className="font-bold">{req.medications}</span>
                             </div>
                           )}
+
+                          {req.specialDiet && (
+                            <div className="bg-white/95 p-2 rounded-xl border border-teal-200 text-teal-950 flex items-start gap-1.5">
+                              <span className="font-black shrink-0">🍲 מזון מיוחד:</span>
+                              <span className="font-bold">{req.specialDiet}</span>
+                            </div>
+                          )}
+
+                          {req.specialNeeds && (
+                            <div className="bg-white/95 p-2 rounded-xl border border-amber-300 text-amber-950 flex items-start gap-1.5">
+                              <span className="font-black shrink-0">🩺 צרכים מיוחדים:</span>
+                              <span className="font-bold">{req.specialNeeds}</span>
+                            </div>
+                          )}
+
                           {req.notes && (
-                            <div>
-                              <strong className="font-bold">📝 הערות הלקוח:</strong> {req.notes}
+                            <div className="bg-white/95 p-2 rounded-xl border border-slate-200 text-slate-900 flex items-start gap-1.5">
+                              <span className="font-black shrink-0">📝 הערות הלקוח:</span>
+                              <span className="font-medium leading-relaxed">{req.notes}</span>
                             </div>
                           )}
                         </div>
@@ -2069,6 +2120,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   <span>{editError}</span>
                 </div>
               )}
+
+              {/* High-Visibility Alerts in Edit Modal */}
+              <IntakeAlertBanner data={editingRequest} className="mb-2" />
 
               {/* 1. Service Type */}
               <div className="space-y-1.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
