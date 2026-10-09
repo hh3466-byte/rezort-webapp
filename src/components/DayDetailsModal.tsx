@@ -97,7 +97,8 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   const stayingList = sortWithHighlighted(breakdown.staying);
   const departuresList = sortWithHighlighted(breakdown.departures);
 
-  // If a specific dog was clicked, prioritize its section first
+  // If a specific dog was clicked or searched, prioritize its section first!
+  const isArrivalTarget = arrivalsList.some(b => b.id === highlightedBookingId);
   const isStayingTarget = stayingList.some(b => b.id === highlightedBookingId);
   const isDepartureTarget = departuresList.some(b => b.id === highlightedBookingId);
 
@@ -278,6 +279,19 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
         {/* Scrollable Body Content */}
         <div className="p-4 sm:p-5 pt-3 overflow-y-auto overflow-x-hidden flex-1 space-y-4">
 
+        {/* Highlighted Search Target Banner */}
+        {highlightedBookingId && (
+          <div className="p-2.5 bg-emerald-100 border border-emerald-300 rounded-xl flex items-center justify-between gap-2 text-xs text-emerald-950 font-bold shadow-2xs animate-in fade-in">
+            <div className="flex items-center gap-1.5">
+              <span>🎯</span>
+              <span>תוצאת חיפוש: הכלב שנבחר מוצג בראש הרשימה ומודגש בירוק</span>
+            </div>
+            <span className="text-[10px] bg-emerald-700 text-white px-2 py-0.5 rounded-full font-black">
+              בראש הרשימה ⭐
+            </span>
+          </div>
+        )}
+
         {/* Shabbat / Holiday Greeting Button Banner */}
         {breakdown.staying.length > 0 && (
           <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
@@ -311,10 +325,14 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
           </div>
         )}
 
-        {/* Sections in dynamic priority order: Departures (משתחררים) first, Arrivals (נכנסים) second, Staying (שוהים) third */}
+        {/* Sections in dynamic priority order: Whichever section contains the searched dog appears FIRST! */}
         <div className="space-y-5">
-          {isStayingTarget
+          {isArrivalTarget
+            ? [renderArrivalsSection(), renderDeparturesSection(), renderStayingSection()]
+            : isStayingTarget
             ? [renderStayingSection(), renderDeparturesSection(), renderArrivalsSection()]
+            : isDepartureTarget
+            ? [renderDeparturesSection(), renderArrivalsSection(), renderStayingSection()]
             : [renderDeparturesSection(), renderArrivalsSection(), renderStayingSection()]}
         </div>
 
@@ -449,8 +467,17 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
     openWhatsAppMessage(booking.ownerPhone, msg);
   };
 
+  const cardRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (isHighlighted && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [isHighlighted]);
+
   return (
     <div
+      ref={cardRef}
       onClick={onSelect}
       className={`p-3.5 sm:p-4 rounded-2xl border-2 transition-all hover:shadow-xs cursor-pointer ${
         isHighlighted
