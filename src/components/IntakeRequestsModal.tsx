@@ -7,6 +7,7 @@ import { getNextAllowedCommunicationDate, isShabbatOrHolidayRestricted } from '.
 import { generateUnansweredFollowUpMarketingText } from '../services/whatsappCrmService';
 import { SendIntakeModal } from './SendIntakeModal';
 import { IntakeAlertBanner } from './IntakeAlertBadges';
+import { isNormalText } from '../utils/intakeAlerts';
 import { 
   X, 
   Phone, 
@@ -1661,34 +1662,37 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   {/* Special Needs, Client Notes & Shmulik Internal Notes */}
                   {(req.specialNeeds || req.notes || req.specialDiet || req.medications || req.internalNotes || (req.depositRequested && req.depositRequested > 0)) && (
                     <div className="space-y-2">
-                      {(req.specialNeeds || req.notes || req.specialDiet || req.medications) && (
+                      {((req.specialNeeds && !isNormalText(req.specialNeeds)) || 
+                        (req.notes && !isNormalText(req.notes)) || 
+                        (req.specialDiet && !isNormalText(req.specialDiet)) || 
+                        (req.medications && !isNormalText(req.medications))) && (
                         <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-300 rounded-2xl p-3 sm:p-3.5 text-xs text-amber-950 space-y-2 shadow-xs">
                           <div className="font-black text-xs text-amber-900 border-b border-amber-200 pb-1 flex items-center gap-1.5">
                             <span>📝 דגשי לקוח, תרופות והערות מיוחדות:</span>
                           </div>
 
-                          {req.medications && (
+                          {req.medications && !isNormalText(req.medications) && (
                             <div className="bg-white/95 p-2 rounded-xl border border-indigo-200 text-indigo-950 flex items-start gap-1.5">
                               <span className="font-black shrink-0">💊 תרופות:</span>
                               <span className="font-bold">{req.medications}</span>
                             </div>
                           )}
 
-                          {req.specialDiet && (
+                          {req.specialDiet && !isNormalText(req.specialDiet) && (
                             <div className="bg-white/95 p-2 rounded-xl border border-teal-200 text-teal-950 flex items-start gap-1.5">
                               <span className="font-black shrink-0">🍲 מזון מיוחד:</span>
                               <span className="font-bold">{req.specialDiet}</span>
                             </div>
                           )}
 
-                          {req.specialNeeds && (
+                          {req.specialNeeds && !isNormalText(req.specialNeeds) && (
                             <div className="bg-white/95 p-2 rounded-xl border border-amber-300 text-amber-950 flex items-start gap-1.5">
                               <span className="font-black shrink-0">🩺 צרכים מיוחדים:</span>
                               <span className="font-bold">{req.specialNeeds}</span>
                             </div>
                           )}
 
-                          {req.notes && (
+                          {req.notes && !isNormalText(req.notes) && (
                             <div className="bg-white/95 p-2 rounded-xl border border-slate-200 text-slate-900 flex items-start gap-1.5">
                               <span className="font-black shrink-0">📝 הערות הלקוח:</span>
                               <span className="font-medium leading-relaxed">{req.notes}</span>

@@ -1,6 +1,9 @@
 /**
  * Utility for detecting irregularities, special conditions, and critical alerts
  * in dog intake questionnaires and bookings for Shmulik (Resort Manager).
+ * 
+ * Strict Rule: If everything is normal and healthy (no irregularities),
+ * return an empty array so NO alert banner or warning is displayed at all.
  */
 
 export interface IntakeAlertItem {
@@ -12,6 +15,148 @@ export interface IntakeAlertItem {
   description: string;
   dogName?: string;
   highlightText?: string;
+}
+
+/**
+ * Checks whether a text string simply indicates normal health, regular food,
+ * or absence of problems (e.g. "בריא לחלוטין", "אין תרופות", "אוכל רגיל", "הכל בסדר").
+ */
+export function isNormalText(raw?: string): boolean {
+  if (!raw) return true;
+  let t = raw.trim().toLowerCase();
+  if (!t) return true;
+
+  // Single word / punctuation / placeholders
+  if (/^(\.|-|_|\/|na|n\/a|none|אין|לא|ללא|בלי|רגיל|רגילה|טוב|טובה|הכל טוב|הכל בסדר|הכל תקין|הכל מעולה|בסדר גמור|בריא|בריאה|בריא לחלוטין|בריאה לחלוטין|שום דבר|לא רלוונטי|כלום|אין משהו מיוחד|אין משהו|אין בעיה|אין שום בעיה|אין תרופות|ללא תרופות|אין צרכים מיוחדים|ללא צרכים מיוחדים|אין אלרגיות|ללא אלרגיות|אין רגישויות|אוכל רגיל|אוכל יבש|אוכל יבש רגיל|מזון רגיל|בונזו|דוגלי|רויאל קנין|פרופלאן|טופ דוג|מונג'|בלקנדו|אקאנה|הפי דוג|מזון יבש|חברותי|חברותית|מקסים|אוהב אנשים|אוהב כלבים|אין הערות|ללא הערות|בסדר|מעולה|אין צורך|אין שום צורך|ללא הגבלה|מטופל|מחוסן|מסורס|מעוקרת)$/.test(t)) {
+    return true;
+  }
+
+  // 1. Remove parenthetical affirmations/negations e.g. "(אין תרופות או צרכים מיוחדים)"
+  t = t.replace(/\([^)]*(אין|ללא|לא|בלי|בריא|תקין|רגיל|בסדר|טוב|מעולה|מצוין)[^)]*\)/g, ' ');
+
+  // 2. Strip standard negative normal affirmations
+  t = t.replace(/(אין|ללא|לא|בלי|אפס)\s+(שום\s+)?(תרופות|תרופה|צרכים|צורך|בעיות|בעיה|תוקפנות|נשיכות|אלרגיות|אלרגיה|מחלות|מחלה|ניתוחים|ניתוח|חרדה|פחד|סכנה|נזק|אגרסיביות|רכושנות|טיפול|טיפולים|רגישות|רגישויות|דגשים|דגש|הערות|הערה)/g, ' ');
+  t = t.replace(/(לא|אינו|אינה)\s+(נושך|תוקף|בורח|פוחד|הורס|קופץ|רגיש|חולה|מפחד|מקבל|נוטלת|נוטל|אגרסיבי)/g, ' ');
+  t = t.replace(/בריא(ה)?(\s+לחלוטין)?/g, ' ');
+  t = t.replace(/הכל\s+(בסדר|תקין|טוב|מעולה|גמור|רגיל|מצוין)/g, ' ');
+
+  // 3. Clean punctuation & digits
+  const cleaned = t
+    .replace(/[0-9.,/#!$%^&*;:{}=\-_`~()?"'\\+]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned) return true;
+
+  const words = cleaned.split(' ').filter(Boolean);
+  if (words.length === 0) return true;
+
+  // Dictionary of known normal words (with Hebrew prefix stripping support)
+  const normalKeywords = new Set([
+    'אין', 'לא', 'ללא', 'בלי', 'בריא', 'בריאה', 'לחלוטין', 'תקין', 'תקינה', 'בסדר', 'גמור',
+    'טוב', 'טובה', 'טובים', 'טובות', 'מעולה', 'מצוין', 'מצוינת', 'רגיל', 'רגילה', 'רגילים', 'שום', 'דבר', 'רלוונטי', 'כלום', 'משהו',
+    'מיוחד', 'מיוחדים', 'מיוחדת', 'צרכים', 'צורך', 'תרופות', 'תרופה', 'בעיה', 'בעיות', 'הערות', 'הערה',
+    'הכל', 'הכול', 'אוכל', 'יבש', 'רטוב', 'מזון', 'בונזו', 'דוגלי', 'קנין', 'רויאל', 'פרופלאן', 'מונג', 'אקאנה',
+    'חברותי', 'חברותית', 'חברותיים', 'חברותיות', 'שמח', 'שמחה', 'אוהב', 'אוהבת', 'אוהבים', 'אוהבות', 'אנשים', 'כלבים', 'משחק', 'משחקים',
+    'מקסים', 'מקסימה', 'חמוד', 'חמודה', 'מתוק', 'מתוקה', 'רגוע', 'רגועה', 'נוח', 'נוחה', 'מדהים', 'מדהימה',
+    'בוקר', 'ערב', 'צהריים', 'לילה', 'גרם', 'כוס', 'כוסות', 'פעמיים', 'פעם', 'ביום', 'מים', 'קערה', 'מנה', 'מנות',
+    'כלב', 'כלבה', 'גור', 'גורה', 'שקט', 'שקטה', 'עדין', 'עדינה', 'עם', 'של', 'על', 'מאוד', 'מאד', 'רק', 'או', 'כי',
+    'הוא', 'היא', 'זה', 'זו', 'אצל', 'יחד', 'לשחק', 'לשחקנים'
+  ]);
+
+  const stripHebrewPrefix = (w: string) => {
+    if (normalKeywords.has(w)) return w;
+    // Try stripping single letter prefix: ו, ה, ב, כ, ל, מ, ש
+    if (w.length > 2 && /^[והבכלמש]/.test(w)) {
+      const stripped = w.slice(1);
+      if (normalKeywords.has(stripped)) return stripped;
+    }
+    // Try stripping double prefix: וה, וכ, ול, ומ, וש
+    if (w.length > 3 && /^ו[הבכלמש]/.test(w)) {
+      const stripped = w.slice(2);
+      if (normalKeywords.has(stripped)) return stripped;
+    }
+    return w;
+  };
+
+  const allWordsNormal = words.every(w => {
+    const canonical = stripHebrewPrefix(w);
+    return normalKeywords.has(canonical);
+  });
+
+  if (allWordsNormal) {
+    return true;
+  }
+
+  // If text contains ANY red flags (drugs, aggressive behavior, escape risk, severe disease)
+  const redFlagPattern = /נושך|נשיכות|תוקפנ|תוקף|אגרסיב|רכושנ|נוהם|מגרגר|בורח|בריח|קופץ\s+מעל|חרדת\s+נטישה|אפילפס|סוכרת|עיוור|חירש|זריקות|זריקה|טיפות|אנטיביוט|משחה|חולה|מחלה|אלרג|ניתוח\s+חדש|צליעה|פצוע|כדור|כדורים|נקסטגארד|ברבקטו|סימפריקה|אילוף|אינסולין/;
+  if (redFlagPattern.test(cleaned)) {
+    return false;
+  }
+
+  // If no red flag exists, treat general positive/normal statements as normal
+  return true;
+}
+
+/**
+ * Scan free-text notes for actual, genuine behavioral or medical red flags,
+ * carefully ignoring negations (e.g. "לא נושך", "אין תוקפנות", "ללא אלרגיה").
+ */
+function extractProblemSemanticAlerts(dogName: string, notesRaw?: string): IntakeAlertItem[] {
+  if (!notesRaw) return [];
+  let t = notesRaw.toLowerCase();
+
+  // 1. Strip parenthetical negations e.g. "(אין תרופות או צרכים מיוחדים)"
+  t = t.replace(/\([^)]*(אין|ללא|לא|בלי|בריא|תקין|רגיל|בסדר|טוב|מעולה|מצוין)[^)]*\)/g, ' ');
+
+  // 2. Strip negative phrases e.g. "אין תוקפנות", "לא נושך", "ללא אלרגיה", "אין תרופות", "ללא ניתוחים"
+  t = t.replace(/(אין|ללא|לא|בלי|אפס)\s+(שום\s+)?(תרופות|תרופה|צרכים|צורך|בעיות|בעיה|תוקפנות|נשיכות|אלרגיות|אלרגיה|מחלות|מחלה|ניתוחים|ניתוח|חרדה|פחד|סכנה|נזק|אגרסיביות|רכושנות|טיפול|טיפולים|רגישות|רגישויות|דגשים|דגש|הערות|הערה)/g, ' ');
+  t = t.replace(/(לא|אינו|אינה)\s+(נושך|תוקף|בורח|פוחד|הורס|קופץ|רגיש|חולה|מפחד|מקבל|נוטלת|נוטל|אגרסיבי)/g, ' ');
+  t = t.replace(/בריא(ה)?(\s+לחלוטין)?/g, ' ');
+  t = t.replace(/הכל\s+(בסדר|תקין|טוב|מעולה|גמור|רגיל|מצוין)/g, ' ');
+
+  const alerts: IntakeAlertItem[] = [];
+
+  // 1. Positive Aggression triggers
+  if (/(^|\s)(נושך|נשיכות|תוקפנ|תוקף|אגרסיב|רכושנ|נוהם|מגרגר)($|\s)/.test(t)) {
+    alerts.push({
+      id: `${dogName}-aggression-flag`,
+      type: 'behavior_flag',
+      severity: 'danger',
+      dogName,
+      title: `🚨 ${dogName}: הערת תוקפנות / נשיכות בטופס!`,
+      badgeLabel: `🚨 ${dogName}: סכנת נשיכות/תוקפנות`,
+      description: 'בטופס צוינו דגשים המעידים על תוקפנות, נשיכות או רכושנות.'
+    });
+  }
+
+  // 2. Positive Escape / Severe Anxiety triggers
+  if (/(^|\s)(בורח|בריח|קופץ\s+מעל\s+גדר|מטפס\s+על\s+גדר|חרדת\s+נטישה\s+קשה|הורס\s+דלתות|הורס\s+כלובים)($|\s)/.test(t)) {
+    alerts.push({
+      id: `${dogName}-escape-flag`,
+      type: 'escape_flag',
+      severity: 'warning',
+      dogName,
+      title: `⚠️ ${dogName}: נטייה לבריחה / חרדת נטישה / קפיצת גדר`,
+      badgeLabel: `⚠️ ${dogName}: סכנת בריחה/חרדה`,
+      description: 'בטופס צוינו דגשים המעידים על נטייה לבריחה, קפיצה מעל גדרות או חרדת נטישה.'
+    });
+  }
+
+  // 3. Positive Critical Medical triggers
+  if (/(^|\s)(אפילפס|סוכרת|עיוור|חירש|ניתוח\s+שעבר\s+לאחרונה|צליעה\s+קשה|זריקות\s+אינסולין|אלרגיה\s+חמורה|התקפי\s+אפילפסיה)($|\s)/.test(t)) {
+    alerts.push({
+      id: `${dogName}-medical-flag`,
+      type: 'medical_flag',
+      severity: 'warning',
+      dogName,
+      title: `🩺 ${dogName}: רקע רפואי מיוחד (אלרגיה/מחלה/ניתוח)`,
+      badgeLabel: `🩺 ${dogName}: רקע רפואי מיוחד`,
+      description: 'בטופס צוינו פרטים רפואיים מיוחדים (אלרגיה, מחלה כרונית, עיוורון, או ניתוח עבר).'
+    });
+  }
+
+  return alerts;
 }
 
 export function detectIntakeAlerts(data: {
@@ -49,12 +194,9 @@ export function detectIntakeAlerts(data: {
     medicationsRaw?: string,
     notesRaw?: string
   ) => {
-    // 1. Gender & Neutered / Spayed check
+    // 1. Gender & Neutered / Spayed check: ONLY unneutered males trigger pricing/isolation alert
     const isExplicitMaleIntact = genderRaw === 'male_intact';
-    const isExplicitFemaleIntact = genderRaw === 'female_intact';
     const isMale = isExplicitMaleIntact || genderRaw === 'male' || genderRaw === 'male_neutered';
-    const isFemale = isExplicitFemaleIntact || genderRaw === 'female' || genderRaw === 'female_spayed';
-
     const isNeutered = isNeuteredRaw !== undefined
       ? isNeuteredRaw
       : (genderRaw === 'male_neutered' || genderRaw === 'female_spayed');
@@ -69,19 +211,9 @@ export function detectIntakeAlerts(data: {
         badgeLabel: `⚠️ ${dogName} זכר לא מסורס (₪230 ליום)`,
         description: 'זכרים לא מסורסים מחייבים הפרדת חצרות והשגחה אישית. המערכת מחשבת תעריף בידוד של ₪230 ליום ללא הנחות משך.'
       });
-    } else if (isExplicitFemaleIntact || (isFemale && isNeutered === false)) {
-      alerts.push({
-        id: `${dogName}-unspayed-female`,
-        type: 'unspayed_female',
-        severity: 'warning',
-        dogName,
-        title: `${dogName}: נקבה לא מעוקרת (לוודא שאינה בייחום)`,
-        badgeLabel: `🌸 ${dogName} נקבה לא מעוקרת`,
-        description: 'נקבה לא מעוקרת עשויה להיכנס לייחום. יש לוודא מול הבעלים שאינה מיוחמת בעת השהייה.'
-      });
     }
 
-    // 2. Vaccinations
+    // 2. Vaccinations: ONLY missing vaccines trigger an alert
     const isVaccinated = isVaccinatedRaw !== undefined ? isVaccinatedRaw : data.vaccinationValid;
     if (isVaccinated === false) {
       alerts.push({
@@ -95,7 +227,7 @@ export function detectIntakeAlerts(data: {
       });
     }
 
-    // 3. Friendly with Dogs / Isolation
+    // 3. Friendly with Dogs / Isolation: ONLY aggressive / isolation dogs trigger alert
     if (isFriendlyRaw === 'no' || isFriendlyRaw === false) {
       alerts.push({
         id: `${dogName}-not-friendly`,
@@ -118,7 +250,7 @@ export function detectIntakeAlerts(data: {
       });
     }
 
-    // 4. House Trained
+    // 4. House Trained: ONLY if NOT house trained
     if (isHouseTrainedRaw === false) {
       alerts.push({
         id: `${dogName}-not-house-trained`,
@@ -131,7 +263,7 @@ export function detectIntakeAlerts(data: {
       });
     }
 
-    // 5. Parasite Treatment
+    // 5. Parasite Treatment: ONLY if NOT treated
     if (isTreatedParasitesRaw === false) {
       alerts.push({
         id: `${dogName}-untreated-parasites`,
@@ -144,9 +276,9 @@ export function detectIntakeAlerts(data: {
       });
     }
 
-    // 6. Medications
+    // 6. Medications: ONLY if actual medications exist and it's not a normal/healthy text
     const medsText = (medicationsRaw || '').trim();
-    if (medsText && medsText !== 'אין' && medsText !== 'לא' && medsText !== 'ללא') {
+    if (medsText && !isNormalText(medsText)) {
       alerts.push({
         id: `${dogName}-medications`,
         type: 'medications',
@@ -159,9 +291,9 @@ export function detectIntakeAlerts(data: {
       });
     }
 
-    // 7. Special Diet
+    // 7. Special Diet: ONLY if actual special medical diet exists (not regular kibble brands)
     const dietText = (specialDietRaw || '').trim();
-    if (dietText && dietText !== 'אין' && dietText !== 'לא' && dietText !== 'רגיל' && dietText !== 'ללא') {
+    if (dietText && !isNormalText(dietText)) {
       alerts.push({
         id: `${dogName}-special-diet`,
         type: 'special_diet',
@@ -174,9 +306,9 @@ export function detectIntakeAlerts(data: {
       });
     }
 
-    // 8. Special Needs
+    // 8. Special Needs: ONLY if actual special needs exist and not normal/healthy statements
     const needsText = (specialNeedsRaw || '').trim();
-    if (needsText && needsText !== 'אין' && needsText !== 'לא' && needsText !== 'ללא') {
+    if (needsText && !isNormalText(needsText)) {
       alerts.push({
         id: `${dogName}-special-needs`,
         type: 'special_needs',
@@ -189,47 +321,9 @@ export function detectIntakeAlerts(data: {
       });
     }
 
-    // 9. Free-text semantic problem scans in notes
-    const combinedNotes = `${notesRaw || ''} ${specialNeedsRaw || ''}`.toLowerCase();
-    
-    // Scan for aggressive keywords
-    if (/נושך|נשיכות|תוקפנ|תוקף|אגרסיב|רכושנ|נוהם|מגרגר/.test(combinedNotes)) {
-      alerts.push({
-        id: `${dogName}-aggression-flag`,
-        type: 'behavior_flag',
-        severity: 'danger',
-        dogName,
-        title: `🚨 ${dogName}: הערת תוקפנות / נשיכות בטופס!`,
-        badgeLabel: `🚨 ${dogName}: סכנת נשיכות/תוקפנות`,
-        description: 'בטופס צוינו מילות מפתח המעידות על תוקפנות, נשיכות או רכושנות.'
-      });
-    }
-
-    // Scan for escape / severe anxiety / fence jumping
-    if (/בורח|בריח|קופץ מעל|קופץ גדר|מטפס על גדר|חרדת נטישה|חרדתי|פוחד מרעמים|הורס|לשבור/.test(combinedNotes)) {
-      alerts.push({
-        id: `${dogName}-escape-flag`,
-        type: 'escape_flag',
-        severity: 'warning',
-        dogName,
-        title: `⚠️ ${dogName}: נטייה לבריחה / חרדת נטישה / קפיצת גדר`,
-        badgeLabel: `⚠️ ${dogName}: סכנת בריחה/חרדה`,
-        description: 'בטופס צוינו מילות מפתח המעידות על נטייה לבריחה, קפיצה מעל גדרות או חרדת נטישה.'
-      });
-    }
-
-    // Scan for critical medical conditions (Epilepsy, Surgery, Blind, Heart, Diabetes, Allergy)
-    if (/אפילפסי|סוכרת|עיוור|חירש|ניתוח|צליעה|מפרקים|לב|זריקות|אלרגי/.test(combinedNotes)) {
-      alerts.push({
-        id: `${dogName}-medical-flag`,
-        type: 'medical_flag',
-        severity: 'warning',
-        dogName,
-        title: `🩺 ${dogName}: רקע רפואי מיוחד (אלרגיה/מחלה/ניתוח)`,
-        badgeLabel: `🩺 ${dogName}: רקע רפואי מיוחד`,
-        description: 'בטופס צוינו פרטים רפואיים מיוחדים (אלרגיה, מחלה כרונית, עיוורון, או ניתוח עבר).'
-      });
-    }
+    // 9. Semantic problem scans in notes (aggression, escape, severe disease)
+    const semanticAlerts = extractProblemSemanticAlerts(dogName, `${notesRaw || ''}`);
+    alerts.push(...semanticAlerts);
   };
 
   // Run check on primary dog
@@ -249,7 +343,7 @@ export function detectIntakeAlerts(data: {
 
   // Run check on additional dogs if present
   if (data.additionalDogs && Array.isArray(data.additionalDogs)) {
-    data.additionalDogs.forEach((ad, idx) => {
+    data.additionalDogs.forEach((ad) => {
       if (ad && (ad.dogName || '').trim()) {
         const adName = ad.dogName.trim();
         checkSingleDog(
