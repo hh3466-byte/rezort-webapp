@@ -132,31 +132,28 @@ function processLeadsInSheet() {
       continue;
     }
 
+    var fullName = "";
+    if (colMap.fullName !== -1) {
+      fullName = String(row[colMap.fullName] || "").trim();
+    }
+
     var firstName = "";
     var lastName = "";
-    var fullName = "";
-
     if (colMap.firstName !== -1) {
       firstName = String(row[colMap.firstName] || "").trim();
     }
     if (colMap.lastName !== -1) {
       lastName = String(row[colMap.lastName] || "").trim();
     }
-    if (colMap.fullName !== -1) {
-      fullName = String(row[colMap.fullName] || "").trim();
-    }
 
-    if (!firstName && fullName) {
-      var parts = fullName.split(/\s+/);
-      firstName = parts[0] || "";
-      lastName = parts.slice(1).join(" ") || "";
+    if (!fullName && (firstName || lastName)) {
+      fullName = (firstName + " " + lastName).trim();
     }
 
     // הכנת גוף הבקשה ל-API
     var payload = {
-      firstName: firstName,
-      lastName: lastName,
-      fullName: fullName || (firstName + " " + lastName).trim(),
+      fullName: fullName,
+      name: fullName,
       phone: rawPhone,
       source: "Google Sheets / Meta Lead Campaign",
       notes: "שורה " + (rowIdx + 1) + " בגיליון"
@@ -207,9 +204,9 @@ function processLeadsInSheet() {
  */
 function findColumnIndices(headers) {
   var map = {
+    fullName: -1,
     firstName: -1,
     lastName: -1,
-    fullName: -1,
     phone: -1,
     status: -1
   };
@@ -221,17 +218,17 @@ function findColumnIndices(headers) {
     if (h.indexOf("טלפון") !== -1 || h.indexOf("נייד") !== -1 || h.indexOf("phone") !== -1 || h.indexOf("mobile") !== -1 || h.indexOf("tel") !== -1) {
       if (map.phone === -1) map.phone = i;
     }
-    // שם פרטי
+    // שם מלא / שם (עדיפות עליונה)
+    else if (h.indexOf("שם מלא") !== -1 || h.indexOf("שם הלקוח") !== -1 || h.indexOf("שם הבעלים") !== -1 || h === "שם" || h.indexOf("full name") !== -1 || h.indexOf("full_name") !== -1 || h.indexOf("fullname") !== -1 || h === "name" || h.indexOf("lead_name") !== -1 || h.indexOf("owner_name") !== -1) {
+      if (map.fullName === -1) map.fullName = i;
+    }
+    // שם פרטי (גיבוי)
     else if (h.indexOf("שם פרטי") !== -1 || h.indexOf("first name") !== -1 || h.indexOf("first_name") !== -1 || h.indexOf("fname") !== -1) {
       map.firstName = i;
     }
-    // שם משפחה
+    // שם משפחה (גיבוי)
     else if (h.indexOf("שם משפחה") !== -1 || h.indexOf("last name") !== -1 || h.indexOf("last_name") !== -1 || h.indexOf("lname") !== -1) {
       map.lastName = i;
-    }
-    // שם מלא / שם
-    else if (h === "שם" || h === "שם מלא" || h === "name" || h === "full name" || h === "full_name") {
-      map.fullName = i;
     }
     // סטטוס
     else if (h.indexOf("סטטוס") !== -1 || h.indexOf("status") !== -1) {
@@ -240,17 +237,15 @@ function findColumnIndices(headers) {
   }
 
   // ברירות מחדל אם הכותרות לא זוהו במדויק:
-  // אם לא נמצא טלפון, נבדוק עמודות נפוצות (D, C, או B)
   if (map.phone === -1) {
     if (headers.length >= 4) map.phone = 3; // עמודה D
     else if (headers.length >= 3) map.phone = 2; // עמודה C
     else if (headers.length >= 1) map.phone = 0; // עמודה A
   }
 
-  if (map.firstName === -1 && map.fullName === -1) {
+  if (map.fullName === -1 && map.firstName === -1) {
     if (headers.length >= 2) {
-      map.firstName = 1; // עמודה B
-      map.lastName = 2;  // עמודה C
+      map.fullName = 1; // עמודה B
     } else {
       map.fullName = 0;
     }

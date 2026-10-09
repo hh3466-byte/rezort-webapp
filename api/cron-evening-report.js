@@ -161,18 +161,22 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
       const cleanPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
       if (cleanPhone) {
         const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-        const firstName = (ownerName || 'לקוח').trim().split(/\s+/)[0];
-        const demandMsg = `היי ${firstName}! 🐾 לקראת ההגעה/איסוף מחר בריזורט לכלב, נשמח להסדרת יתרת התשלום בסך ₪${remainingDebt.toLocaleString()}:\n👉 ${growPaymentLink}`;
-        linkLine = `\n   📲 *לתשלום בוואטסאפ:* https://wa.me/${intlPhone}?text=${encodeURIComponent(demandMsg)}`;
+        const bId = b.id || '';
+        const shortUrl = bId
+          ? `https://rezort-webapp.vercel.app/api/wa-reminder?b=${bId}&t=${isInc ? 'in' : 'out'}`
+          : `https://wa.me/${intlPhone}`;
+        linkLine = `\n   📲 *לינק לשליחת ההודעה ללקוח:* ${shortUrl}`;
       }
     } else if (totalPrice > 0 && depositAmount === 0) {
       paymentBadge = `🔴 *לא שולם (חוב: ₪${totalPrice.toLocaleString()})* ⚠️`;
       const cleanPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
       if (cleanPhone) {
         const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-        const firstName = (ownerName || 'לקוח').trim().split(/\s+/)[0];
-        const demandMsg = `היי ${firstName}! 🐾 לקראת ההגעה/איסוף מחר בריזורט לכלב, נשמח להסדרת יתרת התשלום בסך ₪${totalPrice.toLocaleString()}:\n👉 ${growPaymentLink}`;
-        linkLine = `\n   📲 *לתשלום בוואטסאפ:* https://wa.me/${intlPhone}?text=${encodeURIComponent(demandMsg)}`;
+        const bId = b.id || '';
+        const shortUrl = bId
+          ? `https://rezort-webapp.vercel.app/api/wa-reminder?b=${bId}&t=${isInc ? 'in' : 'out'}`
+          : `https://wa.me/${intlPhone}`;
+        linkLine = `\n   📲 *לינק לשליחת ההודעה ללקוח:* ${shortUrl}`;
       }
     }
 
@@ -196,7 +200,7 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
   // 1. Unhandled Intakes (Pending, In Progress, Payment Requested) - FIRST PRIORITY
   const unhandledIntakes = (intakes || []).filter(r => {
     const st = r.status;
-    if (st === 'approved' || st === 'rejected' || st === 'archived') return false;
+    if (st === 'approved' || st === 'rejected' || st === 'archived' || st === 'abandoned') return false;
     const rStart = r.startDate || r.start_date || '';
     const rEnd = r.endDate || r.end_date || '';
     // Auto-archive rule: if dates have already passed without a booking, ignore from report
@@ -219,9 +223,10 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
       const phone = formatPhoneFormatted(pi.ownerPhone || pi.owner_phone || '');
       const sDate = formatDateIL(pi.startDate || pi.start_date);
       const eDate = formatDateIL(pi.endDate || pi.end_date);
+      const notes = (pi.internalNotes || pi.internal_notes || '').trim();
       let statusBadge = '🔴 לבדיקה';
-      if (pi.status === 'in_progress') statusBadge = '🟡 בתהליך';
-      else if (pi.status === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
+      if (pi.status === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
+      else if (pi.status === 'in_progress' || notes.length > 0) statusBadge = '🟡 בתהליך';
       return `${idx + 1}. ${statusBadge}: *${dog}* (${owner} - 📞 ${phone}) | מיועד: ${sDate} עד ${eDate}`;
     }).join('\n');
     actionBlocks.push(`📋 *שאלוני קליטה לבדיקה / בתהליך שממתינים לטיפול וסגירה (${unhandledIntakes.length}):*\n${pList}\n👉 *שמוליק, אנא היכנס למסך שאלוני קליטה כדי לאשר, לקלוט ליומן או לסגור טיפול.*`);
@@ -316,12 +321,20 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
     actionBlocks.push(`🔴 *שריונים ללא מקדמה (₪0) שתופסים מקום ביומן (${zeroDepositUpcoming.length}):*\n${list}`);
   }
 
-  // 6. Pricing, Debts & Grow Clearing Discrepancies
+  // 6. Pricing, Debts & Grow Clearing Discrepancies (Active & Future stays only)
   const financialDiscrepancies = [];
-  activeBookings.forEach(b => {
+  const activeAndFutureForFin = activeBookings.filter(b => {
+    const end = b.end_date || b.endDate || '';
+    const status = b.stay_status || b.stayStatus;
+    return end >= todayStr && status !== 'checked_out';
+  });
+
+  activeAndFutureForFin.forEach(b => {
     const price = Number(b.total_price || b.totalPrice) || 0;
     const deposit = Number(b.deposit_amount || b.depositAmount) || 0;
-    const isFree = b.is_free_stay || b.isFreeStay || b.data?.isFreeStay || b.data?.is_free_stay;
+    const notes = (b.notes || '') + (b.data?.notes || '');
+    const isPairZeroCharge = (b.is_free_stay || b.isFreeStay || b.data?.isFreeStay || b.data?.is_free_stay) && (notes.includes('זוג') || notes.includes('שולם דרך') || notes.includes('כלב נוסף') || notes.includes('כלב שני'));
+    const isFree = b.is_free_stay || b.isFreeStay || b.data?.isFreeStay || b.data?.is_free_stay || isPairZeroCharge;
     const dailyRate = Number(b.daily_rate || b.dailyRate) || 0;
     const dog = (b.dog_name || b.dogName || '').trim();
     const owner = (b.owner_name || b.ownerName || '').trim();
@@ -330,12 +343,11 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
     const pMode = b.pricing_mode || b.pricingMode || '';
     const sDate = b.start_date || b.startDate;
     const eDate = b.end_date || b.endDate;
-    const notes = (b.notes || '') + (b.data?.notes || '');
     const paymentStatus = b.payment_status || b.paymentStatus || 'unpaid';
 
-    // Ignore settled/approved agreements
+    // Ignore settled/approved agreements or pair stays
     const isExplicitlyApproved = notes.includes('אושר') || notes.includes('הסדר סגור') || notes.includes('שולם במלואו במזומן');
-    if (isExplicitlyApproved || isFree) return;
+    if (isExplicitlyApproved || isFree || isPairZeroCharge) return;
 
     let days = 1;
     if (sDate && eDate) {
@@ -344,8 +356,8 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
       days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
     }
 
-    // 1. Negative balance / Deposit > Total Price
-    if (deposit > price && !isFree && price > 0) {
+    // 1. Negative balance / Deposit > Total Price on future/active stays
+    if (deposit > price && !isFree && price > 0 && (deposit - price) > 50) {
       financialDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${deposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}!`);
     }
 
@@ -497,7 +509,12 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'already_sent', date: todayStr });
     }
 
-    const { data: bookings } = await supabase.from('bookings').select('*');
+    const { data: bookingsRaw } = await supabase.from('bookings').select('*');
+    const bookings = (bookingsRaw || []).map(b => ({
+      ...b,
+      ...(b.data || {}),
+      kennelNumber: b.data?.kennelNumber || b.kennel_number || b.kennelNumber
+    }));
     const { data: intakesRows } = await supabase.from('intake_requests').select('*');
     const { data: payments } = await supabase.from('grow_incoming_payments').select('*');
 

@@ -2,7 +2,7 @@ export type ServiceType = 'boarding' | 'training' | 'day_training' | 'daycare' |
 
 export type PaymentStatus = 'unpaid' | 'deposit_paid' | 'fully_paid';
 
-export type StayStatus = 'booked' | 'checked_in' | 'checked_out' | 'cancelled';
+export type StayStatus = 'booked' | 'checked_in' | 'checked_out' | 'cancelled' | 'archived';
 
 export type PaymentMethod = 'bit' | 'paybox' | 'cash' | 'credit' | 'bank_transfer' | 'other';
 
@@ -138,6 +138,7 @@ export interface IntakeRequest {
   calculatedPrice?: number;
   depositRequested?: number;
   internalNotes?: string;
+  adminNotes?: string;
   termsAccepted?: boolean;
   termsAcceptedAt?: string;
   clientOrigin?: 'new' | 'returning' | 'referral';

@@ -22,7 +22,8 @@ import {
   clearAllBookingsFromDb,
   updateVoucherStatusInDb,
   findDaycarePassByCode,
-  deductDayFromPassInDb
+  deductDayFromPassInDb,
+  autoArchiveOldCheckedOutBookings
 } from './services/dbService';
 import { parseVoiceOrWhatsAppText } from './services/agentService';
 import { 
@@ -250,6 +251,8 @@ export default function App() {
           ).join('|');
           if (makeSig(prev) === makeSig(incomingBookings)) return prev;
         }
+        // Rule 22: Automatically archive checked_out stays older than 72 hours
+        autoArchiveOldCheckedOutBookings(incomingBookings);
         return incomingBookings;
       });
     });
@@ -293,7 +296,7 @@ export default function App() {
 
   // Today stats calculations
   const todayStr = getTodayStr();
-  const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
+  const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled' && b.stayStatus !== 'archived');
   const todayBookings = getBookingsForDate(activeBookings, todayStr);
   const todayStayingBookings = todayBookings.filter(b => b.stayStatus !== 'checked_out');
 
@@ -1990,6 +1993,18 @@ export default function App() {
                 }`}>
                   {inProgressIntakeCount}
                 </span>
+              </button>
+
+              {/* Send Intake to Caller Button */}
+              <button
+                type="button"
+                onClick={() => setIsSendIntakeModalOpen(true)}
+                id="btn-send-intake-top"
+                className="font-black px-3 py-1.5 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0 active:scale-95 bg-white hover:bg-emerald-50 border border-emerald-300 text-emerald-950"
+                title="שליחת קישור לשאלון קליטה ללקוח שפנה טלפונית"
+              >
+                <span className="text-base">📲</span>
+                <span>שלח שאלון ללקוח</span>
               </button>
 
               {/* Desktop-Only Scanner Button */}

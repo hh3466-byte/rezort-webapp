@@ -172,17 +172,11 @@ function formatTomorrowOverviewReport(
       const stayDescription = isTraining ? 'תהליך האילוף' : 'השהות בריזורט';
 
       let demandMsg = '';
-      if (isIncoming) {
-        demandMsg = `היי ${firstName}! 🐾\nמתרגשים ומחכים מחר לתחילת ${stayDescription} של ${dogName} בריזורט לכלב! 🐶❤️\n\nלקראת ההגעה מחר, נשמח להסדרת יתרת התשלום בסך ₪${remainingDebt.toLocaleString()}.\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 ${growPaymentLink}\n\nמחכים לכם בשמחה,\nשמוליק וצוות הריזורט לכלב 🐾✨`;
-      } else {
-        const finishVerb = isFemale ? 'מסיימת' : 'מסיים';
-        const enjoyVerb = isFemale ? 'נהנתה' : 'נהנה';
-        const missVerb = isFemale ? 'מתגעגעת' : 'מתגעגע';
-        demandMsg = `היי ${firstName}! 🐾\nרצינו לעדכן שמחר ${dogName} ${finishVerb} את ${stayDescription} בריזורט לכלב! 🐕🥰 ${enjoyVerb} מכל רגע ו${missVerb} אליכם מאוד.\n\nלקראת האיסוף והשחרור מחר, נשמח להסדרת יתרת התשלום בסך ₪${remainingDebt.toLocaleString()}.\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 ${growPaymentLink}\n\nתודה רבה ונתראה מחר,\nשמוליק וצוות הריזורט לכלב 🐾✨`;
-      }
-
-      const waLink = `https://wa.me/${intlPhone}?text=${encodeURIComponent(demandMsg)}`;
-      linkLine = `\n   📲 *דרישת תשלום בוואטסאפ (לעריכה ושליחה):*\n   ${waLink}`;
+      const bId = b.id || '';
+      const shortUrl = bId
+        ? `https://rezort-webapp.vercel.app/api/wa-reminder?b=${bId}&t=${isIncoming ? 'in' : 'out'}`
+        : `https://wa.me/${intlPhone}`;
+      linkLine = `\n   📲 *לינק לשליחת ההודעה ללקוח:* ${shortUrl}`;
     }
 
     const hl = cleanDogHighlights(b);

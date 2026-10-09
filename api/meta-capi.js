@@ -124,6 +124,7 @@ export async function sendMetaConversionEvent({
  */
 export async function sendMetaLeadEvent({
   phone,
+  fullName,
   firstName,
   lastName,
   email,
@@ -131,11 +132,19 @@ export async function sendMetaLeadEvent({
   eventId,
   eventSourceUrl
 }) {
+  let fn = firstName;
+  let ln = lastName;
+  if (!fn && fullName) {
+    const parts = String(fullName).trim().split(/\s+/);
+    fn = parts[0] || '';
+    ln = parts.slice(1).join(' ') || '';
+  }
+
   return sendMetaConversionEvent({
     eventName: 'Lead',
     phone,
-    firstName,
-    lastName,
+    firstName: fn,
+    lastName: ln,
     email,
     eventId: eventId || `lead_${Date.now()}_${String(phone).slice(-4)}`,
     eventSourceUrl: eventSourceUrl || 'https://rezort-webapp.vercel.app/?request=true',

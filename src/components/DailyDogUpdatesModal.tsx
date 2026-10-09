@@ -116,7 +116,9 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
         isIsolation,
         [],
         isTraining,
-        isFemale
+        isFemale,
+        b.startDate,
+        b.ownerPhone
       );
 
       // Check if already sent today in localStorage or Supabase settings
@@ -165,7 +167,9 @@ export const DailyDogUpdatesModal: React.FC<DailyDogUpdatesModalProps> = ({
         item.isIsolation,
         item.usedTemplateIds,
         item.isTraining,
-        isFemale
+        isFemale,
+        item.booking.startDate,
+        item.booking.ownerPhone
       );
 
       return {

@@ -177,6 +177,46 @@ async function fetchGreenApiChats(id, token, count = 80) {
   }
 }
 
+async function ensureOfficialProfilePicture(greenId, greenToken) {
+  if (!greenId || !greenToken) return;
+  try {
+    const logoPath = './public/resort-official-logo.jpg';
+    if (!fs.existsSync(logoPath)) return;
+
+    // Check current avatar
+    const getAvatarRes = await fetch(`https://api.green-api.com/waInstance${greenId}/getAvatar/${greenToken}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId: '972548765888@c.us' })
+    });
+    const avatarData = await getAvatarRes.json();
+    if (avatarData && avatarData.urlAvatar && avatarData.urlAvatar.includes('pps.whatsapp.net')) {
+      // Avatar is already present
+      return;
+    }
+
+    // Otherwise, ensure official logo
+    const boundary = '----WebKitFormBoundary' + Math.random().toString(16).slice(2);
+    const fileData = fs.readFileSync(logoPath);
+    let header = `--${boundary}\r\n`;
+    header += `Content-Disposition: form-data; name="file"; filename="resort-official-logo.jpg"\r\n`;
+    header += `Content-Type: image/jpeg\r\n\r\n`;
+    const footer = `\r\n--${boundary}--\r\n`;
+    const payload = Buffer.concat([Buffer.from(header, 'utf8'), fileData, Buffer.from(footer, 'utf8')]);
+
+    await fetch(`https://api.green-api.com/waInstance${greenId}/setProfilePicture/${greenToken}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': String(payload.length)
+      },
+      body: payload
+    });
+  } catch (err) {
+    console.warn('Could not auto-verify profile picture:', err.message);
+  }
+}
+
 async function run1830Audit() {
   const todayStr = getTodayIsraelStr();
   const isDryRun = process.argv.includes('--dry-run');
@@ -418,15 +458,23 @@ async function run1830Audit() {
     }
   });
 
-  // 12. Deep Check: Financial & Pricing Integrity (בקרת תמחור, יתרות שליליות ודיוק כספי)
-  activeBookings.forEach(b => {
+  // 12. Deep Check: Financial & Pricing Integrity (בקרת תמחור, יתרות שליליות ודיוק כספי - שהיות פעילות ועתידיות בלבד)
+  const activeAndFutureStays = activeBookings.filter(b => {
+    const end = b.end_date || b.endDate || '';
+    const status = b.stay_status || b.stayStatus;
+    return end >= todayStr && status !== 'checked_out';
+  });
+
+  activeAndFutureStays.forEach(b => {
     const d = b.data || {};
     const dog = (b.dog_name || b.dogName || d.dogName || '').trim();
     const owner = (b.owner_name || b.ownerName || d.ownerName || '').trim();
     const phone = b.owner_phone || b.ownerPhone || d.ownerPhone || '';
     const price = Number(b.total_price ?? b.totalPrice ?? d.totalPrice ?? 0);
     const deposit = Number(b.deposit_amount ?? b.depositAmount ?? d.depositAmount ?? 0);
-    const isFree = Boolean(b.is_free_stay || b.isFreeStay || d.isFreeStay || (b.notes && (b.notes.includes('חינם') || b.notes.includes('כלב נוסף') || b.notes.includes('כלב שני'))));
+    const notes = b.notes || d.notes || '';
+    const isPairZeroCharge = (b.is_free_stay || b.isFreeStay || d.isFreeStay) && (notes.includes('זוג') || notes.includes('שולם דרך') || notes.includes('כלב נוסף') || notes.includes('כלב שני'));
+    const isFree = Boolean(b.is_free_stay || b.isFreeStay || d.isFreeStay || isPairZeroCharge || (b.notes && (b.notes.includes('חינם') || b.notes.includes('כלב נוסף') || b.notes.includes('כלב שני'))));
     const dailyRate = Number(d.dailyRate ?? b.dailyRate ?? 0);
     const s = b.start_date || b.startDate;
     const e = b.end_date || b.endDate;
@@ -439,8 +487,8 @@ async function run1830Audit() {
     const pricingMode = d.pricingMode || (dailyRate > 0 && Math.abs(price - (days * dailyRate)) <= 1 ? 'daily' : 'period');
     const paymentStatus = b.payment_status || b.paymentStatus || d.paymentStatus || 'unpaid';
 
-    // 1. Negative balance / Deposit > Total Price
-    if (deposit > price && !isFree && price > 0) {
+    // 1. Negative balance / Deposit > Total Price on future/active stays
+    if (deposit > price && !isFree && price > 0 && (deposit - price) > 50) {
       redLights.paymentDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${deposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}! (דורש קיבוע סה"כ ל-₪${deposit.toLocaleString()} כמחיר תקופה/פיקס או בדיקת זיכוי)`);
     }
 
@@ -459,8 +507,8 @@ async function run1830Audit() {
       }
     }
 
-    // 5. Free stay inconsistency
-    if (isFree && (price > 0 || deposit > 0)) {
+    // 5. Free stay inconsistency (ignore legitimate Rule 8 pair stays)
+    if (isFree && !isPairZeroCharge && !notes.includes('זוג') && !notes.includes('שולם דרך') && (price > 0 || deposit > 0)) {
       redLights.paymentDiscrepancies.push(`🎁 אירוח חינם עם חיוב כספי: *${dog}* (${owner}) סומן כחינם אך מופיעים סכומים (סה"כ ₪${price.toLocaleString()}, שולם ₪${deposit.toLocaleString()})`);
     }
   });

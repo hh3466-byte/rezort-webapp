@@ -4,6 +4,7 @@ import { cleanPhoneNumber, getServiceTypeHebrew, getFirstName } from '../utils/w
 import { formatClientPaymentLinkMessage, formatClientRejectionMessage, sendGreenApiDirectMessage } from '../services/notificationService';
 import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
 import { getNextAllowedCommunicationDate, isShabbatOrHolidayRestricted } from '../utils/jewishCalendar';
+import { generateUnansweredFollowUpMarketingText } from '../services/whatsappCrmService';
 import { SendIntakeModal } from './SendIntakeModal';
 import { 
   X, 
@@ -44,7 +45,6 @@ import {
 import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import { calculateDaysCount, addDays, formatDateIL, getDayNameHebrew, getBookingsForDate } from '../utils/dateUtils';
 import { calculateBoardingRate } from '../utils/pricingUtils';
-import { generateUnansweredFollowUpMarketingText } from '../services/whatsappCrmService';
 import { 
   normalizeHebrew, 
   hasActiveBookingForIntake, 
@@ -54,6 +54,8 @@ import {
   isIntakeRequestNew, 
   isIntakeRequestInTreatment 
 } from '../utils/intakeUtils';
+import { findCustomerPastDebt, PastStayDebtItem } from '../utils/pastDebtUtils';
+import { waivePastDebtForBooking } from '../services/dbService';
 
 interface IntakeRequestsModalProps {
   requests: IntakeRequest[];
@@ -252,6 +254,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [isProcessingReject, setIsProcessingReject] = useState<boolean>(false);
   const [customPrices, setCustomPrices] = useState<Record<string, number | string>>({});
   const [showEditOccupancy, setShowEditOccupancy] = useState<boolean>(false);
+  const [waivedDebts, setWaivedDebts] = useState<Record<string, boolean>>({});
 
   const handleUpdatePrice = async (req: IntakeRequest, newPrice: number | string) => {
     const numPrice = typeof newPrice === 'string' ? (Number(newPrice.replace(/\D/g, '')) || 0) : newPrice;
@@ -267,6 +270,30 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
         console.error('Error saving edited price:', err);
       }
     }
+  };
+
+  const handleWaivePastDebt = async (req: IntakeRequest, pastStays: PastStayDebtItem[]) => {
+    for (const s of pastStays) {
+      if (s.bookingId) {
+        await waivePastDebtForBooking(s.bookingId);
+      }
+    }
+    setWaivedDebts(prev => ({ ...prev, [req.id]: true }));
+    if (onSaveRequest) {
+      const curNotes = req.adminNotes || '';
+      await onSaveRequest({
+        ...req,
+        adminNotes: curNotes ? `${curNotes}\n[חוב עבר נמחל ע״י שמוליק]` : '[חוב עבר נמחל ע״י שמוליק]'
+      });
+    }
+  };
+
+  const handleAddPastDebtToPrice = async (req: IntakeRequest, pastDebt: number, currentPrice: number | string) => {
+    const numCurrent = typeof currentPrice === 'string' ? (Number(currentPrice.replace(/\D/g, '')) || 0) : Number(currentPrice || 0);
+    const newPrice = numCurrent + pastDebt;
+    setCustomPrices(prev => ({ ...prev, [req.id]: newPrice }));
+    setWaivedDebts(prev => ({ ...prev, [req.id]: true }));
+    await handleUpdatePrice(req, newPrice);
   };
 
   const handleAddAdditionalDogToEdit = () => {
@@ -1434,6 +1461,60 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* Returning Customer Past Debt Banner (Rule 21: Displayed ONLY on new intake / returning inquiry for Shmulik's decision) */}
+                  {(() => {
+                    if (waivedDebts[req.id]) return null;
+                    const pastDebtInfo = findCustomerPastDebt(req.ownerPhone, req.ownerName, bookings);
+                    if (!pastDebtInfo.hasPastDebt) return null;
+
+                    return (
+                      <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-400/90 rounded-2xl p-3 sm:p-4 my-2 shadow-xs text-right animate-fadeIn" dir="rtl">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-amber-300/80">
+                          <div className="flex items-center gap-2 font-black text-amber-950 text-xs sm:text-sm">
+                            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
+                            <span>⚠️ <strong className="text-amber-900 font-extrabold">לקוח חוזר</strong> – קיימת יתרת חוב משהיית עבר: <span className="font-mono text-sm sm:text-base text-rose-700 font-black">₪{pastDebtInfo.totalDebt.toLocaleString()}</span></span>
+                          </div>
+                          <span className="text-[11px] bg-amber-200/90 text-amber-950 font-black px-2.5 py-0.5 rounded-lg border border-amber-300 shadow-2xs">
+                            🎯 להחלטת שמוליק
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-slate-700 py-2.5 space-y-1.5">
+                          {pastDebtInfo.pastStays.map((s, idx) => (
+                            <div key={idx} className="flex flex-wrap items-center justify-between gap-2 bg-white/90 p-2.5 rounded-xl border border-amber-200 shadow-2xs">
+                              <span className="font-bold text-slate-900">🐶 {s.dogName} ({s.datesText})</span>
+                              <span className="font-mono text-xs text-slate-600">
+                                נרשם: ₪{s.totalPrice.toLocaleString()} | שולם: ₪{s.depositAmount.toLocaleString()} | <strong className="text-rose-700 font-black">חוב שנותר: ₪{s.debtAmount.toLocaleString()}</strong>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1 flex-wrap justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleWaivePastDebt(req, pastDebtInfo.pastStays)}
+                            className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer hover:shadow-md"
+                            title="סמן את חוב העבר כמחול ואשר את השאלון כרגיל ללא חיוב נוסף"
+                          >
+                            <Check className="w-4 h-4 text-emerald-100 shrink-0" />
+                            <span>💚 מחל על החוב (קבל רגיל)</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleAddPastDebtToPrice(req, pastDebtInfo.totalDebt, currentReqPrice)}
+                            className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-black px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer hover:shadow-md"
+                            title="הוסף את חוב העבר לסכום לתשלום של השהייה החדשה ועדכן את הקישור"
+                          >
+                            <Plus className="w-4 h-4 text-blue-100 shrink-0" />
+                            <span>➕ הוסף חוב עבר (₪{pastDebtInfo.totalDebt.toLocaleString()}) לתשלום החדש</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Card Middle: Key Vetting Indicators */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 text-xs">

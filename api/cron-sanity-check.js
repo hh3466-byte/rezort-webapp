@@ -158,24 +158,21 @@ async function fetchGreenApiChats(id, token, count = 80) {
 }
 
 function matchGrowPaymentsForBooking(b, growPayments = []) {
-  const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
-  const bName = (b.owner_name || b.ownerName || '').trim().toLowerCase();
   const notes = (b.notes || '') + (b.data?.notes || '');
-  const emergencyPhone = cleanPhoneNumber(b.emergency_contact || b.emergencyContact || '');
   const matched = new Map();
 
+  // If this is a secondary dog in a pair with ₪0 price, don't double-count Grow payments
+  const isFree = Boolean(b.is_free_stay || b.isFreeStay || (b.notes && (b.notes.includes('חינם') || b.notes.includes('כלב נוסף') || b.notes.includes('כלב שני'))));
+  if (isFree && (notes.includes('זוג') || notes.includes('שולם דרך') || notes.includes('כלב נוסף') || notes.includes('כלב שני'))) {
+    return { totalGrowPaid: 0, transactions: [] };
+  }
+
   (growPayments || []).forEach(p => {
-    const pPhone = cleanPhoneNumber(p.customer_phone || p.customerPhone || '');
-    const pName = (p.customer_name || p.customerName || '').trim().toLowerCase();
     const ref = String(p.reference_id || p.referenceId || p.id || '');
     const amount = Number(p.amount) || 0;
-
-    const isPhoneMatch = (bPhone.length >= 7 && pPhone.length >= 7 && (bPhone.slice(-7) === pPhone.slice(-7))) ||
-                         (emergencyPhone.length >= 7 && pPhone.length >= 7 && (emergencyPhone.slice(-7) === pPhone.slice(-7)));
-    const isNameMatch = bName && pName && (bName.includes(pName) || pName.includes(bName));
     const isRefMatch = ref && notes.includes(ref);
 
-    if (isPhoneMatch || isNameMatch || isRefMatch) {
+    if (isRefMatch) {
       matched.set(ref || `grow-${Math.random()}`, { ref, amount });
     }
   });
@@ -195,7 +192,10 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
   const effectiveGrowLink = settings.growPaymentLink || settings.payboxPaymentLink;
   const isGrowLinkHealthy = Boolean(effectiveGrowLink && effectiveGrowLink.includes('http'));
 
-  const activeBookings = (bookings || []).filter(b => (b.stay_status || b.stayStatus) !== 'cancelled');
+  const activeBookings = (bookings || []).filter(b => {
+    const st = b.stay_status || b.stayStatus;
+    return st !== 'cancelled' && st !== 'archived';
+  });
 
   const recentBookings = activeBookings.filter(b => {
     const up = b.updated_at || b.updatedAt;
@@ -235,7 +235,8 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
       hasIssue = true;
     }
 
-    if (price > 0 && deposit === 0 && !isFree && end >= todayStr) {
+    const status = b.stay_status || b.stayStatus;
+    if (price > 0 && deposit === 0 && !isFree && end >= todayStr && status !== 'checked_out') {
       redLights.zeroDepositHolding.push(`🔴 *${dog}* (${owner} - ${phone}) | ${formatDateIL(start)} עד ${formatDateIL(end)} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`);
       hasIssue = true;
     }
@@ -246,84 +247,55 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     }
 
     if (!hasIssue) {
-      const depositText = deposit > 0 ? `שולמה מקדמה ₪${deposit.toLocaleString()}` : isFree ? 'אירוח חינם' : 'הוסדר תשלום';
-      greenEvents.push(`• שריון לכלב *${dog}* (${owner}) | תאריכים: ${formatDateIL(start)}-${formatDateIL(end)} | ${depositText} | נתונים ופרטי קשר תואמים.`);
+      greenEvents.push(b);
     }
   });
 
-  // Deep Check: Financial & Pricing Integrity
-  activeBookings.forEach(b => {
+  // Deep Check: Financial & Pricing Integrity on ACTIVE & FUTURE bookings only (end >= todayStr and not checked_out)
+  const futureAndActiveBookings = activeBookings.filter(b => {
+    const end = b.end_date || b.endDate || '';
+    const status = b.stay_status || b.stayStatus;
+    return end >= todayStr && status !== 'checked_out';
+  });
+
+  futureAndActiveBookings.forEach(b => {
     const d = b.data || {};
     const dog = (b.dog_name || b.dogName || d.dogName || '').trim();
     const owner = (b.owner_name || b.ownerName || d.ownerName || '').trim();
     const phone = b.owner_phone || b.ownerPhone || d.ownerPhone || '';
     const price = Number(b.total_price ?? b.totalPrice ?? d.totalPrice ?? 0);
     const deposit = Number(b.deposit_amount ?? b.depositAmount ?? d.depositAmount ?? 0);
-    const isFree = Boolean(b.is_free_stay || b.isFreeStay || d.isFreeStay || (b.notes && (b.notes.includes('חינם') || b.notes.includes('כלב נוסף') || b.notes.includes('כלב שני'))));
-    const dailyRate = Number(d.dailyRate ?? b.dailyRate ?? 0);
+    const notes = b.notes || d.notes || '';
+    const isPairZeroCharge = (b.is_free_stay || b.isFreeStay || d.isFreeStay) && (notes.includes('זוג') || notes.includes('שולם דרך') || notes.includes('כלב נוסף') || notes.includes('כלב שני'));
+    const isFree = Boolean(b.is_free_stay || b.isFreeStay || d.isFreeStay || isPairZeroCharge || (b.notes && (b.notes.includes('חינם') || b.notes.includes('כלב נוסף') || b.notes.includes('כלב שני'))));
     const pricingMode = d.pricingMode || b.pricingMode || (b.service_type === 'training' || b.serviceType === 'training' ? 'period' : 'daily');
     const paymentStatus = b.payment_status || b.paymentStatus || d.paymentStatus || 'unpaid';
-    const notes = b.notes || d.notes || '';
     const start = b.start_date || b.startDate;
     const end = b.end_date || b.endDate;
 
-    let days = 1;
-    if (start && end) {
-      const startMs = new Date(start).getTime();
-      const endMs = new Date(end).getTime();
-      days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
-    }
-
-    // 1. Negative balance / Deposit > Total Price
-    if (deposit > price && !isFree && price > 0) {
+    // 1. Negative balance / Deposit > Total Price on future/active stays
+    if (deposit > price && !isFree && price > 0 && (deposit - price) > 50) {
       redLights.paymentDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${deposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}! (דורש קיבוע סה"כ ל-₪${deposit.toLocaleString()} כמחיר תקופה/פיקס או בדיקת זיכוי)`);
     }
 
-    // 3. Multi-dog booking without period pricing
+    // 2. Multi-dog booking without period pricing
     const isMultiDog = dog.includes(' ו') || dog.includes(' + ') || dog.includes(' and ');
     if (isMultiDog && pricingMode !== 'period' && b.service_type !== 'training' && b.serviceType !== 'training' && !isFree) {
       redLights.paymentDiscrepancies.push(`🐶🐶 תמחור זוג כלבים: *${dog}* (${owner}) | נדרש לוודא שהתמחור מוגדר כ'מחיר פיקס/לתקופה' הכולל את שני הכלבים.`);
     }
 
-    // 4. Payment status vs amounts inconsistency
+    // 3. Payment status vs amounts inconsistency
     if (!isFree && price > 0) {
       if (deposit >= price && paymentStatus !== 'fully_paid') {
         redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) שילם מלוא הסכום (₪${deposit.toLocaleString()}) אך סטטוס מוגדר '${paymentStatus}' במקום 'fully_paid'`);
       } else if (deposit === 0 && paymentStatus === 'fully_paid') {
         redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך לא נרשמה מקדמה (₪0 מתוך ₪${price.toLocaleString()})`);
-      } else if (deposit > 0 && deposit < price && paymentStatus === 'fully_paid') {
-        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך קיימת יתרת חוב של ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
       }
     }
 
-    // 5. Free stay inconsistency
-    if (isFree && (price > 0 || deposit > 0)) {
+    // 4. Free stay inconsistency (ignore legitimate Rule 8 pair zero-charge stays)
+    if (isFree && !isPairZeroCharge && !notes.includes('זוג') && !notes.includes('שולם דרך') && (price > 0 || deposit > 0)) {
       redLights.paymentDiscrepancies.push(`🎁 אירוח חינם עם חיוב כספי: *${dog}* (${owner}) סומן כחינם אך מופיעים סכומים (סה"כ ₪${price.toLocaleString()}, שולם ₪${deposit.toLocaleString()})`);
-    }
-
-    // 6. Stay extension mentioned in notes with open debt
-    const isExtension = notes.includes('הוארך') || notes.includes('הארכה') || notes.includes('עודכן מוואטסאפ');
-    if (isExtension && price > deposit && !isFree) {
-      redLights.paymentDiscrepancies.push(`💰 שהות מוארכת עם יתרת חוב פתוחה: *${dog}* (${owner} - 📞 ${phone}) | שהות הוארכה עד ${formatDateIL(end)}, נותרה יתרה לגבייה: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
-    }
-
-    // 7. Active staying dog with open debt
-    const isCurrentlyStaying = start <= todayStr && end >= todayStr && (b.stay_status || b.stayStatus) !== 'checked_out';
-    if (isCurrentlyStaying && price > deposit && !isFree) {
-      redLights.paymentDiscrepancies.push(`💰 כלב שוהה כעת בריזורט עם יתרת חוב: *${dog}* (${owner} - 📞 ${phone}) | שוהה עד ${formatDateIL(end)}, נותרה יתרה לתשלום: ₪${(price - deposit).toLocaleString()} (שולם ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
-    }
-
-    // 8. Cross-reconcile against live Grow transactions
-    const isFullyPaidAndClosed = paymentStatus === 'fully_paid' && deposit >= price && deposit > 0;
-    const isVerifiedInNotes = notes.includes('שולם במלואו') || notes.includes('אסמכתא');
-    const { totalGrowPaid } = matchGrowPaymentsForBooking(b, growPayments);
-    const pMethod = b.payment_method || b.paymentMethod || d.paymentMethod || '';
-    const isGrowMethod = pMethod === 'bit' || pMethod === 'grow' || pMethod === 'credit_card' || pMethod === 'grow_invoice' || notes.includes('Grow') || notes.includes('Bit') || notes.includes('אסמכתא');
-
-    if (!isFullyPaidAndClosed && !isVerifiedInNotes && isGrowMethod && totalGrowPaid > 0 && deposit > totalGrowPaid + 10) {
-      redLights.paymentDiscrepancies.push(`🚨 פער סליקת Grow: *${dog}* (${owner} - 📞 ${phone}) | נרשם ביומן ששולם ₪${deposit.toLocaleString()}, אך ב-Grow נסלקו בפועל ₪${totalGrowPaid.toLocaleString()} בלבד! (חסרים ₪${(deposit - totalGrowPaid).toLocaleString()})`);
-    } else if (totalGrowPaid > 0 && deposit === 0 && !isFree && end >= todayStr) {
-      redLights.paymentDiscrepancies.push(`💡 תשלום Grow שלא הוזן ליומן: *${dog}* (${owner}) | נקלטו ב-Grow ₪${totalGrowPaid.toLocaleString()} אך ביומן רשום ₪0 מקדמה.`);
     }
   });
 

@@ -92,12 +92,20 @@ function processResortEmails() {
         continue;
       }
 
-      // הגנה מוחלטת: לעולם לא לגעת בעסקים אחרים של מגדל דנילוב (כנען טרקטורים, זכויות המורה, עופרה שפר, סלקום, הלוואות וכו')!
+      // הגנה מוחלטת: לעולם לא לגעת בעסקים אחרים של מגדל דנילוב (זכויות המורה של אתי, כנען טרקטורים, עופרה שפר, סלקום וכו')!
       var otherBusinessKeywords = [
+        "זכויות המורה",
+        "זכויות מורה",
+        "אתי",
+        "etti",
+        "מורה",
+        "מורים",
+        "מורות",
+        "הוראה",
+        "שכר מורים",
         "כנען",
         "טרקטור",
-        "זכויות המורה",
-        "המורה",
+        "טרקטורים",
         "עפרה",
         "עופרה",
         "שפר",
@@ -122,6 +130,7 @@ function processResortEmails() {
       }
 
       if (isOtherBusiness) {
+        Logger.log("🛡️ זוהה מייל של עסק אחר (זכויות המורה של אתי / כנען / עפרה וכו') - דילוג מוחלט ללא נגיעה: " + subject);
         continue;
       }
 
@@ -200,24 +209,29 @@ function processResortEmails() {
           customerName = "לקוח Grow";
         }
 
-        // בדיקה האם התשלום שייך לריזורט (ברירת מחדל: כל תשלום Grow שלא שייך במפורש לעסק אחר שייך לריזורט!)
-        var isThisResort = true;
-        if (cleanText.indexOf("עבור שירות") !== -1) {
-          var serviceMatch = cleanText.match(/עבור שירות\s*[:\-]?\s*([^.,<\n\r]{2,50})/i);
-          if (serviceMatch) {
-            var serviceText = serviceMatch[1].toLowerCase();
-            for (var obk2 = 0; obk2 < otherBusinessKeywords.length; obk2++) {
-              if (serviceText.indexOf(otherBusinessKeywords[obk2]) !== -1) {
-                isThisResort = false;
-                break;
-              }
+        // הגנה קשיחה: זיהוי תשלום כמשתייך לריזורט אך ורק אם מופיעים במפורש מונחי ריזורט/כלבים/פנסיון/אילוף!
+        var isThisResort = false;
+        var explicitResortTerms = ["הריזורט לכלב", "הריזורט", "ריזורט", "פנסיון", "אילוף", "מעון יום", "כלב", "כלבים", "דוג", "dog", "resort"];
+        for (var ert = 0; ert < explicitResortTerms.length; ert++) {
+          if (cleanText.toLowerCase().indexOf(explicitResortTerms[ert]) !== -1 || subject.toLowerCase().indexOf(explicitResortTerms[ert]) !== -1) {
+            isThisResort = true;
+            break;
+          }
+        }
+
+        // בדיקת שלילה נוספת מול רשימת עסקים אחרים
+        if (isThisResort) {
+          for (var obk2 = 0; obk2 < otherBusinessKeywords.length; obk2++) {
+            if (cleanText.toLowerCase().indexOf(otherBusinessKeywords[obk2]) !== -1 || subject.toLowerCase().indexOf(otherBusinessKeywords[obk2]) !== -1) {
+              isThisResort = false;
+              break;
             }
           }
         }
 
-        // אם אינו שייך לריזורט - לדלג מיד ולא לגעת!
+        // אם אינו שייך בוודאות של 100% לריזורט - לדלג מיד ולא לגעת במייל כלל (משאיר ב-Inbox ללא שינוי)!
         if (!isThisResort) {
-          Logger.log("מייל תשלום Grow אינו שייך לריזורט לכלב - דילוג מוחלט: " + subject);
+          Logger.log("מייל תשלום Grow שייך לעסק אחר של מגדל דנילוב (לא הריזורט לכלב) - דילוג מוחלט: " + subject);
           continue;
         }
 
@@ -264,6 +278,10 @@ function processResortEmails() {
 
         // בדיקת שיוך חכמה ומבוססת תאריכים להזמנה קיימת או עתידית ביומן
         var isLinkedToBooking = false;
+        var activeBk = null;
+        var matchedIntake = null;
+        var isFullyPaid = false;
+
         try {
           var cleanPhoneNum = customerPhone.replace(/\D/g, '').slice(-7);
           var todayDateStr = Utilities.formatDate(new Date(), "Asia/Jerusalem", "yyyy-MM-dd");
@@ -279,7 +297,6 @@ function processResortEmails() {
           }
 
           // חפש תחילה הזמנה פעילה או עתידית (תאריך סיום מהיום והלאה)
-          var activeBk = null;
           for (var bki = 0; bki < foundBookings.length; bki++) {
             var candidate = foundBookings[bki];
             var candEnd = candidate.end_date || (candidate.data && candidate.data.endDate) || "";
@@ -306,7 +323,8 @@ function processResortEmails() {
             var currentDeposit = Number(activeBk.deposit_amount) || 0;
             var newDeposit = currentDeposit + amount;
             var totalPrice = Number(activeBk.total_price) || 0;
-            var newPaymentStatus = (newDeposit >= totalPrice && totalPrice > 0) ? "fully_paid" : "deposit_paid";
+            isFullyPaid = (newDeposit >= totalPrice && totalPrice > 0);
+            var newPaymentStatus = isFullyPaid ? "fully_paid" : "deposit_paid";
             var bkData = activeBk.data || {};
             bkData.depositAmount = newDeposit;
             bkData.paymentStatus = newPaymentStatus;
@@ -337,7 +355,6 @@ function processResortEmails() {
                 var sRows = JSON.parse(sRes.getContentText());
                 var sData = (sRows && sRows[0] && sRows[0].data) || {};
                 var intakes = sData.intakeRequests || [];
-                var matchedIntake = null;
                 for (var inti = 0; inti < intakes.length; inti++) {
                   var req = intakes[inti];
                   var reqPhone = (req.ownerPhone || "").replace(/\D/g, "");
@@ -433,8 +450,50 @@ function processResortEmails() {
           Logger.log("✓ תשלום נרשם ב-Supabase (" + paymentStatusInDb + "): " + customerName + " | ₪" + amount);
         } catch (ePayIns) {}
 
-        // הודעת וואטסאפ ועדכון נשלחים ישירות ובזמן אמת משרת ה-Webhook של Grow (למניעת כפילויות), ולכן סריקת המיילים רק מסנכרנת בסופאבייס ומעבירה לאשפה את המייל הנכנס ללא שליחת מייל דיווח או וואטסאפ כפול.
-        Logger.log("✓ תשלום סונכרן מול Supabase. מייל המקור יועבר לאשפה (התראת וואטסאפ נשלחת ישירות מה-Webhook).");
+        // משלוח התראת וואטסאפ תמציתית ומדויקת לחגי ולשמוליק
+        try {
+          var dogNameAlert = "הכלב";
+          var serviceNameAlert = "פנסיון";
+          var paymentClassAlert = "מקדמה";
+
+          if (activeBk) {
+            dogNameAlert = activeBk.dog_name || (activeBk.data && activeBk.data.dogName) || "הכלב";
+            var st = (activeBk.service_type || (activeBk.data && activeBk.data.serviceType) || "").toLowerCase();
+            if (st.indexOf("train") !== -1 || st.indexOf("אילוף") !== -1) serviceNameAlert = "אילוף";
+            else if (st.indexOf("daycare") !== -1 || st.indexOf("מעון") !== -1 || st.indexOf("יום") !== -1) serviceNameAlert = "מעון יום";
+            else serviceNameAlert = "פנסיון";
+
+            if (isFullyPaid) {
+              paymentClassAlert = "תשלום מלא";
+            } else {
+              paymentClassAlert = "מקדמה";
+            }
+          } else if (matchedIntake) {
+            dogNameAlert = matchedIntake.dogName || "הכלב";
+            var st = (matchedIntake.serviceType || "").toLowerCase();
+            if (st.indexOf("train") !== -1 || st.indexOf("אילוף") !== -1) serviceNameAlert = "אילוף";
+            else if (st.indexOf("daycare") !== -1 || st.indexOf("מעון") !== -1) serviceNameAlert = "מעון יום";
+            else serviceNameAlert = "פנסיון";
+            paymentClassAlert = "מקדמה";
+          }
+
+          var alertMsg = "שלום, התקבל תשלום ע״ס " + Number(amount).toLocaleString() + " ₪ מ" + (customerName || "לקוח") + " בעבור " + dogNameAlert + " על שירות " + serviceNameAlert + " (" + paymentClassAlert + ").";
+
+          var recipients = ["972543200007@c.us", "972506336896@c.us"];
+          for (var rIdx = 0; rIdx < recipients.length; rIdx++) {
+            try {
+              UrlFetchApp.fetch("https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN, {
+                method: "post",
+                contentType: "application/json",
+                payload: JSON.stringify({ chatId: recipients[rIdx], message: alertMsg }),
+                muteHttpExceptions: true
+              });
+            } catch (eWa) {}
+          }
+          Logger.log("✓ נשלחה התראת וואטסאפ לחגי ולשמוליק: " + alertMsg);
+        } catch (eAlert) {
+          Logger.log("שגיאה בשליחת התראת וואטסאפ: " + eAlert.toString());
+        }
 
         growCount++;
         threadHandled = true;
@@ -1274,6 +1333,17 @@ var WEEKEND_DOG_TEMPLATES = [
   { id: 215, type: "isolation", text: "שבוע טוב {ownerName}! 🌟 סיימתי עכשיו סופ\"ש שליו ומפנק במיוחד במתחם המוגן שלי. המטפלים ישבו איתו לזמן איכות ארוך והרעיפו עלי אהבה. עכשיו אני ישן עמוק ושלו. שבוע מקסים! {dogName} 🐕🌸" }
 ];
 
+var SHLOMI_LUNA_TEMPLATES = [
+  { id: 301, type: "training", text: "📅 *יום {daysCount} בריזורט (וכבר שבועות מאז ראש השנה...)* 💔\n\nשלומי אהוב שלי... 🥺 שמעתי שראש השנה כבר עבר, סוכות עוד רגע כאן, ואני עדיין מריחה את השבילים בטבע ותוהה לאן נעלם הריח של אבא שלי? מתגעגעת ברמות ששמוליק כבר לא יודע איפה ללטף אותי קודם כדי לנחם... מתי אתה בא לחבק אותי? לונה המתגעגעת 🐾💔" },
+  { id: 302, type: "training", text: "📅 *יום {daysCount} של געגועים עמוקים לאבא שלומי* 🥺🐾\n\nהיי שלומי... 🐾 היום באילוף שמוליק לימד אותי להקשיב ולהיות הכי טובה בעולם, אבל האמת? בכל פעם שנפתח השער של הריזורט האוזניים שלי מזדקרות ואני בטוחה שזה אתה שבא לבקר. אל תשאיר אותי במתח יותר מדי זמן, אני מחכה לך! שלך תמיד, לונה 🐶❤️" },
+  { id: 303, type: "training", text: "📅 *יום {daysCount} בלי ביקור מאבא...* 🥺⏳\n\nשלומי... אני לא רוצה לעשות לך רגשות אשם (טוב, אולי ממש קצת 🐶), אבל הכרית שלי בסוויטה כבר ספוגה בגעגועים. תגיד, שכחת איך מגיעים לריזורט או שאתה צריך שאני אשלח לך מיקום בוייז? בוא לבקר אותי כבר! 🥺🐕" },
+  { id: 304, type: "training", text: "📅 *יום {daysCount} באילוף של אלופים בריזורט* 🎓💔\n\nערב טוב שלומי! 🎓🐾 אני תלמידה מצטיינת והכל פה 5 כוכבים, אבל יש תרגיל אחד שאני פשוט לא מצליחה ללמוד: איך להפסיק להתגעגע אליך... תבטיח שאתה קופץ לראות כמה גדלתי והחכמתי? מחכה לחיבוק שלך, לונה 🐾🥰" },
+  { id: 305, type: "training", text: "📅 *יום {daysCount} שבו הזנב שובת מגעגוע* 🐾💔\n\nשלומי, הזנב שלי שובת מפעילות עד שאתה לא בא לתת לי ליטוף ארוך מאחורי האוזניים! 🥺 שמוליק והצוות מפנקים אותי בטירוף, אבל אין תחליף לאבא שלי. מתי רואים אותך? מתגעגעת עד הירח ובחזרה, לונה שלך 🐶🌙❤️" },
+  { id: 306, type: "training", text: "📅 *יום {daysCount} – מישהו ראה את אבא שלומי?* 🔍🥺\n\nהיי שלומי! 🐾 עבר עוד יום של טיולים ומשחקים, וכל החברים בריזורט כבר שואלים אותי מתי אבא שלי מגיע להשוויץ בי... שמוליק אומר שאתה עסוק, אבל הלב שלי אומר שהגיע הזמן לביקור! אוהבת הכי בעולם, לונה 🐕❤️✨" },
+  { id: 307, type: "training", text: "📅 *יום {daysCount} לילה טוב לאבא שלומי* 🌙💔\n\nשלומי יקר שלי... לפני שאני עוצמת עיניים בסוויטה, רק רציתי להזכיר לך שיש פה כלבה אחת מהממת שמחכה רק לך. אל תשכח אותי שם בחוץ, בוא לבקר בהקדם! נשיקות רטובות, לונה המתגעגעת 🐶💋🐾" },
+  { id: 308, type: "training", text: "📅 *יום {daysCount} של סבלנות שכבר נגמרת...* 🥺⏳\n\nשלומי, בדקתי עם שמוליק ביומן – עברו חגים, שבתות ושבועות, ואתה עדיין לא באת! 🐶💔 אם אתה צריך שאבוא ברגל עד אליך רק תגיד, אבל עדיף שתניע את הרכב ותבוא לתת לי נשיקה ענקית. מחכה לך, לונה 🐕🥺❤️" }
+];
+
 var DAILY_DOG_TEMPLATES = [
   // קבוצה 1: טיול יומי בטבע, הרפתקאות וריחות (1–20) - מתאים לכולם
   { id: 1, type: "safe", text: "היי {ownerName}! 🐾 סיימתי עכשיו טיול יומי בטבע של אלופים אמיתיים! 🌲🌿 ריחרחתי כל עץ ושיח, ועכשיו אני שוכב רגוע ומרוצה בסוויטה שלי 🛋️✨ תיהנו בעניינים שלכם, אוהב {dogName} 🐶❤️" },
@@ -1474,14 +1544,30 @@ function getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat) {
   // בדיקה האם הכלב באילוף
   var inTraining = isDogInTraining(b);
 
-  // בחירת מאגר: במוצאי שבת מאגר סופ"ש ייעודי, בימי חול המאגר היומי
-  var sourcePool = (isMotzaeiShabbat && typeof WEEKEND_DOG_TEMPLATES !== "undefined") ? WEEKEND_DOG_TEMPLATES : DAILY_DOG_TEMPLATES;
+  var oLower = (b.owner_name || "").toLowerCase();
+  var dLower = (b.dog_name || "").toLowerCase();
+  var pClean = (b.owner_phone || "").replace(/\D/g, "");
+  var isShlomiLuna = (oLower.indexOf("שלומי") !== -1 && (dLower.indexOf("לונה") !== -1 || pClean.indexOf("5445512") !== -1)) ||
+                     dLower === "לונה המתגעגעת" ||
+                     (oLower.indexOf("שלומי ממן") !== -1);
+
+  // בחירת מאגר: לשלומי ממן מאגר געגועים שובר לב, במוצאי שבת מאגר סופ"ש ייעודי, בימי חול המאגר היומי
+  var sourcePool;
+  if (isShlomiLuna && typeof SHLOMI_LUNA_TEMPLATES !== "undefined") {
+    sourcePool = SHLOMI_LUNA_TEMPLATES;
+  } else if (isMotzaeiShabbat && typeof WEEKEND_DOG_TEMPLATES !== "undefined") {
+    sourcePool = WEEKEND_DOG_TEMPLATES;
+  } else {
+    sourcePool = DAILY_DOG_TEMPLATES;
+  }
 
   // סינון המאגר המורשה: אילוף / בידוד / חברותי
   var pool = [];
   for (var i = 0; i < sourcePool.length; i++) {
     var t = sourcePool[i];
-    if (inTraining) {
+    if (isShlomiLuna) {
+      pool.push(t);
+    } else if (inTraining) {
       // כלב באילוף: רק תבניות אילוף!
       if (t.type === "training") {
         pool.push(t);
@@ -1517,12 +1603,29 @@ function getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat) {
   sentIds.push(chosen.id);
   props.setProperty(sentKey, JSON.stringify(sentIds));
 
+  // חישוב מונה ימים
+  var daysCount = 160;
+  if (b.start_date) {
+    try {
+      var sDate = new Date(b.start_date);
+      var curDate = new Date();
+      var diffDays = Math.round((curDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+      daysCount = Math.max(1, diffDays + 1);
+    } catch(e) { daysCount = 160; }
+  } else if (isShlomiLuna) {
+    var sDate = new Date('2026-05-01');
+    var curDate = new Date();
+    var diffDays = Math.round((curDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+    daysCount = Math.max(1, diffDays + 1);
+  }
+
   // החלפת שמות הבעלים והכלב
-  var cleanOwner = (b.owner_name || "").trim().split(" ")[0] || "לקוח יקר";
-  var cleanDog = (b.dog_name || "").trim() || "החבר על 4";
+  var cleanOwner = (b.owner_name || "").trim().split(" ")[0] || "שלומי";
+  var cleanDog = isShlomiLuna ? "לונה" : ((b.dog_name || "").trim() || "החבר על 4");
   var msgText = chosen.text
     .replace(/{ownerName}/g, cleanOwner)
-    .replace(/{dogName}/g, cleanDog);
+    .replace(/{dogName}/g, cleanDog)
+    .replace(/{daysCount}/g, String(daysCount));
 
   return { id: chosen.id, text: msgText, isWeekend: isMotzaeiShabbat };
 }
@@ -2117,20 +2220,20 @@ function sendTomorrowOverviewToShmulikFromCloud() {
         pBadge = "🟡 שולמה מקדמה ₪" + deposit.toLocaleString() + " (נותר ₪" + debt.toLocaleString() + ")";
         var cPhone = (bk.owner_phone || "").replace(/[^0-9]/g, "");
         var iPhone = cPhone.indexOf("0") === 0 ? "972" + cPhone.substring(1) : cPhone;
-        var fName = (owner.split(" ")[0] || "לקוח");
-        var demandMsg = isIncoming
-          ? "היי " + fName + "! 🐾\nמתרגשים ומחכים מחר לתחילת השהות של " + dog + " בריזורט לכלב! 🐶❤️\n\nלקראת ההגעה מחר, נשמח להסדרת יתרת התשלום בסך ₪" + debt.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nמחכים לכם בשמחה,\nשמוליק וצוות הריזורט לכלב 🐾✨"
-          : "היי " + fName + "! 🐾\nרצינו לעדכן שמחר " + dog + " מסיים/ת את השהות בריזורט לכלב! 🐕🥰 נהנה/תה מכל רגע ומתגעגע/ת אליכם מאוד.\n\nלקראת האיסוף והשחרור מחר, נשמח להסדרת יתרת התשלום בסך ₪" + debt.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nתודה רבה ונתראה מחר,\nשמוליק וצוות הריזורט לכלב 🐾✨";
-        linkText = "\n   📲 תזכורת תשלום בוואטסאפ: https://wa.me/" + iPhone + "?text=" + encodeURIComponent(demandMsg);
+        var bId = bk.id || "";
+        var shortUrl = bId
+          ? ("https://rezort-webapp.vercel.app/api/wa-reminder?b=" + bId + "&t=" + (isIncoming ? "in" : "out"))
+          : ("https://wa.me/" + iPhone);
+        linkText = "\n   📲 לינק לשליחת ההודעה ללקוח: " + shortUrl;
       } else if (total > 0 && deposit === 0) {
         pBadge = "🔴 לא שולם (חוב: ₪" + total.toLocaleString() + ")";
         var cPhone = (bk.owner_phone || "").replace(/[^0-9]/g, "");
         var iPhone = cPhone.indexOf("0") === 0 ? "972" + cPhone.substring(1) : cPhone;
-        var fName = (owner.split(" ")[0] || "לקוח");
-        var demandMsg = isIncoming
-          ? "היי " + fName + "! 🐾\nמתרגשים ומחכים מחר לתחילת השהות של " + dog + " בריזורט לכלב! 🐶❤️\n\nלקראת ההגעה מחר, נשמח להסדרת יתרת התשלום בסך ₪" + total.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nמחכים לכם בשמחה,\nשמוליק וצוות הריזורט לכלב 🐾✨"
-          : "היי " + fName + "! 🐾\nרצינו לעדכן שמחר " + dog + " מסיים/ת את השהות בריזורט לכלב! 🐕🥰 נהנה/תה מכל רגע ומתגעגע/ת אליכם מאוד.\n\nלקראת האיסוף והשחרור מחר, נשמח להסדרת יתרת התשלום בסך ₪" + total.toLocaleString() + ".\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 " + growLink + "\n\nתודה רבה ונתראה מחר,\nשמוליק וצוות הריזורט לכלב 🐾✨";
-        linkText = "\n   📲 תזכורת תשלום בוואטסאפ: https://wa.me/" + iPhone + "?text=" + encodeURIComponent(demandMsg);
+        var bId = bk.id || "";
+        var shortUrl = bId
+          ? ("https://rezort-webapp.vercel.app/api/wa-reminder?b=" + bId + "&t=" + (isIncoming ? "in" : "out"))
+          : ("https://wa.me/" + iPhone);
+        linkText = "\n   📲 לינק לשליחת ההודעה ללקוח: " + shortUrl;
       }
 
       var meds = bk.medications || bk.special_diet || "";

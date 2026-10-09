@@ -751,6 +751,61 @@ export const DAILY_DOG_TEMPLATES: DailyDogTemplate[] = [
 ];
 
 /**
+ * מאגר תבניות געגוע שוברי לב בלעדיים לשלומי ממן (לונה המתגעגעת)
+ * כולל מונה ימים דינמי מאז תחילת השהייה/ראש השנה
+ */
+export const SHLOMI_LUNA_TEMPLATES: DailyDogTemplate[] = [
+  {
+    id: 301,
+    type: 'training',
+    category: 'training_progress',
+    text: '📅 *יום {daysCount} בריזורט (וכבר שבועות מאז ראש השנה...)* 💔\n\nשלומי אהוב שלי... 🥺 שמעתי שראש השנה כבר עבר, סוכות עוד רגע כאן, ואני עדיין מריחה את השבילים בטבע ותוהה לאן נעלם הריח של אבא שלי? מתגעגעת ברמות ששמוליק כבר לא יודע איפה ללטף אותי קודם כדי לנחם... מתי אתה בא לחבק אותי? לונה המתגעגעת 🐾💔'
+  },
+  {
+    id: 302,
+    type: 'training',
+    category: 'training_progress',
+    text: '📅 *יום {daysCount} של געגועים עמוקים לאבא שלומי* 🥺🐾\n\nהיי שלומי... 🐾 היום באילוף שמוליק לימד אותי להקשיב ולהיות הכי טובה בעולם, אבל האמת? בכל פעם שנפתח השער של הריזורט האוזניים שלי מזדקרות ואני בטוחה שזה אתה שבא לבקר. אל תשאיר אותי במתח יותר מדי זמן, אני מחכה לך! שלך תמיד, לונה 🐶❤️'
+  },
+  {
+    id: 303,
+    type: 'training',
+    category: 'training_progress',
+    text: '📅 *יום {daysCount} בלי ביקור מאבא...* 🥺⏳\n\nשלומי... אני לא רוצה לעשות לך רגשות אשם (טוב, אולי ממש קצת 🐶), אבל הכרית שלי בסוויטה כבר ספוגה בגעגועים. תגיד, שכחת איך מגיעים לריזורט או שאתה צריך שאני אשלח לך מיקום בוייז? בוא לבקר אותי כבר! 🥺🐕'
+  },
+  {
+    id: 304,
+    type: 'training',
+    category: 'training_progress',
+    text: '📅 *יום {daysCount} באילוף של אלופים בריזורט* 🎓💔\n\nערב טוב שלומי! 🎓🐾 אני תלמידה מצטיינת והכל פה 5 כוכבים, אבל יש תרגיל אחד שאני פשוט לא מצליחה ללמוד: איך להפסיק להתגעגע אליך... תבטיח שאתה קופץ לראות כמה גדלתי והחכמתי? מחכה לחיבוק שלך, לונה 🐾🥰'
+  },
+  {
+    id: 305,
+    type: 'training',
+    category: 'training_progress',
+    text: '📅 *יום {daysCount} שבו הזנב שובת מגעגוע* 🐾💔\n\nשלומי, הזנב שלי שובת מפעילות עד שאתה לא בא לתת לי ליטוף ארוך מאחורי האוזניים! 🥺 שמוליק והצוות מפנקים אותי בטירוף, אבל אין תחליף לאבא שלי. מתי רואים אותך? מתגעגעת עד הירח ובחזרה, לונה שלך 🐶🌙❤️'
+  },
+  {
+    id: 306,
+    type: 'training',
+    category: 'training_progress',
+    text: '📅 *יום {daysCount} – מישהו ראה את אבא שלומי?* 🔍🥺\n\nהיי שלומי! 🐾 עבר עוד יום של טיולים ומשחקים, וכל החברים בריזורט כבר שואלים אותי מתי אבא שלי מגיע להשוויץ בי... שמוליק אומר שאתה עסוק, אבל הלב שלי אומר שהגיע הזמן לביקור! אוהבת הכי בעולם, לונה 🐕❤️✨'
+  },
+  {
+    id: 307,
+    type: 'training',
+    category: 'training_progress',
+    text: '📅 *יום {daysCount} לילה טוב לאבא שלומי* 🌙💔\n\nשלומי יקר שלי... לפני שאני עוצמת עיניים בסוויטה, רק רציתי להזכיר לך שיש פה כלבה אחת מהממת שמחכה רק לך. אל תשכח אותי שם בחוץ, בוא לבקר בהקדם! נשיקות רטובות, לונה המתגעגעת 🐶💋🐾'
+  },
+  {
+    id: 308,
+    type: 'training',
+    category: 'training_progress',
+    text: '📅 *יום {daysCount} של סבלנות שכבר נגמרת...* 🥺⏳\n\nשלומי, בדקתי עם שמוליק ביומן – עברו חגים, שבתות ושבועות, ואתה עדיין לא באת! 🐶💔 אם אתה צריך שאבוא ברגל עד אליך רק תגיד, אבל עדיף שתניע את הרכב ותבוא לתת לי נשיקה ענקית. מחכה לך, לונה 🐕🥺❤️'
+  }
+];
+
+/**
  * בדיקה האם כלב מוגדר בבידוד / תוקפני
  */
 export function isDogIsolationRequired(
@@ -809,6 +864,7 @@ export function isDogInTraining(
 /**
  * הגרלת תבנית מתאימה מתוך המאגר בהתאם לסטטוס הכלב
  * - הפרדה מלאה בין פנסיון לאילוף: כלב באילוף מקבל אך ורק נוסחי אילוף ייעודיים!
+ * - שלומי ממן (לונה המתגעגעת) מקבל באופן בלעדי נוסחי געגוע שוברי לב עם מונה ימים!
  * - מונע שימוש בתבניות שכבר נשלחו במהלך השהות
  * - מסנן הרמטית תבניות מדשאה (81-90) מכלבים בבידוד
  */
@@ -818,11 +874,26 @@ export function pickDailyDogTemplate(
   isIsolation: boolean,
   alreadyUsedTemplateIds: number[] = [],
   isTraining: boolean = false,
-  isFemale: boolean = false
+  isFemale: boolean = false,
+  startDate?: string,
+  ownerPhone?: string
 ): { template: DailyDogTemplate; formattedText: string } {
   let eligibleTemplates: DailyDogTemplate[] = [];
 
-  if (isTraining) {
+  const cleanOwnerLower = (ownerName || '').toLowerCase();
+  const cleanDogLower = (dogName || '').toLowerCase();
+  const phoneClean = (ownerPhone || '').replace(/\D/g, '');
+
+  const isShlomiLuna = 
+    (cleanOwnerLower.includes('שלומי') && (cleanDogLower.includes('לונה') || phoneClean.includes('5445512'))) ||
+    cleanDogLower === 'לונה המתגעגעת' ||
+    (cleanOwnerLower.includes('שלומי ממן'));
+
+  if (isShlomiLuna) {
+    // שלומי ממן ולונה המתגעגעת: אך ורק נוסחי געגוע שוברי לב עם מונה ימים!
+    eligibleTemplates = SHLOMI_LUNA_TEMPLATES;
+    isFemale = true;
+  } else if (isTraining) {
     // כלב באילוף: מקבל אך ורק נוסחי אילוף מעצימים עם שמוליק!
     eligibleTemplates = DAILY_DOG_TEMPLATES.filter(t => t.type === 'training');
     if (eligibleTemplates.length === 0) {
@@ -847,12 +918,35 @@ export function pickDailyDogTemplate(
   const chosenIndex = Math.floor(Math.random() * unusedTemplates.length);
   const template = unusedTemplates[chosenIndex] || eligibleTemplates[0];
 
-  const cleanOwner = (ownerName || '').trim().split(' ')[0] || 'לקוח יקר';
-  const cleanDog = (dogName || '').trim() || 'החבר על 4';
+  const cleanOwner = (ownerName || '').trim().split(' ')[0] || 'שלומי';
+  const cleanDog = isShlomiLuna ? 'לונה' : ((dogName || '').trim() || 'החבר על 4');
+
+  // חישוב מונה ימים דינמי
+  let daysCount = 160;
+  if (startDate) {
+    try {
+      const sDate = new Date(startDate.includes('T') ? startDate.split('T')[0] : startDate);
+      const now = new Date();
+      sDate.setHours(0, 0, 0, 0);
+      now.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((now.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+      daysCount = Math.max(1, diffDays + 1);
+    } catch (e) {
+      daysCount = 160;
+    }
+  } else if (isShlomiLuna) {
+    const sDate = new Date('2026-05-01');
+    const now = new Date();
+    sDate.setHours(0, 0, 0, 0);
+    now.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((now.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+    daysCount = Math.max(1, diffDays + 1);
+  }
 
   let formattedText = template.text
     .replace(/{ownerName}/g, cleanOwner)
-    .replace(/{dogName}/g, cleanDog);
+    .replace(/{dogName}/g, cleanDog)
+    .replace(/{daysCount}/g, String(daysCount));
 
   if (isFemale) {
     formattedText = formattedText

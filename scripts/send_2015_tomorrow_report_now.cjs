@@ -153,9 +153,11 @@ async function main() {
     if (!isPaid && remainingDebt > 0 && ownerPhone) {
       const cleanPhone = cleanPhoneNumber(ownerPhone);
       const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-      const firstName = (ownerName || 'לקוח').trim().split(/\s+/)[0];
-      const demandMsg = `היי ${firstName}! 🐾 לקראת ההגעה/איסוף מחר בריזורט לכלב, נשמח להסדרת יתרת התשלום בסך ₪${remainingDebt.toLocaleString()}:\n👉 ${growPaymentLink}`;
-      linkLine = `\n   📲 *לתשלום בוואטסאפ:* https://wa.me/${intlPhone}?text=${encodeURIComponent(demandMsg)}`;
+      const bId = b.id || '';
+      const shortUrl = bId
+        ? `https://rezort-webapp.vercel.app/api/wa-reminder?b=${bId}&t=${isIncoming ? 'in' : 'out'}`
+        : `https://wa.me/${intlPhone}`;
+      linkLine = `\n   📲 *לינק לשליחת ההודעה ללקוח:* ${shortUrl}`;
     }
 
     return `${index + 1}. 🐶 *${dogName}*${breedStr} | 🏷️ ${serviceLabel}\n   👤 בעלים: ${ownerName} (📞 ${ownerPhone})\n   ${paymentLine}${linkLine}`;

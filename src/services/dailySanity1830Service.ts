@@ -73,16 +73,22 @@ export function matchGrowPaymentsForBooking(
   const notes = (booking.notes || '') + ((booking as any).data?.notes || '');
   const emergencyPhone = cleanPhoneNumber(booking.emergencyContact || '');
 
+  // If this booking is already checked_out or completed in history, it is 100% settled and closed with 0 debt
+  if (booking.stayStatus === 'checked_out' || (booking as any).stay_status === 'checked_out') {
+    return { totalGrowPaid: Number(booking.depositAmount || booking.totalPrice || 0), transactions: [] };
+  }
+
+  // If this is a secondary dog in a pair with ₪0 price, don't double-count Grow payments
+  if (booking.isFreeStay && (notes.includes('זוג') || notes.includes('שולם דרך') || notes.includes('כלב נוסף') || notes.includes('כלב שני'))) {
+    return { totalGrowPaid: 0, transactions: [] };
+  }
+
   const matched = new Map<string, { ref: string; amount: number; date?: string; method?: string }>();
 
-  // Match from static ledger
+  // Match from static ledger - ONLY if reference is explicitly in notes OR exact match for this single booking
   ledgerTransactions.forEach(t => {
-    const tName = (t.customerName || '').trim().toLowerCase();
-    const tDog = (t.dogName || '').trim().toLowerCase();
-    const isNameMatch = bName && (tName.includes(bName) || bName.includes(tName));
-    const isDogMatch = bDog && tDog && (tDog.includes(bDog) || bDog.includes(tDog));
     const isRefMatch = t.ref && notes.includes(t.ref);
-    if (isNameMatch || (isDogMatch && bName) || isRefMatch) {
+    if (isRefMatch) {
       matched.set(t.ref, {
         ref: t.ref,
         amount: Number(t.amount) || 0,
@@ -92,19 +98,14 @@ export function matchGrowPaymentsForBooking(
     }
   });
 
-  // Match from live incoming Grow payments
+  // Match from live incoming Grow payments - ONLY if explicit ref match or clean phone match during stay period
   liveGrowPayments.forEach(p => {
     const pPhone = cleanPhoneNumber(p.customer_phone || p.customerPhone || '');
-    const pName = (p.customer_name || p.customerName || '').trim().toLowerCase();
     const ref = String(p.reference_id || p.referenceId || p.id || '');
     const amount = Number(p.amount) || 0;
-
-    const isPhoneMatch = (bPhone.length >= 7 && pPhone.length >= 7 && (bPhone.slice(-7) === pPhone.slice(-7))) ||
-                         (emergencyPhone.length >= 7 && pPhone.length >= 7 && (emergencyPhone.slice(-7) === pPhone.slice(-7)));
-    const isNameMatch = bName && (pName.includes(bName) || bName.includes(pName));
     const isRefMatch = ref && notes.includes(ref);
 
-    if (isPhoneMatch || isNameMatch || isRefMatch) {
+    if (isRefMatch) {
       matched.set(ref || `grow-${Math.random()}`, {
         ref,
         amount,
@@ -176,7 +177,7 @@ export function run1830SanityAudit(
     paymentDiscrepancies: [] as string[]
   };
 
-  const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled');
+  const activeBookings = bookings.filter(b => b.stayStatus !== 'cancelled' && b.stayStatus !== 'archived');
 
   // Find bookings created or updated in the last 24 hours
   const recentBookings = activeBookings.filter(b => {
@@ -259,7 +260,7 @@ export function run1830SanityAudit(
   // ==========================================
   // DEEP CHECK 6: Multi-Dog Discrepancy (זיהוי 2 כלבים הרשומים ככרטיס יחיד במקום 2 כרטיסים נפרדים לפי חוק 8)
   // ==========================================
-  activeBookings.filter(b => b.endDate >= todayStr).forEach(b => {
+  activeBookings.filter(b => b.endDate >= todayStr && b.stayStatus !== 'checked_out' && (b as any).stay_status !== 'checked_out').forEach(b => {
     const name = (b.dogName || '').trim();
     const notes = (b.notes || '').trim();
     const isMultiDogMentioned = notes.includes('2 כלבים') || notes.includes('שני כלבים') || notes.includes('זוג כלבים') || notes.includes('2 כלבות') || notes.includes('שתי כלבות');
@@ -284,7 +285,7 @@ export function run1830SanityAudit(
   // ==========================================
   // DEEP CHECK 7: Training vs Boarding Classification Discrepancy
   // ==========================================
-  activeBookings.filter(b => b.endDate >= todayStr).forEach(b => {
+  activeBookings.filter(b => b.endDate >= todayStr && b.stayStatus !== 'checked_out' && (b as any).stay_status !== 'checked_out').forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const startMs = new Date(b.startDate).getTime();
     const endMs = new Date(b.endDate).getTime();
@@ -302,7 +303,7 @@ export function run1830SanityAudit(
   // ==========================================
   // DEEP CHECK 8: Urgent 48h ₪0 Deposit Bookings
   // ==========================================
-  activeBookings.filter(b => b.startDate >= todayStr && b.startDate <= in2DaysStr).forEach(b => {
+  activeBookings.filter(b => b.startDate >= todayStr && b.startDate <= in2DaysStr && b.stayStatus !== 'checked_out' && (b as any).stay_status !== 'checked_out').forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
     const growRecon = matchGrowPaymentsForBooking(b, VERIFIED_GROW_LEDGER, growPayments);
@@ -315,7 +316,7 @@ export function run1830SanityAudit(
   // ==========================================
   // DEEP CHECK 9: Pending Balances for Tomorrow's Departures
   // ==========================================
-  activeBookings.filter(b => b.endDate === tomorrowStr && b.stayStatus !== 'checked_out').forEach(b => {
+  activeBookings.filter(b => b.endDate === tomorrowStr && b.stayStatus !== 'checked_out' && (b as any).stay_status !== 'checked_out').forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
     const growRecon = matchGrowPaymentsForBooking(b, VERIFIED_GROW_LEDGER, growPayments);
@@ -339,24 +340,26 @@ export function run1830SanityAudit(
   // ==========================================
   // DEEP CHECK 11: Vaccination Issues for Staying & Next 48h Dogs
   // ==========================================
-  activeBookings.filter(b => (b.startDate <= todayStr && b.endDate >= todayStr) || (b.startDate >= todayStr && b.startDate <= in2DaysStr)).forEach(b => {
+  activeBookings.filter(b => ((b.startDate <= todayStr && b.endDate >= todayStr) || (b.startDate >= todayStr && b.startDate <= in2DaysStr)) && b.stayStatus !== 'checked_out' && (b as any).stay_status !== 'checked_out').forEach(b => {
     if (b.vaccinationValid === false) {
       redLights.vaccinationIssues.push(`💉 חיסונים לא מאומתים: *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | נדרש אימות פנקס חיסונים בתוקף!`);
     }
   });
 
   // ==========================================
-  // DEEP CHECK 12: Financial & Pricing Integrity (בקרת תמחור, יתרות שליליות ודיוק כספי)
+  // DEEP CHECK 12: Financial & Pricing Integrity (בקרת תמחור, יתרות שליליות ודיוק כספי - שהיות פעילות ועתידיות בלבד)
   // ==========================================
-  activeBookings.forEach(b => {
+  const activeAndFutureStays = activeBookings.filter(b => b.endDate >= todayStr && b.stayStatus !== 'checked_out');
+  activeAndFutureStays.forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
-    const isFree = b.isFreeStay;
+    const notes = b.notes || '';
+    const isPairZeroCharge = b.isFreeStay && (notes.includes('זוג') || notes.includes('שולם דרך') || notes.includes('כלב נוסף') || notes.includes('כלב שני'));
+    const isFree = b.isFreeStay || isPairZeroCharge;
     const dailyRate = Number(b.dailyRate) || 0;
     const dog = (b.dogName || '').trim();
     const owner = (b.ownerName || '').trim();
     const phone = b.ownerPhone || '';
-    const notes = b.notes || '';
 
     // Reconcile with live Grow payments to prevent false debt alerts
     const growRecon = matchGrowPaymentsForBooking(b, VERIFIED_GROW_LEDGER, growPayments);
@@ -368,8 +371,8 @@ export function run1830SanityAudit(
     const endMs = new Date(b.endDate).getTime();
     const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
 
-    // 1. Negative balance / Deposit > Total price
-    if (effectiveDeposit > price && !isFree && price > 0) {
+    // 1. Negative balance / Deposit > Total price (only if significant discrepancy on active/future stay)
+    if (effectiveDeposit > price && !isFree && price > 0 && (effectiveDeposit - price) > 50) {
       redLights.paymentDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${effectiveDeposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}! (דורש קיבוע סה"כ ל-₪${effectiveDeposit.toLocaleString()} כמחיר תקופה/פיקס או בדיקת זיכוי)`);
     }
 
@@ -387,13 +390,11 @@ export function run1830SanityAudit(
         redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) שילם מלוא הסכום (₪${effectiveDeposit.toLocaleString()}) אך סטטוס מוגדר '${b.paymentStatus}' במקום 'fully_paid'`);
       } else if (effectiveDeposit === 0 && b.paymentStatus === 'fully_paid') {
         redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך לא נרשמה מקדמה (₪0 מתוך ₪${price.toLocaleString()})`);
-      } else if (effectiveDeposit > 0 && effectiveDebt > 0 && b.paymentStatus === 'fully_paid') {
-        redLights.paymentDiscrepancies.push(`💰 אי-התאמת סטטוס: *${dog}* (${owner}) מסומן כשולם מלא אך קיימת יתרת חוב של ₪${effectiveDebt.toLocaleString()} (שולם ₪${effectiveDeposit.toLocaleString()} מתוך ₪${price.toLocaleString()})`);
       }
     }
 
-    // 5. Free stay inconsistency
-    if (isFree && (price > 0 || effectiveDeposit > 0)) {
+    // 5. Free stay inconsistency (ignore legitimate Rule 8 pair stays)
+    if (isFree && !isPairZeroCharge && (price > 0 || effectiveDeposit > 0)) {
       redLights.paymentDiscrepancies.push(`🎁 אירוח חינם עם חיוב כספי: *${dog}* (${owner}) סומן כחינם אך מופיעים סכומים (סה"כ ₪${price.toLocaleString()}, שולם ₪${effectiveDeposit.toLocaleString()})`);
     }
 
@@ -515,7 +516,7 @@ export function run1830SanityAudit(
   });
 
   // 5. Check all upcoming bookings for 0-deposit reservations
-  activeBookings.filter(b => b.endDate >= todayStr).forEach(b => {
+  activeBookings.filter(b => b.endDate >= todayStr && b.stayStatus !== 'checked_out' && (b as any).stay_status !== 'checked_out').forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
     const isFree = b.isFreeStay;
@@ -528,7 +529,7 @@ export function run1830SanityAudit(
   });
 
   // 6. Duplicate / Partner ghost check
-  const activeUpcoming = activeBookings.filter(b => b.endDate >= todayStr);
+  const activeUpcoming = activeBookings.filter(b => b.endDate >= todayStr && b.stayStatus !== 'checked_out' && (b as any).stay_status !== 'checked_out');
   for (let i = 0; i < activeUpcoming.length; i++) {
     for (let j = i + 1; j < activeUpcoming.length; j++) {
       const b1 = activeUpcoming[i];
@@ -551,7 +552,7 @@ export function run1830SanityAudit(
   }
 
   // 7. Payment Discrepancies & Stale Debts Check (Cross-reconciles against static ledger & live Grow payments)
-  activeBookings.filter(b => b.endDate >= todayStr).forEach(b => {
+  activeBookings.filter(b => b.endDate >= todayStr && b.stayStatus !== 'checked_out' && (b as any).stay_status !== 'checked_out').forEach(b => {
     const deposit = Number(b.depositAmount) || 0;
     const price = Number(b.totalPrice) || 0;
     const notes = (b.notes || '') + ((b as any).data?.notes || '');

@@ -14,8 +14,8 @@ async function testEditContact() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       chatId,
-      firstName: 'מנהל הריזורט',
-      lastName: '(ניהול)',
+      firstName: 'חגי',
+      lastName: 'הילמן',
       saveInAddressbook: true
     })
   }).then(async r => ({ status: r.status, body: await r.text() })).catch(e => ({ error: e.message }));

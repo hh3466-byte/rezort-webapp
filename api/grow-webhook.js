@@ -304,11 +304,34 @@ export default async function handler(req, res) {
     }).catch(capiErr => console.warn('Non-blocking Meta CAPI purchase event warning:', capiErr));
 
     // Send real-time WhatsApp alert to BOTH Manager (054-3200007) and Shmulik (050-6336896) ONLY for verified Resort transactions
-    const alertMsg = `💳 *התקבל תשלום ריזורט ב-GROW!*
-• *לקוח:* ${fullName || 'לא צוין'} (📞 ${cleanPhone || 'ללא טלפון'})
-• *סכום:* ₪${amount.toLocaleString()} (${methodDisplay}${bankInfoStr})
-• *אסמכתא:* ${transactionId}
-• *סנכרון יומן:* ${matchSummary}`;
+    let dogName = 'הכלב';
+    let serviceName = 'פנסיון';
+    let paymentClassification = 'מקדמה';
+
+    if (matchedBooking) {
+      dogName = matchedBooking.dog_name || (matchedBooking.data && matchedBooking.data.dogName) || 'הכלב';
+      const st = (matchedBooking.service_type || (matchedBooking.data && matchedBooking.data.serviceType) || '').toLowerCase();
+      if (st.includes('train') || st.includes('אילוף')) serviceName = 'אילוף';
+      else if (st.includes('daycare') || st.includes('מעון') || st.includes('יום')) serviceName = 'מעון יום';
+      else serviceName = 'פנסיון';
+
+      const curDeposit = Number(matchedBooking.deposit_amount || (matchedBooking.data && matchedBooking.data.depositAmount) || 0);
+      const totalPrice = Number(matchedBooking.total_price || (matchedBooking.data && matchedBooking.data.totalPrice) || 0);
+      if (totalPrice > 0 && curDeposit >= (totalPrice - 1)) {
+        paymentClassification = 'תשלום מלא';
+      } else {
+        paymentClassification = 'מקדמה';
+      }
+    } else if (matchingIntake) {
+      dogName = matchingIntake.dog_name || matchingIntake.dogName || 'הכלב';
+      const st = (matchingIntake.service_type || matchingIntake.serviceType || '').toLowerCase();
+      if (st.includes('train') || st.includes('אילוף')) serviceName = 'אילוף';
+      else if (st.includes('daycare') || st.includes('מעון')) serviceName = 'מעון יום';
+      else serviceName = 'פנסיון';
+      paymentClassification = 'מקדמה';
+    }
+
+    const alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על שירות ${serviceName} (${paymentClassification}).`;
 
     await sendWhatsAppDirect(MANAGER_PHONE, alertMsg);
     await sendWhatsAppDirect(SHMULIK_PHONE, alertMsg);

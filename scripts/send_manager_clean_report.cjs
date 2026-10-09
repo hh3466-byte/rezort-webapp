@@ -143,18 +143,22 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
       const cleanPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
       if (cleanPhone) {
         const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-        const firstName = (ownerName || 'לקוח').trim().split(/\s+/)[0];
-        const demandMsg = `היי ${firstName}! 🐾 לקראת ההגעה/איסוף מחר בריזורט לכלב, נשמח להסדרת יתרת התשלום בסך ₪${remainingDebt.toLocaleString()}:\n👉 ${growPaymentLink}`;
-        linkLine = `\n   📲 *לתשלום בוואטסאפ:* https://wa.me/${intlPhone}?text=${encodeURIComponent(demandMsg)}`;
+        const bId = b.id || '';
+        const shortUrl = bId
+          ? `https://rezort-webapp.vercel.app/api/wa-reminder?b=${bId}&t=${isInc ? 'in' : 'out'}`
+          : `https://wa.me/${intlPhone}`;
+        linkLine = `\n   📲 *לינק לשליחת ההודעה ללקוח:* ${shortUrl}`;
       }
     } else if (totalPrice > 0 && depositAmount === 0) {
       paymentBadge = `🔴 *לא שולם (חוב: ₪${totalPrice.toLocaleString()})* ⚠️`;
       const cleanPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
       if (cleanPhone) {
         const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-        const firstName = (ownerName || 'לקוח').trim().split(/\s+/)[0];
-        const demandMsg = `היי ${firstName}! 🐾 לקראת ההגעה/איסוף מחר בריזורט לכלב, נשמח להסדרת יתרת התשלום בסך ₪${totalPrice.toLocaleString()}:\n👉 ${growPaymentLink}`;
-        linkLine = `\n   📲 *לתשלום בוואטסאפ:* https://wa.me/${intlPhone}?text=${encodeURIComponent(demandMsg)}`;
+        const bId = b.id || '';
+        const shortUrl = bId
+          ? `https://rezort-webapp.vercel.app/api/wa-reminder?b=${bId}&t=${isInc ? 'in' : 'out'}`
+          : `https://wa.me/${intlPhone}`;
+        linkLine = `\n   📲 *לינק לשליחת ההודעה ללקוח:* ${shortUrl}`;
       }
     }
 
@@ -200,9 +204,10 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
       const phone = formatPhoneFormatted(pi.ownerPhone || pi.owner_phone || '');
       const sDate = formatDateIL(pi.startDate || pi.start_date);
       const eDate = formatDateIL(pi.endDate || pi.end_date);
+      const notes = (pi.internalNotes || pi.internal_notes || '').trim();
       let statusBadge = '🔴 לבדיקה';
-      if (pi.status === 'in_progress') statusBadge = '🟡 בתהליך';
-      else if (pi.status === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
+      if (pi.status === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
+      else if (pi.status === 'in_progress' || notes.length > 0) statusBadge = '🟡 בתהליך';
       return `${idx + 1}. ${statusBadge}: *${dog}* (${owner} - 📞 ${phone}) | מיועד: ${sDate} עד ${eDate}`;
     }).join('\n');
     actionBlocks.push(`📋 *שאלוני קליטה לבדיקה / בתהליך שממתינים לטיפול וסגירה (${unhandledIntakes.length}):*\n${pList}\n👉 *שמוליק, אנא היכנס למסך שאלוני קליטה כדי לאשר, לקלוט ליומן או לסגור טיפול.*`);

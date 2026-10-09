@@ -132,7 +132,7 @@ async function canSendAutoReplyToClient(cleanPhone) {
   }
 }
 
-async function updateGreenApiContact(chatId, firstName, lastName) {
+async function updateGreenApiContact(chatId, fullName) {
   try {
     const url = `https://api.green-api.com/waInstance${GREEN_API_ID}/editContact/${GREEN_API_TOKEN}`;
     const res = await fetch(url, {
@@ -140,8 +140,8 @@ async function updateGreenApiContact(chatId, firstName, lastName) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chatId,
-        firstName: `[חדש] ${firstName || ''}`.trim(),
-        lastName: (lastName || '').trim(),
+        firstName: `[חדש] ${fullName || ''}`.trim(),
+        lastName: '',
         saveInAddressbook: true
       })
     });
@@ -202,21 +202,29 @@ export default async function handler(req, res) {
     const body = req.body || {};
     console.log('--- Incoming Lead Webhook Payload ---', JSON.stringify(body));
 
-    // Flexible key extraction for various lead formats (Google Sheets, Meta, Zapier, Make)
+    // Flexible key extraction for single Full Name or split names (Meta, Google Sheets, Zapier, Make)
+    let rawFullName = body.fullName || body.full_name || body.name || body['שם מלא'] || body['שם'] || body['שם הלקוח'] || body['שם הבעלים'] || body['שם_מלא'] || body.owner_name || '';
     const rawFirstName = body.firstName || body.first_name || body['שם פרטי'] || body['שם_פרטי'] || body.fname || '';
     const rawLastName = body.lastName || body.last_name || body['שם משפחה'] || body['שם_משפחה'] || body.lname || '';
-    let rawFullName = body.fullName || body.full_name || body.name || body['שם'] || body['שם מלא'] || body['שם_מלא'] || '';
 
+    let fullName = String(rawFullName || '').trim();
     let firstName = String(rawFirstName || '').trim();
     let lastName = String(rawLastName || '').trim();
 
-    if (!firstName && rawFullName) {
-      const parts = String(rawFullName).trim().split(/\s+/);
-      firstName = parts[0] || '';
-      lastName = parts.slice(1).join(' ') || '';
+    if (!fullName) {
+      fullName = `${firstName} ${lastName}`.trim();
     }
 
-    const fullName = `${firstName} ${lastName}`.trim() || firstName || 'לקוח יקר';
+    if (!fullName) {
+      fullName = 'לקוח יקר';
+    }
+
+    // Extract first name for greeting if not explicitly passed
+    if (!firstName && fullName && fullName !== 'לקוח יקר') {
+      const parts = fullName.split(/\s+/);
+      firstName = parts[0] || fullName;
+      lastName = parts.slice(1).join(' ') || '';
+    }
 
     const rawPhone = body.phone || body.phoneNumber || body.phone_number || body.mobile || body.tel || body['טלפון'] || body['נייד'] || body['מספר טלפון'] || body['מספר_טלפון'] || '';
     const cleanPhone = cleanPhoneNumber(rawPhone);
@@ -248,8 +256,8 @@ export default async function handler(req, res) {
       });
     }
 
-    // 1. Create / Update Contact in Green-API Address Book with "[חדש] {שם}" (Rule 17)
-    await updateGreenApiContact(chatId, firstName, lastName);
+    // 1. Create / Update Contact in Green-API Address Book with "[חדש] {שם מלא}" (Rule 17)
+    await updateGreenApiContact(chatId, fullName);
 
     // 2. Check Closed Hours (Friday 14:00 - Sunday 09:30 or Shabbat / Jewish Holiday)
     const now = new Date();
@@ -296,6 +304,7 @@ export default async function handler(req, res) {
     // 6. Report Lead Conversion to Meta Conversions API (CAPI)
     sendMetaLeadEvent({
       phone: cleanPhone,
+      fullName,
       firstName,
       lastName,
       email,

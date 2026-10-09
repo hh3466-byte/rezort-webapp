@@ -220,20 +220,11 @@ function formatTomorrowOverviewReport(
     if (!cleanPhone) return '';
 
     const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-    const ownerFirst = getFirstName(b.owner_name || b.ownerName);
-    const dog = b.dog_name || b.dogName || 'הכלב';
-    const total = Number(b.total_price || b.totalPrice) || 0;
-    const deposit = Number(b.deposit_amount || b.depositAmount) || 0;
-    const balance = Math.max(0, total - deposit);
-
-    let messageText = '';
-    if (isEnteringTomorrow) {
-      messageText = `היי ${ownerFirst}! 🐾\nמתרגשים ומחכים מחר לתחילת השהות של ${dog} בריזורט לכלב! 🐶❤️\n\nלקראת ההגעה מחר, נשמח להסדרת יתרת התשלום בסך ₪${balance.toLocaleString()}.\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 ${growPaymentLink}\n\nמחכים לכם בשמחה,\nשמוליק וצוות הריזורט לכלב 🐾✨`;
-    } else {
-      messageText = `היי ${ownerFirst}! 🐾\nרצינו לעדכן שמחר ${dog} מסיים/ת את השהות בריזורט לכלב! 🐕🥰 נהנה/תה מכל רגע ומתגעגע/ת אליכם מאוד.\n\nלקראת האיסוף והשחרור מחר, נשמח להסדרת יתרת התשלום בסך ₪${balance.toLocaleString()}.\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 ${growPaymentLink}\n\nתודה רבה ונתראה מחר,\nשמוליק וצוות הריזורט לכלב 🐾✨`;
+    const bId = b.id || '';
+    if (bId) {
+      return `https://rezort-webapp.vercel.app/api/wa-reminder?b=${bId}&t=${isEnteringTomorrow ? 'in' : 'out'}`;
     }
-
-    return `https://wa.me/${intlPhone}?text=${encodeURIComponent(messageText)}`;
+    return `https://wa.me/${intlPhone}`;
   };
 
   const formatDogItem = (b, idx, isEntering) => {
@@ -257,13 +248,13 @@ function formatTomorrowOverviewReport(
       paymentBadge = `🟡 שולמה מקדמה ₪${deposit.toLocaleString()} (נותר ₪${balance.toLocaleString()})`;
       const waUrl = buildDebtPaymentWhatsAppUrl(b, isEntering);
       if (waUrl) {
-        quickPaymentLinkLine = `\n   📲 תזכורת תשלום בוואטסאפ: ${waUrl}`;
+        quickPaymentLinkLine = `\n   📲 לינק לשליחת ההודעה ללקוח: ${waUrl}`;
       }
     } else if (price > 0 && deposit === 0) {
       paymentBadge = `🔴 לא שולם (חוב: ₪${price.toLocaleString()})`;
       const waUrl = buildDebtPaymentWhatsAppUrl(b, isEntering);
       if (waUrl) {
-        quickPaymentLinkLine = `\n   📲 תזכורת תשלום בוואטסאפ: ${waUrl}`;
+        quickPaymentLinkLine = `\n   📲 לינק לשליחת ההודעה ללקוח: ${waUrl}`;
       }
     }
 

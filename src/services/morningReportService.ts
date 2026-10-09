@@ -153,22 +153,22 @@ export function formatTomorrowOverviewReport(
       const cleanPhone = cleanPhoneNumber(rawPhone);
       if (cleanPhone) {
         const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-        const firstName = getFirstName(ownerName);
-        const msg = isIncoming
-          ? `היי ${firstName}! 🐾\nמתרגשים ומחכים מחר לתחילת השהות של ${dogName} בריזורט לכלב! 🐶❤️\n\nלקראת ההגעה מחר, נשמח להסדרת יתרת התשלום בסך ₪${remainingDebt.toLocaleString()}.\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 ${growPaymentLink}\n\nמחכים לכם בשמחה,\nשמוליק וצוות הריזורט לכלב 🐾✨`
-          : `היי ${firstName}! 🐾\nרצינו לעדכן שמחר ${dogName} מסיים/ת את השהות בריזורט לכלב! 🐕🥰 נהנה/תה מכל רגע ומתגעגע/ת אליכם מאוד.\n\nלקראת האיסוף והשחרור מחר, נשמח להסדרת יתרת התשלום בסך ₪${remainingDebt.toLocaleString()}.\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 ${growPaymentLink}\n\nתודה רבה ונתראה מחר,\nשמוליק וצוות הריזורט לכלב 🐾✨`;
-        linkLine = `\n   📲 תזכורת תשלום בוואטסאפ: https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
+        const bId = b.id || '';
+        const shortUrl = bId
+          ? `https://rezort-webapp.vercel.app/api/wa-reminder?b=${bId}&t=${isIncoming ? 'in' : 'out'}`
+          : `https://wa.me/${intlPhone}`;
+        linkLine = `\n   📲 לינק לשליחת ההודעה ללקוח: ${shortUrl}`;
       }
     } else if (totalPrice > 0 && deposit === 0) {
       paymentBadge = `🔴 לא שולם (חוב: ₪${totalPrice.toLocaleString()})`;
       const cleanPhone = cleanPhoneNumber(rawPhone);
       if (cleanPhone) {
         const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-        const firstName = getFirstName(ownerName);
-        const msg = isIncoming
-          ? `היי ${firstName}! 🐾\nמתרגשים ומחכים מחר לתחילת השהות של ${dogName} בריזורט לכלב! 🐶❤️\n\nלקראת ההגעה מחר, נשמח להסדרת יתרת התשלום בסך ₪${totalPrice.toLocaleString()}.\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 ${growPaymentLink}\n\nמחכים לכם בשמחה,\nשמוליק וצוות הריזורט לכלב 🐾✨`
-          : `היי ${firstName}! 🐾\nרצינו לעדכן שמחר ${dogName} מסיים/ת את השהות בריזורט לכלב! 🐕🥰 נהנה/תה מכל רגע ומתגעגע/ת אליכם מאוד.\n\nלקראת האיסוף והשחרור מחר, נשמח להסדרת יתרת התשלום בסך ₪${totalPrice.toLocaleString()}.\nלתשלום מהיר, נוח ומאובטח ב-Bit או כרטיס אשראי:\n👉 ${growPaymentLink}\n\nתודה רבה ונתראה מחר,\nשמוליק וצוות הריזורט לכלב 🐾✨`;
-        linkLine = `\n   📲 תזכורת תשלום בוואטסאפ: https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
+        const bId = b.id || '';
+        const shortUrl = bId
+          ? `https://rezort-webapp.vercel.app/api/wa-reminder?b=${bId}&t=${isIncoming ? 'in' : 'out'}`
+          : `https://wa.me/${intlPhone}`;
+        linkLine = `\n   📲 לינק לשליחת ההודעה ללקוח: ${shortUrl}`;
       }
     }
 
@@ -235,7 +235,7 @@ export function formatTomorrowOverviewReport(
 
   const unhandledIntakes = safeIntakes.filter(r => {
     const s = r.status as string;
-    if (s === 'approved' || s === 'rejected' || s === 'archived') return false;
+    if (s === 'approved' || s === 'rejected' || s === 'archived' || s === 'abandoned') return false;
     const rStart = r.startDate || '';
     const rEnd = r.endDate || '';
     // Auto-archive rule: if dates have already passed without a booking, ignore from report
@@ -292,9 +292,10 @@ export function formatTomorrowOverviewReport(
       const rawPhone = pi.ownerPhone || '';
       const phone = formatPhoneFormatted(rawPhone);
       const dates = `${formatDateIL(pi.startDate)} עד ${formatDateIL(pi.endDate)}`;
+      const notes = (pi.internalNotes || '').trim();
       let statusBadge = '🔴 לבדיקה';
-      if ((pi.status as string) === 'in_progress') statusBadge = '🟡 בתהליך';
-      else if ((pi.status as string) === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
+      if ((pi.status as string) === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
+      else if ((pi.status as string) === 'in_progress' || notes.length > 0) statusBadge = '🟡 בתהליך';
       return `${idx + 1}. ${statusBadge}: *${dog}* (${owner} - 📞 ${phone}) | מיועד: ${dates}`;
     }).join('\n');
     actionBlocks.push(`📋 *שאלוני קליטה לבדיקה / בתהליך שממתינים לטיפול וסגירה (${unhandledIntakes.length}):*\n${list}\n👉 *שמוליק, אנא היכנס למסך שאלוני קליטה כדי לאשר, לקלוט ליומן או לסגור טיפול.*`);
@@ -349,7 +350,7 @@ export function formatTomorrowOverviewReport(
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
     const isFree = b.isFreeStay;
-    return price > 0 && deposit === 0 && !isFree && b.endDate >= todayStr;
+    return price > 0 && deposit === 0 && !isFree && b.endDate >= todayStr && b.stayStatus !== 'checked_out';
   });
   if (zeroDepositUpcoming.length > 0) {
     const list = zeroDepositUpcoming.map((b, idx) => {
@@ -359,18 +360,23 @@ export function formatTomorrowOverviewReport(
     actionBlocks.push(`🔴 *שריונים ללא מקדמה (₪0) שתופסים מקום ביומן (${zeroDepositUpcoming.length}):*\n${list}`);
   }
 
-  // 6. Pricing, Debts & Grow Clearing Discrepancies
+  // 6. Pricing, Debts & Grow Clearing Discrepancies (Active & Future stays only)
   const financialDiscrepancies: string[] = [];
-  activeBookings.forEach(b => {
+  const activeAndFutureForFin = activeBookings.filter(b => b.endDate >= todayStr && b.stayStatus !== 'checked_out');
+
+  activeAndFutureForFin.forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
-    const isFree = b.isFreeStay;
+    const notes = b.notes || '';
+    const isPairZeroCharge = b.isFreeStay && (notes.includes('זוג') || notes.includes('שולם דרך') || notes.includes('כלב נוסף') || notes.includes('כלב שני'));
+    const isFree = b.isFreeStay || isPairZeroCharge;
     const dailyRate = Number(b.dailyRate) || 0;
     const dog = (b.dogName || '').trim();
     const owner = (b.ownerName || '').trim();
     const phone = formatPhoneFormatted(b.ownerPhone || '');
-    const notes = b.notes || '';
     const paymentStatus = b.paymentStatus || 'unpaid';
+
+    if (isFree || isPairZeroCharge) return;
 
     let days = 1;
     if (b.startDate && b.endDate) {
@@ -379,8 +385,8 @@ export function formatTomorrowOverviewReport(
       days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
     }
 
-    // 1. Negative balance / Deposit > Total Price
-    if (deposit > price && !isFree && price > 0) {
+    // 1. Negative balance / Deposit > Total Price on future/active stays
+    if (deposit > price && !isFree && price > 0 && (deposit - price) > 50) {
       financialDiscrepancies.push(`🚨 חריגת תשלום (יתרה שלילית): *${dog}* (${owner} - 📞 ${phone}) | נקלט תשלום ₪${deposit.toLocaleString()} מתוך סה"כ ₪${price.toLocaleString()}!`);
     }
 

@@ -30,6 +30,8 @@ import { Booking, IntakeRequest, IntakeRequestStatus, ResortSettings } from '../
 import { DesktopWhatsAppAuditModal } from './DesktopWhatsAppAuditModal';
 import { cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
 import { formatDateIL } from '../utils/dateUtils';
+import { findCustomerPastDebt } from '../utils/pastDebtUtils';
+import { waivePastDebtForBooking } from '../services/dbService';
 import { 
   WhatsAppChat, 
   WhatsAppMessage, 
@@ -92,6 +94,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   const [filter, setFilter] = useState<'new' | 'in_chat' | 'waiting_reply' | 'all'>('in_chat');
   const hasUserSelectedFilter = useRef(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [waivedDebts, setWaivedDebts] = useState<Record<string, boolean>>({});
   
   // Stealth Reading Mode (מצב קריאה סמויה - אי סימון הודעות כנקראות עם קוד 3466)
   const [isStealthMode, setIsStealthMode] = useState<boolean>(() => {
@@ -1143,6 +1146,90 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* Returning Customer Past Debt Banner (Rule 21: Displayed ONLY on returning inquiry for Shmulik's decision) */}
+              {(() => {
+                const pastDebtInfo = findCustomerPastDebt(selectedChat.cleanPhone, selectedChat.name, bookings);
+                if (!pastDebtInfo.hasPastDebt) return null;
+                const remainingStays = pastDebtInfo.pastStays.filter(s => !waivedDebts[s.bookingId]);
+                const remainingDebt = remainingStays.reduce((sum, s) => sum + s.debtAmount, 0);
+                if (remainingDebt <= 0) return null;
+
+                return (
+                  <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-b-2 border-amber-400/90 px-4 py-3 shadow-xs shrink-0 text-right" dir="rtl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-amber-950 text-xs sm:text-sm">
+                              ⚠️ לקוח חוזר – קיימת יתרת חוב משהיית עבר: <span className="font-mono text-sm sm:text-base text-rose-700 font-black">₪{remainingDebt.toLocaleString()}</span>
+                            </span>
+                            <span className="text-[11px] bg-amber-200/90 text-amber-950 font-black px-2 py-0.5 rounded-lg border border-amber-300 shadow-2xs">
+                              🎯 להחלטת שמוליק
+                            </span>
+                          </div>
+
+                          <div className="text-[11px] text-slate-700 mt-1.5 space-y-1">
+                            {remainingStays.map((s, idx) => (
+                              <div key={idx} className="bg-white/90 px-2.5 py-1 rounded-lg border border-amber-200 inline-block ml-2 mb-1 shadow-2xs">
+                                <span className="font-bold text-slate-900">🐶 {s.dogName} ({s.datesText}): </span>
+                                <span className="font-mono text-slate-600">
+                                  נרשם: ₪{s.totalPrice.toLocaleString()} | שולם: ₪{s.depositAmount.toLocaleString()} | <strong className="text-rose-700 font-black">חוב: ₪{s.debtAmount.toLocaleString()}</strong>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-center flex-wrap">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (confirm(`האם למחול על חוב עבר בסך ₪${remainingDebt.toLocaleString()} עבור ${selectedChat.name || 'הלקוח'}?`)) {
+                              for (const s of remainingStays) {
+                                if (s.bookingId) {
+                                  await waivePastDebtForBooking(s.bookingId, 'נמחל על ידי שמוליק בעת פנייה חוזרת בוואטסאפ CRM');
+                                }
+                              }
+                              setWaivedDebts(prev => {
+                                const next = { ...prev };
+                                remainingStays.forEach(s => { next[s.bookingId] = true; });
+                                return next;
+                              });
+                            }
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                          title="מחל על החוב וסגור את היתרה (לא תופיע שוב)"
+                        >
+                          <Check className="w-3.5 h-3.5 text-emerald-100" />
+                          <span>💚 מחל על החוב</span>
+                        </button>
+
+                        {onOpenNewBookingWithData && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateChatStatus(selectedChat.cleanPhone, 'handled');
+                              onOpenNewBookingWithData({
+                                ownerName: selectedChat.name,
+                                ownerPhone: selectedChat.cleanPhone,
+                                dogName: selectedChat.matchedDogName || remainingStays[0]?.dogName || ''
+                              });
+                            }}
+                            className="bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                            title="קלוט ליומן וגבה את חוב העבר יחד עם ההזמנה החדשה"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5 text-amber-100" />
+                            <span>➕ קלוט וגבה חוב</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Restored / Archived Intake Notice Banner */}
               {selectedChat.matchedIntake?.status === 'abandoned' && (

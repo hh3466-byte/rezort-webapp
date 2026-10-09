@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   MessageCircle, 
@@ -37,6 +37,13 @@ export const SendIntakeModal: React.FC<SendIntakeModalProps> = ({
   const [dogName, setDogName] = useState('');
   const [copiedMessage, setCopiedMessage] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setCopiedMessage(false);
+      setCopiedLink(false);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -77,7 +84,7 @@ export const SendIntakeModal: React.FC<SendIntakeModalProps> = ({
 מיד שנתפנה נעבור על פרטי השאלון ונחזור אליכם לשיחה בנוגע לתשובות לתיאום סופי.
 
 בברכה חמה,
-צוות ${resortTitle} 🐕🤍`;
+שמוליק וכל צוות ${resortTitle} 🐾`;
   };
 
   const messageText = generateWhatsAppMessage();

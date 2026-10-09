@@ -286,18 +286,22 @@ async function execute1900Tomorrow(settings, bookings, intakes, todayStr, isForc
       const cleanPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
       if (cleanPhone) {
         const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-        const firstName = (ownerName || 'לקוח').trim().split(/\s+/)[0];
-        const demandMsg = `היי ${firstName}! 🐾 לקראת ההגעה/איסוף מחר בריזורט לכלב, נשמח להסדרת יתרת התשלום בסך ₪${remainingDebt.toLocaleString()}:\n👉 ${growPaymentLink}`;
-        linkLine = `\n   📲 *לתשלום בוואטסאפ:* https://wa.me/${intlPhone}?text=${encodeURIComponent(demandMsg)}`;
+        const bId = b.id || '';
+        const shortUrl = bId
+          ? `https://rezort-webapp.vercel.app/api/wa-reminder?b=${bId}&t=${isInc ? 'in' : 'out'}`
+          : `https://wa.me/${intlPhone}`;
+        linkLine = `\n   📲 *לינק לשליחת ההודעה ללקוח:* ${shortUrl}`;
       }
     } else if (totalPrice > 0 && depositAmount === 0) {
       paymentBadge = `🔴 *לא שולם (חוב: ₪${totalPrice.toLocaleString()})* ⚠️`;
       const cleanPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
       if (cleanPhone) {
         const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.substring(1) : cleanPhone;
-        const firstName = (ownerName || 'לקוח').trim().split(/\s+/)[0];
-        const demandMsg = `היי ${firstName}! 🐾 לקראת ההגעה/איסוף מחר בריזורט לכלב, נשמח להסדרת יתרת התשלום בסך ₪${totalPrice.toLocaleString()}:\n👉 ${growPaymentLink}`;
-        linkLine = `\n   📲 *לתשלום בוואטסאפ:* https://wa.me/${intlPhone}?text=${encodeURIComponent(demandMsg)}`;
+        const bId = b.id || '';
+        const shortUrl = bId
+          ? `https://rezort-webapp.vercel.app/api/wa-reminder?b=${bId}&t=${isInc ? 'in' : 'out'}`
+          : `https://wa.me/${intlPhone}`;
+        linkLine = `\n   📲 *לינק לשליחת ההודעה ללקוח:* ${shortUrl}`;
       }
     }
 

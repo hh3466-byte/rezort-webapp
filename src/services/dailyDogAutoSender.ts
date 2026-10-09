@@ -26,14 +26,18 @@ function buildEveningManagerSummaryMessage(
   const regardsStatus = regardsErrors.length === 0 ? 'אין כשל' : `יש כשל (${regardsErrors.length} שגיאות)`;
   const regardsLine = `• *עדכוני ד"ש (20:00):* נשלחו ד"ש לכול בעלי הכלבים סה"כ ${sentRegardsCount} הודעות כולם קיבלו. ${regardsStatus}`;
 
-  // Analyze 19:00 VIP Review Requests & Vouchers
-  const yesterdayStr = addDays(todayStr, -1);
-  const fourDaysAgoStr = addDays(todayStr, -4);
+  // Analyze 19:00 VIP Review Requests & Vouchers strictly for today's departures (or weekend departures on Motzei Shabbat)
+  const now = new Date();
+  const isSat = now.getDay() === 6;
+  const weekendStartStr = addDays(todayStr, -2);
 
   const recentDepartures = bookings.filter(b => {
-    if (b.stayStatus === 'cancelled') return false;
+    if (b.stayStatus === 'cancelled' || b.stayStatus === 'archived' || (b as any).stay_status === 'archived') return false;
     const end = b.endDate;
-    return end >= fourDaysAgoStr && end <= todayStr;
+    if (isSat) {
+      return end >= weekendStartStr && end <= todayStr;
+    }
+    return end === todayStr;
   });
 
   const sentReviews = recentDepartures.filter(b => {
@@ -52,8 +56,6 @@ function buildEveningManagerSummaryMessage(
     const clientList = sentReviews.map(b => `${b.dogName || 'כלב'} (${b.ownerName || 'בעלים'})`).join(', ');
     reviewLine = `• *בקשות חוות דעת ומועדון VIP:* נשלחו בקשות חוות דעת ומועדון VIP סה"כ ${sentReviews.length} הודעות והאירוע הסתיים בהצלחה (${clientList}). אין כשל`;
   } else {
-    const now = new Date();
-    const isSat = now.getDay() === 6;
     if (isSat && (now.getHours() < 20 || (now.getHours() === 20 && now.getMinutes() < 15))) {
       reviewLine = `• *בקשות חוות דעת ומועדון VIP:* מתוזמנות למוצאי שבת (20:15). טרם שוגרו.`;
     } else {
@@ -228,12 +230,29 @@ export async function runAutoDailyDogUpdates(
       intakeMatch?.isFriendlyWithDogs
     ));
 
+    const isFemale = dogGroup.some(b => Boolean(
+      b.dogGender === 'female_spayed' || 
+      b.dogGender === 'female_intact' ||
+      (intakeMatch?.dogGender as string) === 'female' ||
+      (intakeMatch?.dogGender as string) === 'female_spayed' ||
+      (intakeMatch?.dogGender as string) === 'female_intact' ||
+      (b.notes && (b.notes.includes('נקבה') || b.notes.includes('מעוקרת'))) ||
+      (b.behaviorNotes && (b.behaviorNotes.includes('נקבה') || b.behaviorNotes.includes('מעוקרת'))) ||
+      ['לונה', 'קירה', 'מימי', 'ניצה', 'גולי', 'ג\'ולי', 'נולי', 'שירלי', 'מיה', 'בלה', 'בל', 'רובי', 'ג\'סי', 'גסי', 'מרתה', 'לוסי', 'לולה', 'ג\'וזי'].some(fn => (b.dogName || '').includes(fn)) ||
+      (b.dogName || '').includes('ית')
+    ));
+
+    const minStartDate = dogGroup.map(b => b.startDate).filter(Boolean).sort()[0] || firstB.startDate;
+
     const { formattedText } = pickDailyDogTemplate(
       ownerName,
       combinedDogName,
       isIsolation,
       [],
-      isTraining
+      isTraining,
+      isFemale,
+      minStartDate,
+      cleanPhone
     );
 
     try {

@@ -1,5 +1,5 @@
 const fs = require('fs');
-
+const { createClient } = require('@supabase/supabase-js');
 const envContent = fs.readFileSync('.env', 'utf8');
 const env = {};
 envContent.split('\n').forEach(line => {
@@ -12,50 +12,21 @@ envContent.split('\n').forEach(line => {
     env[match[1]] = val;
   }
 });
+const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
 
-const idInstance = env.VITE_GREEN_API_ID_INSTANCE || '710722735421';
-const apiToken = env.VITE_GREEN_API_TOKEN || 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b';
-
-const phones = [
-  { dog: 'מייק', owner: 'בוריס', phone: '0545970156' },
-  { dog: 'ג\'וי', owner: 'ירוס', phone: '0556646093' },
-  { dog: 'טר', owner: 'רעות', phone: '0545495932' },
-  { dog: 'דילן', owner: 'בר', phone: '0535882051' },
-  { dog: 'ג\'סי', owner: 'ריקה', phone: '0527777737' },
-  { dog: 'לונה', owner: 'רונן', phone: '0524728843' },
-  { dog: 'לונה', owner: 'שלומי', phone: '0505445512' },
-  { dog: 'מגן', owner: 'דורין', phone: '0529270115' },
-  { dog: 'ונוס', owner: 'אלי', phone: '0546160220' },
-  { dog: 'קירה', owner: 'ישראל', phone: '0505642501' },
-  { dog: 'תיאו', owner: 'איל', phone: '0505564073' },
-  { dog: 'סקאי', owner: 'קובי', phone: '0549147080' }
-];
-
-async function run() {
-  console.log('--- VERIFYING ACTUAL MOTZEI SHABBAT GREETINGS SENT ---');
-  for (const item of phones) {
-    const clean = item.phone.replace(/\D/g, '');
-    const chatId = `972${clean.startsWith('0') ? clean.slice(1) : clean}@c.us`;
-    try {
-      const resp = await fetch(`https://api.green-api.com/waInstance${idInstance}/getChatHistory/${apiToken}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, count: 3 })
-      });
-      const hist = await resp.json();
-      const last = Array.isArray(hist) ? hist.find(m => m.type === 'outgoing') : null;
-      if (last) {
-        const time = new Date(last.timestamp * 1000).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
-        const snippet = (last.textMessage || last.extendedTextMessage?.text || '').slice(0, 70);
-        console.log(`✅ ${item.dog} (${item.owner}): [${time}] -> ${snippet.replace(/\n/g, ' ')}`);
-      } else {
-        console.log(`❌ ${item.dog} (${item.owner}): No outgoing messages found`);
-      }
-    } catch (e) {
-      console.log(`⚠️ ${item.dog}: fetch error`);
-    }
-    await new Promise(r => setTimeout(r, 250)); // small delay to respect rate limit
-  }
+async function verifyAll9Dogs() {
+  const todayStr = '2026-10-05';
+  const { data: bookings } = await supabase
+    .from('bookings')
+    .select('*')
+    .lte('start_date', todayStr)
+    .gt('end_date', todayStr)
+    .neq('stay_status', 'cancelled');
+    
+  console.log(`Total active bookings today: ${bookings.length}`);
+  bookings.forEach((b, i) => {
+    console.log(`${i + 1}. כלב: ${b.dog_name}, בעלים: ${b.owner_name} (${b.owner_phone}) | סטטוס שליחה אחרונה: ${b.data?.lastDailyDogUpdateSent}`);
+  });
 }
 
-run();
+verifyAll9Dogs().catch(console.error);

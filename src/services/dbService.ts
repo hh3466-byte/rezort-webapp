@@ -632,6 +632,9 @@ export const saveBookingToDb = async (booking: Booking): Promise<void> => {
   } catch (e) {}
 
   try {
+    const isFree = updatedBooking.isFreeStay || Number(updatedBooking.totalPrice) === 0;
+    const depositNum = Number(updatedBooking.depositAmount) || 0;
+
     const payload = {
       id: updatedBooking.id,
       dog_name: updatedBooking.dogName,
@@ -644,9 +647,9 @@ export const saveBookingToDb = async (booking: Booking): Promise<void> => {
       start_date: updatedBooking.startDate,
       end_date: updatedBooking.endDate,
       total_price: Number(updatedBooking.totalPrice) || 0,
-      deposit_amount: Number(updatedBooking.depositAmount) || 0,
-      payment_status: updatedBooking.paymentStatus,
-      payment_method: updatedBooking.paymentMethod || 'bit',
+      deposit_amount: isFree ? 0 : depositNum,
+      payment_status: isFree ? 'fully_paid' : updatedBooking.paymentStatus,
+      payment_method: updatedBooking.paymentMethod || null,
       stay_status: updatedBooking.stayStatus,
       notes: updatedBooking.notes || '',
       vaccination_valid: updatedBooking.vaccinationValid ?? true,
@@ -688,6 +691,37 @@ export const saveBookingToDb = async (booking: Booking): Promise<void> => {
     }));
     await supabase.from(CUSTOMERS_TABLE).upsert(customerRecords, { onConflict: 'id' });
   } catch (e) {}
+};
+
+// Waive past debt for a completed/historical booking (Shmulik's decision)
+export const waivePastDebtForBooking = async (bookingId: string, reason?: string): Promise<boolean> => {
+  try {
+    const { data: rows } = await supabase.from(BOOKINGS_TABLE).select('*').eq('id', bookingId).limit(1);
+    if (!rows || rows.length === 0) return false;
+    const b = rows[0];
+    const d = b.data || {};
+    const price = Number(b.total_price ?? d.totalPrice ?? 0);
+    const existingNotes = b.notes || d.notes || '';
+    const noteReason = reason ? `[חוב_עבר_נמחל: ${reason}]` : '[חוב_עבר_נמחל_ע״י_שמוליק]';
+    const updatedNotes = existingNotes ? `${existingNotes} ${noteReason}` : noteReason;
+
+    await supabase.from(BOOKINGS_TABLE).update({
+      deposit_amount: price,
+      payment_status: 'fully_paid',
+      notes: updatedNotes,
+      data: {
+        ...d,
+        depositAmount: price,
+        paymentStatus: 'fully_paid',
+        notes: updatedNotes
+      },
+      updated_at: new Date().toISOString()
+    }).eq('id', bookingId);
+    return true;
+  } catch (err) {
+    console.warn('Error waiving past debt:', err);
+    return false;
+  }
 };
 
 // Delete a Booking from Supabase
@@ -1826,6 +1860,48 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
     totalVisits: 0,
     isVip: false
   };
+};
+
+/**
+ * Rule 22: Automatically archives bookings checked out > 72 hours ago.
+ * Released dogs are archived and never mentioned in daily routine reports.
+ */
+export const autoArchiveOldCheckedOutBookings = async (bookings: Booking[] = []): Promise<Booking[]> => {
+  try {
+    const today = new Date();
+    const threeDaysAgoDate = new Date(today.getTime() - 72 * 60 * 60 * 1000);
+    const threeDaysAgoStr = threeDaysAgoDate.toISOString().split('T')[0];
+
+    const toArchive = bookings.filter(b => {
+      if (b.stayStatus === 'cancelled' || b.stayStatus === 'archived') return false;
+      const isPastCheckout = b.stayStatus === 'checked_out' && b.endDate <= threeDaysAgoStr;
+      const isOldPastStay = b.endDate <= threeDaysAgoStr && (!b.stayStatus || b.stayStatus === 'checked_out');
+      return isPastCheckout || isOldPastStay;
+    });
+
+    if (toArchive.length === 0) return bookings;
+
+    for (const b of toArchive) {
+      b.stayStatus = 'archived';
+      (b as any).isArchived = true;
+      try {
+        await supabase
+          .from('bookings')
+          .update({
+            stay_status: 'archived',
+            data: { ...(b as any), stayStatus: 'archived', isArchived: true, archivedAt: new Date().toISOString() }
+          })
+          .eq('id', b.id);
+      } catch (err) {
+        console.warn(`Failed to auto-archive booking ${b.id}:`, err);
+      }
+    }
+
+    return bookings;
+  } catch (err) {
+    console.error('Error in autoArchiveOldCheckedOutBookings:', err);
+    return bookings;
+  }
 };
 
 

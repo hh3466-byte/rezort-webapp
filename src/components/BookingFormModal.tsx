@@ -25,6 +25,7 @@ import { parseVoiceOrWhatsAppText } from '../services/agentService';
 import { getLearnedRefundReasons, saveLearnedRefundReason } from '../utils/refundUtils';
 import { TimeSchedulePicker } from './TimeSchedulePicker';
 import { normalizePlacementKey, getPlacementDisplayName } from '../utils/kennelUtils';
+import { verifyGrowPayment, fetchCustomerVerifiedGrowPayments, GrowVerificationResult } from '../services/growVerificationGatekeeper';
 
 interface BookingFormModalProps {
   initialData?: Partial<Booking> | null;
@@ -155,6 +156,27 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
     return 'free';
   });
   const [linkedMainDogName, setLinkedMainDogName] = useState<string>(initialData?.linkedDogName || '');
+
+  const [growVerification, setGrowVerification] = useState<GrowVerificationResult | null>(null);
+  const [manualOverrideConfirmed, setManualOverrideConfirmed] = useState(false);
+  const [availableGrowPayments, setAvailableGrowPayments] = useState<any[]>([]);
+
+  // Real-time Grow Verification Check
+  useEffect(() => {
+    let isCancelled = false;
+    if (depositAmount > 0 && !isFreeStay && paymentMethod !== 'cash') {
+      verifyGrowPayment(ownerPhone, depositAmount, paymentMethod, isFreeStay).then(res => {
+        if (!isCancelled) setGrowVerification(res);
+      });
+      fetchCustomerVerifiedGrowPayments(ownerPhone).then(list => {
+        if (!isCancelled) setAvailableGrowPayments(list);
+      });
+    } else {
+      setGrowVerification(null);
+      setAvailableGrowPayments([]);
+    }
+    return () => { isCancelled = true; };
+  }, [ownerPhone, depositAmount, paymentMethod, isFreeStay]);
 
   // Stay extension calculations
   const isExtended = Boolean(
@@ -386,6 +408,14 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       setRefundWillExecute(true);
       setShowRefundPrompt(true);
       return;
+    }
+
+    // Layer 1 Safeguard: Prevent inventing unverified digital payments
+    if (depositAmount > 0 && !isFreeStay && paymentMethod !== 'cash') {
+      if (growVerification && !growVerification.isVerified && !manualOverrideConfirmed) {
+        alert('🛑 לא ניתן לרשום תשלום דיגיטלי (ביט/אשראי/העברה) שלא אומת מול Grow!\n\nלשמירה, יש לאפס את המקדמה ל-₪0 (ולשלוח ללקוח קישור לתשלום ב-Grow), או לסמן "אישור חריג" אם קיבלת את הכסף ישירות בביט הפרטי.');
+        return;
+      }
     }
 
     doSave();
@@ -1640,6 +1670,74 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                     <option value="other">אחר</option>
                   </select>
                 </div>
+              </div>
+            )}
+
+            {/* Real-time Grow Payment Verification Banner (Anti-Fake Payment Guard) */}
+            {depositAmount > 0 && !isFreeStay && paymentMethod !== 'cash' && (
+              <div className="pt-2 animate-in fade-in duration-150">
+                {growVerification?.isVerified ? (
+                  <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-2.5 text-xs text-emerald-950 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <strong className="text-emerald-900 font-black">✅ תשלום מאומת ב-Grow / Bit:</strong>
+                        <span className="mr-1">
+                          נמצאה עסקה אמיתית בסך ₪{growVerification.matchedAmount.toLocaleString()} ({growVerification.matchedTransactions[0]?.method || 'Grow'}, אסמכתא: {growVerification.matchedTransactions[0]?.ref}).
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-3 text-xs text-rose-950 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="text-rose-900 font-black">🛑 עצור – לא נמצא תשלום מאומת ב-Grow עבור לקוח זה!</strong>
+                        <p className="text-[11px] text-rose-800 mt-0.5">
+                          לא נקלטה עסקה על סך ₪{depositAmount.toLocaleString()} ב-Grow/Bit עבור מספר הטלפון {ownerPhone || '(לא הוזן)'}.
+                          חל איסור על רישום תשלום דיגיטלי ללא אימות בפועל מול Grow.
+                        </p>
+                      </div>
+                    </div>
+
+                    {availableGrowPayments.length > 0 && (
+                      <div className="bg-white/90 p-2 rounded-lg border border-rose-200">
+                        <span className="text-[11px] font-bold text-slate-700 block mb-1">
+                          עסקאות Grow קיימות שנמצאו עבור לקוח זה:
+                        </span>
+                        <div className="space-y-1">
+                          {availableGrowPayments.map((p, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setDepositAmount(p.amount);
+                                setPaymentMethod(p.method?.toLowerCase().includes('bit') ? 'bit' : 'credit');
+                              }}
+                              className="text-right w-full text-[11px] bg-slate-50 hover:bg-emerald-50 border border-slate-200 rounded p-1.5 flex items-center justify-between cursor-pointer"
+                            >
+                              <span>🔹 ₪{p.amount} ({p.method}) - אסמכתא: {p.ref} ({formatDateIL(p.date)})</span>
+                              <span className="text-emerald-700 font-bold">שייך תשלום זה 👈</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-rose-200/60">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold text-slate-800">
+                        <input
+                          type="checkbox"
+                          checked={manualOverrideConfirmed}
+                          onChange={(e) => setManualOverrideConfirmed(e.target.checked)}
+                          className="rounded text-rose-600 focus:ring-rose-500"
+                        />
+                        <span>אישור חריג: אני מאשר שווידאתי את קבלת הכסף באפליקציית ביט הפרטית / מזומן</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
