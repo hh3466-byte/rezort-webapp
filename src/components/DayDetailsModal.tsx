@@ -720,22 +720,23 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
               <MessageSquare className="w-3.5 h-3.5" />
               <span>וואטסאפ</span>
             </button>
-
-            {onOpenSendPaymentLink && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenSendPaymentLink();
-                }}
-                title="שלח קישור Grow / Bit לתשלום בוואטסאפ ללא ביטול הזמנה"
-                className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-950 border border-emerald-300 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
-              >
-                <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
-                <span>קישור לתשלום 💳</span>
-              </button>
-            )}
           </>
+        )}
+
+        {/* Send Payment Link Button (Always accessible for full debt or extra charges/days) */}
+        {onOpenSendPaymentLink && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenSendPaymentLink();
+            }}
+            title="שלח קישור Grow / Bit לתשלום בוואטסאפ (סכום רגיל או תוספת/יום נוסף)"
+            className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-950 border border-emerald-300 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+          >
+            <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
+            <span>קישור לתשלום 💳</span>
+          </button>
         )}
 
         {/* Direct Delete Button */}

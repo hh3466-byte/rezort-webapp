@@ -63,6 +63,12 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
   const serviceHebrew = getServiceTypeHebrew(booking.serviceType);
   const stayDates = `${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}`;
 
+  // Auto-detect initial payment reason
+  const isCheckedOutOrPast = booking.stayStatus === 'checked_out' || (booking.endDate && new Date(booking.endDate).getTime() < new Date().setHours(0,0,0,0));
+  const [reasonType, setReasonType] = useState<'extra_day' | 'extra_service' | 'general_booking'>(() => {
+    return isCheckedOutOrPast ? 'extra_day' : 'general_booking';
+  });
+
   // Helper to format link
   const formatLink = (rawLink: string) => {
     let clean = (rawLink || '').trim();
@@ -74,13 +80,35 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
     return clean;
   };
 
-  // Construct official payment message
-  const buildDefaultMessage = (amt: number, rawLink: string, locked: boolean) => {
+  // Construct official payment message according to reason
+  const buildDefaultMessage = (amt: number, rawLink: string, locked: boolean, reason: 'extra_day' | 'extra_service' | 'general_booking') => {
     const formattedLink = formatLink(rawLink);
     const amountSection = amt > 0 ? `\n💰 *הסכום לתשלום:* ₪${amt}\n` : '';
     const amountHint = locked 
       ? ` (סכום ₪${amt} מעודכן ונעול לתשלום)` 
       : (amt > 0 ? ` (יש להזין ₪${amt} בעמוד התשלום)` : '');
+
+    if (reason === 'extra_day') {
+      return `היי ${firstName}! 🐾
+בהמשך לשהייה של *${booking.dogName}* בריזורט לכלב, מצורף קישור מאובטח להסדרת התשלום עבור היום הנוסף / סיום השהייה:${amountSection}
+👉 ${formattedLink}${amountHint}
+
+💡 *לתשלום ב-Bit, Apple Pay, Google Pay, PayBox, אשראי או העברה בנקאית:* פשוט לוחצים על הקישור למעלה ובוחרים באמצעי התשלום הרצוי (התשלום נקלט ומעדכן את המערכת אוטומטית עם קבלה וחשבונית מס מיידית!).
+
+נשמח לראותכם שוב בריזורט! 🐕🤍
+שמוליק וכל צוות הריזורט לכלב 🐾`;
+    }
+
+    if (reason === 'extra_service') {
+      return `היי ${firstName}! 🐾
+בהמשך לשהייה של *${booking.dogName}* בריזורט לכלב, מצורף קישור מאובטח להסדרת תשלום עבור שירות נוסף / אקסטרה:${amountSection}
+👉 ${formattedLink}${amountHint}
+
+💡 *לתשלום ב-Bit, Apple Pay, Google Pay, PayBox, אשראי או העברה בנקאית:* פשוט לוחצים על הקישור למעלה ובוחרים באמצעי התשלום הרצוי (התשלום נקלט ומעדכן את המערכת אוטומטית עם קבלה וחשבונית מס מיידית!).
+
+נשמח לראותכם בריזורט! 🐕🤍
+שמוליק וכל צוות הריזורט לכלב 🐾`;
+    }
 
     return `היי ${firstName}! 🐾
 שמחים לעדכן שהמקום עבור *${booking.dogName}* (${serviceHebrew}) שוריין בריזורט לכלב לתאריכים:
@@ -95,40 +123,46 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 • מעבר לשעות הפעילות (לפני 09:30 ואחרי 18:30), ובסופי שבוע וחגים על הבעלים להתגבר ולהתאפק! בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐾
 
 נשמח לראותכם בריזורט! 🐕🤍
-צוות הריזורט לכלב`;
+שמוליק וכל צוות הריזורט לכלב 🐾`;
   };
 
-  const [messageText, setMessageText] = useState<string>(() => buildDefaultMessage(initialAmount, defaultStaticLink, false));
+  const [messageText, setMessageText] = useState<string>(() => buildDefaultMessage(initialAmount, defaultStaticLink, false, isCheckedOutOrPast ? 'extra_day' : 'general_booking'));
 
   // Auto-generate dynamic locked Grow link on mount or amount change
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const fetchDynamicLink = async (targetAmt: number) => {
+  const fetchDynamicLink = async (targetAmt: number, currentReason = reasonType) => {
     if (!targetAmt || targetAmt <= 0) {
       setCustomLink(defaultStaticLink);
       setIsLockedLink(false);
       if (!isManuallyEdited) {
-        setMessageText(buildDefaultMessage(targetAmt, defaultStaticLink, false));
+        setMessageText(buildDefaultMessage(targetAmt, defaultStaticLink, false, currentReason));
       }
       return;
     }
 
     setIsGeneratingLink(true);
     try {
+      const reasonLabel = currentReason === 'extra_day' 
+        ? `תשלום יום נוסף - ${booking.dogName}` 
+        : currentReason === 'extra_service' 
+        ? `תשלום שירות נוסף - ${booking.dogName}` 
+        : `שריון אירוח בריזורט לכלב - ${booking.dogName} (${stayDates})`;
+
       const res = await createGrowDynamicPaymentLink({
         amount: targetAmt,
         bookingId: booking.id,
         dogName: booking.dogName,
         ownerName: booking.ownerName,
         ownerPhone: booking.ownerPhone,
-        description: `שריון אירוח בריזורט לכלב - ${booking.dogName} (${stayDates})`
+        description: reasonLabel
       });
 
       if (res && res.paymentUrl) {
         setCustomLink(res.paymentUrl);
         setIsLockedLink(res.isLocked);
         if (!isManuallyEdited) {
-          setMessageText(buildDefaultMessage(targetAmt, res.paymentUrl, res.isLocked));
+          setMessageText(buildDefaultMessage(targetAmt, res.paymentUrl, res.isLocked, currentReason));
         }
       }
     } catch (err) {
@@ -141,24 +175,31 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
   };
 
   useEffect(() => {
-    fetchDynamicLink(amount);
+    fetchDynamicLink(amount, reasonType);
   }, []);
 
   const handleAmountChange = (newAmt: number) => {
     setAmount(newAmt);
-    fetchDynamicLink(newAmt);
+    fetchDynamicLink(newAmt, reasonType);
+  };
+
+  const handleReasonChange = (newReason: 'extra_day' | 'extra_service' | 'general_booking') => {
+    setReasonType(newReason);
+    setIsManuallyEdited(false);
+    setMessageText(buildDefaultMessage(amount, customLink, isLockedLink, newReason));
+    fetchDynamicLink(amount, newReason);
   };
 
   const handleLinkChange = (newLink: string) => {
     setCustomLink(newLink);
     setIsLockedLink(false);
     if (!isManuallyEdited) {
-      setMessageText(buildDefaultMessage(amount, newLink, false));
+      setMessageText(buildDefaultMessage(amount, newLink, false, reasonType));
     }
   };
 
   const handleResetToDefault = () => {
-    setMessageText(buildDefaultMessage(amount, customLink, isLockedLink));
+    setMessageText(buildDefaultMessage(amount, customLink, isLockedLink, reasonType));
     setIsManuallyEdited(false);
   };
 
@@ -345,6 +386,44 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 
           {/* Editable Message Box */}
           <div>
+            {/* Quick Reason Tabs */}
+            <div className="flex items-center gap-1 mb-2 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs flex-wrap">
+              <span className="text-[11px] font-bold text-slate-500 px-1 shrink-0">נושא:</span>
+              <button
+                type="button"
+                onClick={() => handleReasonChange('extra_day')}
+                className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  reasonType === 'extra_day'
+                    ? 'bg-emerald-700 text-white shadow-2xs font-black'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                }`}
+              >
+                יום נוסף / סיום שהייה ➕
+              </button>
+              <button
+                type="button"
+                onClick={() => handleReasonChange('extra_service')}
+                className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  reasonType === 'extra_service'
+                    ? 'bg-emerald-700 text-white shadow-2xs font-black'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                }`}
+              >
+                שירות אקסטרה / מקלחת 🛁
+              </button>
+              <button
+                type="button"
+                onClick={() => handleReasonChange('general_booking')}
+                className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  reasonType === 'general_booking'
+                    ? 'bg-emerald-700 text-white shadow-2xs font-black'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
+                }`}
+              >
+                שריון מקום / יתרה 📅
+              </button>
+            </div>
+
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
                 <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />

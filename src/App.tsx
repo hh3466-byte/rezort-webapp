@@ -2205,6 +2205,7 @@ export default function App() {
               settings={settings}
               onSelectBooking={(b) => setSelectedDateForDetails(b.startDate)}
               onOpenVoucher={(data) => setVoucherModalData({ isOpen: true, ...data })}
+              onOpenSendPaymentLink={(b) => setPaymentLinkBooking(b)}
               onNewBookingForCustomer={(customer) => {
                 const firstDog = customer.dogs[0];
                 setBookingWizardOpen({

@@ -3,7 +3,7 @@ import {
   Users, 
   Search, 
   Dog, 
-  User,
+  User, 
   Phone, 
   Calendar, 
   DollarSign, 
@@ -13,7 +13,8 @@ import {
   AlertCircle,
   Clock,
   Sparkles,
-  Gift
+  Gift,
+  CreditCard
 } from 'lucide-react';
 import { Booking, Customer, ResortSettings } from '../types';
 import { extractCustomers } from '../utils/storage';
@@ -26,6 +27,7 @@ interface CustomersViewProps {
   onNewBookingForCustomer: (customer: Customer) => void;
   onSelectBooking: (booking: Booking) => void;
   onOpenVoucher?: (data: { customerName: string; dogName: string; phone: string; staysCount?: number }) => void;
+  onOpenSendPaymentLink?: (booking: Booking) => void;
 }
 
 export const CustomersView: React.FC<CustomersViewProps> = ({
@@ -34,6 +36,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   onNewBookingForCustomer,
   onSelectBooking,
   onOpenVoucher,
+  onOpenSendPaymentLink,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [vipFilter, setVipFilter] = useState<'all' | 'vip' | 'debt'>('all');
@@ -230,7 +233,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   </div>
                 </div>
 
-                {/* Action Buttons: New Booking for this Customer, Voucher, WhatsApp, Call */}
+                {/* Action Buttons: New Booking, Payment Link, Voucher, WhatsApp, Call */}
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
                   <button
                     type="button"
@@ -240,6 +243,35 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <Plus className="w-4 h-4 stroke-[3]" />
                     <span>הזמנה חדשה</span>
                   </button>
+
+                  {onOpenSendPaymentLink && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetBooking: Booking = customerBookings[0] || {
+                          id: 'cust-' + customer.id,
+                          dogName: customer.dogs[0]?.name || 'כלב',
+                          ownerName: customer.name,
+                          ownerPhone: customer.phone,
+                          startDate: new Date().toISOString().split('T')[0],
+                          endDate: new Date().toISOString().split('T')[0],
+                          totalPrice: customer.openDebt || 0,
+                          depositAmount: 0,
+                          serviceType: 'boarding',
+                          stayStatus: 'checked_out',
+                          paymentStatus: customer.openDebt > 0 ? 'unpaid' : 'fully_paid',
+                          createdAt: new Date().toISOString(),
+                          updatedAt: new Date().toISOString(),
+                        };
+                        onOpenSendPaymentLink(targetBooking);
+                      }}
+                      className="py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 shrink-0"
+                      title="שלח קישור לתשלום ב-Grow / Bit ישירות לוואטסאפ של הלקוח"
+                    >
+                      <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      <span>קישור לתשלום 💳</span>
+                    </button>
+                  )}
 
                   {onOpenVoucher && (
                     <button

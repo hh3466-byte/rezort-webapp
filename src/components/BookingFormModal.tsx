@@ -643,7 +643,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
             isNeutered: dogGender === 'male_neutered' || dogGender === 'female_spayed',
             isVaccinated: vaccinationValid,
             specialDiet,
-            medications,
+            medications: medicationSchedule,
             specialNeeds: notes,
             notes
           }}
@@ -1767,7 +1767,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               </span>
 
               <div className="flex items-center gap-2 flex-wrap">
-                {onOpenSendPaymentLink && initialData?.id && remainingDebt > 0 && !isFreeStay && (
+                {onOpenSendPaymentLink && initialData?.id && (
                   <button
                     type="button"
                     onClick={() => {
@@ -1795,11 +1795,11 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                       };
                       onOpenSendPaymentLink(currentBooking);
                     }}
-                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-black shadow-2xs flex items-center gap-1 cursor-pointer transition-all"
-                    title="שלח קישור לתשלום מאובטח בוואטסאפ ללקוח"
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer transition-all"
+                    title="שלח קישור לתשלום מאובטח ב-Grow / Bit בוואטסאפ ללקוח"
                   >
-                    <span>📲</span>
-                    <span>שלח קישור תשלום בוואטסאפ (יתרה ₪{remainingDebt.toLocaleString()})</span>
+                    <span>💳</span>
+                    <span>שלח קישור לתשלום (Grow / Bit){remainingDebt > 0 ? ` • יתרה ₪${remainingDebt.toLocaleString()}` : ''}</span>
                   </button>
                 )}
 
