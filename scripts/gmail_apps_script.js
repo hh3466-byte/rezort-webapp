@@ -474,7 +474,13 @@ function processResortEmails() {
             if (st.indexOf("train") !== -1 || st.indexOf("אילוף") !== -1) serviceNameAlert = "אילוף";
             else if (st.indexOf("daycare") !== -1 || st.indexOf("מעון") !== -1) serviceNameAlert = "מעון יום";
             else serviceNameAlert = "פנסיון";
-            paymentClassAlert = "מקדמה";
+            
+            var intakePrice = Number(matchedIntake.calculatedPrice || matchedIntake.totalPrice || 0);
+            if (intakePrice > 0 && amount >= (intakePrice - 1)) {
+              paymentClassAlert = "תשלום מלא";
+            } else {
+              paymentClassAlert = "מקדמה";
+            }
           }
 
           var alertMsg = "שלום, התקבל תשלום ע״ס " + Number(amount).toLocaleString() + " ₪ מ" + (customerName || "לקוח") + " בעבור " + dogNameAlert + " על שירות " + serviceNameAlert + " (" + paymentClassAlert + ").";

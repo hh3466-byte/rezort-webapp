@@ -328,7 +328,13 @@ export default async function handler(req, res) {
       if (st.includes('train') || st.includes('אילוף')) serviceName = 'אילוף';
       else if (st.includes('daycare') || st.includes('מעון')) serviceName = 'מעון יום';
       else serviceName = 'פנסיון';
-      paymentClassification = 'מקדמה';
+      
+      const intakeFullPrice = Number(matchingIntake.calculated_price || matchingIntake.calculatedPrice || matchingIntake.total_price || (matchingIntake.data && matchingIntake.data.calculatedPrice) || 0);
+      if (intakeFullPrice > 0 && amount >= (intakeFullPrice - 1)) {
+        paymentClassification = 'תשלום מלא';
+      } else {
+        paymentClassification = 'מקדמה';
+      }
     }
 
     const alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על שירות ${serviceName} (${paymentClassification}).`;
