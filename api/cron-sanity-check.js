@@ -145,10 +145,21 @@ function isActionableIncomingMessage(rawText) {
   return false;
 }
 
+function getGreenApiUrl(id, endpoint, token) {
+  const cleanId = String(id || '').trim();
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
+  const domain = clusterPrefix ? `${clusterPrefix}.api.greenapi.com` : 'api.greenapi.com';
+  return `https://${domain}/waInstance${cleanId}/${endpoint}/${token}`;
+}
+
 async function fetchGreenApiChats(id, token, count = 80) {
   if (!id || !token) return [];
   try {
-    const res = await fetch(`https://api.green-api.com/waInstance${id}/getChats/${token}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const url = getGreenApiUrl(id, 'getChats', token);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
     if (!res.ok) return [];
     const raw = await res.json();
     return Array.isArray(raw) ? raw : [];
@@ -563,11 +574,15 @@ export default async function handler(req, res) {
     // Additional Ironclad Guard: Check directly in Green-API manager chat history (only for evening messages sent after 18:00)
     if (!isForced && greenId && greenToken) {
       try {
-        const histResp = await fetch(`https://api.green-api.com/waInstance${greenId}/getChatHistory/${greenToken}`, {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 6000);
+        const histResp = await fetch(getGreenApiUrl(greenId, 'getChatHistory', greenToken), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId: MANAGER_CHAT_ID, count: 12 })
+          body: JSON.stringify({ chatId: MANAGER_CHAT_ID, count: 12 }),
+          signal: controller.signal
         });
+        clearTimeout(timeout);
         if (histResp.ok) {
           const hist = await histResp.json();
           if (Array.isArray(hist)) {
@@ -599,15 +614,24 @@ export default async function handler(req, res) {
       growPayments || []
     );
 
-    // Send WhatsApp directly to Manager (0543200007)
+    // Send WhatsApp directly to Hagai (0543200007)
     let sendResult = null;
     if (greenId && greenToken) {
-      const sendRes = await fetch(`https://api.green-api.com/waInstance${greenId}/sendMessage/${greenToken}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: MANAGER_CHAT_ID, message: reportText })
-      });
-      sendResult = await sendRes.json();
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
+        const sendRes = await fetch(getGreenApiUrl(greenId, 'sendMessage', greenToken), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId: MANAGER_CHAT_ID, message: reportText }),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        sendResult = await sendRes.json();
+      } catch (sendErr) {
+        console.error('Error sending sanity report WhatsApp:', sendErr);
+        sendResult = { error: sendErr.message };
+      }
     }
 
     const curData = sRow.data || {};

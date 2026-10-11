@@ -132,9 +132,18 @@ async function canSendAutoReplyToClient(cleanPhone) {
   }
 }
 
+function getGreenApiUrl(id, endpoint, token) {
+  const cleanId = String(id || '').trim();
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
+  const domain = clusterPrefix ? `${clusterPrefix}.api.greenapi.com` : 'api.greenapi.com';
+  return `https://${domain}/waInstance${cleanId}/${endpoint}/${token}`;
+}
+
 async function updateGreenApiContact(chatId, fullName) {
   try {
-    const url = `https://api.green-api.com/waInstance${GREEN_API_ID}/editContact/${GREEN_API_TOKEN}`;
+    const url = getGreenApiUrl(GREEN_API_ID, 'editContact', GREEN_API_TOKEN);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -143,8 +152,10 @@ async function updateGreenApiContact(chatId, fullName) {
         firstName: `[חדש] ${fullName || ''}`.trim(),
         lastName: '',
         saveInAddressbook: true
-      })
+      }),
+      signal: controller.signal
     });
+    clearTimeout(timeout);
     return res.ok;
   } catch (err) {
     console.warn('Error updating Green API contact name:', err);
@@ -154,12 +165,16 @@ async function updateGreenApiContact(chatId, fullName) {
 
 async function sendWhatsAppMessage(chatId, message) {
   try {
-    const url = `https://api.green-api.com/waInstance${GREEN_API_ID}/sendMessage/${GREEN_API_TOKEN}`;
+    const url = getGreenApiUrl(GREEN_API_ID, 'sendMessage', GREEN_API_TOKEN);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, message })
+      body: JSON.stringify({ chatId, message }),
+      signal: controller.signal
     });
+    clearTimeout(timeout);
     if (!res.ok) {
       const errText = await res.text();
       console.error('Green API error sending message:', res.status, errText);

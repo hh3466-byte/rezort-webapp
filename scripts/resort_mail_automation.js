@@ -26,8 +26,8 @@ function processResortEmails() {
   var allMessagesByThread = [];
   try {
     // שליפה ממוקדת של שרשורים רלוונטיים בלבד (חיסכון של 95% במכסות Gmail)
-    var query = 'in:inbox (from:grow OR from:meshulam OR from:morning OR from:greeninvoice OR subject:"בוצע תשלום" OR subject:"חשבונית" OR subject:"הפקת מסמך" OR "הריזורט לכלב" OR "יניב אלעד")';
-    var foundThreads = GmailApp.search(query, 0, 25);
+    var query = 'is:unread in:inbox (from:grow OR from:meshulam OR from:morning OR from:greeninvoice OR "הריזורט לכלב" OR "יניב אלעד")';
+    var foundThreads = GmailApp.search(query, 0, 5);
     if (foundThreads && foundThreads.length > 0) {
       threads = foundThreads;
       // קריאה אחודה אחת (Batch) לכל השרשורים יחד במקום עשרות קריאות נפרדות
@@ -41,7 +41,7 @@ function processResortEmails() {
 
   if (!threads || threads.length === 0) {
     Logger.log("תיבת הדואר נקייה.");
-    try { checkAndTriggerMotzeiShabbatDogUpdates(); } catch (eM) {}
+    // Motzei Shabbat handled independently
     return;
   }
 
@@ -502,7 +502,7 @@ function processResortEmails() {
           var recipients = ["972543200007@c.us", "972506336896@c.us"];
           for (var rIdx = 0; rIdx < recipients.length; rIdx++) {
             try {
-              UrlFetchApp.fetch("https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN, {
+              UrlFetchApp.fetch("https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN, {
                 method: "post",
                 contentType: "application/json",
                 payload: JSON.stringify({ chatId: recipients[rIdx], message: alertMsg }),
@@ -532,9 +532,7 @@ function processResortEmails() {
     }
   }
 
-  try {
-    checkAndTriggerMotzeiShabbatDogUpdates();
-  } catch (eM) {}
+  // Motzei Shabbat handled independently
 
   Logger.log("=== סיום ריצה: " + growCount + " תשלומי Grow נקלטו, " + morningDeletedCount + " חשבוניות מורנינג נמחקו, " + yanivDeletedCount + " מיילי יניב נמחקו ===");
 }
@@ -567,7 +565,7 @@ function forceCleanResortInboxNow() {
  */
 function notifyShmulikLeoPaid() {
   var alertMsg = "שלום שמוליק, התקבל תשלום ע״ס 4,000 ₪ מלי דלויה בעבור ליאו על שירות אילוף (תשלום מלא).";
-  var res = UrlFetchApp.fetch("https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN, {
+  var res = UrlFetchApp.fetch("https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN, {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({ chatId: "972506336896@c.us", message: alertMsg }),
@@ -830,7 +828,7 @@ function doPost(e) {
     }
 
     // שליחת ההודעה דרך Green-API
-    var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+    var sendUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
     var sendRes = UrlFetchApp.fetch(sendUrl, {
       method: "post",
       contentType: "application/json",
@@ -1002,7 +1000,7 @@ function sendDayAfterDepartureReviewRequests() {
         + "מחכים לראותכם שוב!\n"
         + "שמוליק וצוות הריזורט לכלב 🐾🐶";
 
-      var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+      var sendUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
       var sendRes = UrlFetchApp.fetch(sendUrl, {
         method: "post",
         contentType: "application/json",
@@ -1260,7 +1258,7 @@ function sendYomKippurFollowups() {
             var cIntlPhone = cCleanPhone.indexOf("0") === 0 ? "972" + cCleanPhone.substring(1) : cCleanPhone;
             var cChatId = cIntlPhone + "@c.us";
 
-            var cSendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+            var cSendUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
             var cSendRes = UrlFetchApp.fetch(cSendUrl, {
               method: "post",
               contentType: "application/json",
@@ -1316,7 +1314,7 @@ function sendYomKippurFollowups() {
         + "בברכה חמה ושנה טובה,\n"
         + "שמוליק וצוות הריזורט לכלב 🐾🐕");
 
-      var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+      var sendUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
       UrlFetchApp.fetch(sendUrl, {
         method: "post",
         contentType: "application/json",
@@ -1798,7 +1796,7 @@ function sendDailyDogEveningUpdates() {
       // בחירת נוסח מותאם
       var templateData = getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat);
 
-      var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+      var sendUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
       var sendRes = UrlFetchApp.fetch(sendUrl, {
         method: "post",
         contentType: "application/json",
@@ -1848,7 +1846,7 @@ function sendDailyDogEveningUpdates() {
       var managerChatId = "972543200007@c.us";
       var managerMsg = "נשלחו הודעות יומיות ל " + sentCount + " בעלי כלבים נוספים. כולם קיבלו. אין כשל ✅";
 
-      var mgrSendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+      var mgrSendUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
       UrlFetchApp.fetch(mgrSendUrl, {
         method: "post",
         contentType: "application/json",
@@ -2021,7 +2019,7 @@ function sendShabbatOrHolidayGreetingsFromCloud(todayStr, occasionWord) {
                  "אז רציתי רק להגיד לכם שממש טוב לי בריזורט לכלב ואיזה כיף היה לי " + occasionWord + ".\n" +
                  dogName;
 
-      var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+      var sendUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
       var sendRes = UrlFetchApp.fetch(sendUrl, {
         method: "post",
         contentType: "application/json",
@@ -2158,7 +2156,7 @@ function sendTomorrowOverviewToShmulikFromCloud() {
 
     // שכבה 3: אימות ישיר מול Green-API היסטוריית הודעות אחרונות לשמוליק
     try {
-      var histUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/getChatHistory/" + GREEN_API_TOKEN;
+      var histUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/getChatHistory/" + GREEN_API_TOKEN;
       var histRes = UrlFetchApp.fetch(histUrl, {
         method: "post",
         contentType: "application/json",
@@ -2344,7 +2342,7 @@ function sendTomorrowOverviewToShmulikFromCloud() {
     // שליפת הודעות וואטסאפ ללא מענה (מסונן: מתעלם מסגירות שיחה, תודות, חחח, אימוג'ים)
     var unansweredChats = [];
     try {
-      var chatsUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/getChats/" + GREEN_API_TOKEN;
+      var chatsUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/getChats/" + GREEN_API_TOKEN;
       var chatsRes = UrlFetchApp.fetch(chatsUrl, { muteHttpExceptions: true });
       if (chatsRes.getResponseCode() === 200) {
         var rawChats = JSON.parse(chatsRes.getContentText()) || [];
@@ -2508,7 +2506,7 @@ function sendTomorrowOverviewToShmulikFromCloud() {
       + extraActionSections + "\n\n"
       + "שיהיה יום מוצלח ושקט! ❤️🐶🐾";
 
-    var sendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+    var sendUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
     var targetChatIds = [mgrChatId, "972543200007@c.us"];
     var sentSuccessfully = false;
 
@@ -2549,4 +2547,45 @@ function sendTomorrowOverviewToShmulikFromCloud() {
   } catch (e) {
     Logger.log("sendTomorrowOverviewToShmulikFromCloud error: " + e.toString());
   }
+}
+
+/**
+ * הגדרת כל הטריגרים האוטומטיים בצורה בטוחה והרמטית (בלחיצה אחת):
+ * 1. בדיקת מיילים ומחיקה בלבד - פעם בשעה בלבד (24 פעמים ביום בסך הכל - 0% סיכוי לחריגת מכסות)
+ * 2. 19:00 - סקירת מחר (גיבוי) + בקשת חוות דעת
+ * 3. 20:00 - עדכון ערב יומי לכלבי הריזורט (גיבוי)
+ */
+function setupAllTriggersSafely() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    ScriptApp.deleteTrigger(triggers[i]);
+  }
+
+  ScriptApp.newTrigger("processResortEmails")
+    .timeBased()
+    .everyHours(1)
+    .create();
+
+  ScriptApp.newTrigger("sendTomorrowOverviewToShmulikFromCloud")
+    .timeBased()
+    .everyDays(1)
+    .atHour(19)
+    .inTimezone("Asia/Jerusalem")
+    .create();
+
+  ScriptApp.newTrigger("sendDayAfterDepartureReviewRequests")
+    .timeBased()
+    .everyDays(1)
+    .atHour(19)
+    .inTimezone("Asia/Jerusalem")
+    .create();
+
+  ScriptApp.newTrigger("sendDailyDogEveningUpdates")
+    .timeBased()
+    .everyDays(1)
+    .atHour(20)
+    .inTimezone("Asia/Jerusalem")
+    .create();
+
+  Logger.log("כל הטריגרים הוגדרו בצורה נעולה ומאובטחת ללא עומס על Gmail וללא חריגת מכסות!");
 }

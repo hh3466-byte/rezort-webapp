@@ -32,16 +32,27 @@ function cleanPhoneNumber(phone) {
   return cleaned;
 }
 
+function getGreenApiUrl(id, endpoint, token) {
+  const cleanId = String(id || '').trim();
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
+  const domain = clusterPrefix ? `${clusterPrefix}.api.greenapi.com` : 'api.greenapi.com';
+  return `https://${domain}/waInstance${cleanId}/${endpoint}/${token}`;
+}
+
 async function sendWhatsAppDirect(phone, message) {
   try {
     const clean = cleanPhoneNumber(phone);
     const chatId = `${clean.startsWith('0') ? '972' + clean.slice(1) : clean}@c.us`;
-    const url = `https://api.green-api.com/waInstance${GREEN_API_ID}/sendMessage/${GREEN_API_TOKEN}`;
+    const url = getGreenApiUrl(GREEN_API_ID, 'sendMessage', GREEN_API_TOKEN);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, message })
+      body: JSON.stringify({ chatId, message }),
+      signal: controller.signal
     });
+    clearTimeout(timeout);
   } catch (err) {
     console.error(`Error sending WhatsApp to ${phone}:`, err);
   }

@@ -59,6 +59,13 @@ function formatDateIL(dateStr) {
   return dateStr;
 }
 
+function getGreenApiUrl(id, endpoint, token) {
+  const cleanId = String(id || '').trim();
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
+  const domain = clusterPrefix ? `${clusterPrefix}.api.greenapi.com` : 'api.greenapi.com';
+  return `https://${domain}/waInstance${cleanId}/${endpoint}/${token}`;
+}
+
 function cleanPhoneNumber(phone) {
   if (!phone) return '';
   let cleaned = phone.replace(/\D/g, '');
@@ -538,11 +545,15 @@ export default async function handler(req, res) {
     // Additional Ironclad Guard: Check if tomorrow report was already sent today
     if (!isForced) {
       try {
-        const histResp = await fetch(`https://api.green-api.com/waInstance${greenId}/getChatHistory/${greenToken}`, {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 6000);
+        const histResp = await fetch(getGreenApiUrl(greenId, 'getChatHistory', greenToken), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId: '972543200007@c.us', count: 12 })
+          body: JSON.stringify({ chatId: '972543200007@c.us', count: 12 }),
+          signal: controller.signal
         });
+        clearTimeout(timeout);
         if (histResp.ok) {
           const hist = await histResp.json();
           if (Array.isArray(hist)) {
@@ -571,13 +582,22 @@ export default async function handler(req, res) {
     const sendResults = [];
 
     for (const chatId of recipients) {
-      const sendRes = await fetch(`https://api.green-api.com/waInstance${greenId}/sendMessage/${greenToken}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message: reportText })
-      });
-      const sendData = await sendRes.json();
-      sendResults.push({ chatId, sendData });
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
+        const sendRes = await fetch(getGreenApiUrl(greenId, 'sendMessage', greenToken), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId, message: reportText }),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        const sendData = await sendRes.json();
+        sendResults.push({ chatId, sendData });
+      } catch (sendErr) {
+        console.error(`Error sending tomorrow report to ${chatId}:`, sendErr);
+        sendResults.push({ chatId, error: sendErr.message });
+      }
     }
 
     const curData = sRow.data || {};

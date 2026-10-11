@@ -97,14 +97,25 @@ async function canSendAutoReplyToClient(cleanPhone) {
 // Anti-spam cooldown memory (fallback)
 const cooldownMap = global._resortWaCooldown || (global._resortWaCooldown = new Map());
 
+function getGreenApiUrl(id, endpoint, token) {
+  const cleanId = String(id || '').trim();
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
+  const domain = clusterPrefix ? `${clusterPrefix}.api.greenapi.com` : 'api.greenapi.com';
+  return `https://${domain}/waInstance${cleanId}/${endpoint}/${token}`;
+}
+
 async function sendWhatsAppMessage(chatId, message) {
   try {
-    const url = `https://api.green-api.com/waInstance${GREEN_API_ID}/sendMessage/${GREEN_API_TOKEN}`;
+    const url = getGreenApiUrl(GREEN_API_ID, 'sendMessage', GREEN_API_TOKEN);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, message })
+      body: JSON.stringify({ chatId, message }),
+      signal: controller.signal
     });
+    clearTimeout(timeout);
     return res.ok;
   } catch (err) {
     console.error('Error sending WhatsApp message via Green-API:', err);
@@ -114,12 +125,16 @@ async function sendWhatsAppMessage(chatId, message) {
 
 async function sendWhatsAppFile(chatId, urlFile, fileName, caption) {
   try {
-    const url = `https://api.green-api.com/waInstance${GREEN_API_ID}/sendFileByUrl/${GREEN_API_TOKEN}`;
+    const url = getGreenApiUrl(GREEN_API_ID, 'sendFileByUrl', GREEN_API_TOKEN);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId, urlFile, fileName: fileName || 'video.mp4', caption: caption || '' })
+      body: JSON.stringify({ chatId, urlFile, fileName: fileName || 'video.mp4', caption: caption || '' }),
+      signal: controller.signal
     });
+    clearTimeout(timeout);
     return res.ok;
   } catch (err) {
     console.error('Error sending WhatsApp file via Green-API:', err);
