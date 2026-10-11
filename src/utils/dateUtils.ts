@@ -599,6 +599,11 @@ export const KNOWN_FUTURE_INSTALLMENTS: FutureInstallmentCredit[] = [
   { ref: '516299998-inst-3', customerName: 'דורין לוקס', dogName: 'מגן', originalMonth: '2026-09', installmentNum: 3, totalInstallments: 4, payoutDate: '2026-12-10', payoutMonth: '2026-12', amount: 675 },
   // תשלום 4: נכנס ב-10.01.2027 (בעוד 4 חודשים)
   { ref: '516299998-inst-4', customerName: 'דורין לוקס', dogName: 'מגן', originalMonth: '2026-09', installmentNum: 4, totalInstallments: 4, payoutDate: '2027-01-10', payoutMonth: '2027-01', amount: 675 },
+
+  // לי דלויה (ליאו) - עסקה 4961553619 מ-11.10.2026 (2 תשלומים של 2,000 ₪):
+  // תשלום 1: נכנס ב-10.11.2026 (סליקת אוקטובר הקרובה)
+  // תשלום 2: נכנס ב-10.12.2026 (סליקת נובמבר בעוד חודשיים)
+  { ref: '4961553619-inst-2', customerName: 'לי דלויה', dogName: 'ליאו', originalMonth: '2026-10', installmentNum: 2, totalInstallments: 2, payoutDate: '2026-12-10', payoutMonth: '2026-12', amount: 2000 },
 ];
 
 export interface MonthlyRevenueBreakdown {
@@ -662,7 +667,28 @@ export function getMonthlyRevenueBreakdown(
       if (ref && !processedRefs.has(ref) && !isRonen) {
         const pMonth = (p.created_at || '').substring(0, 7);
         if (pMonth === targetMonthKey && p.status !== 'dismissed' && p.status !== 'refunded') {
-          growClearedBankOn10th += Number(p.amount) || 0;
+          // מניעת כפילות של וובהוק מול מייל עבור אותו לקוח, סכום ותאריך
+          const isDupWebhook = (p.raw_email_snippet || '').includes('Grow Webhook') && incomingGrowPayments.some(other => 
+            other.id !== p.id && 
+            other.status !== 'dismissed' &&
+            !(other.raw_email_snippet || '').includes('Grow Webhook') &&
+            other.customer_name === p.customer_name &&
+            Number(other.amount) === Number(p.amount) &&
+            (other.created_at || '').substring(0, 10) === (p.created_at || '').substring(0, 10)
+          );
+          if (isDupWebhook) {
+            return;
+          }
+
+          const totalAmt = Number(p.amount) || 0;
+          // ניכוי תשלומים עתידיים שייכנסו לחשבון בחודשים הבאים (עסקאות בתשלומים)
+          const futureInsts = KNOWN_FUTURE_INSTALLMENTS.filter(inst => 
+            inst.originalMonth === targetMonthKey && inst.ref.startsWith(ref)
+          );
+          const futureAmt = futureInsts.reduce((sum, inst) => sum + inst.amount, 0);
+          const currentPayoutAmt = Math.max(0, totalAmt - futureAmt);
+
+          growClearedBankOn10th += currentPayoutAmt;
           growPaidCount += 1;
           processedRefs.add(ref);
         }
