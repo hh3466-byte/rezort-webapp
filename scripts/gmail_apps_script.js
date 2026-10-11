@@ -42,6 +42,17 @@ function processResortEmails() {
   if (!threads || threads.length === 0) {
     Logger.log("תיבת הדואר נקייה.");
     // Motzei Shabbat handled independently
+
+  // בדיקה יזומה וסנכרון תשלומים מול Grow בענן (בכל שעה - ללא עומס על Gmail)
+  try {
+    UrlFetchApp.fetch("https://rezort-webapp.vercel.app/api/cron-hourly-sync", {
+      method: "get",
+      muteHttpExceptions: true
+    });
+    Logger.log("✓ בדיקה יזומה מול Grow בענן הופעלה בהצלחה.");
+  } catch (eSync) {
+    Logger.log("הערה בסנכרון Grow בענן: " + eSync.toString());
+  }
     return;
   }
 
