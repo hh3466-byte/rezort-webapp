@@ -168,12 +168,15 @@ export default async function handler(req, res) {
     let growLatencyMs = 0;
     try {
       const pingStart = Date.now();
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
       const growPingRes = await fetch('https://meshulam.co.il/api/light/server/1.0/getPaymentProcessInfo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ pageCode: '538cbf6f8827', processId: 'ping' }),
-        signal: AbortSignal.timeout(5000)
+        signal: controller.signal
       });
+      clearTimeout(timeout);
       growLatencyMs = Date.now() - pingStart;
       growApiHealthy = growPingRes.status === 200;
     } catch (e) {
