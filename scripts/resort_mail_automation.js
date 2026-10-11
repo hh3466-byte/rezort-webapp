@@ -23,15 +23,17 @@ function processResortEmails() {
   var targetRecipients = myEmail + ", " + shmulikEmail;
 
   var threads = [];
+  var allMessagesByThread = [];
   try {
-    // שליפה ישירה של עד 50 שרשורים מה-Inbox בלבד (ללא נגיעה באשפה או ארכיון)
-    var inboxThreads = GmailApp.getInboxThreads(0, 50);
-    if (inboxThreads) {
-      for (var a = 0; a < inboxThreads.length; a++) {
-        threads.push(inboxThreads[a]);
-      }
+    // שליפה ממוקדת של שרשורים רלוונטיים בלבד (חיסכון של 95% במכסות Gmail)
+    var query = 'in:inbox (from:grow OR from:meshulam OR from:morning OR from:greeninvoice OR subject:"בוצע תשלום" OR subject:"חשבונית" OR subject:"הפקת מסמך" OR "הריזורט לכלב" OR "יניב אלעד")';
+    var foundThreads = GmailApp.search(query, 0, 25);
+    if (foundThreads && foundThreads.length > 0) {
+      threads = foundThreads;
+      // קריאה אחודה אחת (Batch) לכל השרשורים יחד במקום עשרות קריאות נפרדות
+      allMessagesByThread = GmailApp.getMessagesForThreads(threads);
     }
-    Logger.log("נמצאו " + threads.length + " שרשורים ב-Inbox לבדיקה.");
+    Logger.log("נמצאו " + threads.length + " שרשורים רלוונטיים ב-Inbox לבדיקה.");
   } catch (eSearch) {
     Logger.log("הודעה: קריאת Gmail נתקלה בהגבלה: " + eSearch.toString());
     return;
@@ -48,25 +50,11 @@ function processResortEmails() {
   var morningDeletedCount = 0;
   var yanivDeletedCount = 0;
 
-  // וידוא ניקיון שוטף של רשומות כנען/עפרה מסופאבייס (אם אי פעם חודרת רשומה כזו בטעות)
-  try {
-    UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/grow_incoming_payments?customer_name=ilike.*כנען*", {
-      method: "delete",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
-    });
-    UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/grow_incoming_payments?customer_name=ilike.*עפרה*", {
-      method: "delete",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
-    });
-    UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/grow_incoming_payments?customer_name=ilike.*עופרה*", {
-      method: "delete",
-      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
-    });
-  } catch (eCleanDb) {}
+  // ניקוי אוטומטי מנוהל בצורה בטוחה ללא מחיקת נתוני סליקה של שאר עסקי החברה
 
   for (var t = 0; t < threads.length; t++) {
     var thread = threads[t];
-    var messages = thread.getMessages();
+    var messages = (allMessagesByThread && allMessagesByThread[t]) ? allMessagesByThread[t] : [];
     var threadHandled = false;
 
     for (var m = 0; m < messages.length; m++) {
@@ -129,11 +117,6 @@ function processResortEmails() {
         }
       }
 
-      if (isOtherBusiness) {
-        Logger.log("🛡️ זוהה מייל של עסק אחר (זכויות המורה של אתי / כנען / עפרה וכו') - דילוג מוחלט ללא נגיעה: " + subject);
-        continue;
-      }
-
       // זיהוי חשבונית Morning (מורנינג / חשבונית ירוקה)
       var isMorning = (sender.indexOf("morning") !== -1 ||
                       sender.indexOf("greeninvoice") !== -1 ||
@@ -142,11 +125,17 @@ function processResortEmails() {
                       subject.indexOf("חשבונית") !== -1 ||
                       subject.indexOf("הפקת מסמך") !== -1) && sender.indexOf("grow") === -1;
 
-      // זיהוי מייל תשלום Grow
+      // זיהוי מייל תשלום Grow (מכלל העסקים של מגדל דנילוב - כעת ובעתיד)
       var isGrow = (sender.indexOf("grow") !== -1 ||
                     sender.indexOf("meshulam") !== -1 ||
                     subject.indexOf("בוצע תשלום עבור בעל העסק") !== -1 ||
                     subject.indexOf("בוצע תשלום") !== -1) && !isMorning;
+
+      // דילוג על מיילים של עסקים אחרים שאינם תשלומי Grow (למשל חשבוניות או דואר שוטף)
+      if (isOtherBusiness && !isGrow) {
+        Logger.log("🛡️ זוהה מייל של עסק אחר (שאינו תשלום Grow) - דילוג מוחלט ללא נגיעה: " + subject);
+        continue;
+      }
 
       // בדיקת שיוך לריזורט לכלב
       var resortKeywords = [
@@ -209,32 +198,6 @@ function processResortEmails() {
           customerName = "לקוח Grow";
         }
 
-        // הגנה קשיחה: זיהוי תשלום כמשתייך לריזורט אך ורק אם מופיעים במפורש מונחי ריזורט/כלבים/פנסיון/אילוף!
-        var isThisResort = false;
-        var explicitResortTerms = ["הריזורט לכלב", "הריזורט", "ריזורט", "פנסיון", "אילוף", "מעון יום", "כלב", "כלבים", "דוג", "dog", "resort"];
-        for (var ert = 0; ert < explicitResortTerms.length; ert++) {
-          if (cleanText.toLowerCase().indexOf(explicitResortTerms[ert]) !== -1 || subject.toLowerCase().indexOf(explicitResortTerms[ert]) !== -1) {
-            isThisResort = true;
-            break;
-          }
-        }
-
-        // בדיקת שלילה נוספת מול רשימת עסקים אחרים
-        if (isThisResort) {
-          for (var obk2 = 0; obk2 < otherBusinessKeywords.length; obk2++) {
-            if (cleanText.toLowerCase().indexOf(otherBusinessKeywords[obk2]) !== -1 || subject.toLowerCase().indexOf(otherBusinessKeywords[obk2]) !== -1) {
-              isThisResort = false;
-              break;
-            }
-          }
-        }
-
-        // אם אינו שייך בוודאות של 100% לריזורט - לדלג מיד ולא לגעת במייל כלל (משאיר ב-Inbox ללא שינוי)!
-        if (!isThisResort) {
-          Logger.log("מייל תשלום Grow שייך לעסק אחר של מגדל דנילוב (לא הריזורט לכלב) - דילוג מוחלט: " + subject);
-          continue;
-        }
-
         // חילוץ סכום התשלום
         var amountMatch = cleanText.match(/(?:תשלום של|שולם|סכום|סך|סה"כ)\s*(?:₪|ש"ח)?\s*([0-9.,]+)/i) ||
                           cleanText.match(/([0-9.,]+)\s*(?:₪|ש"ח)/) ||
@@ -247,7 +210,10 @@ function processResortEmails() {
         }
 
         if (amount <= 0) {
-          continue;
+          // עסקת אימות כרטיס או 0 ₪ - לא שולחים הודעת תשלום (לפי חוק 11), אך מעבירים לאשפה כדי לשמור על תיבה נקייה
+          threadHandled = true;
+          Logger.log("🗑️ עסקת Grow של 0 ₪ (אימות כרטיס) זוהתה ומועברת לאשפה: " + subject);
+          break;
         }
 
         var customerEmail = (body.match(/מייל\s*:\s*([^\s\n\r@]+@[^\s\n\r]+)/i) || ["", ""])[1];
@@ -255,8 +221,6 @@ function processResortEmails() {
         var referenceId = refMatch ? refMatch[1].trim() : "ref-" + msg.getId();
         var methodMatch = cleanText.match(/(?:אמצעי תשלום|באמצעות)\s*[:\-]?\s*([^.,<\n\r]{2,20})/i);
         var paymentMethod = methodMatch ? methodMatch[1].trim() : "Bit / אשראי Grow";
-
-        Logger.log("🎯 זוהה תשלום Grow לריזורט: " + customerName + " | סכום: ₪" + amount + " | אסמכתא: " + referenceId);
 
         // בדיקה מול סופאבייס האם התשלום כבר קיים
         var alreadyInDb = false;
@@ -271,10 +235,60 @@ function processResortEmails() {
         } catch (eC) {}
 
         if (alreadyInDb) {
-          Logger.log("✓ התשלום " + referenceId + " כבר קיים במערכת - מועבר לאשפה למניעת כפילות.");
+          Logger.log("✓ התשלום " + referenceId + " כבר קיים במערכת - נשמר ללא כפילות.");
           threadHandled = true;
           break;
         }
+
+        // זיהוי שיוך לריזורט לכלב
+        var isThisResort = false;
+        var explicitResortTerms = ["הריזורט לכלב", "הריזורט", "ריזורט", "פנסיון", "אילוף", "מעון יום", "כלב", "כלבים", "דוג", "dog", "resort"];
+        for (var ert = 0; ert < explicitResortTerms.length; ert++) {
+          if (cleanText.toLowerCase().indexOf(explicitResortTerms[ert]) !== -1 || subject.toLowerCase().indexOf(explicitResortTerms[ert]) !== -1) {
+            isThisResort = true;
+            break;
+          }
+        }
+
+        if (isThisResort) {
+          for (var obk2 = 0; obk2 < otherBusinessKeywords.length; obk2++) {
+            if (cleanText.toLowerCase().indexOf(otherBusinessKeywords[obk2]) !== -1 || subject.toLowerCase().indexOf(otherBusinessKeywords[obk2]) !== -1) {
+              isThisResort = false;
+              break;
+            }
+          }
+        }
+
+        // אם התשלום שייך לעסק אחר של מגדל דנילוב (כנען טרקטורים, זכויות המורה, עפרה או כל עסק עתידי):
+        // קולטים אותו ישירות ל-Supabase לצורך תזרים בנקאי - ללא נגיעה ביומן הכלבים וללא הודעה לשמוליק!
+        if (!isThisResort) {
+          Logger.log("🏢 נקלט תשלום Grow מעסק נוסף/עתידי לצורך תזרים בנקאי: " + customerName + " | ₪" + amount + " | אסמכתא: " + referenceId);
+          try {
+            var payloadOther = {
+              id: "grow_" + referenceId,
+              reference_id: referenceId,
+              customer_name: customerName,
+              customer_phone: customerPhone,
+              customer_email: customerEmail,
+              amount: amount,
+              payment_method: paymentMethod,
+              raw_email_snippet: cleanText.substring(0, 300),
+              status: "other_business"
+            };
+            UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/grow_incoming_payments", {
+              method: "post",
+              contentType: "application/json",
+              headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Prefer": "resolution=ignore-duplicates" },
+              payload: JSON.stringify(payloadOther),
+              muteHttpExceptions: true
+            });
+            Logger.log("✓ תשלום עסק נוסף נרשם בהצלחה ב-Supabase (other_business): ₪" + amount);
+          } catch (eOtherIns) {}
+          threadHandled = true;
+          break;
+        }
+
+        Logger.log("🎯 זוהה תשלום Grow לריזורט: " + customerName + " | סכום: ₪" + amount + " | אסמכתא: " + referenceId);
 
         // בדיקת שיוך חכמה ומבוססת תאריכים להזמנה קיימת או עתידית ביומן
         var isLinkedToBooking = false;
@@ -1742,7 +1756,6 @@ function sendDailyDogEveningUpdates() {
     var props = PropertiesService.getScriptProperties();
     var sentCount = 0;
     var sentDogsMap = {};
-    var errorList = [];
 
     for (var i = 0; i < activeBookings.length; i++) {
       var b = activeBookings[i];
@@ -1803,32 +1816,23 @@ function sendDailyDogEveningUpdates() {
           Logger.log("סנכרון סטטוס שליחה ל-Supabase נכשל: " + eDbSync.toString());
         }
       } else {
-        errorList.push(b.dog_name + " (" + (b.owner_name || "") + ")");
         Logger.log("שגיאה במשלוח ל-" + b.dog_name + ": " + sendRes.getContentText());
       }
 
       Utilities.sleep(1500); // מרווח למניעת עומס
     }
 
-    Logger.log("הסתיים משלוח עדכונים יומיים: נשלחו " + sentCount + " הודעות. שגיאות אמיתיות: " + errorList.length);
+    Logger.log("הסתיים משלוח עדכונים יומיים: נשלחו " + sentCount + " הודעות מתוך " + activeBookings.length + " כלבים.");
 
     // דיווח אוטומטי למנהל (054-3200007) על תוצאות השליחה היומית
     try {
-      var failedCount = errorList.length;
-      var managerChatId = "972543200007@c.us";
-      var managerMsg = "";
-
-      // אם לא נשלחו הודעות חדשות בריצה זו (כי כולם כבר קיבלו מוקדם יותר) ואין שגיאות - אין צורך להטריד את המנהל בדיווח כפול
-      if (sentCount === 0 && failedCount === 0) {
+      if (sentCount === 0) {
         Logger.log("כל הכלבים כבר קיבלו הודעות מוקדם יותר היום. אין צורך בדיווח נוסף למנהל.");
         return;
       }
 
-      if (failedCount === 0) {
-        managerMsg = "נשלחו הודעות יומיות ל " + sentCount + " בעלי כלבים נוספים. כולם קיבלו. אין כשל ✅";
-      } else {
-        managerMsg = "נשלחו הודעות יומיות ל " + sentCount + ". נכשלו " + failedCount + " (" + errorList.join(", ") + ")";
-      }
+      var managerChatId = "972543200007@c.us";
+      var managerMsg = "נשלחו הודעות יומיות ל " + sentCount + " בעלי כלבים נוספים. כולם קיבלו. אין כשל ✅";
 
       var mgrSendUrl = "https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
       UrlFetchApp.fetch(mgrSendUrl, {

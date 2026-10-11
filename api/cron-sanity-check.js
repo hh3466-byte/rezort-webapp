@@ -502,6 +502,26 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     }
   }
 
+  // תזרים בנקאי צפוי ל-10 לחודש הבא (סליקת Grow - כלל העסקים יחד)
+  const [cy, cm] = todayStr.split('-').map(Number);
+  const nextMonthDate = new Date(cy, cm, 1);
+  const nextMonthNum = String(nextMonthDate.getMonth() + 1).padStart(2, '0');
+  const nextPayoutDate = `10.${nextMonthNum}`;
+  const currentMonthPrefix = todayStr.substring(0, 7);
+
+  let totalAccumulatedForNextMonth = 0;
+  if (Array.isArray(growPayments)) {
+    growPayments.forEach(p => {
+      const pDate = p.created_at || '';
+      if (pDate.startsWith(currentMonthPrefix) && p.status !== 'dismissed' && p.status !== 'refunded') {
+        totalAccumulatedForNextMonth += Number(p.amount) || 0;
+      }
+    });
+  }
+
+  parts.push(`\n🏦 *תזרים בנקאי עתידי (Grow - סה״כ מכלל העסקים):*`);
+  parts.push(`ב-10 לחודש הבא (${nextPayoutDate}), ייכנס לבנק ${Math.round(totalAccumulatedForNextMonth).toLocaleString()} שקלים`);
+
   parts.push(`\n📱 *דוח זה הופק ונשלח ישירות למנהל (${MANAGER_PHONE}) כהוראת ברזל.*`);
 
   return {

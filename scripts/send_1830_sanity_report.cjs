@@ -230,6 +230,7 @@ async function run1830Audit() {
   const { data: bookings } = await supabase.from('bookings').select('*');
   const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
   const { data: intakes } = await supabase.from('intake_requests').select('*');
+  const { data: growPayments } = await supabase.from('grow_incoming_payments').select('*');
 
   const sRow = settingsRows?.[0] || {};
   const settings = { ...sRow, ...(sRow.data || {}) };
@@ -778,6 +779,26 @@ async function run1830Audit() {
       redLights.paymentDiscrepancies.forEach(pd => parts.push(`   • ${pd}`));
     }
   }
+
+  // תזרים בנקאי צפוי ל-10 לחודש הבא (סליקת Grow - כלל העסקים יחד)
+  const [cy, cm] = todayStr.split('-').map(Number);
+  const nextMonthDate = new Date(cy, cm, 1);
+  const nextMonthNum = String(nextMonthDate.getMonth() + 1).padStart(2, '0');
+  const nextPayoutDate = `10.${nextMonthNum}`;
+  const currentMonthPrefix = todayStr.substring(0, 7);
+
+  let totalAccumulatedForNextMonth = 0;
+  if (Array.isArray(growPayments)) {
+    growPayments.forEach(p => {
+      const pDate = p.created_at || '';
+      if (pDate.startsWith(currentMonthPrefix) && p.status !== 'dismissed' && p.status !== 'refunded') {
+        totalAccumulatedForNextMonth += Number(p.amount) || 0;
+      }
+    });
+  }
+
+  parts.push(`\n🏦 *תזרים בנקאי עתידי (Grow - סה״כ מכלל העסקים):*`);
+  parts.push(`ב-10 לחודש הבא (${nextPayoutDate}), ייכנס לבנק ${Math.round(totalAccumulatedForNextMonth).toLocaleString()} שקלים`);
 
   parts.push(`\n📱 *דוח זה הופק ונשלח ישירות למנהל (${MANAGER_PRIVATE_PHONE}) כהוראת ברזל.*`);
 
