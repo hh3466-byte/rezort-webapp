@@ -563,6 +563,20 @@ function forceCleanResortInboxNow() {
 }
 
 /**
+ * שליחת הודעת תשלום מיידית לשמוליק בלבד (050-6336896) עבור תשלום היתרה של ליאו
+ */
+function notifyShmulikLeoPaid() {
+  var alertMsg = "שלום שמוליק, התקבל תשלום ע״ס 4,000 ₪ מלי דלויה בעבור ליאו על שירות אילוף (תשלום מלא).";
+  var res = UrlFetchApp.fetch("https://api.green-api.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify({ chatId: "972506336896@c.us", message: alertMsg }),
+    muteHttpExceptions: true
+  });
+  Logger.log("✓ תוצאת שליחה לשמוליק: " + res.getContentText());
+}
+
+/**
  * בדיקת שחרורים קרובים עם חוב פתוח (בוטל - מטופל בלעדית בסקירת 19:00 לשמוליק)
  */
 function checkUpcomingDeparturesWithDebtAndAlert() {
