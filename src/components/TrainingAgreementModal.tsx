@@ -561,23 +561,6 @@ export const TrainingAgreementModal: React.FC<TrainingAgreementModalProps> = ({
         {/* Scrollable Document Body */}
         <div className="p-4 sm:p-8 overflow-y-auto space-y-6 text-slate-800 text-xs sm:text-sm leading-relaxed printable-document">
 
-          {/* Training Agreement Hard Payment Rule Banner */}
-          {!isSigned && (
-            <div className="bg-gradient-to-r from-red-50 via-rose-50 to-red-50 border-2 border-red-300 rounded-2xl p-3.5 sm:p-4 flex items-start gap-3 shadow-xs print:hidden animate-in fade-in">
-              <div className="w-9 h-9 rounded-2xl bg-red-600 text-white flex items-center justify-center font-black text-lg shrink-0 shadow-xs">
-                🛑
-              </div>
-              <div className="space-y-0.5">
-                <h4 className="text-xs sm:text-sm font-black text-red-950">
-                  נוהל ריזורט מחייב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם
-                </h4>
-                <p className="text-[11px] sm:text-xs text-red-800 font-bold leading-relaxed">
-                  השלמת החתימה הדיגיטלית על הסכם זה הינה תנאי מוקדם ומחייב להסדרת התשלום או שריון המקום. אפשרות התשלום תשתחרר אוטומטית מיד לאחר השלמת החתימה בתחתית המסמך.
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* Document Header with Official Logo */}
           <div className="text-center pb-4 border-b-2 border-emerald-800/20 space-y-2">
             <div className="flex items-center justify-center gap-3">
@@ -868,8 +851,8 @@ export const TrainingAgreementModal: React.FC<TrainingAgreementModalProps> = ({
                 />
               </div>
 
-              {/* Dates and Trainer row */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              {/* Dates row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
                   <span className="text-[11px] font-bold text-slate-600 block mb-1">תאריך כניסה לאילוף:</span>
                   <input
@@ -889,16 +872,6 @@ export const TrainingAgreementModal: React.FC<TrainingAgreementModalProps> = ({
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none font-mono"
                   />
                 </div>
-
-                <div>
-                  <span className="text-[11px] font-bold text-slate-600 block mb-1">מאלף/ת אחראי/ת:</span>
-                  <input
-                    type="text"
-                    value={trainerName}
-                    onChange={(e) => setTrainerName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none"
-                  />
-                </div>
               </div>
 
               <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-2.5 text-[11px] text-emerald-950 flex items-center justify-between font-bold">
@@ -911,8 +884,8 @@ export const TrainingAgreementModal: React.FC<TrainingAgreementModalProps> = ({
 
             {/* Legal clauses 2.1 - 2.4 */}
             <div className="space-y-1.5 text-xs text-slate-700 pr-2">
-              <p><strong>2.1.</strong> מועדי מפגשי החפיפה ייקבעו בתיאום בין הצדדים, בהתאם לסעיף 6.2.</p>
-              <p><strong>2.2.</strong> הריזורט רשאי להחליף את המאלף/ת במאלף/ת אחר/ת מטעמו.</p>
+              <p><strong>2.1.</strong> בסיום האילוף ייקבעו מפגשי חפיפה עם הבעלים על מנת להדריך אותו בתוצאות האילוף. מועדי מפגשי החפיפה ייקבעו בתיאום בין הצדדים, בהתאם לסעיף 6.2.</p>
+              <p><strong>2.2.</strong> האילוף יבוצע על ידי צוות מאלפי הריזורט. הריזורט רשאי לקבוע ולהחליף את המאלף/ת במאלף/ת אחר/ת מטעמו בכל שלב.</p>
               <p><strong>2.3.</strong> אם במהלך האילוף יתברר שהכלב זקוק לתוכנית שונה מזו שנבחרה, הריזורט יציע זאת לבעלים. שינוי בתוכנית או במחיר ייעשה רק בהסכמת הבעלים בכתב, לרבות בהודעת וואטסאפ או בדוא&quot;ל.</p>
               <p><strong>2.4. מפגשי חפיפה.</strong> מפגשי החפיפה כלולים בתוכנית, ובהם מקבלים הבעלים את הכלים להמשך העבודה עם הכלב. השתתפות הבעלים בהם היא חובה. אם מפגשי החפיפה לא מתקיימים, תכלית האילוף מסוכלת, והריזורט לא יישא באחריות לתוצאות האילוף.</p>
             </div>
