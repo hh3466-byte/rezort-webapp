@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 
 import { Booking, ResortSettings, AgentActionProposal, PaymentMethod, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus } from './types';
@@ -241,7 +241,14 @@ export default function App() {
     }, 4000);
   };
 
-  // Real-time Cloud Sync from Firestore / Supabase
+  const bookingsRef = useRef(bookings);
+  bookingsRef.current = bookings;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const intakeRequestsRef = useRef(intakeRequests);
+  intakeRequestsRef.current = intakeRequests;
+
+  // Real-time Cloud Sync from Firestore / Supabase (Subscribed ONCE on mount)
   useEffect(() => {
     const unsubBookings = subscribeToBookings((incomingBookings) => {
       setBookings(prev => {
@@ -272,7 +279,7 @@ export default function App() {
     });
 
     const unsubFeedingReminders = initFeedingReminderScheduler(
-      () => bookings,
+      () => bookingsRef.current,
       (event) => {
         const placementText = event.kennelNumber ? ` (${getPlacementDisplayName(event.kennelNumber)})` : '';
         showToast(
@@ -290,7 +297,7 @@ export default function App() {
       unsubIntake();
       unsubFeedingReminders();
     };
-  }, [bookings]);
+  }, []);
 
   // Customers derived from bookings
   const customers = React.useMemo(() => extractCustomers(bookings), [bookings]);
@@ -413,72 +420,77 @@ export default function App() {
   // 20:00 Daily Dog Evening Updates Auto-Sender Background Runner (Fail-safe auto dispatch)
   useEffect(() => {
     const cleanup = initDailyDogAutoSender(
-      () => bookings,
-      () => settings,
-      () => intakeRequests,
+      () => bookingsRef.current,
+      () => settingsRef.current,
+      () => intakeRequestsRef.current,
       showToast
     );
     return cleanup;
-  }, [bookings, settings, intakeRequests]);
+  }, []);
 
   // 19:00 Daily Tomorrow Overview Auto-Sender to Shmulik (Arrivals, Departures, Debts, Capacity, Notes)
   useEffect(() => {
     const cleanup = initTomorrowOverviewScheduler(
-      () => bookings,
-      () => settings,
-      () => intakeRequests,
+      () => bookingsRef.current,
+      () => settingsRef.current,
+      () => intakeRequestsRef.current,
       showToast
     );
     return cleanup;
-  }, [bookings, settings, intakeRequests]);
+  }, []);
 
   // 18:30 Daily Sanity Audit Auto-Sender to Shmulik (Green Events, Red Lights, Integrations & 24h Checks)
   useEffect(() => {
     const cleanup = init1830SanityScheduler(
-      () => bookings,
-      () => settings,
-      () => intakeRequests,
+      () => bookingsRef.current,
+      () => settingsRef.current,
+      () => intakeRequestsRef.current,
       showToast
     );
     return cleanup;
-  }, [bookings, settings, intakeRequests]);
+  }, []);
 
   // Automatic Day-After-Departure VIP Voucher & Review Request Scheduler (Sent at 19:00 after departure)
   useEffect(() => {
     const cleanup = initAutoReviewScheduler(
-      () => bookings,
-      () => settings,
+      () => bookingsRef.current,
+      () => settingsRef.current,
       showToast
     );
     return cleanup;
-  }, [bookings, settings]);
+  }, []);
 
-  // Periodic check for new CRM chats & unread inquiries for the top button badge
+  // Periodic check for new CRM chats & unread inquiries for the top button badge (Throttled & isolated)
   useEffect(() => {
     let isMounted = true;
+    let isChecking = false;
+
     const checkCrmNew = async () => {
+      if (isChecking) return;
+      isChecking = true;
       try {
-        if (!settings) return;
-        const count = await fetchNewCrmChatsCount(settings, bookings, intakeRequests);
+        const curSettings = settingsRef.current;
+        if (!curSettings?.greenApiIdInstance || !curSettings?.greenApiToken) return;
+        const count = await fetchNewCrmChatsCount(curSettings, bookingsRef.current, intakeRequestsRef.current);
         if (isMounted) {
           setNewCrmChatsCount(count);
         }
       } catch (err) {
         console.warn('Error checking new CRM count:', err);
+      } finally {
+        isChecking = false;
       }
     };
 
     checkCrmNew();
-    const cleanupInterval = createPowerAwareInterval(checkCrmNew, 120000, true);
+    const cleanupInterval = createPowerAwareInterval(checkCrmNew, 180000, true);
     window.addEventListener('crm-chats-read-updated', checkCrmNew);
-    window.addEventListener('storage', checkCrmNew);
     return () => {
       isMounted = false;
       cleanupInterval();
       window.removeEventListener('crm-chats-read-updated', checkCrmNew);
-      window.removeEventListener('storage', checkCrmNew);
     };
-  }, [settings?.greenApiIdInstance, settings?.greenApiToken, bookings, intakeRequests]);
+  }, []);
 
   // Accurate real-time money calculation across all bookings
   const totalCollected = activeBookings.reduce((acc, b) => {
