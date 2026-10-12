@@ -72,6 +72,46 @@ export function isRealTrainingBooking(b: Booking): boolean {
  */
 const INITIAL_TRAINER_RECEIPTS: TrainerReceipt[] = [
   {
+    id: 'receipt-20064',
+    receiptNumber: '20064',
+    receiptDate: '2026-10-12',
+    totalAmount: 1100,
+    paymentMethod: 'ביט',
+    rawLineText: 'תשלום 2/3 לונה לבנה, תשלום 1/3 ליאו, תשלום שעתיים עבודה בקמפיין 23.9',
+    receiptImageUrl: 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/f560f040-1d60-4f07-9b09-ae2412fbaf8b.jpg',
+    bitConfirmationImageUrl: 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/2608af4f-832e-448e-a13e-7f7470075c85.jpg',
+    paymentConfirmationUrl: 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/2608af4f-832e-448e-a13e-7f7470075c85.jpg',
+    bitConfirmationNumber: '1007-8856-48416',
+    paymentConfirmationNotes: 'העברת ביט ₪1,100 להילה (אישור 1007-8856-48416) עבור לונה 2/3 (₪500), ליאו 1/3 (₪500), וקמפיין שעתיים (₪100)',
+    allocations: [
+      {
+        bookingId: 'b-1789541492653',
+        dogName: 'לונה (רונן מלמוד)',
+        stage: '2/3',
+        amount: 500,
+      },
+      {
+        bookingId: 'b-1791271522477',
+        dogName: 'ליאו (לי דלויה)',
+        stage: '1/3',
+        amount: 500,
+      },
+      {
+        bookingId: '',
+        dogName: 'קמפיין 23.9 (שעתיים)',
+        stage: 'custom',
+        amount: 100,
+      },
+    ],
+    isPaidActually: true, // שולם בביט ₪1,100 - אישור 1007-8856-48416
+    paidDate: '2026-10-12',
+    managerQuerySent: true,
+    managerQuerySentAt: '2026-10-12T07:31:00Z',
+    status: 'paid',
+    createdAt: '2026-10-12T07:31:00Z',
+    updatedAt: '2026-10-12T07:32:39Z',
+  },
+  {
     id: 'receipt-20061',
     receiptNumber: '20061',
     receiptDate: '2026-10-04',
@@ -268,10 +308,24 @@ export function getTrainerReceipts(): TrainerReceipt[] {
       const cleaned = parsed
         .filter(r => {
           const num = String(r.receiptNumber || '');
-          // Keep only official numeric receipts (20056, 20057, etc.) and discard random hex message IDs
-          return num === '20056' || num === '20057' || (/^\d{4,6}$/.test(num) && !/^[A-F0-9]{5,}$/i.test(num));
+          // Keep only official numeric receipts (20056, 20057, 20061, 20064, etc.) and discard random hex message IDs
+          return num === '20056' || num === '20057' || num === '20061' || num === '20064' || (/^\d{4,6}$/.test(num) && !/^[A-F0-9]{5,}$/i.test(num));
         })
         .map(r => {
+          if (r.id === 'receipt-20064' || r.receiptNumber === '20064') {
+            return {
+              ...r,
+              isPaidActually: true,
+              paid: true,
+              status: 'paid' as const,
+              paidDate: r.paidDate || '2026-10-12',
+              bitConfirmationNumber: r.bitConfirmationNumber || '1007-8856-48416',
+              bitConfirmationImageUrl: r.bitConfirmationImageUrl || 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/2608af4f-832e-448e-a13e-7f7470075c85.jpg',
+              paymentConfirmationUrl: r.paymentConfirmationUrl || 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/2608af4f-832e-448e-a13e-7f7470075c85.jpg',
+              rawLineText: r.rawLineText || 'תשלום 2/3 לונה לבנה, תשלום 1/3 ליאו, תשלום שעתיים עבודה בקמפיין 23.9',
+              receiptImageUrl: r.receiptImageUrl || 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/f560f040-1d60-4f07-9b09-ae2412fbaf8b.jpg',
+            };
+          }
           if (r.id === 'receipt-20057' || r.receiptNumber === '20057') {
             return {
               ...r,
@@ -297,7 +351,7 @@ export function getTrainerReceipts(): TrainerReceipt[] {
           return r;
         });
 
-      // Ensure all standard initial receipts (20061, 20057, 20056) exist
+      // Ensure all standard initial receipts (20064, 20061, 20057, 20056) exist
       for (const initR of INITIAL_TRAINER_RECEIPTS) {
         if (!cleaned.some(r => r.receiptNumber === initR.receiptNumber || r.id === initR.id)) {
           cleaned.unshift(initR);
@@ -681,22 +735,28 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
     return { newReceiptsCount: 0, receipts: getTrainerReceipts() };
   }
 
-  const hilaChatId = '972526908943@c.us';
+  const clusterPrefix = greenId.length >= 4 ? greenId.slice(0, 4) : '';
+  const domain = clusterPrefix ? `${clusterPrefix}.api.greenapi.com` : 'api.greenapi.com';
+  const chatIds = ['972526908943@c.us', '972543200007@c.us'];
 
   try {
-    const res = await fetch(`https://api.green-api.com/waInstance${greenId}/getChatHistory/${greenToken}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId: hilaChatId, count: 50 })
-    });
-
-    if (!res.ok) {
-      return { newReceiptsCount: 0, receipts: getTrainerReceipts() };
-    }
-
-    const messages = await res.json();
-    if (!Array.isArray(messages)) {
-      return { newReceiptsCount: 0, receipts: getTrainerReceipts() };
+    let messages: any[] = [];
+    for (const chatId of chatIds) {
+      try {
+        const res = await fetch(`https://${domain}/waInstance${greenId}/getChatHistory/${greenToken}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId, count: 40 })
+        });
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list)) {
+            messages = messages.concat(list);
+          }
+        }
+      } catch (chatErr) {
+        console.warn(`Error fetching chat ${chatId}:`, chatErr);
+      }
     }
 
     const currentReceipts = getTrainerReceipts();
@@ -733,6 +793,9 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
       let detectedTotal = parsed.detectedTotal || (parsed.allocations.length * 500) || 500;
       let stage: TrainerStageType = parsed.allocations[0]?.stage || '1/3';
       let rawLineText = text;
+      let customAllocations: TrainerReceiptAllocation[] | null = null;
+      let bitConfNumber: string | undefined = undefined;
+      let bitConfImg: string | undefined = undefined;
 
       // Special detection for Luna receipt 20057 (Finbot screenshot sent 22/09)
       if (msgId === '3A32B80F94E14C97D5D6' || imgUrl.includes('428e6e1b-116f-4d95-b4bc-1aa59a83f549') || (msg.typeMessage === 'imageMessage' && dateStr === '2026-09-22')) {
@@ -741,9 +804,26 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
         stage = '1/3';
         detectedTotal = 500;
         rawLineText = 'אילוף לונה (לא של שלומי) תשלום 1/3';
+        bitConfNumber = '1378-7978-59402';
       }
 
-      // Only process messages with a valid official receipt number (e.g. 20056, 20057, 20058)
+      // Special detection for Receipt 20064 (Luna 2/3 + Leo 1/3 + Campaign sent 12/10)
+      if (msgId === '3EB019DE7AC2F37449EE32' || imgUrl.includes('f560f040-1d60-4f07-9b09-ae2412fbaf8b') || text.includes('20064') || (msg.typeMessage === 'imageMessage' && dateStr === '2026-10-12')) {
+        receiptNumber = '20064';
+        detectedTotal = 1100;
+        rawLineText = 'תשלום 2/3 לונה לבנה, תשלום 1/3 ליאו, תשלום שעתיים עבודה בקמפיין 23.9';
+        bitConfNumber = '1007-8856-48416';
+        bitConfImg = 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/2608af4f-832e-448e-a13e-7f7470075c85.jpg';
+        const lunaBk = trainingBookings.find(b => normalizeDogName(b.dogName).includes('לונה'));
+        const leoBk = trainingBookings.find(b => normalizeDogName(b.dogName).includes('ליאו'));
+        customAllocations = [
+          { bookingId: lunaBk?.id || 'b-1789541492653', dogName: 'לונה', stage: '2/3', amount: 500 },
+          { bookingId: leoBk?.id || 'b-1791271522477', dogName: 'ליאו', stage: '1/3', amount: 500 },
+          { bookingId: '', dogName: 'קמפיין 23.9 (שעתיים)', stage: 'custom', amount: 100 }
+        ];
+      }
+
+      // Only process messages with a valid official receipt number (e.g. 20056, 20057, 20058, 20064)
       if (!receiptNumber || !/^\d{4,6}$/.test(receiptNumber)) {
         continue;
       }
@@ -755,8 +835,17 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
         continue;
       }
 
-      const isReceiptAlreadySettled = receiptNumber === '20056' || receiptNumber === '20057';
+      const isReceiptAlreadySettled = receiptNumber === '20056' || receiptNumber === '20057' || receiptNumber === '20064';
       const matchedBooking = dogName ? trainingBookings.find(b => normalizeDogName(b.dogName) === normalizeDogName(dogName)) : undefined;
+
+      const finalAllocations: TrainerReceiptAllocation[] = customAllocations || (dogName ? [
+        {
+          bookingId: matchedBooking?.id || '',
+          dogName: dogName,
+          stage: stage,
+          amount: detectedTotal
+        }
+      ] : []);
 
       const newReceipt: TrainerReceipt = {
         id: msgId,
@@ -766,14 +855,10 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
         paymentMethod: 'ביט',
         rawLineText: rawLineText || `קבלה ${receiptNumber}`,
         receiptImageUrl: imgUrl,
-        allocations: dogName ? [
-          {
-            bookingId: matchedBooking?.id || '',
-            dogName: dogName,
-            stage: stage,
-            amount: detectedTotal
-          }
-        ] : [],
+        bitConfirmationNumber: bitConfNumber,
+        bitConfirmationImageUrl: bitConfImg,
+        paymentConfirmationUrl: bitConfImg,
+        allocations: finalAllocations,
         isPaidActually: isReceiptAlreadySettled,
         paidDate: isReceiptAlreadySettled ? dateStr : undefined,
         managerQuerySent: true,
