@@ -2516,6 +2516,16 @@ export default function App() {
           }}
           onToggleStayStatus={handleToggleStayStatus}
           onInitiateRelease={handleInitiateRelease}
+          onUpdateBooking={async (b) => {
+            setBookings(prev => prev.map(item => item.id === b.id ? b : item));
+            await saveBookingToDb(b);
+          }}
+          onUpdateBookings={async (bList) => {
+            setBookings(bList);
+            for (const b of bList) {
+              await saveBookingToDb(b);
+            }
+          }}
         />
       )}
 

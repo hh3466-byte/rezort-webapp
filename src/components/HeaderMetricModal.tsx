@@ -2144,15 +2144,15 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                             type="button"
                             onClick={() => handleGraduateDog(b.id)}
                             className="w-full bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-bold text-xs py-2 px-3 rounded-xl shadow-2xs cursor-pointer transition-all flex items-center justify-center gap-1.5"
-                            title="סמן כי האילוף הושלם והעבר ללשונית ארכיון"
+                            title="סמן כי האילוף הושלם והעבר ללשונית הסתיים האילוף"
                           >
                             <span>🎓</span>
-                            <span>העבר לארכיון</span>
+                            <span>סיום אילוף</span>
                           </button>
                         ) : (
                           <div className="text-xs bg-emerald-100 text-emerald-900 border border-emerald-300 px-3 py-1.5 rounded-xl font-black flex items-center justify-center gap-1 w-full">
                             <CheckCircle className="w-3.5 h-3.5 text-emerald-700" />
-                            <span>בארכיון (הסתיים)</span>
+                            <span>🏁 הסתיים האילוף</span>
                           </div>
                         )}
                       </div>

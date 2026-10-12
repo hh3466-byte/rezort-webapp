@@ -64,7 +64,12 @@ export function getBookingTrainerStages(booking: Booking): TrainerPaymentStage[]
  */
 export function isRealTrainingBooking(b: Booking): boolean {
   if (b.stayStatus === 'cancelled') return false;
-  return b.serviceType === 'training' || b.serviceType === 'day_training';
+  return (
+    b.serviceType === 'training' || 
+    b.serviceType === 'day_training' || 
+    Boolean(b.isTrainingCompleted) || 
+    (Array.isArray(b.trainerStages) && b.trainerStages.length > 0)
+  );
 }
 
 /**
