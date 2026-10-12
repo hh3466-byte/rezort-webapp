@@ -94,6 +94,72 @@ async function canSendAutoReplyToClient(cleanPhone) {
   }
 }
 
+async function registerIncomingLeadToIntakeRequests(cleanPhone, senderName, incomingText) {
+  try {
+    const { data: sRow } = await supabase
+      .from('settings')
+      .select('data')
+      .eq('id', 'resort_config')
+      .single();
+
+    const curData = sRow?.data || {};
+    const curIntakes = Array.isArray(curData.intakeRequests) ? curData.intakeRequests : [];
+
+    const phoneNorm = cleanPhone.replace(/\D/g, '').slice(-7);
+    if (!phoneNorm || phoneNorm.length < 6) return;
+
+    // Check if an intake request or lead for this phone already exists
+    const exists = curIntakes.some(r => (r.ownerPhone || '').replace(/\D/g, '').includes(phoneNorm));
+    if (exists) {
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const todayStr = nowIso.substring(0, 10);
+    const in3Days = new Date(Date.now() + 3 * 86400000).toISOString().substring(0, 10);
+
+    const displayName = senderName ? senderName.trim().replace(/^\[חדש\]\s*/, '') : 'פנייה חדשה מוואטסאפ';
+    const isMetaLead = incomingText.includes('השלמתי את הטופס') || incomingText.includes('Full name');
+
+    const leadId = `lead_${Date.now()}_${phoneNorm.slice(-4)}`;
+    const newLeadItem = {
+      id: leadId,
+      createdAt: nowIso,
+      status: 'pending',
+      ownerName: displayName,
+      ownerPhone: cleanPhone,
+      dogName: 'ממתין לבירור בשיחה 🐶',
+      dogBreed: '',
+      dogAge: '',
+      serviceType: incomingText.includes('אילוף') ? 'training' : 'boarding',
+      startDate: todayStr,
+      endDate: in3Days,
+      clientOrigin: isMetaLead ? 'meta_lead' : 'new',
+      notes: isMetaLead
+        ? `[📢 ליד ממודעת פייסבוק/אינסטגרם] | ${incomingText.slice(0, 200)}`
+        : `[💬 פנייה חדשה מוואטסאפ] | ${incomingText.slice(0, 200)}`,
+      internalNotes: isMetaLead
+        ? `הלקוח השלים טופס מודעה ראשוני בפייסבוק/אינסטגרם. נשלחה הודעה עם קישור לשאלון. יש ליצור קשר טלפוני לתיאום.`
+        : `פנייה ראשונית בוואטסאפ. נשלחה הודעה עם קישור לשאלון.`,
+      termsAccepted: false
+    };
+
+    curIntakes.unshift(newLeadItem);
+
+    await supabase
+      .from('settings')
+      .update({
+        data: { ...curData, intakeRequests: curIntakes },
+        updated_at: nowIso
+      })
+      .eq('id', 'resort_config');
+
+    console.log(`✅ Registered new lead ${leadId} (${displayName} - ${cleanPhone}) to intakeRequests`);
+  } catch (err) {
+    console.warn('Error in registerIncomingLeadToIntakeRequests:', err);
+  }
+}
+
 // Anti-spam cooldown memory (fallback)
 const cooldownMap = global._resortWaCooldown || (global._resortWaCooldown = new Map());
 
@@ -1081,6 +1147,8 @@ export default async function handler(req, res) {
       await sendWhatsAppMessage(chatId, CLOSED_WEEKEND_HOLIDAY_MSG);
     } else {
       console.log('--- Sending single closed hours notice + intake link to new lead ---', { cleanPhone });
+      // Register lead to intakeRequests so it appears in CRM immediately
+      await registerIncomingLeadToIntakeRequests(cleanPhone, senderName, incomingText);
       await sendWhatsAppMessage(chatId, getClosedHoursNewLeadMessage(cleanPhone, senderName));
     }
 
@@ -1102,6 +1170,8 @@ export default async function handler(req, res) {
   }
 
   console.log('--- Sending intake form to new client lead in business hours ---', { cleanPhone, senderName });
+  // Register lead to intakeRequests so it appears in CRM immediately
+  await registerIncomingLeadToIntakeRequests(cleanPhone, senderName, incomingText);
   await sendWhatsAppMessage(chatId, getIntakeFormMessage(cleanPhone, senderName));
 
   return res.status(200).json({

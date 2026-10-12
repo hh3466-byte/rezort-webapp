@@ -300,20 +300,54 @@ export default async function handler(req, res) {
     // 4. Send WhatsApp Message via Green-API
     const sendResult = await sendWhatsAppMessage(chatId, outgoingMessage);
 
-    // 5. Save Lead Record in Supabase (intake_requests or settings)
+    // 5. Save Lead Record in Supabase settings.data.intakeRequests
     const leadId = `lead_${Date.now()}_${cleanPhone.slice(-4)}`;
     try {
-      await supabase.from('intake_requests').insert({
-        id: leadId,
-        created_at: new Date().toISOString(),
-        status: 'lead_received',
-        owner_name: fullName,
-        owner_phone: cleanPhone,
-        owner_email: email,
-        internal_notes: `שאלון קליטה נשלח אוטומטית בוואטסאפ (${sendResult.idMessage ? `מזהה הודעה: ${sendResult.idMessage}` : 'נשלח'})`
-      });
+      const { data: sRow } = await supabase
+        .from('settings')
+        .select('data')
+        .eq('id', 'resort_config')
+        .single();
+      const curData = sRow?.data || {};
+      const curIntakes = Array.isArray(curData.intakeRequests) ? curData.intakeRequests : [];
+
+      const phoneNorm = cleanPhone.replace(/\D/g, '').slice(-7);
+      const exists = curIntakes.some(r => (r.ownerPhone || '').replace(/\D/g, '').includes(phoneNorm));
+      if (!exists) {
+        const nowIso = new Date().toISOString();
+        const todayStr = nowIso.substring(0, 10);
+        const in3Days = new Date(Date.now() + 3 * 86400000).toISOString().substring(0, 10);
+
+        const newLeadItem = {
+          id: leadId,
+          createdAt: nowIso,
+          status: 'pending',
+          ownerName: fullName,
+          ownerPhone: cleanPhone,
+          ownerEmail: email || '',
+          dogName: 'ממתין לבירור בשיחה 🐶',
+          dogBreed: '',
+          dogAge: '',
+          serviceType: (source || '').includes('אילוף') ? 'training' : 'boarding',
+          startDate: todayStr,
+          endDate: in3Days,
+          clientOrigin: 'meta_lead',
+          notes: `[📢 ליד מקמפיין ממומן במטא] | מקור: ${source}`,
+          internalNotes: `הליד נקלט מקמפיין ממומן. נשלח שאלון קליטה אישי בוואטסאפ (${sendResult.idMessage ? `מזהה הודעה: ${sendResult.idMessage}` : 'נשלח'}). ממתין לשיחה של שמוליק.`,
+          termsAccepted: false
+        };
+        curIntakes.unshift(newLeadItem);
+        await supabase
+          .from('settings')
+          .update({
+            data: { ...curData, intakeRequests: curIntakes },
+            updated_at: nowIso
+          })
+          .eq('id', 'resort_config');
+        console.log(`✅ Saved new lead ${leadId} (${fullName} - ${cleanPhone}) to settings.data.intakeRequests`);
+      }
     } catch (dbErr) {
-      console.warn('Could not insert lead to intake_requests table (non-blocking):', dbErr?.message || dbErr);
+      console.warn('Could not save lead to settings.data.intakeRequests:', dbErr?.message || dbErr);
     }
 
     // 6. Report Lead Conversion to Meta Conversions API (CAPI)

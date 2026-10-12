@@ -1067,7 +1067,18 @@ export const saveIntakeRequestToDb = async (request: IntakeRequest): Promise<voi
   try {
     // 1. Update local storage
     const current = loadStoredIntakeRequests();
-    const updated = [request, ...current.filter(r => r.id !== request.id)];
+    const phoneSuffix = request.ownerPhone ? cleanPhoneNumber(request.ownerPhone).slice(-7) : '';
+    const updated = [
+      request,
+      ...current.filter(r => {
+        if (r.id === request.id) return false;
+        if (phoneSuffix && r.id && r.id.startsWith('lead_')) {
+          const rPhone = cleanPhoneNumber(r.ownerPhone).slice(-7);
+          if (rPhone === phoneSuffix) return false;
+        }
+        return true;
+      })
+    ];
     localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(updated));
 
     // 2. Upsert to Supabase intake_requests table
@@ -1086,7 +1097,7 @@ export const saveIntakeRequestToDb = async (request: IntakeRequest): Promise<voi
         dog_age: request.dogAge || '',
         dog_gender: request.dogGender || 'male',
         dog_size: request.dogSize || 'medium',
-        service_type: request.serviceType,
+        serviceType: request.serviceType,
         start_date: request.startDate,
         end_date: request.endDate,
         is_friendly_with_dogs: request.isFriendlyWithDogs,
@@ -1114,7 +1125,17 @@ export const saveIntakeRequestToDb = async (request: IntakeRequest): Promise<voi
 
         const extraData = (sRow && sRow.data && typeof sRow.data === 'object') ? sRow.data : {};
         const existing: IntakeRequest[] = Array.isArray(extraData.intakeRequests) ? extraData.intakeRequests : [];
-        const merged = [request, ...existing.filter(r => r.id !== request.id)];
+        const merged = [
+          request,
+          ...existing.filter(r => {
+            if (r.id === request.id) return false;
+            if (phoneSuffix && r.id && r.id.startsWith('lead_')) {
+              const rPhone = cleanPhoneNumber(r.ownerPhone).slice(-7);
+              if (rPhone === phoneSuffix) return false;
+            }
+            return true;
+          })
+        ];
 
         await supabase
           .from(SETTINGS_TABLE)
