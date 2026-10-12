@@ -101,8 +101,12 @@ export function initAppFreshnessWatcher(onDataRefresh?: () => void): () => void 
   };
   document.addEventListener('visibilitychange', handleVisibilityChange);
 
-  // 3. Periodic check every 60 seconds
-  const interval = setInterval(handleAppAwake, 60000);
+  // 3. Periodic check every 5 minutes (only when tab is visible)
+  const interval = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      handleAppAwake();
+    }
+  }, 300000);
 
   return () => {
     window.removeEventListener('focus', handleAppAwake);

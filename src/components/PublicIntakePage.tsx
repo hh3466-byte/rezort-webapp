@@ -35,7 +35,8 @@ import {
   Loader2,
   Dog,
   Trash2,
-  Ticket
+  Ticket,
+  Camera
 } from 'lucide-react';
 import { SendIntakeModal } from './SendIntakeModal';
 import { getCurrentCoordinates, reverseGeocodeCoordinates } from '../utils/geolocationUtils';
@@ -138,6 +139,8 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   const [dogAge, setDogAge] = useState(initialProfile?.dogAge || '');
   const [dogGender, setDogGender] = useState<'male' | 'female'>(initialProfile?.dogGender || 'male');
   const [dogSize, setDogSize] = useState<'small' | 'medium' | 'large' | 'giant'>(initialProfile?.dogSize || 'medium');
+  const [dogPhotoUrl, setDogPhotoUrl] = useState<string>('');
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState<boolean>(false);
   const [serviceType, setServiceType] = useState<ServiceType>('boarding');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(addDays(today, 3));
@@ -245,6 +248,61 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   // Mandatory Terms & Conditions Acceptance State
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
+
+  // Dog photo client-side compression handler
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 15 * 1024 * 1024) {
+      alert('גודל הקובץ גדול מדי. אנא בחר תמונה עד 15MB.');
+      return;
+    }
+
+    setIsProcessingPhoto(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const maxDim = 800; // Optimal high-quality lightweight size (~100-150KB)
+
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          setDogPhotoUrl(compressedDataUrl);
+        }
+        setIsProcessingPhoto(false);
+      };
+      img.onerror = () => {
+        setIsProcessingPhoto(false);
+        alert('שגיאה בטעינת התמונה. אנא נסה תמונה אחרת.');
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.onerror = () => {
+      setIsProcessingPhoto(false);
+      alert('שגיאה בקריאת הקובץ.');
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Multi-dog support: "+ הוסף עוד אורח לריזורט לכלב"
   const [additionalDogs, setAdditionalDogs] = useState<AdditionalDogIntake[]>([]);
@@ -562,6 +620,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       dogAge: dogAge.trim() || undefined,
       dogGender,
       dogSize,
+      dogPhotoUrl: dogPhotoUrl.trim() || undefined,
       serviceType,
       startDate,
       endDate: finalEndDate,
@@ -1426,6 +1485,78 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* Dog Photo Upload / Camera Capture */}
+            <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-2 mt-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                  <Camera className="w-4 h-4 text-emerald-700" />
+                  <span>תמונת הכלב/ה (צילום במצלמה או העלאה מהגלריה):</span>
+                </label>
+                <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-300">
+                  מומלץ מאוד 📸
+                </span>
+              </div>
+
+              {!dogPhotoUrl ? (
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <label className="w-full bg-white hover:bg-emerald-50/60 active:scale-98 border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-2xl p-4 text-center cursor-pointer transition-all shadow-2xs group flex flex-col items-center justify-center gap-1.5">
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handlePhotoSelect} 
+                      className="hidden" 
+                      disabled={isProcessingPhoto}
+                    />
+                    <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
+                      {isProcessingPhoto ? <Loader2 className="w-5 h-5 animate-spin" /> : '📸'}
+                    </div>
+                    <span className="text-xs font-black text-emerald-950">
+                      {isProcessingPhoto ? 'מעבד ומכווץ תמונה...' : 'לחצו כאן לצילום במצלמה או בחירת תמונה מהגלריה'}
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      תמונה ברורה של הכלב מסייעת לשמוליק ולצוות להכיר אותו מראש
+                    </span>
+                  </label>
+                </div>
+              ) : (
+                <div className="flex items-center gap-4 bg-white p-3 rounded-2xl border border-emerald-300 shadow-xs">
+                  <img 
+                    src={dogPhotoUrl} 
+                    alt="תמונת הכלב" 
+                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-cover border border-emerald-200 shadow-2xs"
+                  />
+                  <div className="flex-1 space-y-1 text-right">
+                    <div className="text-xs font-black text-emerald-900 flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>התמונה נבחרה בהצלחה!</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      התמונה תוצג מובנית לשמוליק ובכרטיס האירוח של הכלב ביומן.
+                    </p>
+                    <div className="flex items-center gap-3 pt-1">
+                      <label className="text-xs font-black text-emerald-700 hover:text-emerald-900 cursor-pointer underline flex items-center gap-1">
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          onChange={handlePhotoSelect} 
+                          className="hidden" 
+                        />
+                        <span>החלף תמונה</span>
+                      </label>
+                      <span className="text-slate-300">•</span>
+                      <button 
+                        type="button" 
+                        onClick={() => setDogPhotoUrl('')}
+                        className="text-xs font-black text-red-600 hover:text-red-800 cursor-pointer underline"
+                      >
+                        מחק תמונה
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

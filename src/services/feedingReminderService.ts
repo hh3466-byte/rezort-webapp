@@ -2,6 +2,7 @@ import { Booking } from '../types';
 import { getTodayStr } from '../utils/dateUtils';
 import { playNotificationChime } from '../utils/soundUtils';
 import { getPlacementDisplayName } from '../utils/kennelUtils';
+import { createPowerAwareInterval } from '../utils/powerSavingUtils';
 
 export interface FeedingReminderEvent {
   dogName: string;
@@ -150,14 +151,11 @@ export function initFeedingReminderScheduler(
     }
   };
 
-  // Run initial check and set interval
+  // Run initial check and set power-aware interval (2 mins when active, 0 when sleeping)
   check();
-  reminderInterval = setInterval(check, 30000);
+  const cleanup = createPowerAwareInterval(check, 120000, true);
 
   return () => {
-    if (reminderInterval) {
-      clearInterval(reminderInterval);
-      reminderInterval = null;
-    }
+    cleanup();
   };
 }

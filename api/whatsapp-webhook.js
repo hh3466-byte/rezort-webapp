@@ -53,11 +53,14 @@ function getClosedHoursNewLeadMessage(phone, senderName) {
   const phoneParam = cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : '';
   const link = `https://rezort-webapp.vercel.app/?request=true${phoneParam}${nameParam}`;
 
-  return `${CLOSED_WEEKEND_HOLIDAY_MSG}
+  const greeting = senderName ? `שלום ${senderName.trim()}! ` : 'שלום! ';
+  return `${greeting}תודה על פנייתך לריזורט לכלב! 🐾🐶
+שירות הלקוחות והתיאומים שלנו סגור כרגע (בערב / בסופ״ש). המתחם כמובן מאויש 24/7 והכלבים מקבלים טיפול מלא, אוהב ומפנק! 🐕🤍
 
-🐶 במידה ופניתם לבדיקת זמינות וקליטת כלב חדש, נשמח אם תמלאו בינתיים שאלון קליטה קצר (דקה אחת):
+כדי שנוכל לבדוק זמינות עבור כלבך ולחסוך לך זמן, אנא מלא/י את שאלון הקליטה הקצר (דקה אחת בלבד):
 👉 \u200E${link}
-וניצור איתכם קשר מיד עם פתיחת שירות הלקוחות! 🐾🤍`;
+
+עם פתיחת שירות הלקוחות בשעות הפעילות, שמוליק והצוות יעברו על השאלון ונחזור אליך בהקדם לתיאום סופי! 🐾`;
 }
 
 async function canSendAutoReplyToClient(cleanPhone) {
@@ -1129,7 +1132,9 @@ export default async function handler(req, res) {
 
   // Jewish Holiday check
   const isHolidayClosed = await checkIsShabbatOrHoliday(israelDateStr);
-  const isClosedHours = isWeekendClosed || isHolidayClosed;
+  // Weekday evening/night closure: Sunday-Thursday from 19:30 to 08:30
+  const isWeekdayNight = (israelDay >= 0 && israelDay <= 4) && (timeInMinutes >= 19 * 60 + 30 || timeInMinutes < 8 * 60 + 30);
+  const isClosedHours = isWeekendClosed || isHolidayClosed || isWeekdayNight;
 
   // 6. Check client status (Existing vs New)
   const isExisting = await isExistingClient(phoneSuffix);

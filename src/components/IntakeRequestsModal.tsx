@@ -248,6 +248,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [paymentPromptRequest, setPaymentPromptRequest] = useState<IntakeRequest | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [customPaymentLink, setCustomPaymentLink] = useState<string>('');
+  const [previewDogPhoto, setPreviewDogPhoto] = useState<string | null>(null);
   const [isSendingPayment, setIsSendingPayment] = useState<boolean>(false);
   const [paymentSendError, setPaymentSendError] = useState<string | null>(null);
   const [quickSendingId, setQuickSendingId] = useState<string | null>(null);
@@ -1208,9 +1209,23 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                   {/* Card Top: Dog & Owner Header */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
                     <div className="flex items-start gap-3.5">
-                      <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center justify-center font-black text-2xl shadow-xs shrink-0 mt-1">
-                        {req.additionalDogs && req.additionalDogs.length > 0 ? '🐾' : '🐕'}
-                      </div>
+                      {req.dogPhotoUrl ? (
+                        <div 
+                          className="w-14 h-14 rounded-2xl border-2 border-emerald-400 overflow-hidden shadow-xs shrink-0 mt-1 cursor-pointer hover:scale-105 transition-transform bg-slate-100"
+                          onClick={() => setPreviewDogPhoto(req.dogPhotoUrl || null)}
+                          title="לחצו להגדלת תמונת הכלב 📸"
+                        >
+                          <img 
+                            src={req.dogPhotoUrl} 
+                            alt={req.dogName} 
+                            className="w-full h-full object-cover" 
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center justify-center font-black text-2xl shadow-xs shrink-0 mt-1">
+                          {req.additionalDogs && req.additionalDogs.length > 0 ? '🐾' : '🐕'}
+                        </div>
+                      )}
                       
                       {/* 4 Lines - Arranged one below the other, BIG and clear */}
                       <div className="flex flex-col gap-1.5 text-right">
@@ -3313,6 +3328,35 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox for Dog Photo */}
+      {previewDogPhoto && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setPreviewDogPhoto(null)}
+        >
+          <div className="relative max-w-lg w-full bg-slate-900 rounded-3xl overflow-hidden border border-slate-700 shadow-2xl p-2" onClick={e => e.stopPropagation()}>
+            <img 
+              src={previewDogPhoto} 
+              alt="תמונת הכלב" 
+              className="w-full max-h-[75vh] object-contain rounded-2xl"
+            />
+            <div className="p-3 flex items-center justify-between text-white">
+              <span className="text-xs font-bold flex items-center gap-1.5">
+                <span>📸</span>
+                <span>תמונת הכלב שצורפה לטופס הקליטה</span>
+              </span>
+              <button 
+                type="button" 
+                onClick={() => setPreviewDogPhoto(null)}
+                className="bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl cursor-pointer transition-colors"
+              >
+                סגור ✕
+              </button>
+            </div>
           </div>
         </div>
       )}

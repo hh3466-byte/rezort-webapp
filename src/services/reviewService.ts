@@ -5,6 +5,7 @@ import { sendGreenApiDirectMessage, addGreenApiGroupParticipant, RESORT_COMMUNIT
 import { saveBookingToDb } from './dbService';
 import { isCustomerMessagingRestrictedNow } from '../utils/jewishCalendar';
 import { supabase } from '../utils/supabase';
+import { createPowerAwareInterval } from '../utils/powerSavingUtils';
 
 let autoReviewInterval: any = null;
 let isReviewSendingInProgress = false;
@@ -322,14 +323,11 @@ export function initAutoReviewScheduler(
     }
   };
 
-  // Run initial check and then periodically every 60 seconds
+  // Run initial check and then periodically with power awareness
   checkAndRun();
-  autoReviewInterval = setInterval(checkAndRun, 60000);
+  const cleanup = createPowerAwareInterval(checkAndRun, 180000, true);
 
   return () => {
-    if (autoReviewInterval) {
-      clearInterval(autoReviewInterval);
-      autoReviewInterval = null;
-    }
+    cleanup();
   };
 }

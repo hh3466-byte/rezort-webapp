@@ -9,6 +9,7 @@ import {
   isDogInTraining 
 } from '../data/dailyDogTemplates';
 import { isCustomerMessagingRestrictedNow } from '../utils/jewishCalendar';
+import { createPowerAwareInterval } from '../utils/powerSavingUtils';
 
 let autoSenderInterval: any = null;
 let isSendingInProgress = false;
@@ -337,14 +338,11 @@ export function initDailyDogAutoSender(
   // Run initial check after short delay
   const initialTimer = setTimeout(checkAndRun, 4000);
 
-  // Check every 60 seconds
-  autoSenderInterval = setInterval(checkAndRun, 60000);
+  // Check every 3 minutes with power awareness (0 when device sleeping)
+  const cleanup = createPowerAwareInterval(checkAndRun, 180000, true);
 
   return () => {
     clearTimeout(initialTimer);
-    if (autoSenderInterval) {
-      clearInterval(autoSenderInterval);
-      autoSenderInterval = null;
-    }
+    cleanup();
   };
 }

@@ -507,6 +507,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
         : formattedNotes.replace(/\[ללא_סקר\]/g, '').trim(),
       specialDiet: specialDiet.trim(),
       vaccinationValid,
+      dogPhotoUrl: initialData?.dogPhotoUrl,
       daycarePassCode: initialData?.daycarePassCode,
       daycarePassId: initialData?.daycarePassId,
       createdAt: initialData?.createdAt || new Date().toISOString(),
@@ -531,9 +532,17 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-green-50 text-green-700 border border-green-200 flex items-center justify-center font-bold">
-              <Dog className="w-5 h-5" />
-            </div>
+            {initialData?.dogPhotoUrl ? (
+              <img
+                src={initialData.dogPhotoUrl}
+                alt={initialData.dogName || 'תמונת הכלב'}
+                className="w-11 h-11 rounded-xl object-cover border-2 border-amber-400 shadow-sm"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-green-50 text-green-700 border border-green-200 flex items-center justify-center font-bold">
+                <Dog className="w-5 h-5" />
+              </div>
+            )}
             <div>
               <h3 className="font-extrabold text-lg sm:text-xl text-slate-900">
                 {initialData?.id 

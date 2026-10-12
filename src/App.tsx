@@ -40,6 +40,7 @@ import {
 
 import { CalendarView } from './components/CalendarView';
 import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricModal';
+import { createPowerAwareInterval } from './utils/powerSavingUtils';
 import { getPlacementDisplayName } from './utils/kennelUtils';
 import { OccupancyForecast } from './components/OccupancyForecast';
 import { BookingsList } from './components/BookingsList';
@@ -468,12 +469,12 @@ export default function App() {
     };
 
     checkCrmNew();
-    const interval = setInterval(checkCrmNew, 45000);
+    const cleanupInterval = createPowerAwareInterval(checkCrmNew, 120000, true);
     window.addEventListener('crm-chats-read-updated', checkCrmNew);
     window.addEventListener('storage', checkCrmNew);
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      cleanupInterval();
       window.removeEventListener('crm-chats-read-updated', checkCrmNew);
       window.removeEventListener('storage', checkCrmNew);
     };
@@ -1023,10 +1024,10 @@ export default function App() {
       }
     };
     checkGreenApi();
-    const interval = setInterval(checkGreenApi, 45000);
+    const cleanupInterval = createPowerAwareInterval(checkGreenApi, 180000, true);
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      cleanupInterval();
     };
   }, [handleAfterReconnection]);
 
@@ -2632,6 +2633,7 @@ export default function App() {
                 intakeRequestId: req.id,
                 dogName: req.dogName,
                 dogBreed: req.dogBreed,
+                dogPhotoUrl: req.dogPhotoUrl,
                 dogGender: req.dogGender === 'female'
                   ? (req.isNeutered ? 'female_spayed' : 'female_intact')
                   : (req.isNeutered ? 'male_neutered' : 'male_intact'),

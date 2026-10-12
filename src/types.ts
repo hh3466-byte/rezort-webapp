@@ -117,6 +117,7 @@ export interface IntakeRequest {
   dogAge?: string;
   dogGender?: 'male' | 'female';
   dogSize?: 'small' | 'medium' | 'large' | 'giant';
+  dogPhotoUrl?: string; // תמונת הכלב שצולמה/הועלתה ע"י הלקוח בטופס
   serviceType: ServiceType;
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD

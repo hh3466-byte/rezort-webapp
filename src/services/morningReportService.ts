@@ -7,6 +7,7 @@ import { fetchNewCrmChatsCount, fetchUnansweredChatsSummary, UnansweredChatSumma
 import { isIntakeRequestNew } from '../utils/intakeUtils';
 import { supabase } from '../utils/supabase';
 import { send1830SanityReportToShmulik } from './dailySanity1830Service';
+import { createPowerAwareInterval } from '../utils/powerSavingUtils';
 
 let overviewReportInterval: any = null;
 let isOverviewSending = false;
@@ -812,15 +813,12 @@ export function initTomorrowOverviewScheduler(
     }
   };
 
-  // Run initial check and then periodically every 30 seconds
+  // Run initial check and then periodically with power-aware timer (every 3 minutes when active, 0 when sleeping)
   checkAndRun();
-  overviewReportInterval = setInterval(checkAndRun, 30000);
+  const cleanup = createPowerAwareInterval(checkAndRun, 180000, true);
 
   return () => {
-    if (overviewReportInterval) {
-      clearInterval(overviewReportInterval);
-      overviewReportInterval = null;
-    }
+    cleanup();
   };
 }
 
@@ -914,13 +912,10 @@ export function init1830SanityScheduler(
   };
 
   checkAndRun();
-  sanity1830Interval = setInterval(checkAndRun, 30000);
+  const cleanup = createPowerAwareInterval(checkAndRun, 180000, true);
 
   return () => {
-    if (sanity1830Interval) {
-      clearInterval(sanity1830Interval);
-      sanity1830Interval = null;
-    }
+    cleanup();
   };
 }
 
