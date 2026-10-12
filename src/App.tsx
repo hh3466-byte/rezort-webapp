@@ -144,9 +144,10 @@ export default function App() {
 
   // Training Agreement Direct Link (?agreement=training or ?training_agreement=true)
   const isAgreementParam = typeof window !== 'undefined' && (
-    window.location.search.includes('agreement=training') ||
-    window.location.search.includes('training_agreement')
+    window.location.search.toLowerCase().includes('agreement') ||
+    window.location.hash.toLowerCase().includes('agreement')
   );
+  const [showTrainingAgreement, setShowTrainingAgreement] = useState(isAgreementParam);
   const [showPublicIntake, setShowPublicIntake] = useState(isIntakeParam);
   const [intakeRequests, setIntakeRequests] = useState<IntakeRequest[]>(() => loadStoredIntakeRequests());
   const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false);
@@ -1235,7 +1236,7 @@ export default function App() {
   };
 
   // 0. If client opened direct Training Agreement link (?agreement=training)
-  if (isAgreementParam) {
+  if (showTrainingAgreement) {
     const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
     const paramBookingId = urlParams?.get('bookingId');
     const paramIntakeId = urlParams?.get('intakeId');
@@ -1245,44 +1246,43 @@ export default function App() {
 
     const matchedAgreementBooking = paramBookingId 
       ? bookings.find(b => b.id === paramBookingId) 
-      : (paramPhone ? bookings.find(b => cleanPhoneNumber(b.ownerPhone) === cleanPhoneNumber(paramPhone)) : null);
+      : (paramPhone ? (bookings.find(b => cleanPhoneNumber(b.ownerPhone) === cleanPhoneNumber(paramPhone) && b.serviceType === 'training') || bookings.find(b => cleanPhoneNumber(b.ownerPhone) === cleanPhoneNumber(paramPhone))) : null);
 
     const matchedAgreementIntake = paramIntakeId 
       ? intakeRequests.find(r => r.id === paramIntakeId) 
       : (paramPhone ? intakeRequests.find(r => cleanPhoneNumber(r.ownerPhone) === cleanPhoneNumber(paramPhone)) : null);
 
     return (
-      <div className="min-h-screen bg-slate-900/80 flex items-center justify-center p-2 sm:p-4" dir="rtl">
-        <TrainingAgreementModal
-          isOpen={true}
-          onClose={() => {
-            window.location.href = window.location.pathname;
-          }}
-          booking={matchedAgreementBooking || (!matchedAgreementIntake ? {
-            id: paramBookingId || `train-${Date.now()}`,
-            dogName: paramDog || 'כלב',
-            dogBreed: '',
-            ownerName: paramName || '',
-            ownerPhone: paramPhone || '',
-            serviceType: 'training',
-            startDate: getTodayStr(),
-            endDate: addDays(getTodayStr(), 30),
-            totalPrice: Number(settings?.defaultDailyRateTraining) || 6500,
-            depositAmount: 0,
-            paymentStatus: 'unpaid',
-            paymentMethod: 'credit',
-            stayStatus: 'booked',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          } : undefined)}
-          intakeRequest={matchedAgreementIntake || undefined}
-          settings={settings}
-          isPublicClientView={true}
-          onAgreementSigned={() => {
-            showToast('✅ הסכם האילוף נחתם בהצלחה!');
-          }}
-        />
-      </div>
+      <TrainingAgreementModal
+        isOpen={true}
+        onClose={() => {
+          setShowTrainingAgreement(false);
+          window.location.href = window.location.pathname;
+        }}
+        booking={matchedAgreementBooking || (!matchedAgreementIntake ? {
+          id: paramBookingId || `b-training-${cleanPhoneNumber(paramPhone) || Date.now()}`,
+          dogName: paramDog || 'רוקי',
+          dogBreed: 'מעורב',
+          ownerName: paramName || 'חגי',
+          ownerPhone: paramPhone || '054-3200007',
+          serviceType: 'training',
+          startDate: getTodayStr(),
+          endDate: addDays(getTodayStr(), 30),
+          totalPrice: Number(settings?.defaultDailyRateTraining) || 6500,
+          depositAmount: 0,
+          paymentStatus: 'unpaid',
+          paymentMethod: 'credit',
+          stayStatus: 'booked',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        } : undefined)}
+        intakeRequest={matchedAgreementIntake || undefined}
+        settings={settings}
+        isPublicClientView={true}
+        onAgreementSigned={() => {
+          showToast('✅ הסכם האילוף נחתם בהצלחה!');
+        }}
+      />
     );
   }
 

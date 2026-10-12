@@ -472,10 +472,16 @@ export const TrainingAgreementModal: React.FC<TrainingAgreementModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-in fade-in" dir="rtl">
+    <div className={isPublicClientView 
+      ? "min-h-screen bg-slate-100 flex flex-col py-0 sm:py-6 px-0 sm:px-4" 
+      : "fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-in fade-in"
+    } dir="rtl">
       
       {/* Container */}
-      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden my-auto animate-in zoom-in-95">
+      <div className={isPublicClientView
+        ? "bg-white sm:rounded-3xl max-w-4xl w-full mx-auto flex flex-col shadow-xl border border-slate-200 overflow-hidden min-h-screen sm:min-h-0"
+        : "bg-white rounded-3xl max-w-4xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden my-auto animate-in zoom-in-95"
+      }>
         
         {/* Top Floating Control Bar (Hidden in Print) */}
         <div className="p-3 sm:p-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50 via-slate-50 to-teal-50 flex items-center justify-between gap-3 shrink-0 print:hidden">
@@ -539,16 +545,16 @@ export const TrainingAgreementModal: React.FC<TrainingAgreementModalProps> = ({
                   <Send className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">שלח בוואטסאפ</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </>
             )}
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
         </div>
 
@@ -1262,20 +1268,22 @@ export const TrainingAgreementModal: React.FC<TrainingAgreementModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
-            >
-              סגור
-            </button>
+            {!isPublicClientView && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+              >
+                סגור
+              </button>
+            )}
 
             {!isSigned ? (
               <button
                 type="button"
                 onClick={handleSaveAndSign}
                 disabled={isSaving}
-                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-50"
+                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-[#065f46] hover:bg-[#044e45] active:scale-95 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-50"
               >
                 {isSaving ? (
                   <span>שומר חתימה...</span>
@@ -1287,22 +1295,24 @@ export const TrainingAgreementModal: React.FC<TrainingAgreementModalProps> = ({
                 )}
               </button>
             ) : (
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  <span>ההסכם חתום – סגור</span>
-                </button>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                {!isPublicClientView && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span>ההסכם חתום – סגור</span>
+                  </button>
+                )}
 
                 {Number(totalPrice) > 0 && (
                   <button
                     type="button"
                     onClick={handleProceedToPayment}
                     disabled={isOpeningPayment}
-                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20 transition-all cursor-pointer disabled:opacity-50"
+                    className="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 active:scale-95 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/20 transition-all cursor-pointer disabled:opacity-50"
                   >
                     <CreditCard className="w-4 h-4 text-emerald-200" />
                     <span>{isOpeningPayment ? 'מכין קישור תשלום...' : `💳 שלם דמי אילוף כעת (₪${Number(totalPrice).toLocaleString()})`}</span>
