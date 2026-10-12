@@ -6,6 +6,17 @@ export type StayStatus = 'booked' | 'checked_in' | 'checked_out' | 'cancelled' |
 
 export type PaymentMethod = 'bit' | 'paybox' | 'cash' | 'credit' | 'bank_transfer' | 'other';
 
+export interface IntakeMediaItem {
+  id: string;
+  type: 'image' | 'video';
+  url: string; // Base64 data URL or storage URL
+  thumbnailUrl?: string; // תמונה ממוזערת / פריים מייצג מסרטון
+  name?: string;
+  size?: number;
+  duration?: number; // אורך וידאו בשניות
+  mediaSettingsId?: string; // מזהה רשומת וידאו ב-settings אם נשמר בנפרד (סרטון כבד)
+}
+
 export interface Booking {
   id: string;
   dogName: string;
@@ -43,6 +54,8 @@ export interface Booking {
   crateTrained?: boolean;
   vaccinationDates?: { rabies?: string; combo?: string; cough?: string };
   dogPhotoUrl?: string;
+  dogMediaList?: IntakeMediaItem[];
+  dogVideoUrl?: string;
   arrivalTime?: string;
   pickupTime?: string;
   extraServices?: { id: string; name: string; price: number }[];
@@ -117,7 +130,9 @@ export interface IntakeRequest {
   dogAge?: string;
   dogGender?: 'male' | 'female';
   dogSize?: 'small' | 'medium' | 'large' | 'giant';
-  dogPhotoUrl?: string; // תמונת הכלב שצולמה/הועלתה ע"י הלקוח בטופס
+  dogPhotoUrl?: string; // תמונת הכלב שצולמה/הועלתה ע"י הלקוח בטופס (ראשית)
+  dogMediaList?: IntakeMediaItem[]; // רשימת תמונות וסרטוני וידאו של הכלב
+  dogVideoUrl?: string; // סרטון וידאו קצר של הכלב
   serviceType: ServiceType;
   startDate: string; // YYYY-MM-DD
   endDate: string;   // YYYY-MM-DD

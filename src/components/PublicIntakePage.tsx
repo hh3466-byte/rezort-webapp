@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ResortSettings, ServiceType, IntakeRequest, AdditionalDogIntake, RESORT_BENEFIT_OPTIONS } from '../types';
+import { ResortSettings, ServiceType, IntakeRequest, IntakeMediaItem, AdditionalDogIntake, RESORT_BENEFIT_OPTIONS } from '../types';
 import { addDays, getTodayStr, calculateDaysCount, getDayNameHebrew, formatDateIL } from '../utils/dateUtils';
 import { cleanPhoneNumber, isValidIsraeliPhone, formatIsraeliPhoneDisplay } from '../utils/whatsappUtils';
 import { saveIntakeRequestToDb, findVoucherByCode, findDaycarePassByCode, verifyCustomerByPhone, PhoneVerificationResult } from '../services/dbService';
 import { sendResortEmailNotification, sendResortWhatsAppNotification, formatIntakeNotification, saveOrUpdateGreenApiContact } from '../services/notificationService';
+import { supabase } from '../utils/supabase';
 import { 
   CheckCircle2, 
   Send, 
@@ -36,7 +37,9 @@ import {
   Dog,
   Trash2,
   Ticket,
-  Camera
+  Camera,
+  Video,
+  Play
 } from 'lucide-react';
 import { SendIntakeModal } from './SendIntakeModal';
 import { getCurrentCoordinates, reverseGeocodeCoordinates } from '../utils/geolocationUtils';
@@ -140,7 +143,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   const [dogGender, setDogGender] = useState<'male' | 'female'>(initialProfile?.dogGender || 'male');
   const [dogSize, setDogSize] = useState<'small' | 'medium' | 'large' | 'giant'>(initialProfile?.dogSize || 'medium');
   const [dogPhotoUrl, setDogPhotoUrl] = useState<string>('');
-  const [isProcessingPhoto, setIsProcessingPhoto] = useState<boolean>(false);
+  const [dogMediaList, setDogMediaList] = useState<IntakeMediaItem[]>([]);
+  const [isProcessingMedia, setIsProcessingMedia] = useState<boolean>(false);
+  const [mediaProcessingMsg, setMediaProcessingMsg] = useState<string>('');
   const [serviceType, setServiceType] = useState<ServiceType>('boarding');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(addDays(today, 3));
@@ -249,59 +254,201 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
 
-  // Dog photo client-side compression handler
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Helper: Read file as Data URL
+  const readFileAsDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Helper: Compress image to crisp lightweight JPEG (~60-90KB)
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 800;
+
+          if (width > height) {
+            if (width > maxDim) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            }
+          } else {
+            if (height > maxDim) {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.75);
+            resolve(compressed);
+          } else {
+            resolve(event.target?.result as string || '');
+          }
+        };
+        img.onerror = () => resolve('');
+        img.src = event.target?.result as string;
+      };
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Helper: Extract crisp video frame thumbnail and duration
+  const generateVideoThumbnail = (videoFile: File): Promise<{ thumbnailUrl: string; duration: number }> => {
+    return new Promise((resolve) => {
+      try {
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.muted = true;
+        video.playsInline = true;
+        const objectUrl = URL.createObjectURL(videoFile);
+        video.src = objectUrl;
+
+        video.onloadedmetadata = () => {
+          video.currentTime = Math.min(0.5, (video.duration || 1) / 2);
+        };
+
+        video.onseeked = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const maxDim = 600;
+            let w = video.videoWidth || 640;
+            let h = video.videoHeight || 480;
+            if (w > h && w > maxDim) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else if (h > maxDim) {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(video, 0, 0, w, h);
+            const thumb = canvas.toDataURL('image/jpeg', 0.75);
+            URL.revokeObjectURL(objectUrl);
+            resolve({ thumbnailUrl: thumb, duration: Math.round(video.duration || 0) });
+          } catch {
+            URL.revokeObjectURL(objectUrl);
+            resolve({ thumbnailUrl: '', duration: Math.round(video.duration || 0) });
+          }
+        };
+
+        video.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          resolve({ thumbnailUrl: '', duration: 0 });
+        };
+      } catch {
+        resolve({ thumbnailUrl: '', duration: 0 });
+      }
+    });
+  };
+
+  // Handler: Multiple Photos Selection & Compression
+  const handlePhotosSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsProcessingMedia(true);
+    setMediaProcessingMsg('מעבד ומכווץ תמונות...');
+
+    try {
+      const newItems: IntakeMediaItem[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 20 * 1024 * 1024) continue;
+        const compressed = await compressImage(file);
+        if (compressed) {
+          newItems.push({
+            id: `img_${Date.now()}_${i}_${Math.random().toString(36).substring(2, 6)}`,
+            type: 'image',
+            url: compressed,
+            name: file.name,
+            size: file.size
+          });
+        }
+      }
+
+      setDogMediaList(prev => {
+        const combined = [...prev, ...newItems].slice(0, 6);
+        const firstImg = combined.find(m => m.type === 'image');
+        if (firstImg) setDogPhotoUrl(firstImg.url);
+        return combined;
+      });
+    } catch (err) {
+      console.warn('Error processing photos:', err);
+      alert('שגיאה בעיבוד התמונות, אנא נסה שנית.');
+    } finally {
+      setIsProcessingMedia(false);
+      setMediaProcessingMsg('');
+      e.target.value = '';
+    }
+  };
+
+  // Handler: Short Video Selection & Processing
+  const handleVideoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 15 * 1024 * 1024) {
-      alert('גודל הקובץ גדול מדי. אנא בחר תמונה עד 15MB.');
+    if (file.size > 25 * 1024 * 1024) {
+      alert('גודל הסרטון גדול מדי (מעל 25MB). אנא בחר סרטון קצר של עד 15 שניות.');
+      e.target.value = '';
       return;
     }
 
-    setIsProcessingPhoto(true);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-        const maxDim = 800; // Optimal high-quality lightweight size (~100-150KB)
+    setIsProcessingMedia(true);
+    setMediaProcessingMsg('מייצר תצוגה מקדימה ומעבד סרטון...');
 
-        if (width > height) {
-          if (width > maxDim) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          }
-        } else {
-          if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
+    try {
+      const { thumbnailUrl, duration } = await generateVideoThumbnail(file);
+      const dataUrl = await readFileAsDataUrl(file);
 
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-          setDogPhotoUrl(compressedDataUrl);
-        }
-        setIsProcessingPhoto(false);
+      const newVideoItem: IntakeMediaItem = {
+        id: `vid_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        type: 'video',
+        url: dataUrl,
+        thumbnailUrl: thumbnailUrl || undefined,
+        duration: duration || undefined,
+        name: file.name,
+        size: file.size
       };
-      img.onerror = () => {
-        setIsProcessingPhoto(false);
-        alert('שגיאה בטעינת התמונה. אנא נסה תמונה אחרת.');
-      };
-      img.src = event.target?.result as string;
-    };
-    reader.onerror = () => {
-      setIsProcessingPhoto(false);
-      alert('שגיאה בקריאת הקובץ.');
-    };
-    reader.readAsDataURL(file);
+
+      setDogMediaList(prev => {
+        const combined = [...prev, newVideoItem].slice(0, 6);
+        return combined;
+      });
+    } catch (err) {
+      console.warn('Error processing video:', err);
+      alert('שגיאה בטעינת הסרטון. אנא נסה סרטון קצר יותר.');
+    } finally {
+      setIsProcessingMedia(false);
+      setMediaProcessingMsg('');
+      e.target.value = '';
+    }
+  };
+
+  // Handler: Remove a single media item
+  const handleRemoveMedia = (index: number) => {
+    setDogMediaList(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      const firstImg = updated.find(m => m.type === 'image');
+      setDogPhotoUrl(firstImg ? firstImg.url : '');
+      return updated;
+    });
   };
 
   // Multi-dog support: "+ הוסף עוד אורח לריזורט לכלב"
@@ -605,6 +752,36 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       : endDate;
     const formattedPhone = formatIsraeliPhoneDisplay(ownerPhone.trim());
     const requestId = `${isCallbackOnly ? 'call' : 'req'}-${Date.now()}`;
+
+    // Process media list & offload large video payloads to Supabase settings row if > 1MB
+    let finalMediaList = [...dogMediaList];
+    for (let i = 0; i < finalMediaList.length; i++) {
+      const item = finalMediaList[i];
+      if (item.type === 'video' && item.url && item.url.length > 1024 * 1024) {
+        const mediaSettingsId = `media_${requestId}_${i}`;
+        try {
+          await supabase.from('settings').insert({
+            id: mediaSettingsId,
+            data: {
+              requestId,
+              videoDataUrl: item.url,
+              createdAt: new Date().toISOString()
+            }
+          });
+          finalMediaList[i] = {
+            ...item,
+            mediaSettingsId,
+            url: `lazy:${mediaSettingsId}`
+          };
+        } catch (e) {
+          console.warn('Failed to offload video payload to settings:', e);
+        }
+      }
+    }
+
+    const primaryPhoto = finalMediaList.find(m => m.type === 'image')?.url || dogPhotoUrl.trim() || undefined;
+    const primaryVideo = finalMediaList.find(m => m.type === 'video')?.url || undefined;
+
     const chosenBenefit = RESORT_BENEFIT_OPTIONS.find(b => b.id === selectedBenefitId);
     const newRequest: IntakeRequest = {
       id: requestId,
@@ -620,7 +797,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       dogAge: dogAge.trim() || undefined,
       dogGender,
       dogSize,
-      dogPhotoUrl: dogPhotoUrl.trim() || undefined,
+      dogPhotoUrl: primaryPhoto,
+      dogMediaList: finalMediaList.length > 0 ? finalMediaList : (primaryPhoto ? [{ id: '1', type: 'image', url: primaryPhoto }] : undefined),
+      dogVideoUrl: primaryVideo,
       serviceType,
       startDate,
       endDate: finalEndDate,
@@ -1488,72 +1667,133 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
             </div>
 
             {/* Dog Photo Upload / Camera Capture */}
-            <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-2 mt-2">
+            {/* Dog Photos & Short Video Section */}
+            <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-2xl space-y-3 mt-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-black text-slate-900 flex items-center gap-1.5">
                   <Camera className="w-4 h-4 text-emerald-700" />
-                  <span>תמונת הכלב/ה (צילום במצלמה או העלאה מהגלריה):</span>
+                  <span>תמונות וסרטוני וידאו של הכלב/ה (צילום, גלריה או וידאו):</span>
                 </label>
                 <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-lg border border-emerald-300">
-                  מומלץ מאוד 📸
+                  מומלץ מאוד 📸🎥
                 </span>
               </div>
+              <p className="text-[11px] text-slate-600">
+                באפשרותכם לצלם מספר תמונות או להעלות סרטון קצר (עד 15 שניות) כדי ששמוליק והצוות יכירו את הכלב.
+              </p>
 
-              {!dogPhotoUrl ? (
-                <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <label className="w-full bg-white hover:bg-emerald-50/60 active:scale-98 border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-2xl p-4 text-center cursor-pointer transition-all shadow-2xs group flex flex-col items-center justify-center gap-1.5">
+              {/* Upload Buttons */}
+              {dogMediaList.length < 6 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Photo Button */}
+                  <label className="bg-white hover:bg-emerald-50/80 active:scale-98 border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-xl p-3 text-center cursor-pointer transition-all shadow-2xs flex items-center justify-center gap-2.5 group">
                     <input 
                       type="file" 
                       accept="image/*" 
-                      onChange={handlePhotoSelect} 
+                      multiple
+                      onChange={handlePhotosSelect} 
                       className="hidden" 
-                      disabled={isProcessingPhoto}
+                      disabled={isProcessingMedia}
                     />
-                    <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xl group-hover:scale-110 transition-transform">
-                      {isProcessingPhoto ? <Loader2 className="w-5 h-5 animate-spin" /> : '📸'}
+                    <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg group-hover:scale-110 transition-transform shrink-0">
+                      📸
                     </div>
-                    <span className="text-xs font-black text-emerald-950">
-                      {isProcessingPhoto ? 'מעבד ומכווץ תמונה...' : 'לחצו כאן לצילום במצלמה או בחירת תמונה מהגלריה'}
-                    </span>
-                    <span className="text-[11px] text-slate-500">
-                      תמונה ברורה של הכלב מסייעת לשמוליק ולצוות להכיר אותו מראש
-                    </span>
+                    <div className="text-right">
+                      <span className="block text-xs font-black text-emerald-950">
+                        צלם / הוסף תמונות
+                      </span>
+                      <span className="block text-[10px] text-slate-500">
+                        צילום במצלמה או בחירה מהגלריה
+                      </span>
+                    </div>
+                  </label>
+
+                  {/* Video Button */}
+                  <label className="bg-white hover:bg-emerald-50/80 active:scale-98 border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-xl p-3 text-center cursor-pointer transition-all shadow-2xs flex items-center justify-center gap-2.5 group">
+                    <input 
+                      type="file" 
+                      accept="video/*" 
+                      capture="environment"
+                      onChange={handleVideoSelect} 
+                      className="hidden" 
+                      disabled={isProcessingMedia}
+                    />
+                    <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg group-hover:scale-110 transition-transform shrink-0">
+                      🎥
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-xs font-black text-emerald-950">
+                        הסרט / העלה סרטון קצר
+                      </span>
+                      <span className="block text-[10px] text-slate-500">
+                        וידאו קצר של עד 15 שניות
+                      </span>
+                    </div>
                   </label>
                 </div>
-              ) : (
-                <div className="flex items-center gap-4 bg-white p-3 rounded-2xl border border-emerald-300 shadow-xs">
-                  <img 
-                    src={dogPhotoUrl} 
-                    alt="תמונת הכלב" 
-                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-cover border border-emerald-200 shadow-2xs"
-                  />
-                  <div className="flex-1 space-y-1 text-right">
-                    <div className="text-xs font-black text-emerald-900 flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span>התמונה נבחרה בהצלחה!</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      התמונה תוצג מובנית לשמוליק ובכרטיס האירוח של הכלב ביומן.
-                    </p>
-                    <div className="flex items-center gap-3 pt-1">
-                      <label className="text-xs font-black text-emerald-700 hover:text-emerald-900 cursor-pointer underline flex items-center gap-1">
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          onChange={handlePhotoSelect} 
-                          className="hidden" 
-                        />
-                        <span>החלף תמונה</span>
-                      </label>
-                      <span className="text-slate-300">•</span>
-                      <button 
-                        type="button" 
-                        onClick={() => setDogPhotoUrl('')}
-                        className="text-xs font-black text-red-600 hover:text-red-800 cursor-pointer underline"
+              )}
+
+              {/* Processing Loader */}
+              {isProcessingMedia && (
+                <div className="flex items-center justify-center gap-2 p-3 bg-white/90 rounded-xl border border-emerald-200 text-emerald-900 text-xs font-bold animate-pulse">
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                  <span>{mediaProcessingMsg || 'מעבד קובץ...'}</span>
+                </div>
+              )}
+
+              {/* Uploaded Media Items Grid */}
+              {dogMediaList.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-emerald-900">
+                    <span>פריטים שצורפו ({dogMediaList.length} מתוך 6):</span>
+                    <button
+                      type="button"
+                      onClick={() => { setDogMediaList([]); setDogPhotoUrl(''); }}
+                      className="text-red-600 hover:text-red-800 underline cursor-pointer text-xs"
+                    >
+                      נקה הכל ✕
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                    {dogMediaList.map((item, idx) => (
+                      <div 
+                        key={item.id || idx}
+                        className="relative group aspect-square rounded-xl overflow-hidden border-2 border-emerald-300 bg-slate-900 shadow-2xs"
                       >
-                        מחק תמונה
-                      </button>
-                    </div>
+                        <img 
+                          src={item.thumbnailUrl || item.url} 
+                          alt={`מדיה ${idx + 1}`} 
+                          className="w-full h-full object-cover"
+                        />
+                        {/* Video badge */}
+                        {item.type === 'video' && (
+                          <div className="absolute inset-0 bg-black/35 flex items-center justify-center pointer-events-none">
+                            <Play className="w-4 h-4 text-white fill-white" />
+                            {item.duration && (
+                              <span className="absolute bottom-1 right-1 text-[9px] bg-black/75 text-white px-1 rounded font-bold">
+                                {item.duration}s
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {/* Primary Badge on index 0 */}
+                        {idx === 0 && (
+                          <div className="absolute top-1 right-1 bg-emerald-600 text-white text-[8px] font-black px-1 rounded shadow-xs pointer-events-none">
+                            ראשי
+                          </div>
+                        )}
+                        {/* Delete button */}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMedia(idx)}
+                          className="absolute top-1 left-1 w-5 h-5 rounded-full bg-red-600/90 hover:bg-red-700 text-white flex items-center justify-center text-[10px] font-bold transition-all cursor-pointer shadow-xs"
+                          title="מחק פריט זה"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

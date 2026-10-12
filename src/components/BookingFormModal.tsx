@@ -27,6 +27,7 @@ import { TimeSchedulePicker } from './TimeSchedulePicker';
 import { normalizePlacementKey, getPlacementDisplayName } from '../utils/kennelUtils';
 import { verifyGrowPayment, fetchCustomerVerifiedGrowPayments, GrowVerificationResult } from '../services/growVerificationGatekeeper';
 import { IntakeAlertBanner } from './IntakeAlertBadges';
+import { DogMediaCollage, DogMediaLightboxModal } from './DogMediaCollage';
 
 interface BookingFormModalProps {
   initialData?: Partial<Booking> | null;
@@ -137,6 +138,9 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
     if (initialData?.refundAmount !== undefined) return String(initialData.refundAmount);
     return String(initialData?.depositAmount || 0);
   });
+
+  const [isMediaLightboxOpen, setIsMediaLightboxOpen] = useState(false);
+  const [mediaLightboxIndex, setMediaLightboxIndex] = useState(0);
 
   // Free stay / Second dog payment consolidation state
   const [isFreeStay, setIsFreeStay] = useState<boolean>(() => {
@@ -508,6 +512,8 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       specialDiet: specialDiet.trim(),
       vaccinationValid,
       dogPhotoUrl: initialData?.dogPhotoUrl,
+      dogMediaList: initialData?.dogMediaList,
+      dogVideoUrl: initialData?.dogVideoUrl,
       daycarePassCode: initialData?.daycarePassCode,
       daycarePassId: initialData?.daycarePassId,
       createdAt: initialData?.createdAt || new Date().toISOString(),
@@ -532,17 +538,16 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
-            {initialData?.dogPhotoUrl ? (
-              <img
-                src={initialData.dogPhotoUrl}
-                alt={initialData.dogName || 'תמונת הכלב'}
-                className="w-11 h-11 rounded-xl object-cover border-2 border-amber-400 shadow-sm"
-              />
-            ) : (
-              <div className="w-10 h-10 rounded-xl bg-green-50 text-green-700 border border-green-200 flex items-center justify-center font-bold">
-                <Dog className="w-5 h-5" />
-              </div>
-            )}
+            <DogMediaCollage
+              mediaList={initialData?.dogMediaList}
+              singlePhotoUrl={initialData?.dogPhotoUrl}
+              dogName={initialData?.dogName || 'כלב'}
+              size="sm"
+              onMediaClick={(idx) => {
+                setMediaLightboxIndex(idx);
+                setIsMediaLightboxOpen(true);
+              }}
+            />
             <div>
               <h3 className="font-extrabold text-lg sm:text-xl text-slate-900">
                 {initialData?.id 
@@ -2388,8 +2393,21 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               </button>
             </div>
           </div>
-
         </form>
+
+        {/* Media Lightbox */}
+        <DogMediaLightboxModal
+          isOpen={isMediaLightboxOpen}
+          mediaList={
+            initialData?.dogMediaList && initialData.dogMediaList.length > 0
+              ? initialData.dogMediaList
+              : (initialData?.dogPhotoUrl ? [{ id: '1', type: 'image' as const, url: initialData.dogPhotoUrl }] : [])
+          }
+          initialIndex={mediaLightboxIndex}
+          dogName={initialData?.dogName || 'כלב'}
+          ownerName={initialData?.ownerName}
+          onClose={() => setIsMediaLightboxOpen(false)}
+        />
 
       </div>
     </div>

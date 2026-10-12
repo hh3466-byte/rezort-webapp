@@ -2634,6 +2634,8 @@ export default function App() {
                 dogName: req.dogName,
                 dogBreed: req.dogBreed,
                 dogPhotoUrl: req.dogPhotoUrl,
+                dogMediaList: req.dogMediaList,
+                dogVideoUrl: req.dogVideoUrl,
                 dogGender: req.dogGender === 'female'
                   ? (req.isNeutered ? 'female_spayed' : 'female_intact')
                   : (req.isNeutered ? 'male_neutered' : 'male_intact'),
