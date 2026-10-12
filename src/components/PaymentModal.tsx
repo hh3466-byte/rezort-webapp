@@ -7,11 +7,13 @@ import {
   Dog, 
   User, 
   MessageSquare,
-  Sparkles
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Booking, PaymentMethod, ResortSettings } from '../types';
-import { generatePaymentReminderMessage, openWhatsAppMessage } from '../utils/whatsappUtils';
+import { generatePaymentReminderMessage, openWhatsAppMessage, cleanPhoneNumber } from '../utils/whatsappUtils';
+import { TrainingAgreementModal } from './TrainingAgreementModal';
 
 interface PaymentModalProps {
   booking: Booking | null;
@@ -30,6 +32,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 }) => {
   if (!booking) return null;
 
+  // Training Agreement Blocking Rule: "אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם"
+  const isTraining = booking.serviceType === 'training' || booking.serviceType === 'day_training';
+  const [isAgreementSigned, setIsAgreementSigned] = useState<boolean>(() => {
+    return Boolean(
+      booking.isTrainingAgreementSigned || 
+      booking.trainingAgreement?.ownerSignatureDataUrl ||
+      booking.signatureDataUrl
+    );
+  });
+  const [isTrainingAgreementModalOpen, setIsTrainingAgreementModalOpen] = useState(false);
+
   const currentDebt = Math.max(0, booking.totalPrice - booking.depositAmount);
   const [payAmount, setPayAmount] = useState<number>(currentDebt);
   const [method, setMethod] = useState<PaymentMethod>(booking.paymentMethod || 'bit');
@@ -41,6 +54,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isTraining && !isAgreementSigned) {
+      alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.\n\nחובה להחתים תחילה את הלקוח על הסכם האילוף הרשמי לפני רישום תשלום.');
+      return;
+    }
+
     if (payAmount <= 0) {
       alert('נא להזין סכום תשלום חיובי');
       return;
@@ -160,58 +179,120 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </div>
 
           <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 border-t border-slate-100">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              {/* Send Grow Payment Link button */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (onOpenSendPaymentLink) {
-                    onClose();
-                    onOpenSendPaymentLink(booking);
-                  } else {
-                    handleWhatsApp();
-                  }
-                }}
-                className="text-xs text-emerald-800 hover:text-emerald-950 flex items-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-all border border-emerald-300 cursor-pointer font-black active:scale-95 shadow-2xs"
-                title="שלח קישור לתשלום ב-Grow / Bit ישירות ללקוח בוואטסאפ"
-              >
-                <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
-                <span>שלח קישור Grow 💳</span>
-              </button>
+            {isTraining && !isAgreementSigned ? (
+              <div className="w-full bg-rose-50 border-2 border-rose-300 rounded-2xl p-3.5 space-y-2.5 animate-in fade-in">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <strong className="text-xs font-black text-rose-950 block">
+                      🛑 חסימת תשלום – הסכם אילוף טרם נחתם!
+                    </strong>
+                    <p className="text-[11px] text-rose-800 leading-normal mt-0.5">
+                      על פי נהלי הריזורט: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם. חובה להחתים את הלקוח תחילה.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-1 border-t border-rose-200">
+                  <button
+                    type="button"
+                    onClick={() => setIsTrainingAgreementModalOpen(true)}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1 shadow-xs cursor-pointer"
+                  >
+                    <span>✍️ פתח הסכם לחתימה</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://rezort-webapp.vercel.app';
+                      const agrLink = `${origin}/?agreement=training&bookingId=${booking.id}&phone=${cleanPhoneNumber(booking.ownerPhone)}&name=${encodeURIComponent(booking.ownerName)}&dog=${encodeURIComponent(booking.dogName)}`;
+                      const msg = `שלום ${booking.ownerName}! 🐾🐶\nבהמשך להזמנת תהליך האילוף עבור *${booking.dogName}* בריזורט לכלב, מצורף קישור אישי לחתימה על הסכם האילוף:\n\n👉 ${agrLink}\n\n*לתשומת לבכם:* על פי נהלי הריזורט, לא ניתן להסדיר את תשלום דמי האילוף לפני חתימת הלקוח על ההסכם. אנא מלאו את הפרטים וחתמו דיגיטלית כדי שנוכל להמשיך להסדרת התשלום.\n\nבברכה,\nשמוליק וצוות הריזורט לכלב 🐾`;
+                      const cleanP = cleanPhoneNumber(booking.ownerPhone);
+                      const intlP = cleanP.startsWith('0') ? '972' + cleanP.substring(1) : cleanP;
+                      window.open(`https://wa.me/${intlP}?text=${encodeURIComponent(msg)}`, '_blank');
+                    }}
+                    className="bg-[#25D366] hover:bg-[#1EBE5D] text-white font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1 shadow-xs cursor-pointer"
+                  >
+                    <span>📲 שלח בוואטסאפ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="text-xs text-slate-500 hover:text-slate-800 mr-auto px-2 py-1 cursor-pointer"
+                  >
+                    סגור
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {/* Send Grow Payment Link button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onOpenSendPaymentLink) {
+                        onClose();
+                        onOpenSendPaymentLink(booking);
+                      } else {
+                        handleWhatsApp();
+                      }
+                    }}
+                    className="text-xs text-emerald-800 hover:text-emerald-950 flex items-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-all border border-emerald-300 cursor-pointer font-black active:scale-95 shadow-2xs"
+                    title="שלח קישור לתשלום ב-Grow / Bit ישירות ללקוח בוואטסאפ"
+                  >
+                    <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>שלח קישור Grow 💳</span>
+                  </button>
 
-              {/* General WhatsApp reminder */}
-              <button
-                type="button"
-                onClick={handleWhatsApp}
-                className="text-xs text-slate-700 hover:text-slate-900 flex items-center gap-1 py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors border border-slate-200 cursor-pointer font-bold"
-                title="שלח הודעת תזכורת טקסטואלית בוואטסאפ"
-              >
-                <MessageSquare className="w-3.5 h-3.5 text-slate-600" />
-                <span>תזכורת</span>
-              </button>
-            </div>
+                  {/* General WhatsApp reminder */}
+                  <button
+                    type="button"
+                    onClick={handleWhatsApp}
+                    className="text-xs text-slate-700 hover:text-slate-900 flex items-center gap-1 py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors border border-slate-200 cursor-pointer font-bold"
+                    title="שלח הודעת תזכורת טקסטואלית בוואטסאפ"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-slate-600" />
+                    <span>תזכורת</span>
+                  </button>
+                </div>
 
-            <div className="flex items-center gap-2 justify-end">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-3 py-2 text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
-              >
-                בטל
-              </button>
+                <div className="flex items-center gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-3 py-2 text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
+                  >
+                    בטל
+                  </button>
 
-              <button
-                type="submit"
-                className="bg-green-600 hover:bg-green-700 active:scale-98 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>שמור תשלום</span>
-              </button>
-            </div>
+                  <button
+                    type="submit"
+                    className="bg-green-600 hover:bg-green-700 active:scale-98 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>שמור תשלום</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </form>
 
       </div>
+
+      {/* Training Agreement Modal */}
+      {isTrainingAgreementModalOpen && (
+        <TrainingAgreementModal
+          isOpen={true}
+          onClose={() => setIsTrainingAgreementModalOpen(false)}
+          booking={booking}
+          settings={settings}
+          onAgreementSigned={() => {
+            setIsAgreementSigned(true);
+            setIsTrainingAgreementModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -2,7 +2,8 @@ import { supabase } from '../utils/supabase';
 import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus, DigitalVoucher, VoucherStatus, DaycarePass } from '../types';
 import { initialBookings, defaultSettings } from '../data/initialData';
 import { extractCustomers } from '../utils/storage';
-import { sanitizePhone } from '../utils/whatsappUtils';
+import { sanitizePhone, cleanPhoneNumber } from '../utils/whatsappUtils';
+import { hasActiveBookingForIntake } from '../utils/intakeUtils';
 
 const BOOKINGS_TABLE = 'bookings';
 const SETTINGS_TABLE = 'settings';
@@ -1924,6 +1925,77 @@ export const autoArchiveOldCheckedOutBookings = async (bookings: Booking[] = [])
     return bookings;
   }
 };
+
+/**
+ * Automatically archives expired intake requests (Rule 6: dates passed without booking)
+ * or intake requests explicitly marked as not relevant in notes.
+ */
+export const autoArchiveExpiredIntakes = async (
+  requests: IntakeRequest[],
+  bookings: Booking[] = []
+): Promise<IntakeRequest[]> => {
+  try {
+    const todayStr = new Date().toISOString().split('T')[0];
+    let hasChanges = false;
+
+    const updated = requests.map(r => {
+      if (r.status === 'abandoned' || r.status === 'archived' || r.status === 'approved') return r;
+      if (hasActiveBookingForIntake(r, bookings)) return r;
+
+      const isExpired = (r.endDate && r.endDate <= todayStr) || (r.startDate && r.startDate < todayStr);
+      const isMarkedIrrelevant = r.internalNotes && (
+        r.internalNotes.includes('לא רלוונטי') ||
+        r.internalNotes.includes('הוסר מהרשימה') ||
+        r.internalNotes.includes('בוטל') ||
+        r.internalNotes.includes('הסר')
+      );
+
+      if (isExpired || isMarkedIrrelevant) {
+        hasChanges = true;
+        const noteStamp = isMarkedIrrelevant
+          ? `\n[הועבר לארכיון כלא רלוונטי ע"י שמוליק]`
+          : `\n[הועבר לארכיון אוטומטית לפי חוק 6 ב-${todayStr}]`;
+        return {
+          ...r,
+          status: 'abandoned' as const,
+          internalNotes: (r.internalNotes || '') + noteStamp
+        };
+      }
+      return r;
+    });
+
+    if (!hasChanges) return requests;
+
+    // Persist to local storage
+    localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(updated));
+
+    // Persist to settings.data.intakeRequests in Supabase
+    try {
+      const { data: sRow } = await supabase
+        .from(SETTINGS_TABLE)
+        .select('data')
+        .eq('id', SETTINGS_DOC_ID)
+        .single();
+
+      const extraData = (sRow && sRow.data && typeof sRow.data === 'object') ? sRow.data : {};
+      await supabase
+        .from(SETTINGS_TABLE)
+        .update({
+          data: { ...extraData, intakeRequests: updated },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', SETTINGS_DOC_ID);
+    } catch (dbErr) {
+      console.warn('Failed to persist autoArchiveExpiredIntakes to DB:', dbErr);
+    }
+
+    return updated;
+  } catch (err) {
+    console.error('Error in autoArchiveExpiredIntakes:', err);
+    return requests;
+  }
+};
+
 
 
 

@@ -11,13 +11,16 @@ import {
   DollarSign,
   Lock,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  ShieldAlert
 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
 import { formatDateIL } from '../utils/dateUtils';
 import { cleanPhoneNumber, getFirstName, getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from '../services/notificationService';
 import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
+import { isRealTrainingBooking } from '../utils/trainerPaymentUtils';
+import { TrainingAgreementModal } from './TrainingAgreementModal';
 
 interface SendPaymentLinkModalProps {
   isOpen: boolean;
@@ -54,6 +57,17 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
   const [isCopied, setIsCopied] = useState(false);
   const [sendStatus, setSendStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isManuallyEdited, setIsManuallyEdited] = useState<boolean>(false);
+
+  // Training Agreement Blocking Rule: "אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם"
+  const isTraining = isRealTrainingBooking(booking) || booking.serviceType === 'training' || booking.serviceType === 'day_training';
+  const [isAgreementSigned, setIsAgreementSigned] = useState<boolean>(() => {
+    return Boolean(
+      booking.isTrainingAgreementSigned || 
+      booking.trainingAgreement?.ownerSignatureDataUrl || 
+      booking.signatureDataUrl
+    );
+  });
+  const [isTrainingAgreementModalOpen, setIsTrainingAgreementModalOpen] = useState(false);
 
   const cleanPhone = cleanPhoneNumber(booking.ownerPhone);
   const intlPhone = cleanPhone.startsWith('0') 
@@ -132,6 +146,10 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchDynamicLink = async (targetAmt: number, currentReason = reasonType) => {
+    if (isTraining && !isAgreementSigned) {
+      return; // "אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם"
+    }
+
     if (!targetAmt || targetAmt <= 0) {
       setCustomLink(defaultStaticLink);
       setIsLockedLink(false);
@@ -281,23 +299,100 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
           </button>
         </div>
 
-        {/* Scrollable Form Body */}
-        <div className="flex-1 overflow-y-auto py-3 space-y-3.5">
-          
-          {/* Booking Summary Card */}
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs space-y-1.5">
-            <div className="flex items-center justify-between text-slate-600">
-              <span>שירות ותאריכים:</span>
-              <span className="font-bold text-slate-900">{serviceHebrew} ({stayDates})</span>
+        {/* Scrollable Form Body or Hard Blocking Rule for Unsigned Training Agreement */}
+        {isTraining && !isAgreementSigned ? (
+          <div className="flex-1 overflow-y-auto py-5 px-2 space-y-4 text-center">
+            <div className="w-16 h-16 rounded-3xl bg-red-100 text-red-700 border-2 border-red-300 flex items-center justify-center text-3xl mx-auto shadow-sm">
+              🛑
             </div>
-            <div className="flex items-center justify-between text-slate-600">
-              <span>עלות כוללת בהזמנה:</span>
-              <span className="font-black text-slate-900">₪{booking.totalPrice}</span>
+            
+            <div className="space-y-1.5">
+              <h4 className="text-base sm:text-lg font-black text-red-950">
+                חסימת תשלום – הסכם אילוף טרם נחתם!
+              </h4>
+              <p className="text-xs text-red-800 font-bold leading-relaxed max-w-md mx-auto">
+                על פי נהלי הריזורט לכלב: <br />
+                <span className="text-red-900 font-black text-xs sm:text-sm bg-red-100/90 px-3 py-1 rounded-xl border border-red-300 inline-block mt-1">
+                  אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם
+                </span>
+              </p>
+              <p className="text-[11px] text-slate-500 pt-1">
+                עבור <strong>{booking.dogName}</strong> ({booking.ownerName}), חובה להשלים חתימה על הסכם האילוף לפני הפקת קישור תשלום או גבייה.
+              </p>
             </div>
-            <div className="flex items-center justify-between text-slate-600">
-              <span>שולם עד כה:</span>
-              <span className="font-bold text-emerald-600">₪{booking.depositAmount}</span>
+
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-right text-xs space-y-1.5">
+              <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                <span>📝 כיצד ממשיכים?</span>
+              </div>
+              <p className="text-amber-900 leading-normal text-[11px]">
+                שלחו ללקוח קישור ישיר לוואטסאפ למילוי וחתימה דיגיטלית, או פתחו את ההסכם כעת לחתימה במקום (בטלפון / טאבלט). מיד עם סיום החתימה – אפשרות התשלום תשתחרר אוטומטית!
+              </p>
             </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsTrainingAgreementModalOpen(true)}
+                className="w-full sm:w-auto px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+              >
+                <span>✍️ פתח הסכם לחתימה כעת</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://rezort-webapp.vercel.app';
+                  const agrLink = `${origin}/?agreement=training&bookingId=${booking.id}&phone=${cleanPhoneNumber(booking.ownerPhone)}&name=${encodeURIComponent(booking.ownerName)}&dog=${encodeURIComponent(booking.dogName)}`;
+                  const msg = `שלום ${booking.ownerName}! 🐾🐶\nבהמשך להזמנת תהליך האילוף עבור *${booking.dogName}* בריזורט לכלב, מצורף קישור אישי לחתימה על הסכם האילוף:\n\n👉 ${agrLink}\n\n*לתשומת לבכם:* על פי נהלי הריזורט, לא ניתן להסדיר את תשלום דמי האילוף לפני חתימת הלקוח על ההסכם. אנא מלאו את הפרטים וחתמו דיגיטלית כדי שנוכל להמשיך להסדרת התשלום.\n\nבברכה,\nשמוליק וצוות הריזורט לכלב 🐾`;
+                  const waUrl = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
+                  window.open(waUrl, '_blank');
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+              >
+                <span>📲 שלח הסכם לחתימה בוואטסאפ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                סגור
+              </button>
+            </div>
+
+            {/* Embedded Training Agreement Modal */}
+            <TrainingAgreementModal
+              isOpen={isTrainingAgreementModalOpen}
+              onClose={() => setIsTrainingAgreementModalOpen(false)}
+              booking={booking}
+              settings={settings}
+              onAgreementSigned={() => {
+                setIsAgreementSigned(true);
+                setIsTrainingAgreementModalOpen(false);
+              }}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Scrollable Form Body */}
+            <div className="flex-1 overflow-y-auto py-3 space-y-3.5">
+              
+              {/* Booking Summary Card */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs space-y-1.5">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>שירות ותאריכים:</span>
+                  <span className="font-bold text-slate-900">{serviceHebrew} ({stayDates})</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>עלות כוללת בהזמנה:</span>
+                  <span className="font-black text-slate-900">₪{booking.totalPrice}</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>שולם עד כה:</span>
+                  <span className="font-bold text-emerald-600">₪{booking.depositAmount}</span>
+                </div>
             <div className="pt-1.5 border-t border-slate-200 flex items-center justify-between">
               <span className="font-bold text-slate-700">יתרת חוב נוכחית:</span>
               <span className={`font-black text-sm ${currentDebt > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
@@ -480,7 +575,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 
         </div>
 
-        {/* Action Buttons Footer */}
+        {/* Action Buttons Footer - Only visible when NOT blocked */}
         <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0">
           <button
             type="button"
@@ -532,6 +627,8 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
             </button>
           </div>
         </div>
+      </>
+    )}
 
       </div>
     </div>

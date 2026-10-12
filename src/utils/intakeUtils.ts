@@ -111,7 +111,7 @@ export const getIntakeRequestWeekdayAgeHours = (r: IntakeRequest, now: Date = ne
  */
 export const getEffectiveIntakeStatus = (r: IntakeRequest, bookings: Booking[] = []): IntakeRequest['status'] => {
   if (r.status === 'approved') return 'approved';
-  if (r.status === 'abandoned') return 'abandoned';
+  if (r.status === 'abandoned' || r.status === 'archived') return 'abandoned';
   if (hasActiveBookingForIntake(r, bookings)) return 'approved';
   return r.status;
 };
@@ -132,14 +132,36 @@ export const getLatestActionDateFromNotes = (notes: string): Date | null => {
 };
 
 /**
+ * Rule 6: Check if an intake request is expired (dates passed and no active booking)
+ */
+export const isIntakeRequestExpired = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
+  if (r.status === 'approved' || hasActiveBookingForIntake(r, bookings)) return false;
+  if (r.status === 'abandoned' || r.status === 'archived') return false;
+  const todayStr = new Date().toISOString().split('T')[0];
+  const eDate = r.endDate;
+  const sDate = r.startDate;
+  // If end date has arrived/passed, or start date was in the past and no booking
+  if (eDate && eDate <= todayStr) return true;
+  if (sDate && sDate < todayStr) return true;
+  return false;
+};
+
+/**
+ * Checks if notes indicate Shmulik marked this request as cancelled / not relevant / removed
+ */
+export const isIntakeMarkedIrrelevant = (r: IntakeRequest): boolean => {
+  if (!r.internalNotes) return false;
+  const n = r.internalNotes;
+  return n.includes('לא רלוונטי') || n.includes('הוסר מהרשימה') || n.includes('בוטל') || n.includes('הסר');
+};
+
+/**
  * Identifies if a request is archived/abandoned.
- * Note: Per resort business rules, requests are never auto-hidden by a timer;
- * they remain visible in active tabs until Shmulik explicitly moves them to archive or books them.
  */
 export const isUnansweredIntakeRequest = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
   if (r.status === 'approved' || hasActiveBookingForIntake(r, bookings)) return false;
   if (r.status === 'rejected') return false;
-  return r.status === 'abandoned';
+  return r.status === 'abandoned' || r.status === 'archived';
 };
 
 /**
@@ -147,7 +169,9 @@ export const isUnansweredIntakeRequest = (r: IntakeRequest, bookings: Booking[] 
  * Remains in 'new' until Shmulik adds notes, records a call, sends a payment link, or archives/approves it.
  */
 export const isIntakeRequestNew = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
-  if (r.status === 'abandoned' || r.status === 'rejected') return false;
+  if (r.status === 'abandoned' || r.status === 'archived' || r.status === 'rejected') return false;
+  if (isIntakeMarkedIrrelevant(r)) return false;
+  if (isIntakeRequestExpired(r, bookings)) return false;
   const effStatus = getEffectiveIntakeStatus(r, bookings);
   return effStatus === 'pending' && (!r.internalNotes || !r.internalNotes.trim());
 };
@@ -157,10 +181,13 @@ export const isIntakeRequestNew = (r: IntakeRequest, bookings: Booking[] = []): 
  * Remains in treatment until explicitly approved or moved to archive.
  */
 export const isIntakeRequestInTreatment = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
-  if (r.status === 'abandoned' || r.status === 'rejected') return false;
+  if (r.status === 'abandoned' || r.status === 'archived' || r.status === 'rejected') return false;
+  if (isIntakeMarkedIrrelevant(r)) return false;
+  if (isIntakeRequestExpired(r, bookings)) return false;
   const effStatus = getEffectiveIntakeStatus(r, bookings);
   return effStatus === 'payment_requested' || (effStatus === 'pending' && Boolean(r.internalNotes && r.internalNotes.trim()));
 };
+
 
 
 

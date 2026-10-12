@@ -1,5 +1,5 @@
 import { Booking, IntakeRequest, ResortSettings } from '../types';
-import { cleanPhoneNumber, formatPhoneFormatted, isActionableIncomingMessage } from '../utils/whatsappUtils';
+import { cleanPhoneNumber, formatPhoneFormatted, isActionableIncomingMessage, getCleanDogName } from '../utils/whatsappUtils';
 import { isShabbatOrHolidayRestricted } from '../utils/jewishCalendar';
 
 export interface WhatsAppChat {
@@ -330,7 +330,8 @@ export function generateResortMarketingValueText(
     ? ownerName.trim().split(' ')[0]
     : '';
   const greeting = firstName ? `היי ${firstName}! 🐾` : 'היי! 🐾';
-  const dogMention = dogName ? ` עבור ${dogName}` : '';
+  const cleanDog = getCleanDogName(dogName);
+  const dogMention = cleanDog ? ` עבור ${cleanDog}` : '';
 
   let text = `${greeting}
 שמחים שפנית אלינו ל"ריזורט לכלב"! 🐶👑
@@ -360,7 +361,7 @@ export function generateResortMarketingValueText(
 📘 פייסבוק: https://www.facebook.com/profile.php?id=61576998315714&sk=reviews
 📷 אינסטגרם: https://www.instagram.com/dogz.resort/
 
-נשמח לעמוד לרשותכם לכל שאלה ולתת לכם ול${dogName || 'חבר על 4'} את החוויה המושלמת ביותר! ❤️🐾`;
+נשמח לעמוד לרשותכם לכל שאלה ולתת לכם ול${cleanDog || 'חבר על 4'} את החוויה המושלמת ביותר! ❤️🐾`;
   return text;
 }
 
@@ -376,7 +377,8 @@ export function generateTrainingOnlyMarketingText(
     ? ownerName.trim().split(' ')[0]
     : '';
   const greeting = firstName ? `היי ${firstName}! 🐾` : 'היי! 🐾';
-  const dogMention = dogName ? ` של ${dogName}` : '';
+  const cleanDog = getCleanDogName(dogName);
+  const dogMention = cleanDog ? ` של ${cleanDog}` : '';
 
   let text = `${greeting}
 שמחים שפנית אלינו לגבי תוכנית האילוף בריזורט לכלב! 🎓🐶
@@ -400,7 +402,7 @@ export function generateTrainingOnlyMarketingText(
 📘 פייסבוק: https://www.facebook.com/profile.php?id=61576998315714&sk=reviews
 📷 אינסטגרם: https://www.instagram.com/dogz.resort/
 
-נשמח לדבר ולהתאים ל${dogName || 'כלב שלכם'} את התוכנית המדויקת ביותר! 🐕✨`;
+נשמח לדבר ולהתאים ל${cleanDog || 'כלב שלכם'} את התוכנית המדויקת ביותר! 🐕✨`;
   return text;
 }
 
@@ -416,7 +418,8 @@ export function generateBoardingOnlyMarketingText(
     ? ownerName.trim().split(' ')[0]
     : '';
   const greeting = firstName ? `היי ${firstName}! 🐾` : 'היי! 🐾';
-  const dogMention = dogName ? ` עבור ${dogName}` : '';
+  const cleanDog = getCleanDogName(dogName);
+  const dogMention = cleanDog ? ` עבור ${cleanDog}` : '';
 
   let text = `${greeting}
 שמחים שפנית אלינו לגבי אירוח בריזורט לכלב! 🏡🐶👑
@@ -440,7 +443,7 @@ export function generateBoardingOnlyMarketingText(
 📘 פייסבוק: https://www.facebook.com/profile.php?id=61576998315714&sk=reviews
 📷 אינסטגרם: https://www.instagram.com/dogz.resort/
 
-מחכים לכם ול${dogName || 'חבר על 4'} באהבה גדולה! ❤️🐾`;
+מחכים לכם ול${cleanDog || 'חבר על 4'} באהבה גדולה! ❤️🐾`;
   return text;
 }
 
@@ -458,7 +461,8 @@ export function generateUnansweredFollowUpMarketingText(
     ? ownerName.trim().split(' ')[0]
     : '';
   const greeting = firstName ? `היי ${firstName}! 🐾` : 'היי! 🐾';
-  const dogMention = dogName ? ` עבור *${dogName}*` : '';
+  const cleanDog = getCleanDogName(dogName);
+  const dogMention = cleanDog ? ` עבור *${cleanDog}*` : '';
 
   return `${greeting}
 ניסינו לתפוס אתכם בטלפון בהמשך לפנייתכם ל"ריזורט לכלב"${dogMention} 🐕🤍
@@ -483,13 +487,13 @@ export function generateUnansweredFollowUpMarketingText(
 📘 פייסבוק: https://www.facebook.com/profile.php?id=61576998315714&sk=reviews
 📷 אינסטגרם: https://www.instagram.com/dogz.resort/
 ${intakeUrl ? `\n📋 קישור לשאלון הקליטה המהיר:\n${intakeUrl}\n` : ''}
-נשמח לדבר כשתהיו פנויים ולתת לכם ול${dogName || 'כלבכם'} את המענה הטוב ביותר! 🐶❤️
+נשמח לדבר כשתהיו פנויים ולתת לכם ול${cleanDog || 'כלבכם'} את המענה הטוב ביותר! 🐶❤️
 שמוליק וצוות הריזורט לכלב`;
 }
 
 /**
- * Generates a warm, respectful and welcoming message for a lead where response was delayed,
- * asking if they are available to talk on the phone now.
+ * Generates a warm, respectful and welcoming message for a lead/inquiry,
+ * clearly asking when it is convenient to talk and coordinate details.
  */
 export function generateAvailableToTalkText(
   ownerName?: string,
@@ -499,15 +503,11 @@ export function generateAvailableToTalkText(
     ? ownerName.trim().split(' ')[0]
     : '';
   const greeting = firstName ? `שלום ${firstName}!` : 'שלום!';
-  const dogMention = dogName ? ` עבור ${dogName}` : '';
+  const cleanDog = getCleanDogName(dogName);
+  const dogMention = cleanDog ? ` עבור ${cleanDog}` : '';
 
-  return `${greeting} 🐾
-סליחה מעומק הלב על ההמתנה, היינו בפעילות שוטפת עם הכלבים בריזורט.
-
-רצינו לשאול – האם אפשר לדבר עכשיו? פנוי/ה לשיחה טלפונית קצרה${dogMention}?
-נשמח לתת לכם את כל הפרטים ולענות על כל שאלה באהבה! 🐶❤️
-
-(אם פחות נוח כרגע, אפשר פשוט לכתוב מתי מתאים ונתקשר)`;
+  return `${greeting} כאן שמוליק מהריזורט לכלב 🐾
+בהמשך לפנייתך${dogMention} – מתי יהיה לך נוח לדבר ולתאם פרטים? 🐶`;
 }
 
 export type CustomerIntentType = 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { IntakeRequest, IntakeRequestStatus, ResortSettings, Booking, IntakeMediaItem } from '../types';
-import { cleanPhoneNumber, getServiceTypeHebrew, getFirstName } from '../utils/whatsappUtils';
+import { cleanPhoneNumber, getServiceTypeHebrew, getFirstName, formatIntakeDirectWhatsAppMessage } from '../utils/whatsappUtils';
 import { formatClientPaymentLinkMessage, formatClientRejectionMessage, sendGreenApiDirectMessage } from '../services/notificationService';
 import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
 import { getNextAllowedCommunicationDate, isShabbatOrHolidayRestricted } from '../utils/jewishCalendar';
@@ -8,6 +8,7 @@ import { generateUnansweredFollowUpMarketingText } from '../services/whatsappCrm
 import { SendIntakeModal } from './SendIntakeModal';
 import { IntakeAlertBanner } from './IntakeAlertBadges';
 import { DogMediaCollage, DogMediaLightboxModal } from './DogMediaCollage';
+import { TrainingAgreementModal } from './TrainingAgreementModal';
 import { isNormalText } from '../utils/intakeAlerts';
 import { 
   X, 
@@ -232,6 +233,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     }
   }, [initialFilter]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, IntakeRequestStatus>>({});
   const [notesInputs, setNotesInputs] = useState<Record<string, string>>({});
   const [savedNoteSuccess, setSavedNoteSuccess] = useState<Record<string, boolean>>({});
   const [followUpTimes, setFollowUpTimes] = useState<Record<string, string>>({});
@@ -247,6 +249,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [paymentPromptRequest, setPaymentPromptRequest] = useState<IntakeRequest | null>(null);
+  const [selectedTrainingAgreementReq, setSelectedTrainingAgreementReq] = useState<IntakeRequest | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [customPaymentLink, setCustomPaymentLink] = useState<string>('');
   const [lightboxMedia, setLightboxMedia] = useState<{
@@ -480,18 +483,29 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   };
 
   const hasActiveBooking = (r: IntakeRequest) => hasActiveBookingForIntake(r, bookings);
-  const getEffectiveStatus = (r: IntakeRequest) => getEffectiveIntakeStatus(r, bookings);
+  const getEffectiveStatus = (r: IntakeRequest): IntakeRequestStatus => {
+    if (optimisticStatuses[r.id]) return optimisticStatuses[r.id];
+    const eff = getEffectiveIntakeStatus(r, bookings);
+    if (eff === 'archived') return 'abandoned';
+    return eff;
+  };
   const getRequestAgeHours = (r: IntakeRequest) => getIntakeRequestAgeHours(r);
   const isUnansweredRequest = (r: IntakeRequest) => isUnansweredIntakeRequest(r, bookings);
-  const isReqNew = (r: IntakeRequest) => isIntakeRequestNew(r, bookings);
-  const isReqInTreatment = (r: IntakeRequest) => isIntakeRequestInTreatment(r, bookings);
+  const isReqNew = (r: IntakeRequest) => {
+    if (optimisticStatuses[r.id] === 'abandoned') return false;
+    return isIntakeRequestNew(r, bookings);
+  };
+  const isReqInTreatment = (r: IntakeRequest) => {
+    if (optimisticStatuses[r.id] === 'abandoned') return false;
+    return isIntakeRequestInTreatment(r, bookings);
+  };
 
   const newCount = requests.filter(isReqNew).length;
   const inTreatmentCount = requests.filter(isReqInTreatment).length;
-  const pendingCount = requests.filter(r => getEffectiveStatus(r) === 'pending' && r.status !== 'abandoned').length;
-  const paymentRequestedCount = requests.filter(r => getEffectiveStatus(r) === 'payment_requested' && r.status !== 'abandoned').length;
+  const pendingCount = requests.filter(r => getEffectiveStatus(r) === 'pending' && r.status !== 'abandoned' && r.status !== 'archived').length;
+  const paymentRequestedCount = requests.filter(r => getEffectiveStatus(r) === 'payment_requested' && r.status !== 'abandoned' && r.status !== 'archived').length;
   const approvedCount = requests.filter(r => getEffectiveStatus(r) === 'approved').length;
-  const abandonedCount = requests.filter(r => r.status === 'abandoned').length;
+  const abandonedCount = requests.filter(r => getEffectiveStatus(r) === 'abandoned' || r.status === 'abandoned' || r.status === 'archived').length;
 
   const filteredRequests = requests.filter(r => {
     if (searchQuery.trim()) {
@@ -531,33 +545,46 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     return true;
   });
 
-  const handleAbandonIntake = async (req: IntakeRequest) => {
-    const confirmMsg = `האם להעביר את שאלון הקליטה של ${req.dogName} (${req.ownerName}) לארכיון?\nהשאלון יישמר בלשונית "ארכיון" וניתן יהיה לשחזרו בכל עת לטיפול פעיל.`;
-    if (!window.confirm(confirmMsg)) return;
+  const handleAbandonIntake = (req: IntakeRequest) => {
+    // 1. Instant optimistic update - removes card immediately from view with 0ms latency
+    setOptimisticStatuses(prev => ({ ...prev, [req.id]: 'abandoned' }));
 
-    try {
-      const now = new Date();
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
-      const noteAppend = `\n[הועבר לארכיון ע"י שמוליק ב-${dateStr} ${timeStr}]`;
-      const updatedNotes = (req.internalNotes || '') + noteAppend;
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+    const noteAppend = `\n[הועבר לארכיון ע"י שמוליק ב-${dateStr} ${timeStr}]`;
+    const curNotes = notesInputs[req.id] !== undefined ? notesInputs[req.id] : (req.internalNotes || '');
+    const updatedNotes = curNotes + noteAppend;
 
-      const updated: IntakeRequest = {
-        ...req,
-        status: 'abandoned',
-        internalNotes: updatedNotes
-      };
+    const updated: IntakeRequest = {
+      ...req,
+      status: 'abandoned',
+      internalNotes: updatedNotes
+    };
 
-      if (onSaveRequest) {
-        await onSaveRequest(updated);
-      } else {
-        await onUpdateStatus(req.id, 'abandoned', updatedNotes);
-      }
-      setSavedNoteSuccess(prev => ({ ...prev, [req.id]: true }));
-      setTimeout(() => setSavedNoteSuccess(prev => ({ ...prev, [req.id]: false })), 3500);
-    } catch (err) {
-      console.warn('Error archiving intake:', err);
-      alert('אירעה שגיאה בהעברה לארכיון.');
+    setNotesInputs(prev => ({ ...prev, [req.id]: updatedNotes }));
+    setSavedNoteSuccess(prev => ({ ...prev, [req.id]: true }));
+    setTimeout(() => setSavedNoteSuccess(prev => ({ ...prev, [req.id]: false })), 3500);
+
+    // 2. Background persistence without blocking UI
+    if (onSaveRequest) {
+      Promise.resolve(onSaveRequest(updated)).catch(err => {
+        console.warn('Error archiving intake:', err);
+        setOptimisticStatuses(prev => {
+          const next = { ...prev };
+          delete next[req.id];
+          return next;
+        });
+      });
+    } else {
+      Promise.resolve(onUpdateStatus(req.id, 'abandoned', updatedNotes)).catch(err => {
+        console.warn('Error archiving intake:', err);
+        setOptimisticStatuses(prev => {
+          const next = { ...prev };
+          delete next[req.id];
+          return next;
+        });
+      });
     }
   };
 
@@ -607,6 +634,15 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   };
 
   const handleQuickSendPayment = async (req: IntakeRequest) => {
+    // Training Agreement Blocking Rule: "אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם"
+    const isTraining = req.serviceType === 'training' || req.serviceType === 'day_training';
+    const isAgreementSigned = Boolean(req.isTrainingAgreementSigned || req.trainingAgreement?.ownerSignatureDataUrl);
+    if (isTraining && !isAgreementSigned) {
+      alert(`🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב:\n"אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם"\n\nעבור ${req.dogName} (${req.ownerName}), חובה להשלים חתימה על הסכם האילוף תחילה לפני הפקת קישור תשלום או גבייה.`);
+      setSelectedTrainingAgreementReq(req);
+      return;
+    }
+
     setQuickSendingId(req.id);
     try {
       const daysCount = Math.max(1, calculateDaysCount(req.startDate, req.endDate));
@@ -696,7 +732,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
-  const handleAddQuickNote = async (req: IntakeRequest, tag: string) => {
+  const handleAddQuickNote = async (req: IntakeRequest, tag: string, isAbandon?: boolean) => {
     const now = new Date();
     const day = String(now.getDate()).padStart(2, '0');
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -707,6 +743,38 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     const updatedNotes = existing ? `${existing}\n${stamp}` : stamp;
 
     setNotesInputs(prev => ({ ...prev, [req.id]: updatedNotes }));
+
+    const shouldAbandon = Boolean(isAbandon || tag.includes('לא רלוונטי') || tag.includes('הסר') || tag.includes('בוטל') || tag.includes('הוסר מהרשימה'));
+
+    if (shouldAbandon) {
+      // Instant optimistic update: removes card from active tabs in 0ms!
+      setOptimisticStatuses(prev => ({ ...prev, [req.id]: 'abandoned' }));
+
+      const updated: IntakeRequest = {
+        ...req,
+        status: 'abandoned',
+        internalNotes: updatedNotes
+      };
+
+      setSavedNoteSuccess(prev => ({ ...prev, [req.id]: true }));
+      setTimeout(() => setSavedNoteSuccess(prev => ({ ...prev, [req.id]: false })), 3500);
+
+      try {
+        if (onSaveRequest) {
+          await onSaveRequest(updated);
+        } else {
+          await onUpdateStatus(req.id, 'abandoned', updatedNotes);
+        }
+      } catch (err) {
+        console.warn('Error archiving intake via quick note:', err);
+        setOptimisticStatuses(prev => {
+          const next = { ...prev };
+          delete next[req.id];
+          return next;
+        });
+      }
+      return;
+    }
     
     try {
       if (onSaveRequest) {
@@ -1281,7 +1349,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                               ? 'bg-blue-100 text-blue-900 border-blue-300'
                               : req.status === 'approved'
                               ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                              : req.status === 'abandoned'
+                              : (req.status === 'abandoned' || req.status === 'archived')
                               ? 'bg-slate-100 text-slate-700 border-slate-300'
                               : 'bg-slate-200 text-slate-700 border-slate-300'
                           }`}>
@@ -1299,7 +1367,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                               <span>💳 נשלח קישור לתשלום</span>
                             ) : req.status === 'approved' ? (
                               <span>🟢 נקלט ביומן הראשי</span>
-                            ) : req.status === 'abandoned' ? (
+                            ) : (req.status === 'abandoned' || req.status === 'archived') ? (
                               <span>📦 תהליך קליטה ננטש (בארכיון)</span>
                             ) : (
                               <span>⚪ נדחה / בוטל</span>
@@ -1372,7 +1440,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         {/* שורה שלישית: לחץ לוואטסאפ איתו + שלח קישור לתשלום */}
                         <div className="pt-0.5 flex items-center gap-2 flex-wrap">
                           <a
-                            href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(`שלום ${getFirstName(req.ownerName)}, כאן שמוליק מ${settings.resortName} 🐾 בהמשך לשאלון בקשת הקליטה ששלחתם עבור ${req.dogName}`)}`}
+                            href={`https://wa.me/${intlPhone}?text=${encodeURIComponent(formatIntakeDirectWhatsAppMessage(req, settings))}`}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black px-4 py-2 rounded-xl text-sm transition-all shadow-xs cursor-pointer hover:shadow-md"
@@ -1381,6 +1449,31 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                             <MessageCircle className="w-4 h-4 fill-white/20 shrink-0" />
                             <span>לחץ לוואטסאפ איתו</span>
                           </a>
+
+                          {/* Training Agreement Button / Badge for Training Intakes */}
+                          {(req.serviceType === 'training' || req.serviceType === 'day_training') && (
+                            req.isTrainingAgreementSigned || req.trainingAgreement?.ownerSignatureDataUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTrainingAgreementReq(req)}
+                                className="inline-flex items-center gap-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 font-black px-3.5 py-2 rounded-xl text-sm transition-all shadow-xs cursor-pointer"
+                                title="הסכם אילוף חתום ומאושר. לחץ לצפייה, שיתוף והדפסה"
+                              >
+                                <CheckCircle className="w-4 h-4 text-emerald-700 shrink-0" />
+                                <span>הסכם אילוף חתום ✓</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedTrainingAgreementReq(req)}
+                                className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-sm transition-all shadow-xs cursor-pointer animate-pulse"
+                                title="חסימת תשלום: הסכם אילוף טרם נחתם! על פי נהלי הריזורט אין לאפשר תשלום ללא חתימה. לחץ לחתימה או שליחה"
+                              >
+                                <AlertCircle className="w-4 h-4 text-white shrink-0" />
+                                <span>✍️ הסכם אילוף (טרם נחתם)</span>
+                              </button>
+                            )
+                          )}
 
                           {/* כפתור שליחה מהירה של קישור לתשלום - שליחה ישירה ב-1 קליק ללא פתיחת חלון */}
                           <button
@@ -1773,20 +1866,20 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         {/* Quick Action Stamp Buttons */}
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {[
-                            { tag: '📞 לא ענה בטלפון', label: '📞 לא ענה', color: 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900' },
-                            { tag: '📲 נשלחה תזכורת שיווקית בוואטסאפ (פייסבוק/אינסטגרם)', label: '📲 תזכורת שיווקית', color: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-300 text-indigo-900' },
-                            { tag: '🔄 צריך להתקשר אליו שוב', label: '🔄 צריך לחזור אליו', color: 'bg-orange-50 hover:bg-orange-100 border-orange-300 text-orange-900' },
-                            { tag: '💬 שלחתי לו הודעה בוואטסאפ', label: '💬 שלחתי הודעה', color: 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-900' },
-                            { tag: '🤝 שוחחנו בטלפון - סוכמו הפרטים', label: '🤝 שוחחנו - סוכם', color: 'bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-900' },
-                            { tag: '❌ בוטל / לא רלוונטי', label: '❌ לא רלוונטי', color: 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-900' },
-                            { tag: '🚫 הלקוח לא ענה (הוסר מהרשימה עד שיפנה)', label: '🚫 לא ענה (הסר)', color: 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700' },
+                            { tag: '📞 לא ענה בטלפון', label: '📞 לא ענה', color: 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900', isAbandon: false },
+                            { tag: '📲 נשלחה תזכורת שיווקית בוואטסאפ (פייסבוק/אינסטגרם)', label: '📲 תזכורת שיווקית', color: 'bg-indigo-50 hover:bg-indigo-100 border-indigo-300 text-indigo-900', isAbandon: false },
+                            { tag: '🔄 צריך להתקשר אליו שוב', label: '🔄 צריך לחזור אליו', color: 'bg-orange-50 hover:bg-orange-100 border-orange-300 text-orange-900', isAbandon: false },
+                            { tag: '💬 שלחתי לו הודעה בוואטסאפ', label: '💬 שלחתי הודעה', color: 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-900', isAbandon: false },
+                            { tag: '🤝 שוחחנו בטלפון - סוכמו הפרטים', label: '🤝 שוחחנו - סוכם', color: 'bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-900', isAbandon: false },
+                            { tag: '❌ בוטל / לא רלוונטי', label: '❌ לא רלוונטי (העבר לארכיון)', color: 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-900 font-bold', isAbandon: true },
+                            { tag: '🚫 הלקוח לא ענה (הוסר מהרשימה עד שיפנה)', label: '🚫 לא ענה (הסר לארכיון)', color: 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700 font-bold', isAbandon: true },
                           ].map((btn, idx) => (
                             <button
                               key={idx}
                               type="button"
-                              onClick={() => handleAddQuickNote(req, btn.tag)}
-                              className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all active:scale-95 cursor-pointer shadow-2xs ${btn.color}`}
-                              title={`הוסף חותמת תאריך ושעה: "${btn.tag}"`}
+                              onClick={() => handleAddQuickNote(req, btn.tag, btn.isAbandon)}
+                              className={`px-2.5 py-1 rounded-xl text-xs border transition-all active:scale-95 cursor-pointer shadow-2xs ${btn.color}`}
+                              title={btn.isAbandon ? `העבר לארכיון והסר מהבדיקה: "${btn.tag}"` : `הוסף חותמת תאריך ושעה: "${btn.tag}"`}
                             >
                               {btn.label}
                             </button>
@@ -1975,7 +2068,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       </button>
 
                       {/* Action buttons depending on status */}
-                      {req.status === 'abandoned' ? (
+                      {(req.status === 'abandoned' || req.status === 'archived') ? (
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {/* Restore / Reopen to active treatment */}
                           <button
@@ -3141,7 +3234,61 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 
             {/* Sticky, Foolproof Footer for Shmulik - Always visible at bottom */}
             <div className="p-3 sm:p-4 border-t border-slate-200 bg-white shrink-0 flex flex-col gap-2.5 z-10 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
-              {parseFloat(paymentAmount) === 0 ? (
+              {(paymentPromptRequest.serviceType === 'training' || paymentPromptRequest.serviceType === 'day_training') && 
+               !paymentPromptRequest.isTrainingAgreementSigned && 
+               !paymentPromptRequest.trainingAgreement?.ownerSignatureDataUrl ? (
+                /* Hard Blocking Banner for Unsigned Training Agreement */
+                <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 space-y-3 animate-in fade-in">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center font-black shrink-0 text-base">
+                      🛑
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-rose-950">
+                        חסימת תשלום – הסכם אילוף טרם נחתם!
+                      </h4>
+                      <p className="text-xs text-rose-800 font-bold mt-1 leading-relaxed">
+                        על פי נהלי הריזורט לכלב: <strong>אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם</strong>.
+                        יש להחתים תחילה את הלקוח על הסכם האילוף הרשמי לפני הפקת קישור תשלום.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 pt-1 border-t border-rose-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const req = paymentPromptRequest;
+                        setPaymentPromptRequest(null);
+                        setSelectedTrainingAgreementReq(req);
+                      }}
+                      className="bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    >
+                      <span>✍️ פתח הסכם לחתימה כעת</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const origin = typeof window !== 'undefined' ? window.location.origin : 'https://rezort-webapp.vercel.app';
+                        const agrLink = `${origin}/?agreement=training&intakeId=${paymentPromptRequest.id}&phone=${cleanPhoneNumber(paymentPromptRequest.ownerPhone)}&name=${encodeURIComponent(paymentPromptRequest.ownerName)}&dog=${encodeURIComponent(paymentPromptRequest.dogName)}`;
+                        const msg = `שלום ${paymentPromptRequest.ownerName}! 🐾🐶\nבהמשך להזמנת תהליך האילוף עבור *${paymentPromptRequest.dogName}* בריזורט לכלב, מצורף קישור אישי לחתימה על הסכם האילוף:\n\n👉 ${agrLink}\n\n*לתשומת לבכם:* על פי נהלי הריזורט, לא ניתן להסדיר את תשלום דמי האילוף לפני חתימת הלקוח על ההסכם. אנא מלאו את הפרטים וחתמו דיגיטלית כדי שנוכל להמשיך להסדרת התשלום.\n\nבברכה,\nשמוליק וצוות הריזורט לכלב 🐾`;
+                        const cleanP = cleanPhoneNumber(paymentPromptRequest.ownerPhone);
+                        const intlP = cleanP.startsWith('0') ? '972' + cleanP.substring(1) : cleanP;
+                        window.open(`https://wa.me/${intlP}?text=${encodeURIComponent(msg)}`, '_blank');
+                      }}
+                      className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    >
+                      <span>📲 שלח הסכם לחתימה בוואטסאפ</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentPromptRequest(null)}
+                      className="bg-white hover:bg-slate-100 text-slate-600 font-bold px-3 py-2 rounded-xl border border-slate-200 text-xs mr-auto cursor-pointer"
+                    >
+                      ביטול
+                    </button>
+                  </div>
+                </div>
+              ) : parseFloat(paymentAmount) === 0 ? (
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <button
                     type="button"
@@ -3362,6 +3509,28 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
         bookings={bookings}
         intakeRequests={requests}
       />
+
+      {/* Training Agreement Modal for Training Requests */}
+      {selectedTrainingAgreementReq && (
+        <TrainingAgreementModal
+          isOpen={true}
+          onClose={() => setSelectedTrainingAgreementReq(null)}
+          intakeRequest={selectedTrainingAgreementReq}
+          settings={settings}
+          onAgreementSigned={(agrData) => {
+            const updated: IntakeRequest = {
+              ...selectedTrainingAgreementReq,
+              isTrainingAgreementSigned: true,
+              trainingAgreementSignedAt: new Date().toISOString(),
+              trainingAgreement: agrData
+            };
+            if (onSaveRequest) {
+              onSaveRequest(updated);
+            }
+            setSelectedTrainingAgreementReq(null);
+          }}
+        />
+      )}
 
     </div>
   );

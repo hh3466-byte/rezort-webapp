@@ -76,6 +76,57 @@ export function getFirstName(fullName: string): string {
 }
 
 /**
+ * Detects whether a dog name is a placeholder / system status / description
+ * rather than an actual pet name (e.g. "ממתין לבירור בשיחה 🐶", "כלב גדול מחונך", "לא ידוע", etc.)
+ */
+export function isPlaceholderDogName(name?: string): boolean {
+  if (!name) return true;
+  const n = name.trim().toLowerCase();
+  return (
+    n.includes('ממתין') ||
+    n.includes('בירור') ||
+    n.includes('בשיחה') ||
+    n.includes('לא ידוע') ||
+    n.includes('פנייה') ||
+    n.includes('מחונך') ||
+    n.includes('כלב גדול') ||
+    n.includes('כלב קטן') ||
+    n.includes('כלב בינוני') ||
+    n.includes('כלב מעורב') ||
+    n.length > 25
+  );
+}
+
+/**
+ * Returns clean dog display name, or empty string if it's a placeholder or empty.
+ */
+export function getCleanDogName(name?: string): string {
+  if (!name || isPlaceholderDogName(name)) return '';
+  return name.replace(/[🐶🐕🐾]/g, '').trim();
+}
+
+/**
+ * Generates tailored direct WhatsApp message for an intake request or lead.
+ * If waiting for call / placeholder dog name / meta lead: asks when it is convenient to talk!
+ * If completed intake with real dog: greets and asks when it is convenient to talk.
+ */
+export function formatIntakeDirectWhatsAppMessage(
+  req: { ownerName: string; dogName?: string; clientOrigin?: string },
+  settings: { resortName?: string }
+): string {
+  const firstName = getFirstName(req.ownerName);
+  const resortName = settings.resortName || 'הריזורט לכלב';
+  const cleanDog = getCleanDogName(req.dogName);
+
+  if (!cleanDog || req.clientOrigin === 'meta_lead' || req.clientOrigin === 'new') {
+    return `שלום ${firstName}, כאן שמוליק מ${resortName} 🐾\nבהמשך לפנייתך – מתי יהיה לך נוח לדבר?`;
+  }
+
+  return `שלום ${firstName}, כאן שמוליק מ${resortName} 🐾\nבהמשך לשאלון בקשת הקליטה ששלחתם עבור ${cleanDog} – מתי יהיה לכם נוח לדבר?`;
+}
+
+
+/**
  * Generate Hebrew WhatsApp payment reminder message
  */
 export function generatePaymentReminderMessage(booking: Booking, settings: ResortSettings): string {

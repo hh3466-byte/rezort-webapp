@@ -14,11 +14,13 @@ import {
   ShieldAlert, 
   CheckCircle2, 
   AlertCircle,
+  AlertTriangle,
   FileText,
   HeartPulse,
   Trash2
 } from 'lucide-react';
-import { Booking, ResortSettings, ServiceType, PaymentStatus, StayStatus, PaymentMethod } from '../types';
+import { Booking, ResortSettings, ServiceType, PaymentStatus, StayStatus, PaymentMethod, TrainingAgreementData } from '../types';
+import { TrainingAgreementModal } from './TrainingAgreementModal';
 import { calculateDaysCount, checkRangeOccupancy, getTodayStr, addDays, formatDateIL } from '../utils/dateUtils';
 import { calculateBoardingRate } from '../utils/pricingUtils';
 import { parseVoiceOrWhatsAppText } from '../services/agentService';
@@ -141,6 +143,19 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
 
   const [isMediaLightboxOpen, setIsMediaLightboxOpen] = useState(false);
   const [mediaLightboxIndex, setMediaLightboxIndex] = useState(0);
+
+  // Training Agreement state & blocking
+  const [isTrainingAgreementSigned, setIsTrainingAgreementSigned] = useState<boolean>(() => {
+    return Boolean(
+      initialData?.isTrainingAgreementSigned || 
+      initialData?.trainingAgreement?.ownerSignatureDataUrl ||
+      initialData?.signatureDataUrl
+    );
+  });
+  const [trainingAgreementData, setTrainingAgreementData] = useState<TrainingAgreementData | undefined>(() => {
+    return initialData?.trainingAgreement;
+  });
+  const [isTrainingAgreementModalOpen, setIsTrainingAgreementModalOpen] = useState(false);
 
   // Free stay / Second dog payment consolidation state
   const [isFreeStay, setIsFreeStay] = useState<boolean>(() => {
@@ -472,6 +487,21 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       }
     }
 
+    // Training Agreement Blocking Rule: "אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם"
+    const isTraining = serviceType === 'training' || serviceType === 'day_training';
+    const isAgreementSigned = Boolean(
+      isTrainingAgreementSigned || 
+      trainingAgreementData?.ownerSignatureDataUrl ||
+      initialData?.isTrainingAgreementSigned ||
+      (initialData as any)?.trainingAgreement?.ownerSignatureDataUrl ||
+      initialData?.signatureDataUrl
+    );
+
+    if (isTraining && !isAgreementSigned && (finalDeposit > 0 || finalPaymentStatus === 'fully_paid' || finalPaymentStatus === 'deposit_paid')) {
+      alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.\n\nחובה להחתים תחילה את הלקוח על הסכם האילוף הרשמי לפני רישום תשלום או מקדמה.');
+      return;
+    }
+
     const effectiveEndDate = (stayStatus === 'checked_out' && endDate > todayStr) ? todayStr : endDate;
 
     const booking: Booking = {
@@ -516,6 +546,9 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       dogVideoUrl: initialData?.dogVideoUrl,
       daycarePassCode: initialData?.daycarePassCode,
       daycarePassId: initialData?.daycarePassId,
+      isTrainingAgreementSigned: isAgreementSigned,
+      trainingAgreementSignedAt: initialData?.trainingAgreementSignedAt || (isAgreementSigned ? new Date().toISOString() : undefined),
+      trainingAgreement: trainingAgreementData || initialData?.trainingAgreement,
       createdAt: initialData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1568,6 +1601,48 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                     <option value="other">אחר</option>
                   </select>
                 </div>
+
+                {/* Training Agreement Status & Hard Payment Gate */}
+                <div className="sm:col-span-3 pt-1">
+                  {isTrainingAgreementSigned ? (
+                    <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex items-center justify-between text-xs">
+                      <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>הסכם אילוף חתום ומאושר ✓</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsTrainingAgreementModalOpen(true)}
+                        className="text-emerald-800 font-bold hover:underline cursor-pointer"
+                      >
+                        הצג הסכם / הדפס 📜
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-3 space-y-2 text-xs">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong className="text-rose-950 font-black block">
+                            🛑 חסימת תשלום – הסכם אילוף טרם נחתם!
+                          </strong>
+                          <span className="text-rose-800 leading-normal text-[11px] block mt-0.5">
+                            על פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם. לא ניתן לרשום מקדמה או תשלום ללא חתימה.
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 pt-1 border-t border-rose-200">
+                        <button
+                          type="button"
+                          onClick={() => setIsTrainingAgreementModalOpen(true)}
+                          className="bg-emerald-700 hover:bg-emerald-800 text-white font-black px-3.5 py-1.5 rounded-lg text-xs flex items-center gap-1 shadow-2xs cursor-pointer"
+                        >
+                          <span>✍️ פתח הסכם לחתימה כעת</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             ) : pricingMode === 'daily' ? (
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
@@ -2408,6 +2483,34 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
           ownerName={initialData?.ownerName}
           onClose={() => setIsMediaLightboxOpen(false)}
         />
+
+        {/* Training Agreement Modal */}
+        {isTrainingAgreementModalOpen && (
+          <TrainingAgreementModal
+            isOpen={true}
+            onClose={() => setIsTrainingAgreementModalOpen(false)}
+            booking={initialData?.id ? (initialData as Booking) : {
+              id: `temp-${Date.now()}`,
+              dogName: dogName || 'כלב',
+              dogBreed: dogBreed || '',
+              ownerName: ownerName || '',
+              ownerPhone: ownerPhone || '',
+              startDate,
+              endDate,
+              totalPrice,
+              serviceType,
+              stayStatus: 'booked',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }}
+            settings={settings}
+            onAgreementSigned={(agrData) => {
+              setIsTrainingAgreementSigned(true);
+              setTrainingAgreementData(agrData);
+              setIsTrainingAgreementModalOpen(false);
+            }}
+          />
+        )}
 
       </div>
     </div>

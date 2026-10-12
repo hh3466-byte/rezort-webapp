@@ -2733,6 +2733,19 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
             </div>
           </div>
 
+          {/* Training Agreement Notice for Training Clients */}
+          {serviceType === 'training' && (
+            <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 text-xs space-y-1.5 shadow-2xs">
+              <div className="flex items-center gap-2 font-black text-amber-950">
+                <span className="text-base">🎓</span>
+                <span>נוהל תשלום אילוף – הריזורט לכלב:</span>
+              </div>
+              <p className="text-amber-900 leading-relaxed font-medium">
+                על פי נהלי הריזורט לכלב: <strong>אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם</strong>. לאחר הגשת השאלון תקבלו קישור אישי להסכם האילוף הרשמי לחתימה דיגיטלית מאובטחת, ורק לאחר חתימתכם ניתן יהיה להסדיר את התשלום.
+              </p>
+            </div>
+          )}
+
           {/* Action Buttons: Full Submit & Please Call Me */}
           <div className="pt-2 space-y-3">
             <button

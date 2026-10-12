@@ -76,8 +76,55 @@ export interface Booking {
   trainerStages?: TrainerPaymentStage[];
   isTrainingCompleted?: boolean;
   trainingCompletedAt?: string;
+  isTrainingAgreementSigned?: boolean;
+  trainingAgreementSignedAt?: string;
+  trainingAgreement?: TrainingAgreementData;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TrainingAgreementData {
+  signedDate: string; // YYYY-MM-DD
+  signedDateHebrew?: string; // לדוגמה: יום שני, 12 באוקטובר 2026
+  
+  // 1. פרטי הבעלים
+  ownerFullName: string;
+  ownerIdNumber: string; // ת.ז.
+  ownerAddress: string;
+  ownerPhone: string;
+  ownerEmail: string;
+  emergencyContact: string; // שם וטלפון
+
+  // 1. פרטי הכלב
+  dogName: string;
+  dogBreed: string;
+  dogAge: string;
+  dogGenderAndNeutered: string; // מין, מעוקר/מסורסת
+  dogWeightKg: string; // משקל משוער (ק"ג)
+  dogChipNumber: string; // מספר שבב
+  vetNameAndPhone: string; // וטרינר מטפל (שם וטלפון)
+
+  // 2. תוכנית האילוף
+  programType: 'boarding_training' | 'behavioral_rehab' | 'other';
+  programTypeOther?: string;
+  trainingGoals: string; // מטרות האילוף
+  startDate: string;
+  endDate: string;
+  trainerName: string; // מאלף/ת אחראי/ת
+
+  // 5. תמורה ותנאי תשלום
+  totalPrice: number;
+  paymentMethod: string;
+
+  // 7.4 חירום רפואי
+  emergencyMedicalLimit: number; // עלות של עד ___ ₪ בלי אישור נוסף
+
+  // 9. חתימות
+  ownerSignatureDataUrl?: string; // חתימת הבעלים (Base64)
+  ownerSignedAt?: string;
+  resortSigned: boolean;
+  resortSignedBy: string;
+  resortSignedAt: string;
 }
 
 export interface Customer {
@@ -114,7 +161,7 @@ export interface GrowIncomingPayment {
   updated_at?: string;
 }
 
-export type IntakeRequestStatus = 'pending' | 'payment_requested' | 'approved' | 'rejected' | 'abandoned';
+export type IntakeRequestStatus = 'pending' | 'payment_requested' | 'approved' | 'rejected' | 'abandoned' | 'archived';
 
 export interface IntakeRequest {
   id: string;
@@ -157,6 +204,9 @@ export interface IntakeRequest {
   adminNotes?: string;
   termsAccepted?: boolean;
   termsAcceptedAt?: string;
+  isTrainingAgreementSigned?: boolean;
+  trainingAgreementSignedAt?: string;
+  trainingAgreement?: TrainingAgreementData;
   clientOrigin?: 'new' | 'returning' | 'referral';
   selectedBenefitId?: string;
   voucherCode?: string;

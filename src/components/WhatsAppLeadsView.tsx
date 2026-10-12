@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Booking, IntakeRequest, IntakeRequestStatus, ResortSettings } from '../types';
 import { DesktopWhatsAppAuditModal } from './DesktopWhatsAppAuditModal';
+import { WhatsAppComposer, WhatsAppComposerHandle } from './WhatsAppComposer';
 import { IntakeAlertBanner } from './IntakeAlertBadges';
 import { cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
 import { formatDateIL } from '../utils/dateUtils';
@@ -217,7 +218,10 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
     return getChatStatusFromService(chat, statusOverrides);
   };
 
-  const [messageInput, setMessageInput] = useState('');
+  const composerRef = useRef<WhatsAppComposerHandle>(null);
+  const setComposerText = (text: string | ((prev: string) => string)) => {
+    composerRef.current?.setText(text);
+  };
   const [isSending, setIsSending] = useState(false);
   const [sendSuccessToast, setSendSuccessToast] = useState(false);
   const [confirmResendModal, setConfirmResendModal] = useState(false);
@@ -329,7 +333,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
 
   // 3. Send text message
   const handleSendMessage = async (customText?: string) => {
-    const textToSend = (customText !== undefined ? customText : messageInput).trim();
+    const textToSend = (customText !== undefined ? customText : (composerRef.current?.getText() || '')).trim();
     if (!textToSend || !selectedChat || isSending) return;
 
     setIsSending(true);
@@ -352,7 +356,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
         lastMessage: textToSend,
         timestamp: Date.now()
       } : c));
-      setMessageInput('');
+      composerRef.current?.clear();
       setSendSuccessToast(true);
       setTimeout(() => setSendSuccessToast(false), 2500);
       setTimeout(scrollToBottom, 50);
@@ -364,80 +368,46 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
     }
   };
 
-  // 4. Voice dictation (SpeechRecognition)
-  const toggleVoiceDictation = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      alert('זיהוי קולי אינו נתמך בדפדפן זה. מומלץ להשתמש ב-Google Chrome או Microsoft Edge.');
-      return;
-    }
+  // 5. Filter, Search and Priority Sorting (Memoized for 60fps performance):
+  const filteredChats = React.useMemo(() => {
+    return chats
+      .filter(chat => {
+        const status = getChatTreatmentStatus(chat);
 
-    if (isListening) {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch {}
-      }
-      setIsListening(false);
-      return;
-    }
-
-    try {
-      const rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = false;
-      rec.lang = 'he-IL';
-
-      rec.onstart = () => setIsListening(true);
-      rec.onresult = (e: any) => {
-        let chunk = '';
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          if (e.results[i].isFinal) {
-            chunk += e.results[i][0].transcript + ' ';
-          }
+        // חיפוש טקסט חופשי מאפשר למצוא כל שיחה
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase().trim();
+          const qNorm = q.replace(/[״"׳']/g, '').replace(/[יו]/g, '');
+          const matchName = chat.name.toLowerCase().includes(q) || (chat.whatsappPushName || '').toLowerCase().includes(q);
+          const matchPhone = chat.cleanPhone.includes(q.replace(/\D/g, ''));
+          const matchDog = (chat.matchedDogName || '').toLowerCase().includes(q);
+          const matchDogNorm = (chat.matchedDogName || '').replace(/[״"׳']/g, '').replace(/[יו]/g, '').includes(qNorm) && qNorm.length >= 2;
+          const matchMsg = (chat.lastMessage || '').toLowerCase().includes(q);
+          return matchName || matchPhone || matchDog || matchDogNorm || matchMsg;
         }
-        if (chunk.trim()) {
-          setMessageInput(prev => prev ? `${prev} ${chunk.trim()}` : chunk.trim());
-        }
-      };
-      rec.onerror = () => setIsListening(false);
-      rec.onend = () => setIsListening(false);
 
-      recognitionRef.current = rec;
-      rec.start();
-    } catch (err) {
-      setIsListening(false);
+        // ללא חיפוש טקסט - מציג לפי הטאב הפעיל (חדשות, מתנהלות, ממתינות לתגובה או כל השיחות)
+        if (filter === 'all') return true;
+        return status === filter;
+      })
+      .sort((a, b) => {
+        return (b.timestamp || 0) - (a.timestamp || 0);
+      });
+  }, [chats, searchQuery, filter, statusOverrides]);
+
+  // מונים לטאבים הפעילים - חישוב יחיד ממוטב
+  const { newCount, inChatCount, waitingReplyCount, allCount } = React.useMemo(() => {
+    let nc = 0;
+    let ic = 0;
+    let wr = 0;
+    for (let i = 0; i < chats.length; i++) {
+      const s = getChatStatusFromService(chats[i], statusOverrides);
+      if (s === 'new') nc++;
+      else if (s === 'in_chat') ic++;
+      else if (s === 'waiting_reply') wr++;
     }
-  };
-
-  // 5. Filter, Search and Priority Sorting:
-  const filteredChats = chats
-    .filter(chat => {
-      const status = getChatTreatmentStatus(chat);
-
-      // חיפוש טקסט חופשי מאפשר למצוא כל שיחה
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const qNorm = q.replace(/[״"׳']/g, '').replace(/[יו]/g, '');
-        const matchName = chat.name.toLowerCase().includes(q) || (chat.whatsappPushName || '').toLowerCase().includes(q);
-        const matchPhone = chat.cleanPhone.includes(q.replace(/\D/g, ''));
-        const matchDog = (chat.matchedDogName || '').toLowerCase().includes(q);
-        const matchDogNorm = (chat.matchedDogName || '').replace(/[״"׳']/g, '').replace(/[יו]/g, '').includes(qNorm) && qNorm.length >= 2;
-        const matchMsg = (chat.lastMessage || '').toLowerCase().includes(q);
-        return matchName || matchPhone || matchDog || matchDogNorm || matchMsg;
-      }
-
-      // ללא חיפוש טקסט - מציג לפי הטאב הפעיל (חדשות, מתנהלות, ממתינות לתגובה או כל השיחות)
-      if (filter === 'all') return true;
-      return status === filter;
-    })
-    .sort((a, b) => {
-      return (b.timestamp || 0) - (a.timestamp || 0);
-    });
-
-  // מונים לטאבים הפעילים
-  const newCount = chats.filter(c => getChatTreatmentStatus(c) === 'new').length;
-  const inChatCount = chats.filter(c => getChatTreatmentStatus(c) === 'in_chat').length;
-  const waitingReplyCount = chats.filter(c => getChatTreatmentStatus(c) === 'waiting_reply').length;
-  const allCount = chats.length;
+    return { newCount: nc, inChatCount: ic, waitingReplyCount: wr, allCount: chats.length };
+  }, [chats, statusOverrides]);
 
   useEffect(() => {
     onNewCountChange?.(newCount);
@@ -584,7 +554,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   e.stopPropagation();
                   setSelectedChat(chat);
                   const text = generateAvailableToTalkText(chat.name, chat.matchedDogName);
-                  setMessageInput(text);
+                  setComposerText(text);
                 }}
                 className="text-[10px] font-black bg-sky-50 hover:bg-sky-100 text-sky-950 border border-sky-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs"
                 title="טען הודעת פנייה מכבדת ללקוח: האם אפשר לדבר עכשיו? פנוי לשיחה?"
@@ -602,7 +572,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     setSelectedChat(chat);
                     const intakeUrl = `${window.location.origin}/?intake=true`;
                     const text = generateResortMarketingValueText(chat.name, chat.matchedDogName, intakeUrl);
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="text-[10px] font-black bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-md inline-flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-2xs"
                   title="טען הודעת שיווק מקיפה המפרטת על יתרונות הפנסיון והאילוף"
@@ -1486,7 +1456,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   return (
                     <button
                       type="button"
-                      onClick={() => setMessageInput(intent.suggestedResponse || '')}
+                      onClick={() => setComposerText(intent.suggestedResponse || '')}
                       className={`font-black px-3 py-1 rounded-xl text-xs flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-xs active:scale-95 border animate-pulse ${
                         intent.type === 'price_objection'
                           ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-600'
@@ -1505,7 +1475,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   type="button"
                   onClick={() => {
                     const text = generateAvailableToTalkText(selectedChat.name, selectedChat.matchedDogName);
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-sky-50 hover:bg-sky-100 text-sky-950 border border-sky-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="שליחת הודעה מכבדת ללקוח שהתעכבנו איתו: האם אפשר לדבר עכשיו? פנוי לשיחה?"
@@ -1520,7 +1490,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   onClick={() => {
                     const payUrl = settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
                     const text = `שלום ${getFirstName(selectedChat.name)}! 🐾 בהמשך לתיאום מול הריזורט לכלב, מצורף קישור לתשלום מאובטח (Bit, Apple Pay, Google Pay, PayBox, אשראי או העברה בנקאית):\n👉 ${payUrl}\n\nלאחר ביצוע התשלום המקום משוריין רשמית ביומן ומופקת חשבונית מס קבלה אוטומטית! נשמח לראותכם 🐶✨`;
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען קישור לתשלום מאובטח ב-Grow לעריכה ושליחה"
@@ -1535,7 +1505,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   onClick={() => {
                     const intakeUrl = `${window.location.origin}/?intake=true`;
                     const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\nלקראת האירוח בריזורט לכלב, מצורף שאלון קליטה קצרצר (כדקה למילוי) לרישום הכלב, העדפות ופרטים רפואיים:\n👉 ${intakeUrl}\n\nנשמח לעמוד לרשותכם לכל שאלה! צוות ${settings.resortName} 🐾`;
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען קישור לשאלון קליטה לעריכה ושליחה"
@@ -1549,7 +1519,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   type="button"
                   onClick={() => {
                     const text = `🐾 *מחירון פנסיון לילה בריזורט לכלב:*\n• שהות של 1–6 לילות: ₪180 ללילה\n• שהות של 7–20 לילות (משבוע ומעלה): ₪150 ללילה\n• שהות של 21+ לילות (מעל 3 שבועות): ₪120 ללילה\n\n* כלבי בידוד / טיפול מיוחד: ₪230 ללילה\n* אילוף בתנאי פנסיון מלאים: ₪6,500\n* יום כיף (דייקר): ₪90 ליום\n\nנשמח לעמוד לרשותכם לכל שאלה! צוות ${settings.resortName} 🐾`;
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען מחירון רשמי לעריכה ושליחה"
@@ -1563,7 +1533,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   type="button"
                   onClick={() => {
                     const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\nזמני הגעה ואיסוף בריזורט לכלב:\n• ימים א׳–ה׳: 09:30 עד 18:30\n• ימי שישי וערבי חג: 09:30 עד 14:00 בדיוק\n• שבתות וחגים: הריזורט סגור לקבלת/שחרור קהל.\nבאיזו שעה משוערת תרצו להגיע? נערך לקראתכם! 🐕`;
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-sky-50 hover:bg-sky-100 text-sky-950 border border-sky-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען שעות פעילות וזמני קבלה/שחרור לעריכה ושליחה"
@@ -1577,7 +1547,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   type="button"
                   onClick={() => {
                     const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\nדרישות בריאות וחיסונים לכניסה לריזורט לכלב:\n1. חיסון משושה בתוקף (בשנה האחרונה)\n2. חיסון כלבת בתוקף + שבב אלקטרוני\n3. טיפול מונע נגד פרעושים וקרציות\n4. מומלץ: חיסון נגד שעלת המכלאות.\nנשמח אם תוכל/י לשלוח לנו כאן צילום של פנקס החיסונים! 📋🐕`;
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-teal-50 hover:bg-teal-100 text-teal-950 border border-teal-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען דרישות חיסונים ופנקס וטרינרי לעריכה ושליחה"
@@ -1591,7 +1561,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   onClick={() => {
                     const payUrl = settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
                     const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\nלקראת תקופת החגים/עונת השיא הריזורט בתפוסה כמעט מלאה!\nכדי להבטיח ולשריין את הסוויטה עבור ${selectedChat.matchedDogName || 'הכלב'}, נדרש שריון מראש עם מקדמה מאובטחת:\n👉 ${payUrl}\nנשמח לשריין לכם מקום!`;
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-rose-50 hover:bg-rose-100 text-rose-950 border border-rose-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען הודעת שריון מקום בעונות שיא וחגים לעריכה ושליחה"
@@ -1607,7 +1577,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                     const nameGreeting = firstName && firstName !== selectedChat.cleanPhone ? `היי ${firstName}, ` : 'היי, ';
                     const dogMention = selectedChat.matchedDogName ? ` עבור ${selectedChat.matchedDogName}` : '';
                     const text = `${nameGreeting}סליחה שלקח לנו זמן לחזור אלייך! 🙏🐾\nהיינו ממש עסוקים עם הכלבים בריזורט, לקח לנו זמן לחזור ואנחנו ממש מתנצלים על ההמתנה.\n\nעכשיו אנחנו כאן איתך ובמלוא תשומת הלב – אפשר להתקדם! במה נוכל לעזור${dogMention}? 😊`;
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-orange-50 hover:bg-orange-100 text-orange-950 border border-orange-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען הודעת התנצלות חמה: היינו בחצר הכלבים, עכשיו אפשר להתקדם"
@@ -1620,7 +1590,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   type="button"
                   onClick={() => {
                     const text = `שלום ${getFirstName(selectedChat.name)}! 🐾\n${selectedChat.matchedDogName || 'הכלב/ה'} מרגיש/ה נהדר, שמח/ה ומשחק/ת במדשאות הירוקות שלנו! 🐶❤️\nנמשיך לשלוח תמונות, סרטונים ועדכונים שוטפים בכל יום סביב 20:00 בערב. תמיד כאן בשבילכם! צוות הריזורט לכלב 🐾`;
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען הודעת עדכון ותמונות מהשהות לעריכה ושליחה"
@@ -1633,7 +1603,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   type="button"
                   onClick={() => {
                     const text = generateFollowUpReminderText(selectedChat.name, selectedChat.matchedDogName);
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען תזכורת חמה לשאלון קליטה לעריכה ושליחה"
@@ -1647,7 +1617,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   onClick={() => {
                     const intakeUrl = `${window.location.origin}/?intake=true`;
                     const text = generateResortMarketingValueText(selectedChat.name, selectedChat.matchedDogName, intakeUrl);
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black px-3 py-1 rounded-xl text-xs flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
                   title="טען הודעה שיווקית עשירה: יתרונות הריזורט ותוכנית האילוף של שמוליק"
@@ -1662,7 +1632,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   onClick={() => {
                     const intakeUrl = `${window.location.origin}/?intake=true`;
                     const text = generateTrainingOnlyMarketingText(selectedChat.name, selectedChat.matchedDogName, intakeUrl);
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען הודעה שיווקית ממוקדת באילוף כלבים בהובלת שמוליק"
@@ -1676,7 +1646,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   onClick={() => {
                     const intakeUrl = `${window.location.origin}/?intake=true`;
                     const text = generateBoardingOnlyMarketingText(selectedChat.name, selectedChat.matchedDogName, intakeUrl);
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען הודעה שיווקית ממוקדת בפנסיון הבוטיק ותנאי ה-VIP"
@@ -1689,7 +1659,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   type="button"
                   onClick={() => {
                     const text = `שלום ${getFirstName(selectedChat.name)}! 🐾 להגעה ל${settings.resortName}:\n📍 מיקום וניווט ב-Waze / Google Maps:\nhttps://maps.app.goo.gl/8bm2Rdt7DtHeUS5J9\n\nשעות פעילות:\n• ימים א׳–ה׳: 09:30–18:30\n• שישי וערבי חג: עד 14:00\nמחכים לכם! צוות הריזורט 🐾 (${settings.managerPhone || '050-6336896'})`;
-                    setMessageInput(text);
+                    setComposerText(text);
                   }}
                   className="bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
                   title="טען מיקום וקישור Waze לעריכה ושליחה"
@@ -1713,52 +1683,12 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                 </button>
               </div>
 
-              {/* Message Composer & Dictation Input */}
-              <div className="bg-white p-3 border-t border-slate-200 flex items-center gap-2 shrink-0">
-                
-                {/* Voice Dictation Button */}
-                <button
-                  type="button"
-                  onClick={toggleVoiceDictation}
-                  className={`p-2.5 rounded-xl border transition-all cursor-pointer shadow-2xs active:scale-95 shrink-0 ${
-                    isListening
-                      ? 'bg-red-600 text-white animate-pulse ring-2 ring-red-400 border-red-600'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
-                  }`}
-                  title="לחץ להכתבה קולית בעברית"
-                >
-                  {isListening ? <MicOff className="w-4 h-4 animate-bounce" /> : <Mic className="w-4 h-4" />}
-                </button>
-
-                {/* Textarea */}
-                <div className="flex-1 relative">
-                  <textarea
-                    rows={1}
-                    value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    placeholder={isListening ? 'מקליט... דבר עכשיו 🎙️' : 'הקלד הודעת וואטסאפ ישירה ללקוח (Enter לשליחה)...'}
-                    className="w-full bg-slate-50 focus:bg-white text-slate-900 border border-slate-300 focus:border-emerald-500 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none max-h-24 transition-all"
-                  />
-                </div>
-
-                {/* Send Button */}
-                <button
-                  type="button"
-                  disabled={!messageInput.trim() || isSending}
-                  onClick={() => handleSendMessage()}
-                  className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 disabled:opacity-40 disabled:scale-100 text-white font-black px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow-xs transition-all cursor-pointer shrink-0"
-                  title="שלח עכשיו בוואטסאפ דרך Green-API"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>{isSending ? 'שולח...' : 'שלח'}</span>
-                </button>
-              </div>
+              {/* Message Composer & Dictation Input (Isolated for 0ms typing lag) */}
+              <WhatsAppComposer
+                ref={composerRef}
+                onSendMessage={handleSendMessage}
+                isSending={isSending}
+              />
 
               {/* Toast for successful send */}
               {sendSuccessToast && (

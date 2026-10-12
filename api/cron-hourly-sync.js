@@ -150,16 +150,20 @@ export default async function handler(req, res) {
       }
     }
 
-    // 5. Rule 6 Enforcement: Auto-archive expired intake questionnaires (endDate <= today)
+    // 5. Rule 6 Enforcement: Auto-archive expired intake questionnaires (endDate <= today or startDate < today)
     let autoArchivedIntakesCount = 0;
     for (const req of (intakes || [])) {
       const eDate = req.end_date || req.endDate;
-      if (eDate && eDate <= todayStr && req.status !== 'archived') {
-        await supabase.from('intake_requests').update({
-          status: 'archived',
-          updated_at: new Date().toISOString()
-        }).eq('id', req.id);
-        autoArchivedIntakesCount++;
+      const sDate = req.start_date || req.startDate;
+      const isExpired = (eDate && eDate <= todayStr) || (sDate && sDate < todayStr);
+      if (isExpired && req.status !== 'archived' && req.status !== 'abandoned' && req.status !== 'approved') {
+        try {
+          await supabase.from('intake_requests').update({
+            status: 'archived',
+            updated_at: new Date().toISOString()
+          }).eq('id', req.id);
+          autoArchivedIntakesCount++;
+        } catch (e) {}
       }
     }
 
@@ -183,10 +187,29 @@ export default async function handler(req, res) {
       growApiHealthy = false;
     }
 
-    // 7. Save telemetry to settings
+    // 7. Save telemetry and auto-archive in settings.data.intakeRequests (primary storage)
     const { data: sRows } = await supabase.from('settings').select('*').limit(1);
     const sRow = sRows?.[0] || {};
     const curSettingsData = sRow.data || {};
+
+    if (Array.isArray(curSettingsData.intakeRequests)) {
+      curSettingsData.intakeRequests = curSettingsData.intakeRequests.map(req => {
+        const eDate = req.endDate || req.end_date;
+        const sDate = req.startDate || req.start_date;
+        const isExpired = (eDate && eDate <= todayStr) || (sDate && sDate < todayStr);
+        const hasIrrelevantNote = req.internalNotes && (req.internalNotes.includes('לא רלוונטי') || req.internalNotes.includes('הוסר מהרשימה') || req.internalNotes.includes('בוטל'));
+        
+        if ((isExpired || hasIrrelevantNote) && req.status !== 'archived' && req.status !== 'abandoned' && req.status !== 'approved') {
+          autoArchivedIntakesCount++;
+          return {
+            ...req,
+            status: 'abandoned',
+            internalNotes: (req.internalNotes || '') + `\n[הועבר לארכיון אוטומטית לפי חוק 6 ב-${todayStr}]`
+          };
+        }
+        return req;
+      });
+    }
 
     await supabase.from('settings').update({
       data: {

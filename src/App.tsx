@@ -23,7 +23,8 @@ import {
   updateVoucherStatusInDb,
   findDaycarePassByCode,
   deductDayFromPassInDb,
-  autoArchiveOldCheckedOutBookings
+  autoArchiveOldCheckedOutBookings,
+  autoArchiveExpiredIntakes
 } from './services/dbService';
 import { parseVoiceOrWhatsAppText } from './services/agentService';
 import { 
@@ -55,7 +56,8 @@ import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeCha
 import { ManagerAuthModal } from './components/ManagerAuthModal';
 import { ManagerLoginGate } from './components/ManagerLoginGate';
 import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2, LogOut, Lock, ArrowLeft, Search, BarChart3 } from 'lucide-react';
-import { formatPhoneForWhatsApp } from './utils/whatsappUtils';
+import { formatPhoneForWhatsApp, cleanPhoneNumber } from './utils/whatsappUtils';
+import { TrainingAgreementModal } from './components/TrainingAgreementModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
 import { MonthlyRefundsModal } from './components/MonthlyRefundsModal';
@@ -138,6 +140,12 @@ export default function App() {
     window.location.search.includes('intake') ||
     window.location.hash.includes('request') ||
     window.location.hash.includes('intake')
+  );
+
+  // Training Agreement Direct Link (?agreement=training or ?training_agreement=true)
+  const isAgreementParam = typeof window !== 'undefined' && (
+    window.location.search.includes('agreement=training') ||
+    window.location.search.includes('training_agreement')
   );
   const [showPublicIntake, setShowPublicIntake] = useState(isIntakeParam);
   const [intakeRequests, setIntakeRequests] = useState<IntakeRequest[]>(() => loadStoredIntakeRequests());
@@ -276,6 +284,7 @@ export default function App() {
 
     const unsubIntake = subscribeToIntakeRequests((requests) => {
       setIntakeRequests(requests);
+      autoArchiveExpiredIntakes(requests, bookingsRef.current);
     });
 
     const unsubFeedingReminders = initFeedingReminderScheduler(
@@ -1224,6 +1233,58 @@ export default function App() {
     await clearAllBookingsFromDb();
     showToast('🧹 כל הנתונים נמחקו - היומן נקי לחלוטין!');
   };
+
+  // 0. If client opened direct Training Agreement link (?agreement=training)
+  if (isAgreementParam) {
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const paramBookingId = urlParams?.get('bookingId');
+    const paramIntakeId = urlParams?.get('intakeId');
+    const paramPhone = urlParams?.get('phone') || '';
+    const paramName = urlParams?.get('name') || '';
+    const paramDog = urlParams?.get('dog') || '';
+
+    const matchedAgreementBooking = paramBookingId 
+      ? bookings.find(b => b.id === paramBookingId) 
+      : (paramPhone ? bookings.find(b => cleanPhoneNumber(b.ownerPhone) === cleanPhoneNumber(paramPhone)) : null);
+
+    const matchedAgreementIntake = paramIntakeId 
+      ? intakeRequests.find(r => r.id === paramIntakeId) 
+      : (paramPhone ? intakeRequests.find(r => cleanPhoneNumber(r.ownerPhone) === cleanPhoneNumber(paramPhone)) : null);
+
+    return (
+      <div className="min-h-screen bg-slate-900/80 flex items-center justify-center p-2 sm:p-4" dir="rtl">
+        <TrainingAgreementModal
+          isOpen={true}
+          onClose={() => {
+            window.location.href = window.location.pathname;
+          }}
+          booking={matchedAgreementBooking || (!matchedAgreementIntake ? {
+            id: paramBookingId || `train-${Date.now()}`,
+            dogName: paramDog || 'כלב',
+            dogBreed: '',
+            ownerName: paramName || '',
+            ownerPhone: paramPhone || '',
+            serviceType: 'training',
+            startDate: getTodayStr(),
+            endDate: addDays(getTodayStr(), 30),
+            totalPrice: Number(settings?.defaultDailyRateTraining) || 6500,
+            depositAmount: 0,
+            paymentStatus: 'unpaid',
+            paymentMethod: 'credit',
+            stayStatus: 'booked',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          } : undefined)}
+          intakeRequest={matchedAgreementIntake || undefined}
+          settings={settings}
+          isPublicClientView={true}
+          onAgreementSigned={() => {
+            showToast('✅ הסכם האילוף נחתם בהצלחה!');
+          }}
+        />
+      </div>
+    );
+  }
 
   // 1. If public intake link opened (?request=true or ?intake=true) or manager opened preview
   if (showPublicIntake) {
@@ -2588,14 +2649,22 @@ export default function App() {
           initialFilter={intakeModalFilter}
           onClose={() => setIsIntakeModalOpen(false)}
           onUpdateStatus={async (id, status, notes) => {
-            await updateIntakeRequestStatusInDb(id, status, notes);
             setIntakeRequests(prev => prev.map(r => r.id === id ? { ...r, status, ...(notes !== undefined ? { internalNotes: notes } : {}) } : r));
-            showToast('סטטוס בקשת הקליטה עודכן');
+            showToast(status === 'abandoned' ? 'השאלון הועבר לארכיון בהצלחה 📦' : 'סטטוס בקשת הקליטה עודכן');
+            try {
+              await updateIntakeRequestStatusInDb(id, status, notes);
+            } catch (err) {
+              console.error('Failed to update intake status in DB:', err);
+            }
           }}
           onSaveRequest={async (updatedReq) => {
-            await saveIntakeRequestToDb(updatedReq);
             setIntakeRequests(prev => prev.map(r => r.id === updatedReq.id ? updatedReq : r));
-            showToast('פרטי בקשת הקליטה עודכנו ונשמרו! ✨');
+            showToast(updatedReq.status === 'abandoned' ? 'השאלון הועבר לארכיון בהצלחה 📦' : 'פרטי בקשת הקליטה עודכנו ונשמרו! ✨');
+            try {
+              await saveIntakeRequestToDb(updatedReq);
+            } catch (err) {
+              console.error('Failed to save intake request in DB:', err);
+            }
           }}
           onApproveAndBook={async (req) => {
             const daysCount = Math.max(1, calculateDaysCount(req.startDate, req.endDate));
@@ -2667,6 +2736,9 @@ export default function App() {
                 stayStatus: 'booked',
                 secondDog: secondDogData,
                 additionalDogs: req.additionalDogs,
+                isTrainingAgreementSigned: req.isTrainingAgreementSigned,
+                trainingAgreementSignedAt: req.trainingAgreementSignedAt,
+                trainingAgreement: req.trainingAgreement,
                 daycarePassCode: daycarePassCode || matchedPass?.passCode,
                 daycarePassId: matchedPass?.id
               } as any

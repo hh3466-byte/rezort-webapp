@@ -35,10 +35,10 @@ import {
   CreditCard,
   MapPin
 } from 'lucide-react';
-import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import confetti from 'canvas-confetti';
-import { Booking, ResortSettings, ServiceType, PaymentMethod, PaymentStatus, StayStatus, AgentActionProposal, IntakeRequest } from '../types';
+import { Booking, ResortSettings, ServiceType, PaymentMethod, PaymentStatus, StayStatus, AgentActionProposal, IntakeRequest, TrainingAgreementData } from '../types';
 import { verifyGrowPayment, fetchCustomerVerifiedGrowPayments, GrowVerificationResult } from '../services/growVerificationGatekeeper';
+import { TrainingAgreementModal } from './TrainingAgreementModal';
 import { 
   getTodayStr, 
   addDays, 
@@ -203,6 +203,17 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   });
   const [agreedToTerms, setAgreedToTerms] = useState(true);
   const [signatureDataUrl, setSignatureDataUrl] = useState<string>(initialData?.signatureDataUrl || '');
+  const [isTrainingAgreementSigned, setIsTrainingAgreementSigned] = useState<boolean>(() => {
+    return Boolean(
+      initialData?.isTrainingAgreementSigned || 
+      (initialData as any)?.trainingAgreement?.ownerSignatureDataUrl ||
+      initialData?.signatureDataUrl
+    );
+  });
+  const [trainingAgreementData, setTrainingAgreementData] = useState<TrainingAgreementData | undefined>(() => {
+    return (initialData as any)?.trainingAgreement;
+  });
+  const [isTrainingAgreementModalOpen, setIsTrainingAgreementModalOpen] = useState(false);
   const [savedBookingResult, setSavedBookingResult] = useState<Booking | null>(null);
   const [growVerification, setGrowVerification] = useState<GrowVerificationResult | null>(null);
   const [manualOverrideConfirmed, setManualOverrideConfirmed] = useState(false);
@@ -558,6 +569,12 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
         consolidatePayment: true
       });
     }
+    if (initialData.isTrainingAgreementSigned !== undefined) {
+      setIsTrainingAgreementSigned(initialData.isTrainingAgreementSigned);
+    }
+    if ((initialData as any).trainingAgreement) {
+      setTrainingAgreementData((initialData as any).trainingAgreement);
+    }
   }, [initialData, settings]);
 
   // Signature canvas setup
@@ -636,13 +653,15 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     // Placement is optional - can be assigned later
     setPlacementError('');
 
-    // Layer 1 Safeguard: Prevent unverified digital payments
-    if (depositAmount > 0 && !isFreeStay && paymentMethod !== 'cash') {
-      if (growVerification && !growVerification.isVerified && !manualOverrideConfirmed) {
-        alert('🛑 לא ניתן לרשום תשלום דיגיטלי (ביט/אשראי/העברה) שלא אומת מול Grow!\n\nלשמירה, יש לבחור "טרם שולם" (ולשלוח ללקוח קישור לתשלום ב-Grow), או לסמן "אישור חריג" אם קיבלת את הכסף ישירות בביט הפרטי.');
-        return;
-      }
-    }
+    // Training Agreement Hard Gate: "אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם"
+    const isTraining = serviceType === 'training' || serviceType === 'day_training';
+    const isAgreementSigned = Boolean(
+      isTrainingAgreementSigned || 
+      trainingAgreementData?.ownerSignatureDataUrl ||
+      initialData?.isTrainingAgreementSigned ||
+      (initialData as any)?.trainingAgreement?.ownerSignatureDataUrl ||
+      signatureDataUrl
+    );
 
     const finalPaymentStatus: PaymentStatus = isFreeStay 
       ? 'fully_paid' 
@@ -651,6 +670,20 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
           : depositAmount > 0 
           ? 'deposit_paid' 
           : 'unpaid');
+
+    if (isTraining && !isAgreementSigned && (depositAmount > 0 || finalPaymentStatus !== 'unpaid') && !isFreeStay) {
+      alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.\n\nחובה להחתים תחילה את הלקוח על הסכם האילוף הרשמי לפני קבלת או רישום תשלום/מקדמה.');
+      setIsTrainingAgreementModalOpen(true);
+      return;
+    }
+
+    // Layer 1 Safeguard: Prevent unverified digital payments
+    if (depositAmount > 0 && !isFreeStay && paymentMethod !== 'cash') {
+      if (growVerification && !growVerification.isVerified && !manualOverrideConfirmed) {
+        alert('🛑 לא ניתן לרשום תשלום דיגיטלי (ביט/אשראי/העברה) שלא אומת מול Grow!\n\nלשמירה, יש לבחור "טרם שולם" (ולשלוח ללקוח קישור לתשלום ב-Grow), או לסמן "אישור חריג" אם קיבלת את הכסף ישירות בביט הפרטי.');
+        return;
+      }
+    }
 
     const selectedExtras = extraServices
       .filter(s => s.selected)
@@ -709,6 +742,9 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       linkedDogName: isFreeStay && freeStayReason === 'second_dog' ? linkedMainDogName.trim() : undefined,
       extraServices: selectedExtras,
       signatureDataUrl,
+      isTrainingAgreementSigned: isTraining ? isAgreementSigned : initialData?.isTrainingAgreementSigned,
+      trainingAgreementSignedAt: isAgreementSigned ? (initialData?.trainingAgreementSignedAt || new Date().toISOString()) : undefined,
+      trainingAgreement: trainingAgreementData || (initialData as any)?.trainingAgreement,
       pricingMode,
       dailyRate: isFreeStay ? 0 : dailyRate,
       daycarePassCode: initialData?.daycarePassCode,
@@ -753,6 +789,9 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
         linkedDogName: dogName.trim(),
         extraServices: [],
         signatureDataUrl,
+        isTrainingAgreementSigned: isTraining ? isAgreementSigned : initialData?.isTrainingAgreementSigned,
+        trainingAgreementSignedAt: isAgreementSigned ? (initialData?.trainingAgreementSignedAt || new Date().toISOString()) : undefined,
+        trainingAgreement: trainingAgreementData || (initialData as any)?.trainingAgreement,
         pricingMode,
         dailyRate: secondDog.consolidatePayment ? 0 : (isFreeStay ? 0 : dailyRate),
         createdAt: new Date().toISOString(),
@@ -3183,7 +3222,14 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setDepositAmount(totalPrice)}
+                    onClick={() => {
+                      if ((serviceType === 'training' || serviceType === 'day_training') && !isTrainingAgreementSigned) {
+                        alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.\n\nחובה להחתים תחילה את הלקוח על הסכם האילוף.');
+                        setIsTrainingAgreementModalOpen(true);
+                        return;
+                      }
+                      setDepositAmount(totalPrice);
+                    }}
                     className={`p-2 text-center rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                       depositAmount >= totalPrice && totalPrice > 0
                         ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
@@ -3195,7 +3241,14 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => setDepositAmount(depositAmount > 0 ? depositAmount : 0)}
+                    onClick={() => {
+                      if ((serviceType === 'training' || serviceType === 'day_training') && !isTrainingAgreementSigned) {
+                        alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.\n\nחובה להחתים תחילה את הלקוח על הסכם האילוף.');
+                        setIsTrainingAgreementModalOpen(true);
+                        return;
+                      }
+                      setDepositAmount(depositAmount > 0 ? depositAmount : 0);
+                    }}
                     className={`p-2 text-center rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                       depositAmount > 0 && depositAmount < totalPrice
                         ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
@@ -3218,6 +3271,50 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   </button>
                 </div>
 
+                {/* Training Agreement Status & Hard Payment Gate */}
+                {(serviceType === 'training' || serviceType === 'day_training') && (
+                  <div className="pt-1">
+                    {isTrainingAgreementSigned ? (
+                      <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex items-center justify-between text-xs">
+                        <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          <span>הסכם אילוף חתום ומאושר ✓ (מורשה לגביית תשלום)</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsTrainingAgreementModalOpen(true)}
+                          className="text-emerald-800 font-bold hover:underline cursor-pointer"
+                        >
+                          הצג הסכם / הדפס 📜
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="bg-rose-50 border-2 border-rose-300 rounded-xl p-3 space-y-2 text-xs">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                          <div>
+                            <strong className="text-rose-950 font-black block">
+                              🛑 חסימת תשלום – הסכם אילוף טרם נחתם!
+                            </strong>
+                            <span className="text-rose-800 leading-normal text-[11px] block mt-0.5">
+                              נוהל ריזורט מחייב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם. לא ניתן לקבל או לרשום מקדמה/תשלום ללא חתימה.
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 pt-1 border-t border-rose-200">
+                          <button
+                            type="button"
+                            onClick={() => setIsTrainingAgreementModalOpen(true)}
+                            className="bg-emerald-700 hover:bg-emerald-800 text-white font-black px-3.5 py-1.5 rounded-lg text-xs flex items-center gap-1 shadow-2xs cursor-pointer"
+                          >
+                            <span>✍️ פתח הסכם לחתימה כעת</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
                     <span className="text-[11px] text-slate-500 block mb-1">סכום ששולם בפועל כעת (₪)</span>
@@ -3226,7 +3323,15 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       min="0"
                       max={totalPrice}
                       value={depositAmount === 0 ? '' : depositAmount}
-                      onChange={(e) => setDepositAmount(e.target.value === '' ? 0 : Number(e.target.value) || 0)}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : Number(e.target.value) || 0;
+                        if (val > 0 && (serviceType === 'training' || serviceType === 'day_training') && !isTrainingAgreementSigned) {
+                          alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.');
+                          setIsTrainingAgreementModalOpen(true);
+                          return;
+                        }
+                        setDepositAmount(val);
+                      }}
                       placeholder="0"
                       className="w-full bg-slate-50 text-emerald-700 font-extrabold text-sm p-2.5 rounded-xl border border-slate-200 focus:outline-none"
                     />
@@ -3375,18 +3480,25 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
               {/* Actions */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
                 {onOpenSendPaymentLink && savedBookingResult.paymentStatus !== 'fully_paid' && savedBookingResult.totalPrice > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onOpenSendPaymentLink(savedBookingResult);
-                    }}
-                    className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all"
-                    title="פתח חלון שליחת קישור תשלום אוטונומי בוואטסאפ ללקוח"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>⚡ שלח קישור לתשלום (Grow/ביט)</span>
-                  </button>
+                  (savedBookingResult.serviceType === 'training' || savedBookingResult.serviceType === 'day_training') && !savedBookingResult.isTrainingAgreementSigned ? (
+                    <div className="w-full sm:w-auto px-4 py-2 bg-rose-50 border border-rose-300 rounded-xl text-rose-900 text-xs font-bold flex items-center justify-center gap-1.5 shadow-2xs">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>🛑 חסימת תשלום: הסכם אילוף טרם נחתם!</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenSendPaymentLink(savedBookingResult);
+                      }}
+                      className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition-all"
+                      title="פתח חלון שליחת קישור תשלום אוטונומי בוואטסאפ ללקוח"
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      <span>⚡ שלח קישור לתשלום (Grow/ביט)</span>
+                    </button>
+                  )
                 )}
 
                 <a
@@ -3414,6 +3526,37 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
           )}
 
         </div>
+
+        {/* Training Agreement Modal */}
+        {isTrainingAgreementModalOpen && (
+          <TrainingAgreementModal
+            isOpen={true}
+            onClose={() => setIsTrainingAgreementModalOpen(false)}
+            booking={initialData?.id ? (initialData as Booking) : {
+              id: `temp-${Date.now()}`,
+              dogName: dogName || 'כלב',
+              dogBreed: dogBreed || '',
+              ownerName: ownerName || '',
+              ownerPhone: ownerPhone || '',
+              ownerEmail: ownerEmail || '',
+              ownerAddress: ownerAddress || '',
+              startDate,
+              endDate,
+              totalPrice,
+              depositAmount,
+              serviceType,
+              stayStatus: 'booked',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }}
+            settings={settings}
+            onAgreementSigned={(agrData) => {
+              setIsTrainingAgreementSigned(true);
+              setTrainingAgreementData(agrData);
+              setIsTrainingAgreementModalOpen(false);
+            }}
+          />
+        )}
       </div>
     </div>
   );
