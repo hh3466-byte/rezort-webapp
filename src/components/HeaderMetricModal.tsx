@@ -21,7 +21,8 @@ import {
   BarChart3,
   Download,
   TrendingUp,
-  Home
+  Home,
+  RefreshCw
 } from 'lucide-react';
 import { 
   getTodayStr, 
@@ -823,31 +824,13 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                 </button>
               </div>
 
-              {/* Action Buttons: WhatsApp Sync & Ingest Receipt */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSyncHilaReceipts(false)}
-                  disabled={isSyncingHilaChat}
-                  className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-900 border border-emerald-300 font-black text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
-                  title="משיכת קבלות והודעות שנשלחו מהילה (052-690-8943) לוואטסאפ של הריזורט"
-                >
-                  <span className={isSyncingHilaChat ? 'animate-spin' : ''}>🔄</span>
-                  <span>{isSyncingHilaChat ? 'מושך קבלות מהוואטסאפ...' : 'משוך קבלות מוואטסאפ הילה'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedReceiptForEdit(undefined);
-                    setIsTrainerReceiptModalOpen(true);
-                  }}
-                  className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
-                >
-                  <span>➕</span>
-                  <span>קליטת קבלה ידנית</span>
-                </button>
-              </div>
+              {/* Background WhatsApp sync indicator (shows only when active) */}
+              {isSyncingHilaChat && (
+                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-3 py-1.5 rounded-xl shadow-2xs animate-pulse">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-700" />
+                  <span>מסנכרן מהוואטסאפ...</span>
+                </div>
+              )}
             </div>
 
             {trainerActionFeedback && (
@@ -1624,13 +1607,13 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedReceiptForEdit(undefined);
-                      setIsTrainerReceiptModalOpen(true);
-                    }}
-                    className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    onClick={() => handleSyncHilaReceipts(false)}
+                    disabled={isSyncingHilaChat}
+                    className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                    title="סנכרון יזום של קבלות ואישורי ביט מוואטסאפ הילה"
                   >
-                    <span>➕ קליטת קבלה</span>
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingHilaChat ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingHilaChat ? 'מסנכרן...' : 'רענון מוואטסאפ'}</span>
                   </button>
                 </div>
               </div>
