@@ -268,10 +268,6 @@ export const TrainingAgreementModal: React.FC<TrainingAgreementModalProps> = ({
       setValidationError('אנא מלא את שם הכלב');
       return false;
     }
-    if (!dogChipNumber.trim()) {
-      setValidationError('אנא מלא את מספר השבב של הכלב (שדה חובה לאילוף ושהייה בריזורט)');
-      return false;
-    }
     if (!vetNameAndPhone.trim()) {
       setValidationError('אנא ציין שם וטלפון של הווטרינר המטפל למקרה חירום');
       return false;
@@ -748,20 +744,6 @@ export const TrainingAgreementModal: React.FC<TrainingAgreementModalProps> = ({
                       onChange={(e) => setDogWeightKg(e.target.value)}
                       placeholder="למשל: 18 ק״ג"
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 font-medium text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-
-                  <div className="p-2.5 flex items-center justify-between gap-2 bg-amber-50/50">
-                    <span className="text-amber-900 font-black shrink-0 w-24 flex items-center gap-1">
-                      <span>מספר שבב *</span>
-                      {!dogChipNumber && <span className="text-[10px] text-red-600 font-bold">(נדרש)</span>}
-                    </span>
-                    <input
-                      type="text"
-                      value={dogChipNumber}
-                      onChange={(e) => setDogChipNumber(e.target.value)}
-                      placeholder="15 ספרות שבב"
-                      className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1 font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30 font-mono"
                     />
                   </div>
 
