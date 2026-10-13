@@ -743,6 +743,7 @@ export function getMonthlyRevenueBreakdown(
     const ownerName = (b.ownerName || d.ownerName || '').toLowerCase();
     const phone = ((b.ownerPhone || d.ownerPhone || '').replace(/\D/g, '')).slice(-7);
     const notes = (((b.notes || d.notes || '') + ' ' + (d.internalNotes || '')).trim()).toLowerCase();
+    const payMethod = ((b.paymentMethod || d.paymentMethod || '') as string).toLowerCase();
 
     // Direct bank transfers (Ronen Malamud, Ayelet Friedensohn) are handled via VERIFIED_DIRECT_TRANSFERS
     const isDirectBank = (ownerName.includes('רונן') && ownerName.includes('מלמוד')) || 
