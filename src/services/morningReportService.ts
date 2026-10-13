@@ -292,7 +292,9 @@ export function formatTomorrowOverviewReport(
       const owner = pi.ownerName || 'בעלים';
       const rawPhone = pi.ownerPhone || '';
       const phone = formatPhoneFormatted(rawPhone);
-      const dates = `${formatDateIL(pi.startDate)} עד ${formatDateIL(pi.endDate)}`;
+      const dates = (pi.serviceType === 'daycare' || pi.startDate === pi.endDate)
+        ? formatDateIL(pi.startDate)
+        : `${formatDateIL(pi.startDate)} עד ${formatDateIL(pi.endDate)}`;
       const notes = (pi.internalNotes || '').trim();
       let statusBadge = '🔴 לבדיקה';
       if ((pi.status as string) === 'payment_requested') statusBadge = '💳 נשלח קישור לתשלום';
@@ -322,7 +324,9 @@ export function formatTomorrowOverviewReport(
       const owner = ai.ownerName || 'בעלים';
       const rawPhone = ai.ownerPhone || '';
       const phone = formatPhoneFormatted(rawPhone);
-      const dates = `${formatDateIL(ai.startDate)} עד ${formatDateIL(ai.endDate)}`;
+      const dates = (ai.serviceType === 'daycare' || ai.startDate === ai.endDate)
+        ? formatDateIL(ai.startDate)
+        : `${formatDateIL(ai.startDate)} עד ${formatDateIL(ai.endDate)}`;
       return `${idx + 1}. ⚠️ *${dog}* (${owner} - 📞 ${phone}) | ${dates}`;
     }).join('\n');
     actionBlocks.push(`⚠️ *שאלונים שאושרו אך טרם שוריינו ביומן (${approvedIntakesWithoutBooking.length}):*\n${list}`);

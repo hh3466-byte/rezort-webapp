@@ -223,6 +223,9 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   // Update default rate & dates when serviceType changes
   const handleServiceTypeChange = (newType: ServiceType) => {
     setServiceType(newType);
+    if (newType === 'daycare') {
+      setEndDate(startDate);
+    }
     if (isFreeStay) {
       setTotalPrice(0);
       setDailyRate(0);
@@ -1067,90 +1070,113 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                 </label>
               </div>
 
-              <div>
-                <label className="text-xs text-slate-700 font-bold block mb-1">
-                  תאריך כניסה
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={startDate}
-                  onChange={(e) => {
-                    const newStart = e.target.value;
-                    setStartDate(newStart);
-                    if (newStart > endDate) {
-                      setEndDate(addDays(newStart, 1));
-                    }
+              {serviceType === 'daycare' ? (
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-slate-700 font-bold block mb-1">
+                    תאריך השהות היומית 📅
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={startDate}
+                    onChange={(e) => {
+                      const newDate = e.target.value;
+                      setStartDate(newDate);
+                      setEndDate(newDate);
+                    }}
+                    className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono font-semibold"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-xs text-slate-700 font-bold block mb-1">
+                      תאריך כניסה
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={startDate}
+                      onChange={(e) => {
+                        const newStart = e.target.value;
+                        setStartDate(newStart);
+                        if (newStart > endDate) {
+                          setEndDate(addDays(newStart, 1));
+                        }
+                      }}
+                      className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono font-semibold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-700 font-bold block mb-1">
+                      תאריך יציאה ({daysCount} {daysCount === 1 ? 'יום' : 'ימים'})
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono font-semibold"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Quick Duration Buttons (Hidden for Daycare) */}
+            {serviceType !== 'daycare' && (
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <span className="text-[11px] font-bold text-slate-500 ml-1">משך מהיר:</span>
+                <button
+                  type="button"
+                  onClick={() => setEndDate(addDays(startDate, 1))}
+                  className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                >
+                  לילה 1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEndDate(addDays(startDate, 3))}
+                  className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                >
+                  3 לילות
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEndDate(addDays(startDate, 7))}
+                  className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                >
+                  שבוע (7 לילות)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEndDate(addDays(startDate, 14))}
+                  className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                >
+                  שבועיים (14 לילות)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEndDate(addDays(startDate, 365));
+                    setIsFreeStay(true);
+                    setDailyRate(0);
+                    setTotalPrice(0);
+                    setDepositAmount(0);
+                    setNotes(prev => prev ? (prev.includes('ללא הגבלת זמן') ? prev : `${prev} | שהות פתוחה בחינם ללא הגבלת זמן`) : 'שהות פתוחה בחינם ללא הגבלת זמן');
                   }}
-                  className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono font-semibold"
-                />
+                  className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer shadow-2xs border ${
+                    isFreeStay
+                      ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30'
+                      : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-950'
+                  }`}
+                  title="קביעת שהות פתוחה ללא הגבלת זמן ובחינם (למשל עבור לונה)"
+                >
+                  🎁 ♾️ שהות פתוחה ללא הגבלת זמן (חינם)
+                </button>
               </div>
-
-              <div>
-                <label className="text-xs text-slate-700 font-bold block mb-1">
-                  תאריך יציאה ({daysCount} {daysCount === 1 ? 'יום' : 'ימים'})
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-slate-50 text-slate-900 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none font-mono font-semibold"
-                />
-              </div>
-            </div>
-
-            {/* Quick Duration Buttons */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              <span className="text-[11px] font-bold text-slate-500 ml-1">משך מהיר:</span>
-              <button
-                type="button"
-                onClick={() => setEndDate(addDays(startDate, 1))}
-                className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
-              >
-                לילה 1
-              </button>
-              <button
-                type="button"
-                onClick={() => setEndDate(addDays(startDate, 3))}
-                className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
-              >
-                3 לילות
-              </button>
-              <button
-                type="button"
-                onClick={() => setEndDate(addDays(startDate, 7))}
-                className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
-              >
-                שבוע (7 לילות)
-              </button>
-              <button
-                type="button"
-                onClick={() => setEndDate(addDays(startDate, 14))}
-                className="px-2.5 py-1 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
-              >
-                שבועיים (14 לילות)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEndDate(addDays(startDate, 365));
-                  setIsFreeStay(true);
-                  setDailyRate(0);
-                  setTotalPrice(0);
-                  setDepositAmount(0);
-                  setNotes(prev => prev ? (prev.includes('ללא הגבלת זמן') ? prev : `${prev} | שהות פתוחה בחינם ללא הגבלת זמן`) : 'שהות פתוחה בחינם ללא הגבלת זמן');
-                }}
-                className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer shadow-2xs border ${
-                  isFreeStay
-                    ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30'
-                    : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-950'
-                }`}
-                title="קביעת שהות פתוחה ללא הגבלת זמן ובחינם (למשל עבור לונה)"
-              >
-                🎁 ♾️ שהות פתוחה ללא הגבלת זמן (חינם)
-              </button>
-            </div>
+            )}
 
             {/* Real-time Stay Extension Alert Banner */}
             {isExtended && extraDays > 0 && (

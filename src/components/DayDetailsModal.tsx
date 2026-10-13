@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import { Booking, ResortSettings } from '../types';
-import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, getTodayStr, isTrainingBooking, getBookingPairInfo } from '../utils/dateUtils';
+import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, formatStayDatesDisplay, getTodayStr, isTrainingBooking, getBookingPairInfo } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage, cleanPhoneNumber } from '../utils/whatsappUtils';
 import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
@@ -552,7 +552,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             </span>
             <span className="flex items-center gap-1 font-medium text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md">
               <Calendar className="w-3.5 h-3.5 text-amber-600" />
-              <span>{formatDateIL(booking.startDate)} עד {formatDateIL(booking.endDate)}</span>
+              <span>{formatStayDatesDisplay(booking.startDate, booking.endDate, booking.serviceType)}</span>
             </span>
             {booking.ownerAddress && (
               <span className="flex items-center gap-1.5 font-bold text-slate-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md shadow-2xs">

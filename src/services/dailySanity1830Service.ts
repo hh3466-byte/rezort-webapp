@@ -429,7 +429,10 @@ export function run1830SanityAudit(
 
     // Check zero deposit for upcoming paid stay
     if (price > 0 && deposit === 0 && !isFree && b.endDate >= todayStr) {
-      const line = `🔴 *${b.dogName}* (${b.ownerName} - ${b.ownerPhone || 'ללא טלפון'}) | ${formatDateIL(b.startDate)} עד ${formatDateIL(b.endDate)} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`;
+      const datesStr = (b.serviceType === 'daycare' || b.startDate === b.endDate)
+        ? formatDateIL(b.startDate)
+        : `${formatDateIL(b.startDate)} עד ${formatDateIL(b.endDate)}`;
+      const line = `🔴 *${b.dogName}* (${b.ownerName} - ${b.ownerPhone || 'ללא טלפון'}) | ${datesStr} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`;
       if (!redLights.zeroDepositHolding.includes(line)) {
         redLights.zeroDepositHolding.push(line);
       }
@@ -521,7 +524,10 @@ export function run1830SanityAudit(
     const deposit = Number(b.depositAmount) || 0;
     const isFree = b.isFreeStay;
     if (price > 0 && deposit === 0 && !isFree) {
-      const line = `🔴 *${b.dogName}* (${b.ownerName} - ${b.ownerPhone || 'ללא טלפון'}) | ${formatDateIL(b.startDate)} עד ${formatDateIL(b.endDate)} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`;
+      const datesStr = (b.serviceType === 'daycare' || b.startDate === b.endDate)
+        ? formatDateIL(b.startDate)
+        : `${formatDateIL(b.startDate)} עד ${formatDateIL(b.endDate)}`;
+      const line = `🔴 *${b.dogName}* (${b.ownerName} - ${b.ownerPhone || 'ללא טלפון'}) | ${datesStr} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`;
       if (!redLights.zeroDepositHolding.includes(line)) {
         redLights.zeroDepositHolding.push(line);
       }

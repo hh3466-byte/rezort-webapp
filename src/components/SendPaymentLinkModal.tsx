@@ -15,7 +15,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
-import { formatDateIL } from '../utils/dateUtils';
+import { formatDateIL, formatStayDatesDisplay } from '../utils/dateUtils';
 import { cleanPhoneNumber, getFirstName, getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from '../services/notificationService';
 import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
@@ -75,7 +75,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
     : (cleanPhone.startsWith('5') && cleanPhone.length === 9 ? '972' + cleanPhone : cleanPhone);
   const firstName = getFirstName(booking.ownerName);
   const serviceHebrew = getServiceTypeHebrew(booking.serviceType);
-  const stayDates = `${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}`;
+  const stayDates = formatStayDatesDisplay(booking.startDate, booking.endDate, booking.serviceType);
 
   // Auto-detect initial payment reason
   const isCheckedOutOrPast = booking.stayStatus === 'checked_out' || (booking.endDate && new Date(booking.endDate).getTime() < new Date().setHours(0,0,0,0));
@@ -124,8 +124,11 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 שמוליק וכל צוות הריזורט לכלב 🐾`;
     }
 
+    const isDaily = booking.serviceType === 'daycare' || booking.startDate === booking.endDate;
+    const datesIntro = isDaily ? 'לשהות יומית:' : 'לתאריכים:';
+
     return `היי ${firstName}! 🐾
-שמחים לעדכן שהמקום עבור *${booking.dogName}* (${serviceHebrew}) שוריין בריזורט לכלב לתאריכים:
+שמחים לעדכן שהמקום עבור *${booking.dogName}* (${serviceHebrew}) שוריין בריזורט לכלב ${datesIntro}
 📅 ${stayDates}.${amountSection}
 להשלמת השריון / הסדרת התשלום, יש ללחוץ על הקישור המאובטח${amountHint}:
 👉 ${formattedLink}

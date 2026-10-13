@@ -2056,6 +2056,18 @@ export default function App() {
 
             {/* Left Side in RTL (משמאל): Primary CTA (+ הזמנה חדשה) + System Utilities */}
             <div className="flex items-center justify-end gap-2 shrink-0">
+              {/* Daycare Passes Button (כרטיסייה ליומיות) */}
+              <button
+                type="button"
+                onClick={() => setIsDaycarePassModalOpen(true)}
+                id="btn-daycare-passes-main"
+                className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-950 font-black px-3 sm:px-3.5 py-2 rounded-xl text-xs sm:text-sm border border-emerald-300 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                title="כרטיסייה ליומיות - ניהול כרטיסיות, ניקובים והנפקת כרטיסיות חדשות (תוקף לחצי שנה)"
+              >
+                <span className="text-base">🎟️</span>
+                <span>כרטיסייה ליומיות</span>
+              </button>
+
               {/* Primary CTA: + הזמנה חדשה */}
               <button
                 onClick={() => setBookingWizardOpen({ isOpen: true, initialData: null })}
@@ -2184,7 +2196,7 @@ export default function App() {
                 </span>
               </button>
 
-              {/* Daycare Passes Button (כרטיסיות פעילות יומית) */}
+              {/* Daycare Passes Button (כרטיסייה ליומיות) */}
               <button
                 type="button"
                 onClick={() => setIsDaycarePassModalOpen(true)}
@@ -2193,7 +2205,7 @@ export default function App() {
                 title="ניהול כרטיסיות שהייה ואילוף ביומיות (תוקף לחצי שנה)"
               >
                 <span className="text-base">🎟️</span>
-                <span>כרטיסיות פעילות</span>
+                <span>כרטיסייה ליומיות</span>
                 <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.2 rounded-full">
                   6 חודשים
                 </span>
@@ -3030,6 +3042,7 @@ export default function App() {
         onInitiateRelease={handleInitiateRelease}
         onOpenDailyDogUpdates={() => setIsDailyDogUpdatesOpen(true)}
         onOpenTomorrowOverview={() => setIsTomorrowOverviewModalOpen(true)}
+        onOpenDaycarePassModal={() => setIsDaycarePassModalOpen(true)}
         onOpenLinkDevice={() => setIsLinkDeviceModalOpen(true)}
         greenApiStatus={greenApiStatus}
       />

@@ -48,6 +48,22 @@ export function formatDateDisplay(dateStr: string): string {
   return formatDateIL(dateStr);
 }
 
+/**
+ * Formats a stay's date range for display.
+ * If serviceType is daycare or startDate equals endDate:
+ * displays a single date ("יום שלישי, 13.10.26 (שהות יומית)") without redundant "from date to date".
+ */
+export function formatStayDatesDisplay(startDate: string, endDate?: string, serviceType?: string): string {
+  if (!startDate) return '';
+  const isDailyStay = serviceType === 'daycare' || serviceType === 'day_training' || !endDate || startDate === endDate;
+  if (isDailyStay) {
+    const dayName = getDayNameHebrew(startDate);
+    const dayPrefix = dayName ? `יום ${dayName}, ` : '';
+    return `${dayPrefix}${formatDateIL(startDate)} (שהות יומית)`;
+  }
+  return `${formatDateIL(startDate)} עד ${formatDateIL(endDate)}`;
+}
+
 export function getDayNameHebrew(dateStr: string): string {
   if (!dateStr) return '';
   const d = new Date(dateStr + 'T00:00:00');

@@ -15,7 +15,7 @@ import {
   Wallet
 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
-import { formatDateIL } from '../utils/dateUtils';
+import { formatDateIL, formatStayDatesDisplay } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage } from '../utils/whatsappUtils';
 
 interface CheckinDebtAlertModalProps {
@@ -141,7 +141,7 @@ export const CheckinDebtAlertModal: React.FC<CheckinDebtAlertModalProps> = ({
               </span>
               <span className="flex items-center gap-1 text-slate-600">
                 <Calendar className="w-3.5 h-3.5 text-amber-600" />
-                {formatDateIL(booking.startDate)} עד {formatDateIL(booking.endDate)}
+                {formatStayDatesDisplay(booking.startDate, booking.endDate, booking.serviceType)}
               </span>
             </div>
           </div>

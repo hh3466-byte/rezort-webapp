@@ -28,6 +28,7 @@ import {
   getTodayStr, 
   calculateDaysCount, 
   formatDateIL, 
+  formatStayDatesDisplay,
   getBookingsForDate, 
   getBookingPaymentsInMonth, 
   getMonthlyRevenueBreakdown, 
@@ -1929,7 +1930,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                             אילוף ({daysCount} ימים)
                           </span>
                           <span className="text-slate-600 font-mono">
-                            {formatDateIL(b.startDate)} עד {formatDateIL(b.endDate)}
+                            {formatStayDatesDisplay(b.startDate, b.endDate, b.serviceType)}
                           </span>
                         </div>
 
@@ -2248,8 +2249,10 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                       </span>
                       <span className="flex items-center gap-1 text-slate-800 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
                         <Calendar className="w-3.5 h-3.5 text-amber-600" />
-                        <span>{formatDateIL(b.startDate)} עד {formatDateIL(b.endDate)}</span>
-                        <span className="text-slate-400 font-semibold">({daysCount} ימים)</span>
+                        <span>{formatStayDatesDisplay(b.startDate, b.endDate, b.serviceType)}</span>
+                        {b.serviceType !== 'daycare' && b.startDate !== b.endDate && (
+                          <span className="text-slate-400 font-semibold">({daysCount} ימים)</span>
+                        )}
                       </span>
                     </div>
 

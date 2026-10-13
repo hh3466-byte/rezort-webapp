@@ -1,5 +1,5 @@
 import { Booking, ResortSettings } from '../types';
-import { formatDateIL } from './dateUtils';
+import { formatDateIL, formatStayDatesDisplay } from './dateUtils';
 
 export function cleanPhoneNumber(phone: string): string {
   if (!phone) return '';
@@ -132,7 +132,7 @@ export function formatIntakeDirectWhatsAppMessage(
 export function generatePaymentReminderMessage(booking: Booking, settings: ResortSettings): string {
   const remainingBalance = Math.max(0, booking.totalPrice - booking.depositAmount);
   const serviceHebrew = getServiceTypeHebrew(booking.serviceType);
-  const datesText = `${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}`;
+  const datesText = formatStayDatesDisplay(booking.startDate, booking.endDate, booking.serviceType);
   const firstName = getFirstName(booking.ownerName);
 
   let msg = `שלום ${firstName}, כאן צוות הריזורט לכלב 🐾\n\n`;
@@ -163,7 +163,7 @@ export function generatePaymentReminderMessage(booking: Booking, settings: Resor
  */
 export function generateBookingConfirmationMessage(booking: Booking, settings: ResortSettings): string {
   const serviceHebrew = getServiceTypeHebrew(booking.serviceType);
-  const datesText = `${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}`;
+  const datesText = formatStayDatesDisplay(booking.startDate, booking.endDate, booking.serviceType);
   const remainingBalance = Math.max(0, booking.totalPrice - booking.depositAmount);
   const firstName = getFirstName(booking.ownerName);
 

@@ -33,6 +33,7 @@ interface MobileTodayDashboardModalProps {
   onInitiateRelease?: (booking: Booking) => void;
   onOpenDailyDogUpdates?: () => void;
   onOpenTomorrowOverview?: () => void;
+  onOpenDaycarePassModal?: () => void;
   onOpenLinkDevice?: () => void;
   greenApiStatus?: string;
 }
@@ -47,6 +48,7 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
   onInitiateRelease,
   onOpenDailyDogUpdates,
   onOpenTomorrowOverview,
+  onOpenDaycarePassModal,
   onOpenLinkDevice,
   greenApiStatus,
 }) => {
@@ -140,6 +142,32 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
         {/* Scrollable Content Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
           
+          {/* Daycare Passes Quick Access Banner for Shmulik */}
+          {onOpenDaycarePassModal && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenDaycarePassModal();
+              }}
+              className="w-full bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100 hover:from-emerald-100 hover:to-teal-100 active:scale-98 border border-emerald-300/90 rounded-2xl p-3 shadow-2xs flex items-center justify-between gap-3 text-emerald-950 transition-all cursor-pointer text-right"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-lg shadow-2xs font-black shrink-0">
+                  🎟️
+                </div>
+                <div>
+                  <strong className="text-xs font-black block">כרטיסייה ליומיות (משפחתון)</strong>
+                  <span className="text-[11px] text-emerald-800 font-medium">ניהול ניקובים, יתרות והנפקת כרטיסיות</span>
+                </div>
+              </div>
+              <span className="bg-emerald-700 text-white font-black text-[11px] px-3 py-1.5 rounded-xl shrink-0 shadow-xs flex items-center gap-1">
+                <span>פתח כרטיסיות</span>
+                <span className="text-xs">👈</span>
+              </span>
+            </button>
+          )}
+
           {/* Disconnection Warning inside Mobile Today Dashboard */}
           {greenApiStatus === 'notAuthorized' && onOpenLinkDevice && (
             <div 
@@ -205,7 +233,7 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
                             <span>שעת הגעה: {arrivalTime}</span>
                           </span>
                           <span>•</span>
-                          <span>עד {formatDateIL(booking.endDate)}</span>
+                          <span>{booking.serviceType === 'daycare' || booking.startDate === booking.endDate ? 'שהות יומית (היום)' : `עד ${formatDateIL(booking.endDate)}`}</span>
                         </div>
                       </div>
 
@@ -441,6 +469,20 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
             >
               <span>📋</span>
               <span>מה קורה מחר (19:00)</span>
+            </button>
+          )}
+
+          {onOpenDaycarePassModal && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenDaycarePassModal();
+              }}
+              className="flex-1 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-950 font-black py-2.5 px-2 rounded-xl text-xs border border-emerald-300 shadow-2xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+            >
+              <span>🎟️</span>
+              <span>כרטיסייה ליומיות</span>
             </button>
           )}
         </div>

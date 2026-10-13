@@ -18,6 +18,8 @@ export function formatIntakeNotification(request: IntakeRequest): string {
 
   const datesLine = request.serviceType === 'training'
     ? `📅 *תאריך כניסה מבוקש לאילוף:* החל מ-${formatDateIL(request.startDate)} (משך יסוכם בשיחה)`
+    : (request.serviceType === 'daycare' || request.startDate === request.endDate)
+    ? `📅 *תאריך שהות יומית מבוקש:* ${formatDateIL(request.startDate)}`
     : `📅 *תאריכים:* מ-${formatDateIL(request.startDate)} עד ${formatDateIL(request.endDate)}`;
 
   const additionalDogsText = request.additionalDogs && request.additionalDogs.length > 0
@@ -58,7 +60,9 @@ export function formatBookingConfirmedNotification(booking: Booking): string {
 📞 *טלפון:* ${booking.ownerPhone}
 ${booking.ownerAddress ? `🏠 *כתובת מגורים:* ${booking.ownerAddress}\n` : ''}🐶 *כלב:* ${booking.dogName} (${booking.dogBreed || 'מעורב'})
 🏨 *שירות:* ${serviceName}
-📅 *תאריכים:* מ-${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}
+${(booking.serviceType === 'daycare' || booking.startDate === booking.endDate)
+  ? `📅 *תאריך שהות יומית:* ${formatDateIL(booking.startDate)}`
+  : `📅 *תאריכים:* מ-${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)}`}
 💰 *סה״כ לתשלום:* ₪${booking.totalPrice}
 💳 *סטטוס תשלום:* ${paidStatus}
 --------------------------------

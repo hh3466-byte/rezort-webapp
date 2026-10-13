@@ -28,6 +28,7 @@ import {
   getTodayStr, 
   getBookingsForDate, 
   formatDateIL, 
+  formatStayDatesDisplay,
   formatFullHebrewDate,
   addDays,
   getDailyBreakdown,
@@ -1629,7 +1630,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       {/* Footer: Date Range + Payment Status */}
                       <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                         <span className="text-slate-500 font-medium">
-                          {formatDateIL(booking.startDate)} עד {formatDateIL(booking.endDate)}
+                          {formatStayDatesDisplay(booking.startDate, booking.endDate, booking.serviceType)}
                         </span>
 
                         <span className={`px-2 py-0.5 rounded-md font-bold ${

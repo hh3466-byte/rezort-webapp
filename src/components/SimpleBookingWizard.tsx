@@ -46,6 +46,7 @@ import {
   checkRangeOccupancy, 
   formatDateIL, 
   formatDateDisplay, 
+  formatStayDatesDisplay,
   getDayNameHebrew, 
   getBookingsForDate 
 } from '../utils/dateUtils';
@@ -61,6 +62,7 @@ import { parseVoiceOrWhatsAppText } from '../services/agentService';
 import { TimeSchedulePicker } from './TimeSchedulePicker';
 import { normalizePlacementKey, getPlacementDisplayName } from '../utils/kennelUtils';
 import { IntakeAlertBanner } from './IntakeAlertBadges';
+import { loadStoredDaycarePasses } from '../services/dbService';
 
 interface SimpleBookingWizardProps {
   isOpen: boolean;
@@ -218,6 +220,21 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const [growVerification, setGrowVerification] = useState<GrowVerificationResult | null>(null);
   const [manualOverrideConfirmed, setManualOverrideConfirmed] = useState(false);
   const [availableGrowPayments, setAvailableGrowPayments] = useState<any[]>([]);
+  const [selectedDaycarePassCode, setSelectedDaycarePassCode] = useState<string | undefined>(initialData?.daycarePassCode);
+  const [selectedDaycarePassId, setSelectedDaycarePassId] = useState<string | undefined>(initialData?.daycarePassId);
+
+  // Check active daycare passes for this customer
+  const matchedCustomerDaycarePasses = React.useMemo(() => {
+    if (!ownerPhone) return [];
+    const cleanP = cleanPhoneNumber(ownerPhone);
+    const passes = loadStoredDaycarePasses();
+    return passes.filter(p => {
+      const isOwner = cleanPhoneNumber(p.ownerPhone) === cleanP || (cleanP.length >= 7 && cleanPhoneNumber(p.ownerPhone).endsWith(cleanP.slice(-7)));
+      const hasDays = (p.totalDays - p.usedDays) > 0;
+      const notExpired = p.status === 'active' && (!p.validUntil || p.validUntil >= todayStr);
+      return isOwner && hasDays && notExpired;
+    });
+  }, [ownerPhone, todayStr]);
 
   // Real-time Grow Verification Check
   useEffect(() => {
@@ -452,6 +469,9 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   // Update service type & rate default when service type changes
   const handleServiceTypeSelect = (type: ServiceType) => {
     setServiceType(type);
+    if (type === 'daycare') {
+      setEndDate(startDate);
+    }
     if (type === 'training') {
       setPricingMode('period');
       if (!totalPrice || totalPrice === 0) {
@@ -747,8 +767,8 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       trainingAgreement: trainingAgreementData || (initialData as any)?.trainingAgreement,
       pricingMode,
       dailyRate: isFreeStay ? 0 : dailyRate,
-      daycarePassCode: initialData?.daycarePassCode,
-      daycarePassId: initialData?.daycarePassId,
+      daycarePassCode: selectedDaycarePassCode || initialData?.daycarePassCode,
+      daycarePassId: selectedDaycarePassId || initialData?.daycarePassId,
       createdAt: initialData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -827,6 +847,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   // Click on calendar day to set dates
   const handleCalendarDayClick = (dateStr: string) => {
     if (dateStr < todayStr) return; // Ignore past dates
+    if (serviceType === 'daycare') {
+      setStartDate(dateStr);
+      setEndDate(dateStr);
+      return;
+    }
     if (!startDate || dateStr < startDate) {
       setStartDate(dateStr);
       if (endDate <= dateStr) {
@@ -1321,135 +1346,231 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-black text-indigo-950 flex items-center gap-1.5">
                     <CalendarIcon className="w-4 h-4 text-indigo-600" />
-                    <span>קביעת תאריכי השהות *</span>
+                    <span>{serviceType === 'daycare' ? 'קביעת יום השהות (יומיות) 📅' : 'קביעת תאריכי השהות *'}</span>
                   </label>
                   <span className="text-xs font-extrabold text-indigo-700 bg-white px-3 py-1 rounded-full border border-indigo-200 shadow-2xs">
                     {serviceType === 'boarding' 
                       ? `סה״כ ${daysCount} לילות (תעריף ₪${dailyRate} ללילה)`
                       : serviceType === 'training'
                       ? `סה״כ ${daysCount} ימי אילוף`
+                      : serviceType === 'daycare'
+                      ? `יום שהות אחד (תעריף ₪${dailyRate})`
                       : `סה״כ ${daysCount} ימי שהות (תעריף ₪${dailyRate} ליום)`}
                   </span>
                 </div>
 
                 {/* Date Inputs Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                      <span>תאריך כניסה 🏨</span>
-                      <span className="text-[11px] text-indigo-600 font-medium">
-                        {startDate ? `${getDayNameHebrew(startDate)}, ${formatDateDisplay(startDate)}` : ''}
-                      </span>
-                    </label>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full bg-white text-sm font-bold text-slate-900 px-3.5 py-2.5 rounded-xl border border-indigo-200 focus:border-indigo-600 focus:outline-none"
-                    />
-                  </div>
+                {serviceType === 'daycare' ? (
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                        <span>תאריך השהות היומית 📅</span>
+                        <span className="text-xs text-indigo-700 font-extrabold">
+                          {startDate ? `${getDayNameHebrew(startDate)}, ${formatDateDisplay(startDate)}` : ''}
+                        </span>
+                      </label>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setStartDate(val);
+                          setEndDate(val);
+                        }}
+                        className="w-full bg-white text-base font-bold text-slate-900 px-3.5 py-2.5 rounded-xl border border-indigo-200 focus:border-indigo-600 focus:outline-none"
+                      />
+                    </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                      <span>תאריך יציאה 🚗</span>
-                      <span className="text-[11px] text-indigo-600 font-medium">
-                        {endDate ? `${getDayNameHebrew(endDate)}, ${formatDateDisplay(endDate)}` : ''}
-                      </span>
-                    </label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      min={startDate}
-                      className="w-full bg-white text-sm font-bold text-slate-900 px-3.5 py-2.5 rounded-xl border border-indigo-200 focus:border-indigo-600 focus:outline-none"
-                    />
+                    {/* Quick Date Presets for Daycare */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      <span className="text-[11px] font-bold text-slate-500 ml-1">בחירה מהירה:</span>
+                      {[
+                        { label: 'היום', date: todayStr },
+                        { label: 'מחר', date: addDays(todayStr, 1) },
+                        { label: 'מחרתיים', date: addDays(todayStr, 2) },
+                      ].map(chip => (
+                        <button
+                          key={chip.label}
+                          type="button"
+                          onClick={() => {
+                            setStartDate(chip.date);
+                            setEndDate(chip.date);
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                            startDate === chip.date
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                              : 'bg-white hover:bg-indigo-50 text-indigo-900 border-indigo-200'
+                          }`}
+                        >
+                          {chip.label} ({getDayNameHebrew(chip.date)})
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                        <span>תאריך כניסה 🏨</span>
+                        <span className="text-[11px] text-indigo-600 font-medium">
+                          {startDate ? `${getDayNameHebrew(startDate)}, ${formatDateDisplay(startDate)}` : ''}
+                        </span>
+                      </label>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-full bg-white text-sm font-bold text-slate-900 px-3.5 py-2.5 rounded-xl border border-indigo-200 focus:border-indigo-600 focus:outline-none"
+                      />
+                    </div>
 
-                {/* Quick Duration Buttons */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-[11px] font-bold text-slate-500 ml-1">משך מהיר:</span>
-                  <button
-                    type="button"
-                    onClick={() => setEndDate(addDays(startDate, 1))}
-                    className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
-                  >
-                    לילה 1
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEndDate(addDays(startDate, 3))}
-                    className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
-                  >
-                    3 לילות
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEndDate(addDays(startDate, 7))}
-                    className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
-                  >
-                    שבוע (7 לילות)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEndDate(addDays(startDate, 14))}
-                    className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
-                  >
-                    שבועיים (14 לילות)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEndDate(addDays(startDate, 21))}
-                    className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-2xs"
-                  >
-                    3 שבועות (21 לילות · ₪120)
-                  </button>
-                  {serviceType === 'training' && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setEndDate(addDays(startDate, 30))}
-                        className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg text-xs font-bold text-amber-900 transition-colors cursor-pointer"
-                      >
-                        חודש (30 יום)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEndDate(addDays(startDate, 45))}
-                        className="px-2.5 py-1 bg-white hover:bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-800 transition-colors cursor-pointer"
-                      >
-                        45 יום
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEndDate(addDays(startDate, 60))}
-                        className="px-2.5 py-1 bg-white hover:bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-800 transition-colors cursor-pointer"
-                      >
-                        חודשיים (60 יום)
-                      </button>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEndDate(addDays(startDate, 365));
-                      setIsFreeStay(true);
-                      setDailyRate(0);
-                      setTotalPrice(0);
-                      setDepositAmount(0);
-                      setPaymentType('full');
-                      setNotes(prev => prev ? (prev.includes('ללא הגבלת זמן') ? prev : `${prev} | שהות פתוחה בחינם ללא הגבלת זמן`) : 'שהות פתוחה בחינם ללא הגבלת זמן');
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer shadow-2xs border ${
-                      isFreeStay
-                        ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30'
-                        : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-950'
-                    }`}
-                    title="קביעת שהות פתוחה ללא הגבלת זמן ובחינם (למשל עבור לונה)"
-                  >
-                    🎁 ♾️ שהות פתוחה ללא הגבלת זמן (חינם)
-                  </button>
-                </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                        <span>תאריך יציאה 🚗</span>
+                        <span className="text-[11px] text-indigo-600 font-medium">
+                          {endDate ? `${getDayNameHebrew(endDate)}, ${formatDateDisplay(endDate)}` : ''}
+                        </span>
+                      </label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        min={startDate}
+                        className="w-full bg-white text-sm font-bold text-slate-900 px-3.5 py-2.5 rounded-xl border border-indigo-200 focus:border-indigo-600 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Quick Duration Buttons (Hidden for Daycare) */}
+                {serviceType !== 'daycare' && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] font-bold text-slate-500 ml-1">משך מהיר:</span>
+                    <button
+                      type="button"
+                      onClick={() => setEndDate(addDays(startDate, 1))}
+                      className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                    >
+                      לילה 1
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEndDate(addDays(startDate, 3))}
+                      className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                    >
+                      3 לילות
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEndDate(addDays(startDate, 7))}
+                      className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                    >
+                      שבוע (7 לילות)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEndDate(addDays(startDate, 14))}
+                      className="px-2.5 py-1 bg-white hover:bg-indigo-100/50 border border-indigo-200 rounded-lg text-xs font-semibold text-indigo-900 transition-colors cursor-pointer"
+                    >
+                      שבועיים (14 לילות)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEndDate(addDays(startDate, 21))}
+                      className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+                    >
+                      3 שבועות (21 לילות · ₪120)
+                    </button>
+                    {serviceType === 'training' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEndDate(addDays(startDate, 30))}
+                          className="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg text-xs font-bold text-amber-900 transition-colors cursor-pointer"
+                        >
+                          חודש (30 יום)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEndDate(addDays(startDate, 45))}
+                          className="px-2.5 py-1 bg-white hover:bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-800 transition-colors cursor-pointer"
+                        >
+                          45 יום
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEndDate(addDays(startDate, 60))}
+                          className="px-2.5 py-1 bg-white hover:bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-800 transition-colors cursor-pointer"
+                        >
+                          חודשיים (60 יום)
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEndDate(addDays(startDate, 365));
+                        setIsFreeStay(true);
+                        setDailyRate(0);
+                        setTotalPrice(0);
+                        setDepositAmount(0);
+                        setPaymentType('full');
+                        setNotes(prev => prev ? (prev.includes('ללא הגבלת זמן') ? prev : `${prev} | שהות פתוחה בחינם ללא הגבלת זמן`) : 'שהות פתוחה בחינם ללא הגבלת זמן');
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer shadow-2xs border ${
+                        isFreeStay
+                          ? 'bg-emerald-600 text-white border-emerald-700 ring-2 ring-emerald-400/30'
+                          : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-950'
+                      }`}
+                      title="קביעת שהות פתוחה ללא הגבלת זמן ובחינם (למשל עבור לונה)"
+                    >
+                      🎁 ♾️ שהות פתוחה ללא הגבלת זמן (חינם)
+                    </button>
+                  </div>
+                )}
+
+                {/* Active Daycare Pass Alert & Deduction Button */}
+                {serviceType === 'daycare' && matchedCustomerDaycarePasses.length > 0 && (
+                  <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 space-y-2 shadow-2xs animate-in fade-in duration-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl shrink-0">🎟️</span>
+                        <div>
+                          <strong className="text-xs font-black text-emerald-950 block">
+                            נמצאה כרטיסיית יומיות פעילה ללקוח!
+                          </strong>
+                          <span className="text-[11px] text-emerald-800">
+                            קוד: {matchedCustomerDaycarePasses[0].passCode} · נותרו {matchedCustomerDaycarePasses[0].totalDays - matchedCustomerDaycarePasses[0].usedDays} מתוך {matchedCustomerDaycarePasses[0].totalDays} ימים
+                          </span>
+                        </div>
+                      </div>
+                      {selectedDaycarePassCode === matchedCustomerDaycarePasses[0].passCode ? (
+                        <span className="bg-emerald-600 text-white text-xs font-black px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1 self-start sm:self-auto">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>משויך לכרטיסייה (0 ₪)</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const p = matchedCustomerDaycarePasses[0];
+                            setSelectedDaycarePassCode(p.passCode);
+                            setSelectedDaycarePassId(p.id);
+                            setIsFreeStay(true);
+                            setFreeStayReason('other');
+                            setTotalPrice(0);
+                            setDepositAmount(0);
+                            setPaymentStatus('fully_paid');
+                            setPaymentMethod('cash');
+                          }}
+                          className="bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white text-xs font-black px-3 py-1.5 rounded-lg shadow-xs transition-all cursor-pointer self-start sm:self-auto"
+                        >
+                          קזז שהות זו מהכרטיסייה 👈
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Flexible Training Period Selector */}
                 {serviceType === 'training' && (
@@ -3082,15 +3203,19 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">תאריכי שהות:</span>
+                    <span className="text-slate-500">
+                      {serviceType === 'daycare' ? 'תאריך שהות יומית:' : 'תאריכי שהות:'}
+                    </span>
                     <span className="font-bold text-slate-900">
-                      {formatDateDisplay(startDate)} ({getDayNameHebrew(startDate)}) עד {formatDateDisplay(endDate)} ({getDayNameHebrew(endDate)})
+                      {formatStayDatesDisplay(startDate, endDate, serviceType)}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">מספר ימים:</span>
-                    <span className="font-bold text-slate-900">{daysCount} ימים</span>
-                  </div>
+                  {serviceType !== 'daycare' && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">מספר ימים:</span>
+                      <span className="font-bold text-slate-900">{daysCount} ימים</span>
+                    </div>
+                  )}
                   {pricingMode === 'daily' && (
                     <div className="flex justify-between">
                       <span className="text-slate-500">מחיר ליום:</span>

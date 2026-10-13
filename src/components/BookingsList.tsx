@@ -24,7 +24,7 @@ import {
   MapPin
 } from 'lucide-react';
 import { Booking, ResortSettings, ServiceType, PaymentStatus, StayStatus } from '../types';
-import { formatDateIL, calculateDaysCount, isTrainingBooking, sortBookingsWithTrainingLast } from '../utils/dateUtils';
+import { formatDateIL, formatStayDatesDisplay, calculateDaysCount, isTrainingBooking, sortBookingsWithTrainingLast } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage } from '../utils/whatsappUtils';
 import { exportBookingsToCSV } from '../utils/exportUtils';
 import { getWazeNavigationUrl } from '../utils/geolocationUtils';
@@ -397,8 +397,10 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                       )}
                       <span className="flex items-center gap-1 text-slate-800">
                         <Calendar className="w-3.5 h-3.5 text-amber-600" />
-                        <span>{formatDateIL(b.startDate)} עד {formatDateIL(b.endDate)}</span>
-                        <span className="text-slate-500 font-semibold">({daysCount} ימים)</span>
+                        <span>{formatStayDatesDisplay(b.startDate, b.endDate, b.serviceType)}</span>
+                        {b.serviceType !== 'daycare' && b.startDate !== b.endDate && (
+                          <span className="text-slate-500 font-semibold">({daysCount} ימים)</span>
+                        )}
                       </span>
                     </div>
 
