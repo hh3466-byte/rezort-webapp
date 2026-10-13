@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, AlertTriangle, CheckCircle, Phone, Calendar, User, MessageSquare, CreditCard, ShieldAlert, Home, Star } from 'lucide-react';
+import { X, AlertTriangle, CheckCircle, Phone, Calendar, User, MessageSquare, CreditCard, ShieldAlert, Home, Star, Banknote } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
 import { formatDateIL } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage } from '../utils/whatsappUtils';
@@ -9,7 +9,7 @@ interface CheckoutDebtAlertModalProps {
   booking: Booking | null;
   settings: ResortSettings;
   onClose: () => void;
-  onMarkPaidAndRelease: (booking: Booking, skipReview?: boolean) => void;
+  onMarkPaidAndRelease: (booking: Booking, method?: 'cash' | 'grow', amountPaid?: number, skipReview?: boolean) => void;
   onConfirmReleaseWithDebt: (booking: Booking, skipReview?: boolean) => void;
   onConfirmReleaseDirect?: (booking: Booking, skipReview?: boolean) => void;
   onOpenPaymentModal?: (booking: Booking) => void;
@@ -184,19 +184,30 @@ export const CheckoutDebtAlertModal: React.FC<CheckoutDebtAlertModalProps> = ({
             {hasDebt ? (
               <>
                 <p className="text-xs font-bold text-slate-700 text-center mb-1">
-                  האם הלקוח שילם כעת (מזומן / ביט / אשראי), או שברצונך לשחרר בכל זאת?
+                  כיצד מוסדרת יתרת החוב (₪{remainingDebt.toLocaleString('he-IL')}) במעמד השחרור?
                 </p>
-                {/* Primary Action: Mark Paid & Release */}
+
+                {/* Option 1: Cash at Checkout */}
                 <button
                   type="button"
-                  onClick={() => onMarkPaidAndRelease(booking, skipReview)}
-                  className="w-full bg-green-600 hover:bg-green-700 active:scale-[0.99] text-white py-3 px-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
+                  onClick={() => onMarkPaidAndRelease(booking, 'cash', remainingDebt, skipReview)}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white py-3 px-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer"
                 >
-                  <CheckCircle className="w-5 h-5 stroke-[2.5]" />
-                  <span>סמן כשולם במלואו וסגור שחרור הביתה</span>
+                  <Banknote className="w-5 h-5 stroke-[2.5]" />
+                  <span>שולם במזומן בקופה (₪{remainingDebt.toLocaleString('he-IL')}) – סגור שחרור</span>
                 </button>
 
-                {/* Release without payment (keeping debt open) */}
+                {/* Option 2: Digital at Checkout */}
+                <button
+                  type="button"
+                  onClick={() => onMarkPaidAndRelease(booking, 'grow', remainingDebt, skipReview)}
+                  className="w-full bg-sky-600 hover:bg-sky-700 active:scale-[0.99] text-white py-2.5 px-4 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4 stroke-[2.5]" />
+                  <span>הוסדר דיגיטלית (Grow / Bit / העברה) – סגור שחרור</span>
+                </button>
+
+                {/* Option 3: Release without payment (keeping debt open) */}
                 <button
                   type="button"
                   onClick={() => onConfirmReleaseWithDebt(booking, skipReview)}

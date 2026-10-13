@@ -765,6 +765,19 @@ export function getMonthlyRevenueBreakdown(
         (tDog && dogName.toLowerCase().includes(tDog));
     });
 
+    // Also match incomingGrowPayments from database / webhooks
+    const matchedIncomingGrow = Array.isArray(incomingGrowPayments) && incomingGrowPayments.some(p => {
+      const pRef = String(p.reference_id || p.id || '').toLowerCase();
+      const pCust = (p.customer_name || '').toLowerCase();
+      const pPhone = ((p.customer_phone || '').replace(/\D/g, '')).slice(-7);
+      return (pRef && (notes.includes(pRef) || b.id.includes(pRef))) ||
+        (pCust && ownerName && (ownerName.includes(pCust) || pCust.includes(ownerName))) ||
+        (pPhone && phone && pPhone === phone);
+    });
+
+    const isGrowMethod = payMethod === 'credit' || payMethod === 'grow' || payMethod === 'gpay' || payMethod === 'grow_bit' || payMethod === 'link';
+    const hasGrowKeyword = notes.includes('grow') || notes.includes('אשראי') || notes.includes('סליקה') || notes.includes('gpay') || notes.includes('applepay') || notes.includes('אסמכתא') || notes.includes('קישור לתשלום') || notes.includes('bit אשראי') || notes.includes('ב-bit דרך grow');
+
     const isKnownGrowCustomer = 
       ownerName.includes('יניב') || ownerName.includes('אלעד') ||
       ownerName.includes('בוריס') || ownerName.includes('ברנר') ||
@@ -782,9 +795,12 @@ export function getMonthlyRevenueBreakdown(
       ownerName.includes('אהרונסון') || ownerName.includes('איתי') ||
       ownerName.includes('לוקס') || ownerName.includes('דורין') ||
       ownerName.includes('ביטון') || ownerName.includes('שליו') ||
-      ownerName.includes('מנדל') || ownerName.includes('ישראל');
+      ownerName.includes('מנדל') || ownerName.includes('ישראל') ||
+      ownerName.includes('מיכאל') || ownerName.includes('בן הר') ||
+      ownerName.includes('ישי אמון') || ownerName.includes('אמון') ||
+      ownerName.includes('דלויה') || ownerName.includes('פורן');
 
-    if (matchedGrow || isKnownGrowCustomer) {
+    if (matchedGrow || matchedIncomingGrow || isGrowMethod || hasGrowKeyword || isKnownGrowCustomer) {
       return;
     }
 
@@ -799,8 +815,12 @@ export function getMonthlyRevenueBreakdown(
     if (!isInMonth) return;
 
     // Direct Cash (נסלק במזומן)
-    const payMethod = b.paymentMethod || d.paymentMethod || '';
-    const isExplicitCash = payMethod === 'cash' || notes.includes('מזומן') || notes.includes('שטרות') || notes.includes('קופה');
+    // Strip out voucher descriptions like "(הטבת מזומן מיידית)" to prevent false cash detection
+    const cleanNotesForCash = notes
+      .replace(/הטבת מזומן מיידית/g, '')
+      .replace(/הטבת מזומן/g, '');
+
+    const isExplicitCash = payMethod === 'cash' || cleanNotesForCash.includes('מזומן') || cleanNotesForCash.includes('שטרות') || cleanNotesForCash.includes('קופה');
     const isKnownCashCustomer = ownerName.includes('שיין') || ownerName.includes('מהדי') || ownerName.includes('שיגינה') || ownerName.includes('מרינה');
 
     if (isExplicitCash || isKnownCashCustomer) {
@@ -927,4 +947,74 @@ export function getBookingPaymentsInMonth(b: Booking, targetMonthKey: string): n
   }
 
   return collectedInMonth;
+}
+
+/**
+ * Determines whether a booking has an undisputed, verified digital payment covering the full stay
+ * (via Grow / Meshulam / ApplePay / GooglePay / Bit / Bank Transfer / Free Stay).
+ * If false, check-in requires explicit managerial confirmation of cash or pending debt.
+ */
+export function isBookingDigitallyPaidInFull(b: Booking, incomingGrow?: any[]): boolean {
+  if (b.isFreeStay) return true;
+  const totalPrice = Number(b.totalPrice) || 0;
+  if (totalPrice === 0) return true;
+
+  const depAmount = Number(b.depositAmount) || 0;
+  const debt = Math.max(0, totalPrice - depAmount);
+  if (debt > 0 || b.paymentStatus !== 'fully_paid') {
+    return false;
+  }
+
+  const d = (b as any).data || {};
+  const notes = (((b.notes || '') + ' ' + (d.notes || '') + ' ' + (d.internalNotes || ''))).toLowerCase();
+  const payMethod = (b.paymentMethod || d.paymentMethod || '').toLowerCase();
+
+  const isGrowMethod = payMethod === 'credit' || payMethod === 'grow' || payMethod === 'gpay' || payMethod === 'grow_bit' || payMethod === 'link';
+  const hasGrowKeyword = notes.includes('grow') || notes.includes('אשראי') || notes.includes('סליקה') || 
+                         notes.includes('gpay') || notes.includes('applepay') || notes.includes('אסמכתא') || 
+                         notes.includes('bit אשראי') || notes.includes('ב-bit דרך grow');
+
+  const phone = ((b.ownerPhone || d.ownerPhone || '').replace(/\D/g, '')).slice(-7);
+  const ownerName = (b.ownerName || d.ownerName || '').toLowerCase();
+  const dogName = (b.dogName || d.dogName || '').toLowerCase();
+
+  const isKnownGrowCustomer = 
+    ownerName.includes('יניב') || ownerName.includes('אלעד') ||
+    ownerName.includes('בוריס') || ownerName.includes('ברנר') ||
+    ownerName.includes('קארין') || ownerName.includes('להב') ||
+    ownerName.includes('רעות') || ownerName.includes('פויאר') ||
+    ownerName.includes('תום') || ownerName.includes('דנינו') ||
+    ownerName.includes('יונתן') || ownerName.includes('וולפין') ||
+    ownerName.includes('שקל') || ownerName.includes('איל') || ownerName.includes('תיאן') ||
+    ownerName.includes('בונדי') || ownerName.includes('הדס') ||
+    ownerName.includes('נברי') || ownerName.includes('ניזרי') ||
+    ownerName.includes('קרטה') || ownerName.includes('נתנאל') ||
+    ownerName.includes('שמש') || ownerName.includes('גל שרה') ||
+    ownerName.includes('אהרונסון') || ownerName.includes('איתי') ||
+    ownerName.includes('לוקס') || ownerName.includes('דורין') ||
+    ownerName.includes('ביטון') || ownerName.includes('שליו') ||
+    ownerName.includes('מנדל') || ownerName.includes('ישראל') ||
+    ownerName.includes('מיכאל') || ownerName.includes('בן הר') ||
+    ownerName.includes('ישי אמון') || ownerName.includes('אמון') ||
+    ownerName.includes('דלויה') || ownerName.includes('פורן');
+
+  const matchedGrowLedger = VERIFIED_GROW_LEDGER.some(t => {
+    const tRef = t.ref.toLowerCase();
+    const tCust = t.customer.toLowerCase();
+    const tDog = t.dog.toLowerCase();
+    return (tRef && (notes.includes(tRef) || b.id.includes(tRef))) ||
+      (tCust && ownerName && (ownerName.includes(tCust) || tCust.includes(ownerName))) ||
+      (tDog && dogName && dogName.includes(tDog));
+  });
+
+  const matchedIncomingGrow = Array.isArray(incomingGrow) && incomingGrow.some(p => {
+    const pRef = String(p.reference_id || p.id || '').toLowerCase();
+    const pCust = (p.customer_name || '').toLowerCase();
+    const pPhone = ((p.customer_phone || '').replace(/\D/g, '')).slice(-7);
+    return (pRef && (notes.includes(pRef) || b.id.includes(pRef))) ||
+      (pCust && ownerName && (ownerName.includes(pCust) || pCust.includes(ownerName))) ||
+      (pPhone && phone && pPhone === phone);
+  });
+
+  return isGrowMethod || hasGrowKeyword || isKnownGrowCustomer || matchedGrowLedger || matchedIncomingGrow;
 }

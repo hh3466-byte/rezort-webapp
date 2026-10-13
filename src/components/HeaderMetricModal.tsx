@@ -119,7 +119,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
     });
 
     const isGrowMethod = (b.paymentMethod as string) === 'credit' || (b.paymentMethod as string) === 'grow' || (b.paymentMethod as string) === 'gpay' || (b.paymentMethod as string) === 'grow_bit' || (b.paymentMethod as string) === 'link';
-    const hasGrowKeyword = notes.includes('grow') || notes.includes('אשראי') || notes.includes('סליקה') || notes.includes('gpay') || notes.includes('לינק') || notes.includes('קישור לתשלום') || notes.includes('bit אשראי') || notes.includes('ב-bit דרך grow');
+    const hasGrowKeyword = notes.includes('grow') || notes.includes('אשראי') || notes.includes('סליקה') || notes.includes('gpay') || notes.includes('applepay') || notes.includes('אסמכתא') || notes.includes('לינק') || notes.includes('קישור לתשלום') || notes.includes('bit אשראי') || notes.includes('ב-bit דרך grow');
 
     // Known Grow customers explicitly (e.g. Yaniv Elad, Boris Brenner, Karin Lahav, Reut Feuer, Tom Danino, Yonatan Volfin, etc.)
     const isKnownGrowCustomer = 
@@ -140,6 +140,9 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       owner.includes('לוקס') || owner.includes('דורין') ||
       owner.includes('ביטון') || owner.includes('שליו') ||
       owner.includes('מנדל') || owner.includes('ישראל') ||
+      owner.includes('מיכאל') || owner.includes('בן הר') ||
+      owner.includes('ישי אמון') || owner.includes('אמון') ||
+      owner.includes('דלויה') || owner.includes('פורן') ||
       owner.includes('ביקאיה') || owner.includes('ירוס');
 
     return isLedger || isGrowMethod || hasGrowKeyword || isKnownGrowCustomer;
@@ -191,7 +194,10 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
     if (amt <= 0) return false;
 
     const notes = ((b.notes || '') + ' ' + ((b as any)?.data?.internalNotes || '')).toLowerCase();
-    const isExplicitCash = b.paymentMethod === 'cash' || notes.includes('מזומן') || notes.includes('שטרות') || notes.includes('קופה');
+    const cleanNotesForCash = notes
+      .replace(/הטבת מזומן מיידית/g, '')
+      .replace(/הטבת מזומן/g, '');
+    const isExplicitCash = b.paymentMethod === 'cash' || cleanNotesForCash.includes('מזומן') || cleanNotesForCash.includes('שטרות') || cleanNotesForCash.includes('קופה');
     const isKnownCashCustomer = owner.includes('שיין') || owner.includes('מהדי') || owner.includes('שיגינה') || owner.includes('מרינה');
 
     return isExplicitCash || isKnownCashCustomer;

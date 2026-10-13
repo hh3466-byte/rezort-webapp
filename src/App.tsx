@@ -36,7 +36,8 @@ import {
   calculateDaysCount,
   getMonthlyRevenueBreakdown,
   getGrowClearedRevenueForMonth,
-  getCashClearedRevenueForMonth
+  getCashClearedRevenueForMonth,
+  isBookingDigitallyPaidInFull
 } from './utils/dateUtils';
 
 import { CalendarView } from './components/CalendarView';
@@ -1059,10 +1060,10 @@ export default function App() {
     const booking = bookings.find(b => b.id === bookingId);
     if (!booking) return;
 
-    // Checkin Debt Warning: If checking in a dog that hasn't paid in full, alert Shmulik first!
+    // Checkin Payment Verification: If checking in a dog that does NOT have verified digital payment in full, alert Shmulik first!
     if (newStatus === 'checked_in') {
-      const debt = Math.max(0, (Number(booking.totalPrice) || 0) - (Number(booking.depositAmount) || 0));
-      if (debt > 0 && !booking.isFreeStay && booking.paymentStatus !== 'fully_paid') {
+      const isDigitallyPaid = isBookingDigitallyPaidInFull(booking, allGrowPayments);
+      if (!isDigitallyPaid) {
         setCheckinDebtBooking(booking);
         return;
       }
@@ -1086,17 +1087,54 @@ export default function App() {
     await saveBookingToDb(updated);
   };
 
-  const handleMarkPaidAndCheckin = async (booking: Booking) => {
+  const handleMarkPaidAndCheckin = async (
+    booking: Booking,
+    method: 'cash' | 'grow' = 'cash',
+    amountPaid?: number
+  ) => {
     setCheckinDebtBooking(null);
+    const totalPrice = Number(booking.totalPrice) || 0;
+    const currentDeposit = Number(booking.depositAmount) || 0;
+    const remainingDebt = Math.max(0, totalPrice - currentDeposit);
+    const paidNow = amountPaid !== undefined ? amountPaid : (remainingDebt > 0 ? remainingDebt : totalPrice);
+    const newDeposit = Math.min(totalPrice, currentDeposit + paidNow);
+    const isFull = newDeposit >= totalPrice;
+
+    const nowStr = new Date().toLocaleString('he-IL', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+
+    const paymentAuditNote = method === 'cash'
+      ? `[קליטה ${nowStr}] נסלק במזומן בקופה: ₪${paidNow.toLocaleString('he-IL')} לשמוליק`
+      : `[קליטה ${nowStr}] הוסדר דיגיטלית (Grow/Bit/העברה): ₪${paidNow.toLocaleString('he-IL')}`;
+
+    const existingNotes = booking.notes || '';
+    const updatedNotes = existingNotes 
+      ? `${existingNotes} | ${paymentAuditNote}`
+      : paymentAuditNote;
+
     const updated: Booking = {
       ...booking,
-      depositAmount: Number(booking.totalPrice) || 0,
-      paymentStatus: 'fully_paid',
+      depositAmount: newDeposit,
+      paymentMethod: method,
+      paymentStatus: isFull ? 'fully_paid' : 'deposit_paid',
       stayStatus: 'checked_in',
+      notes: updatedNotes,
       updatedAt: new Date().toISOString()
     };
+
     setBookings(prev => prev.map(b => b.id === booking.id ? updated : b));
-    showToast(`🐾 ${booking.dogName} נקלט בהצלחה וסומן כשולם במלואו`);
+
+    if (method === 'cash') {
+      showToast(`💵 ${booking.dogName} נקלט בהצלחה! נרשם תקבול מזומן בקופה ע״ס ₪${paidNow.toLocaleString('he-IL')}`);
+    } else {
+      showToast(`💳 ${booking.dogName} נקלט בהצלחה! סומן כהוסדר דיגיטלית`);
+    }
+
     try {
       await saveBookingToDb(updated);
     } catch (err) {
@@ -1106,13 +1144,33 @@ export default function App() {
 
   const handleConfirmCheckinWithDebt = async (booking: Booking) => {
     setCheckinDebtBooking(null);
+    const totalPrice = Number(booking.totalPrice) || 0;
+    const currentDeposit = Number(booking.depositAmount) || 0;
+    const remainingDebt = Math.max(0, totalPrice - currentDeposit);
+
+    const nowStr = new Date().toLocaleString('he-IL', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+
+    const debtAuditNote = `[קליטה ${nowStr}] נקלט עם יתרת חוב פתוחה לגבייה: ₪${remainingDebt.toLocaleString('he-IL')}`;
+    const existingNotes = booking.notes || '';
+    const updatedNotes = existingNotes 
+      ? `${existingNotes} | ${debtAuditNote}`
+      : debtAuditNote;
+
     const updated: Booking = {
       ...booking,
       stayStatus: 'checked_in',
+      notes: updatedNotes,
       updatedAt: new Date().toISOString()
     };
+
     setBookings(prev => prev.map(b => b.id === booking.id ? updated : b));
-    showToast(`🐾 ${booking.dogName} נקלט לריזורט (יתרת חוב נותרה פתוחה לגבייה)`);
+    showToast(`⚠️ ${booking.dogName} נקלט לריזורט (חוב פתוח של ₪${remainingDebt.toLocaleString('he-IL')} נותר לגבייה)`);
     try {
       await saveBookingToDb(updated);
     } catch (err) {
@@ -1178,27 +1236,57 @@ export default function App() {
     }
   };
 
-  const handleMarkPaidAndRelease = async (booking: Booking, skipReview = false) => {
+  const handleMarkPaidAndRelease = async (
+    booking: Booking, 
+    method: 'cash' | 'grow' = 'cash', 
+    amountPaid?: number, 
+    skipReview = false
+  ) => {
     setCheckoutDebtBooking(null);
     const today = getTodayStr();
     const effectiveEndDate = booking.endDate > today ? today : booking.endDate;
+    const totalPrice = Number(booking.totalPrice) || 0;
+    const currentDeposit = Number(booking.depositAmount) || 0;
+    const remainingDebt = Math.max(0, totalPrice - currentDeposit);
+    const paidNow = amountPaid !== undefined ? amountPaid : remainingDebt;
+    const newDeposit = Math.min(totalPrice, currentDeposit + paidNow);
+
+    const nowStr = new Date().toLocaleString('he-IL', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+
+    const paymentAuditNote = method === 'cash'
+      ? `[שחרור ${nowStr}] שולם במזומן בקופה: ₪${paidNow.toLocaleString('he-IL')}`
+      : `[שחרור ${nowStr}] הוסדר דיגיטלית (Grow/Bit/העברה): ₪${paidNow.toLocaleString('he-IL')}`;
+
+    let baseNotes = booking.notes || '';
+    if (skipReview) {
+      baseNotes = baseNotes.includes('[ללא_סקר]') ? baseNotes : `${baseNotes} [ללא_סקר]`.trim();
+    } else {
+      baseNotes = baseNotes.replace(/\[ללא_סקר\]/g, '').trim();
+    }
+    const updatedNotes = baseNotes ? `${baseNotes} | ${paymentAuditNote}` : paymentAuditNote;
+
     const updated: Booking = {
       ...booking,
       endDate: effectiveEndDate,
-      depositAmount: Number(booking.totalPrice) || 0,
-      paymentStatus: 'fully_paid',
+      depositAmount: newDeposit,
+      paymentMethod: method,
+      paymentStatus: newDeposit >= totalPrice ? 'fully_paid' : 'deposit_paid',
       stayStatus: 'checked_out',
       skipReviewRequest: skipReview,
-      notes: skipReview
-        ? (booking.notes?.includes('[ללא_סקר]') ? booking.notes : `${booking.notes || ''} [ללא_סקר]`.trim())
-        : (booking.notes?.replace(/\[ללא_סקר\]/g, '').trim()),
+      notes: updatedNotes,
       updatedAt: new Date().toISOString()
     };
     setBookings(prev => prev.map(b => b.id === booking.id ? updated : b));
-    if (skipReview) {
-      showToast(`🏡 ${booking.dogName} שוחרר! סומן כשולם מלא (בוטלה שליחת סקר)`);
+    if (method === 'cash') {
+      showToast(`🏡 ${booking.dogName} שוחרר! נרשם תקבול מזומן ע״ס ₪${paidNow.toLocaleString('he-IL')}`);
     } else {
-      showToast(`🏡 ${booking.dogName} שוחרר בהצלחה! התשלום סומן כשולם במלואו.`);
+      showToast(`🏡 ${booking.dogName} שוחרר! סומן כהוסדר דיגיטלית`);
     }
     try {
       await saveBookingToDb(updated);
