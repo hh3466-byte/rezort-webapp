@@ -25,9 +25,9 @@ function processResortEmails() {
   var threads = [];
   var allMessagesByThread = [];
   try {
-    // שליפה ממוקדת של שרשורים רלוונטיים בלבד (חיסכון של 95% במכסות Gmail)
-    var query = 'is:unread in:inbox (from:grow OR from:meshulam OR from:morning OR from:greeninvoice OR "הריזורט לכלב" OR "יניב אלעד")';
-    var foundThreads = GmailApp.search(query, 0, 5);
+    // שליפה ממוקדת של שרשורים רלוונטיים ב-Inbox (תשלומי Grow, מורנינג, ספינדל, הריזורט)
+    var query = 'in:inbox (from:grow OR from:meshulam OR from:morning OR from:greeninvoice OR "הריזורט לכלב" OR "אלון ספינדל" OR "ספינדל" OR "בוצע תשלום")';
+    var foundThreads = GmailApp.search(query, 0, 10);
     if (foundThreads && foundThreads.length > 0) {
       threads = foundThreads;
       // קריאה אחודה אחת (Batch) לכל השרשורים יחד במקום עשרות קריאות נפרדות
@@ -110,10 +110,9 @@ function processResortEmails() {
         "שפר",
         "תכנון פרישה",
         "פרישה",
-        "משטח",
-        "משטחי",
-        "איחסון",
-        "אחסון",
+        "משטחים",
+        "אחסון משטחים",
+        "איחסון משטחים",
         "סלקום",
         "cellcom",
         "סולארי",
@@ -140,13 +139,9 @@ function processResortEmails() {
       var isGrow = (sender.indexOf("grow") !== -1 ||
                     sender.indexOf("meshulam") !== -1 ||
                     subject.indexOf("בוצע תשלום עבור בעל העסק") !== -1 ||
-                    subject.indexOf("בוצע תשלום") !== -1) && !isMorning;
-
-      // דילוג על מיילים של עסקים אחרים שאינם תשלומי Grow (למשל חשבוניות או דואר שוטף)
-      if (isOtherBusiness && !isGrow) {
-        Logger.log("🛡️ זוהה מייל של עסק אחר (שאינו תשלום Grow) - דילוג מוחלט ללא נגיעה: " + subject);
-        continue;
-      }
+                    subject.indexOf("בוצע תשלום") !== -1 ||
+                    fullLower.indexOf("grow.business") !== -1 ||
+                    fullLower.indexOf("grow.link") !== -1) && !isMorning;
 
       // בדיקת שיוך לריזורט לכלב
       var resortKeywords = [
@@ -163,7 +158,16 @@ function processResortEmails() {
         "ג'נגו",
         "django",
         "רונן מלמוד",
-        "לונה"
+        "לונה",
+        "אלון ספינדל",
+        "ספינדל",
+        "פיבי",
+        "חמו",
+        "כרטיסיה",
+        "כרטיסייה",
+        "יומיות",
+        "לי דלויה",
+        "ליאו"
       ];
       var isResort = false;
       for (var rk = 0; rk < resortKeywords.length; rk++) {
@@ -171,6 +175,17 @@ function processResortEmails() {
           isResort = true;
           break;
         }
+      }
+
+      // אם זוהה בבירור כשייך לריזורט, מבטלים כל סיווג כעסק אחר
+      if (isResort) {
+        isOtherBusiness = false;
+      }
+
+      // דילוג על מיילים של עסקים אחרים שאינם תשלומי Grow (למשל חשבוניות או דואר שוטף)
+      if (isOtherBusiness && !isGrow) {
+        Logger.log("🛡️ זוהה מייל של עסק אחר (שאינו תשלום Grow) - דילוג מוחלט ללא נגיעה: " + subject);
+        continue;
       }
 
       // 1. מחיקת חשבונית Morning של הריזורט לכלב
@@ -190,9 +205,8 @@ function processResortEmails() {
       }
 
       // 3. טיפול בתשלום Grow / קבלה של הריזורט לכלב - מחיקה לאשפה בלבד!
-      // כל נתוני התשלום מנוהלים ומדווחים ישירות מ-Grow Webhook בענן. הבדיקה במייל היא אך ורק לטובת מחיקה לאשפה!
       if (isGrow) {
-        if (!isOtherBusiness) {
+        if (!isOtherBusiness || isResort) {
           threadHandled = true;
           growCount++;
           Logger.log("🗑️ מייל קבלת Grow של הריזורט זוהה ומועבר לאשפה: " + subject);

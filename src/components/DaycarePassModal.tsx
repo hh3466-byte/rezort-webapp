@@ -53,8 +53,11 @@ export interface UnifiedCustomerCandidate {
   ownerName: string;
   ownerPhone: string;
   ownerEmail?: string;
+  ownerAddress?: string;
   dogName: string;
   dogBreed?: string;
+  specialDiet?: string;
+  notes?: string;
   source: 'booking' | 'intake' | 'pass';
   sourceLabel: string;
 }
@@ -138,6 +141,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   const [ownerName, setOwnerName] = useState<string>('');
   const [ownerPhone, setOwnerPhone] = useState<string>('');
   const [ownerEmail, setOwnerEmail] = useState<string>('');
+  const [ownerAddress, setOwnerAddress] = useState<string>('');
   const [serviceType, setServiceType] = useState<'daycare' | 'day_training'>('daycare');
   
   // Initialize with 10 days progressive rate
@@ -179,9 +183,41 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
     }
   }, [initialCustomer]);
 
-  // Build unified customer candidates pool from Bookings, Intake Requests and Passes
+  // Build unified customer candidates pool from Bookings, Intake Requests and Passes with cross-record enrichment
   const allCandidates = React.useMemo<UnifiedCustomerCandidate[]>(() => {
     const map = new Map<string, UnifiedCustomerCandidate>();
+
+    // Build phone-to-meta lookup from bookings and intakes to ensure email/address/notes are NEVER missing
+    const phoneEnrichmentMap = new Map<string, { email?: string; address?: string; diet?: string; notes?: string; breed?: string }>();
+
+    for (const b of (bookings || [])) {
+      const p = (b.ownerPhone || '').replace(/\D/g, '').slice(-9);
+      if (p) {
+        const cur = phoneEnrichmentMap.get(p) || {};
+        const bAny = b as any;
+        phoneEnrichmentMap.set(p, {
+          email: cur.email || b.ownerEmail || bAny.owner_email || (bAny.data && bAny.data.ownerEmail) || undefined,
+          address: cur.address || b.ownerAddress || bAny.owner_address || (bAny.data && bAny.data.ownerAddress) || undefined,
+          diet: cur.diet || b.specialDiet || (bAny.data && bAny.data.specialDiet) || undefined,
+          notes: cur.notes || (bAny.data && bAny.data.notes) || undefined,
+          breed: cur.breed || b.dogBreed || (bAny.data && bAny.data.dogBreed) || undefined,
+        });
+      }
+    }
+
+    for (const req of (intakeRequests || [])) {
+      const p = (req.ownerPhone || '').replace(/\D/g, '').slice(-9);
+      if (p) {
+        const cur = phoneEnrichmentMap.get(p) || {};
+        phoneEnrichmentMap.set(p, {
+          email: cur.email || req.ownerEmail || undefined,
+          address: cur.address || req.ownerAddress || undefined,
+          diet: cur.diet || req.specialNeeds || req.specialDiet || undefined,
+          notes: cur.notes || req.notes || req.internalNotes || undefined,
+          breed: cur.breed || req.dogBreed || undefined,
+        });
+      }
+    }
 
     const makeKey = (phone: string, dog: string) => {
       const cleanP = (phone || '').replace(/\D/g, '').slice(-9);
@@ -189,19 +225,24 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       return `${cleanP}_${cleanD}`;
     };
 
-    // 1. From intakeRequests (includes Michael Ben Har - Haimi!)
+    // 1. From intakeRequests (includes Michael Ben Har - Haimi, etc.)
     if (intakeRequests && intakeRequests.length > 0) {
       for (const req of intakeRequests) {
         if (!req.ownerName?.trim() && !req.dogName?.trim()) continue;
+        const cleanP = (req.ownerPhone || '').replace(/\D/g, '').slice(-9);
+        const enriched = phoneEnrichmentMap.get(cleanP) || {};
         const key = makeKey(req.ownerPhone || '', req.dogName || '');
         if (key && !map.has(key)) {
           map.set(key, {
             id: `intake-${req.id}`,
             ownerName: req.ownerName || '',
             ownerPhone: req.ownerPhone || '',
-            ownerEmail: req.ownerEmail || '',
+            ownerEmail: req.ownerEmail || enriched.email || '',
+            ownerAddress: req.ownerAddress || enriched.address || '',
             dogName: req.dogName || '',
-            dogBreed: req.dogBreed || '',
+            dogBreed: req.dogBreed || enriched.breed || '',
+            specialDiet: req.specialNeeds || req.specialDiet || enriched.diet || '',
+            notes: req.notes || req.internalNotes || enriched.notes || '',
             source: 'intake',
             sourceLabel: 'שאלון קליטה / ליד'
           });
@@ -209,10 +250,38 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       }
     }
 
-    // 2. From customers (derived from bookings)
+    // 2. From bookings directly
+    if (bookings && bookings.length > 0) {
+      for (const b of bookings) {
+        if (!b.ownerName?.trim() && !b.dogName?.trim()) continue;
+        const cleanP = (b.ownerPhone || '').replace(/\D/g, '').slice(-9);
+        const enriched = phoneEnrichmentMap.get(cleanP) || {};
+        const key = makeKey(b.ownerPhone || '', b.dogName || '');
+        if (key && !map.has(key)) {
+          const bAny = b as any;
+          map.set(key, {
+            id: `bkg-${b.id}`,
+            ownerName: b.ownerName || '',
+            ownerPhone: b.ownerPhone || '',
+            ownerEmail: b.ownerEmail || bAny.owner_email || (bAny.data && bAny.data.ownerEmail) || enriched.email || '',
+            ownerAddress: b.ownerAddress || bAny.owner_address || (bAny.data && bAny.data.ownerAddress) || enriched.address || '',
+            dogName: b.dogName || '',
+            dogBreed: b.dogBreed || (bAny.data && bAny.data.dogBreed) || enriched.breed || '',
+            specialDiet: b.specialDiet || (bAny.data && bAny.data.specialDiet) || enriched.diet || '',
+            notes: b.notes || (bAny.data && bAny.data.notes) || enriched.notes || '',
+            source: 'booking',
+            sourceLabel: 'לקוח קיים ביומן'
+          });
+        }
+      }
+    }
+
+    // 3. From customers
     if (customers && customers.length > 0) {
       for (const c of customers) {
         if (!c.name?.trim()) continue;
+        const cleanP = (c.phone || '').replace(/\D/g, '').slice(-9);
+        const enriched = phoneEnrichmentMap.get(cleanP) || {};
         if (c.dogs && c.dogs.length > 0) {
           for (const d of c.dogs) {
             const key = makeKey(c.phone || '', d.name || '');
@@ -221,43 +290,36 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                 id: `cust-${c.id}-${d.name}`,
                 ownerName: c.name,
                 ownerPhone: c.phone || '',
-                ownerEmail: c.email || '',
+                ownerEmail: c.email || enriched.email || '',
+                ownerAddress: enriched.address || '',
                 dogName: d.name || '',
-                dogBreed: d.breed || '',
+                dogBreed: d.breed || enriched.breed || '',
+                specialDiet: d.specialDiet || enriched.diet || '',
+                notes: d.notes || enriched.notes || '',
                 source: 'booking',
                 sourceLabel: 'לקוח קיים ביומן'
               });
             }
           }
-        } else {
-          const key = makeKey(c.phone || '', '');
-          if (key && !map.has(key)) {
-            map.set(key, {
-              id: `cust-${c.id}`,
-              ownerName: c.name,
-              ownerPhone: c.phone || '',
-              ownerEmail: c.email || '',
-              dogName: '',
-              dogBreed: '',
-              source: 'booking',
-              sourceLabel: 'לקוח קיים ביומן'
-            });
-          }
         }
       }
     }
 
-    // 3. From passesList
+    // 4. From passesList
     for (const p of passesList) {
+      const cleanP = (p.ownerPhone || '').replace(/\D/g, '').slice(-9);
+      const enriched = phoneEnrichmentMap.get(cleanP) || {};
       const key = makeKey(p.ownerPhone || '', p.dogName || '');
       if (key && !map.has(key)) {
         map.set(key, {
           id: `pass-${p.id}`,
           ownerName: p.ownerName,
           ownerPhone: p.ownerPhone,
-          ownerEmail: p.ownerEmail || '',
+          ownerEmail: p.ownerEmail || enriched.email || '',
+          ownerAddress: enriched.address || '',
           dogName: p.dogName,
-          dogBreed: p.dogBreed || '',
+          dogBreed: p.dogBreed || enriched.breed || '',
+          notes: p.notes || enriched.notes || '',
           source: 'pass',
           sourceLabel: 'כרטיסייה קודמת'
         });
@@ -269,7 +331,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       const nameB = (b.dogName || b.ownerName).toLowerCase();
       return nameA.localeCompare(nameB, 'he');
     });
-  }, [customers, intakeRequests, passesList]);
+  }, [bookings, customers, intakeRequests, passesList]);
 
   // Filter candidates matching search query
   const filteredCandidates = React.useMemo(() => {
@@ -282,12 +344,13 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       const matchName = c.ownerName.toLowerCase().includes(q);
       const matchDog = c.dogName.toLowerCase().includes(q);
       const matchBreed = (c.dogBreed || '').toLowerCase().includes(q);
+      const matchEmail = (c.ownerEmail || '').toLowerCase().includes(q);
       const matchPhone = cleanNum ? c.ownerPhone.replace(/\D/g, '').includes(cleanNum) : false;
-      return matchName || matchDog || matchBreed || matchPhone;
+      return matchName || matchDog || matchBreed || matchEmail || matchPhone;
     });
   }, [allCandidates, customerSearchQuery]);
 
-  // Handle selecting candidate
+  // Handle selecting candidate - auto-fills ALL known fields!
   const handleSelectCandidate = (cand: UnifiedCustomerCandidate) => {
     setSelectedCandidate(cand);
     setDogName(cand.dogName);
@@ -295,6 +358,11 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
     setOwnerName(cand.ownerName);
     setOwnerPhone(cand.ownerPhone);
     setOwnerEmail(cand.ownerEmail || '');
+    setOwnerAddress(cand.ownerAddress || '');
+    if (cand.specialDiet || cand.notes) {
+      const parts = [cand.specialDiet, cand.notes].filter(Boolean);
+      setCustomNotes(parts.join(' | '));
+    }
     setCustomerSearchQuery('');
   };
 
@@ -921,6 +989,29 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                           placeholder="058-6275554"
                           className="w-full bg-white text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none text-left"
                           dir="ltr"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-slate-600 font-bold block mb-1">אימייל הבעלים ✉️</label>
+                        <input
+                          type="email"
+                          value={ownerEmail}
+                          onChange={(e) => setOwnerEmail(e.target.value)}
+                          placeholder="client@gmail.com"
+                          className="w-full bg-white text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none text-left"
+                          dir="ltr"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-slate-600 font-bold block mb-1">כתובת מגורים 🏠</label>
+                        <input
+                          type="text"
+                          value={ownerAddress}
+                          onChange={(e) => setOwnerAddress(e.target.value)}
+                          placeholder="עיר, רחוב ומספר בית"
+                          className="w-full bg-white text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
                         />
                       </div>
                     </div>

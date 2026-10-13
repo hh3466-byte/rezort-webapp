@@ -231,16 +231,37 @@ export default async function handler(req, res) {
       });
     }
 
-    // If still no booking, check if matching intake questionnaire exists
-    const matchingIntake = !matchedBooking && cleanPhone ? (intakes || []).find(r => {
+    // If still no booking, check if matching intake questionnaire exists (by phone or by exact amount/installments)
+    let matchingIntake = !matchedBooking && cleanPhone ? (intakes || []).find(r => {
       const rPhone = cleanPhoneNumber(r.owner_phone || r.ownerPhone || '');
       return rPhone && rPhone.endsWith(cleanPhone.slice(-7));
     }) : null;
 
-    // Strict guard: If this payment has NO relation to Resort bookings, intakes, or dogs, ignore it cleanly
+    // Check if amount matches a pending intake (e.g. 800 NIS total or 2 installments of 400 NIS)
     if (!matchedBooking && !matchingIntake) {
-      console.log(`No resort booking or intake matched for: ${fullName} (${cleanPhone}) - treated as non-resort transaction.`);
-      return res.status(200).json({ status: 'ignored', reason: 'non_resort_transaction' });
+      const pendingIntakes = (intakes || []).filter(r => r.status === 'pending' || r.status === 'payment_requested');
+      matchingIntake = pendingIntakes.find(r => {
+        const p = Number(r.depositRequested || r.calculatedPrice || 0);
+        return p > 0 && (p === amount || (data.installments && Number(data.installments) * amount === p) || (p === 800 && amount === 400));
+      }) || null;
+    }
+
+    // Check if this payment matches an active Daycare pass
+    const { data: activePasses } = await supabase.from('daycare_passes').select('*');
+    const matchedPass = (activePasses || []).find(p => {
+      const pPhone = cleanPhoneNumber(p.ownerPhone || '');
+      const pName = (p.ownerName || '').toLowerCase().trim();
+      return (cleanPhone && pPhone && pPhone.endsWith(cleanPhone.slice(-7))) || (fullName && pName && (fullName.includes(pName) || pName.includes(fullName)));
+    });
+
+    // Check if payload contains keywords for OTHER Danilov businesses (Zkhuyot HaMoreh, Knaan, etc.)
+    const otherBusinessKeywords = ['זכויות המורה', 'זכויות מורה', 'אתי דנילוב', 'כנען', 'טרקטור', 'עפרה', 'שפר'];
+    const payloadStr = JSON.stringify(payload).toLowerCase();
+    const isOtherBusiness = otherBusinessKeywords.some(kw => payloadStr.includes(kw));
+
+    if (isOtherBusiness) {
+      console.log(`Explicit non-resort transaction detected for: ${fullName} (${cleanPhone}) - ignored cleanly.`);
+      return res.status(200).json({ status: 'ignored', reason: 'other_business_transaction' });
     }
 
     // Prevent duplicate processing of the same transaction
@@ -319,6 +340,8 @@ export default async function handler(req, res) {
     let serviceName = 'פנסיון';
     let paymentClassification = 'מקדמה';
 
+    let alertMsg = '';
+
     if (matchedBooking) {
       dogName = matchedBooking.dog_name || (matchedBooking.data && matchedBooking.data.dogName) || 'הכלב';
       const st = (matchedBooking.service_type || (matchedBooking.data && matchedBooking.data.serviceType) || '').toLowerCase();
@@ -333,6 +356,7 @@ export default async function handler(req, res) {
       } else {
         paymentClassification = 'מקדמה';
       }
+      alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על שירות ${serviceName} (${paymentClassification}).`;
     } else if (matchingIntake) {
       dogName = matchingIntake.dog_name || matchingIntake.dogName || 'הכלב';
       const st = (matchingIntake.service_type || matchingIntake.serviceType || '').toLowerCase();
@@ -346,9 +370,25 @@ export default async function handler(req, res) {
       } else {
         paymentClassification = 'מקדמה';
       }
+      alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על שירות ${serviceName} (${paymentClassification}).`;
+    } else if (matchedPass) {
+      dogName = matchedPass.dogName || 'הכלב';
+      serviceName = 'כרטיסיית פעילות יומית';
+      paymentClassification = 'תשלום מלא';
+      alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על ${serviceName} (${paymentClassification} ✅ כרטיסייה ${matchedPass.passCode}).`;
+      
+      // Update pass payment status in Supabase
+      try {
+        await supabase.from('daycare_passes').update({
+          payment_status: 'fully_paid',
+          updated_at: new Date().toISOString()
+        }).eq('id', matchedPass.id);
+      } catch (passUpErr) {
+        console.warn('Error updating daycare pass payment status:', passUpErr);
+      }
+    } else {
+      alertMsg = `שלום, התקבל תשלום חדש ב-Grow ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} (📞 ${cleanPhone || 'ללא נייד'}). ⚠️ לא אותר שיוך אוטומטי להזמנה ביומן - נדרש שיוך ידני!`;
     }
-
-    const alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על שירות ${serviceName} (${paymentClassification}).`;
 
     await sendWhatsAppDirect(MANAGER_PHONE, alertMsg);
     await sendWhatsAppDirect(SHMULIK_PHONE, alertMsg);

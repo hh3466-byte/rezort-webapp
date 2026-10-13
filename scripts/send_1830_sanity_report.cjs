@@ -369,8 +369,12 @@ async function run1830Audit() {
     redLights.pendingCheckins.push(`📥 כניסה של היום שטרם סומנה: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${b.owner_phone || b.ownerPhone}) | רשום לכניסה היום אך טרם סומן שנכנס בפועל!`);
   });
 
-  // 4. Expired Ghost Bookings
-  activeBookings.filter(b => (b.end_date || b.endDate) < todayStr && (b.stay_status || b.stayStatus) !== 'checked_out').forEach(b => {
+  // 4. Expired Ghost Bookings (Exclude checked_out and archived stays per Rule 22)
+  activeBookings.filter(b => {
+    const end = b.end_date || b.endDate;
+    const st = b.stay_status || b.stayStatus;
+    return end < todayStr && st !== 'checked_out' && st !== 'archived';
+  }).forEach(b => {
     redLights.expiredGhostBookings.push(`👻 שריון עבר שטרם נסגר: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName}) | תאריכים ${formatDateIL(b.start_date || b.startDate)}-${formatDateIL(b.end_date || b.endDate)} עברו, נדרש שחרור או ארכיון.`);
   });
 
