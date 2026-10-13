@@ -20,7 +20,12 @@ import {
   ChevronRight,
   ArrowRight,
   ShieldCheck,
-  CalendarDays
+  CalendarDays,
+  ExternalLink,
+  Link2,
+  DollarSign,
+  Send,
+  Loader2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -30,7 +35,8 @@ import {
   PassUsageEntry, 
   PaymentMethod, 
   PaymentStatus, 
-  ResortSettings 
+  ResortSettings,
+  IntakeRequest
 } from '../types';
 import { 
   loadStoredDaycarePasses, 
@@ -38,13 +44,67 @@ import {
   deductDayFromPassInDb,
   subscribeToDaycarePasses 
 } from '../services/dbService';
-import { openWhatsAppMessage, cleanPhoneNumber } from '../utils/whatsappUtils';
+import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
+import { openWhatsAppMessage, cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
 import { formatDateIL, getTodayStr, addDays } from '../utils/dateUtils';
+
+export interface UnifiedCustomerCandidate {
+  id: string;
+  ownerName: string;
+  ownerPhone: string;
+  ownerEmail?: string;
+  dogName: string;
+  dogBreed?: string;
+  source: 'booking' | 'intake' | 'pass';
+  sourceLabel: string;
+}
+
+/**
+ * Progressive discount calculation for Daycare passes:
+ * - Base price for 1 day = 90 NIS
+ * - Price drops down to 75 NIS/day for 10 days in a linear progression:
+ *   (1.5 NIS discount per day for each day, capped at 15 NIS discount)
+ * - 1 day: 90 NIS/day (90 NIS)
+ * - 5 days: 82.5 NIS/day (412.5 NIS)
+ * - 10 days: 75 NIS/day (750 NIS - savings of 150 NIS!)
+ * - >10 days: 75 NIS/day (e.g. 15 days = 1,125 NIS)
+ */
+export function getDaycareProgressiveRate(days: number, baseRate: number = 90): {
+  dailyRate: number;
+  totalPrice: number;
+  discountPerDay: number;
+  totalSavings: number;
+} {
+  const d = Math.max(1, Math.round(Number(days) || 1));
+  if (d === 1) {
+    return {
+      dailyRate: baseRate,
+      totalPrice: baseRate,
+      discountPerDay: 0,
+      totalSavings: 0
+    };
+  }
+  const discountPerDay = Math.min(15, d * 1.5);
+  const dailyRate = Math.max(75, baseRate - discountPerDay);
+  const totalPrice = Math.round(dailyRate * d * 10) / 10;
+  const regularTotal = baseRate * d;
+  const totalSavings = Math.max(0, regularTotal - totalPrice);
+
+  return { dailyRate, totalPrice, discountPerDay, totalSavings };
+}
 
 interface DaycarePassModalProps {
   settings: ResortSettings;
   customers: Customer[];
   bookings: Booking[];
+  intakeRequests?: IntakeRequest[];
+  initialCustomer?: {
+    ownerName?: string;
+    ownerPhone?: string;
+    dogName?: string;
+    dogBreed?: string;
+    ownerEmail?: string;
+  } | null;
   onClose: () => void;
   onSaveBooking: (booking: Booking) => Promise<void> | void;
 }
@@ -53,6 +113,8 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   settings,
   customers,
   bookings,
+  intakeRequests = [],
+  initialCustomer,
   onClose,
   onSaveBooking
 }) => {
@@ -65,18 +127,25 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   const [isBookingSubmitting, setIsBookingSubmitting] = useState(false);
   const [createdPassResult, setCreatedPassResult] = useState<DaycarePass | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [isGeneratingGrowLink, setIsGeneratingGrowLink] = useState(false);
 
   // Form State for creating a new pass
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState<string>('');
+  const [selectedCandidate, setSelectedCandidate] = useState<UnifiedCustomerCandidate | null>(null);
   const [dogName, setDogName] = useState<string>('');
   const [dogBreed, setDogBreed] = useState<string>('');
   const [ownerName, setOwnerName] = useState<string>('');
   const [ownerPhone, setOwnerPhone] = useState<string>('');
   const [ownerEmail, setOwnerEmail] = useState<string>('');
   const [serviceType, setServiceType] = useState<'daycare' | 'day_training'>('daycare');
-  const [totalDays, setTotalDays] = useState<number>(10);
-  const [dailyRate, setDailyRate] = useState<number>(() => settings.defaultDailyRateDaycare || 90);
-  const [pricePaid, setPricePaid] = useState<number>(() => (settings.defaultDailyRateDaycare || 90) * 10);
+  
+  // Initialize with 10 days progressive rate
+  const initialDays = 10;
+  const initialRates = getDaycareProgressiveRate(initialDays, settings.defaultDailyRateDaycare || 90);
+  const [totalDays, setTotalDays] = useState<number>(initialDays);
+  const [dailyRate, setDailyRate] = useState<number>(initialRates.dailyRate);
+  const [pricePaid, setPricePaid] = useState<number>(initialRates.totalPrice);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('fully_paid');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bit');
   const [customNotes, setCustomNotes] = useState<string>('');
@@ -89,33 +158,171 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
     return () => unsub();
   }, []);
 
+  // Pre-fill initial customer if provided
+  useEffect(() => {
+    if (initialCustomer) {
+      if (initialCustomer.ownerName) setOwnerName(initialCustomer.ownerName);
+      if (initialCustomer.ownerPhone) setOwnerPhone(initialCustomer.ownerPhone);
+      if (initialCustomer.dogName) setDogName(initialCustomer.dogName);
+      if (initialCustomer.dogBreed) setDogBreed(initialCustomer.dogBreed);
+      if (initialCustomer.ownerEmail) setOwnerEmail(initialCustomer.ownerEmail);
+      setSelectedCandidate({
+        id: 'initial',
+        ownerName: initialCustomer.ownerName || '',
+        ownerPhone: initialCustomer.ownerPhone || '',
+        ownerEmail: initialCustomer.ownerEmail || '',
+        dogName: initialCustomer.dogName || '',
+        dogBreed: initialCustomer.dogBreed || '',
+        source: 'intake',
+        sourceLabel: 'לקוח נוכחי'
+      });
+    }
+  }, [initialCustomer]);
+
+  // Build unified customer candidates pool from Bookings, Intake Requests and Passes
+  const allCandidates = React.useMemo<UnifiedCustomerCandidate[]>(() => {
+    const map = new Map<string, UnifiedCustomerCandidate>();
+
+    const makeKey = (phone: string, dog: string) => {
+      const cleanP = (phone || '').replace(/\D/g, '').slice(-9);
+      const cleanD = (dog || '').trim().toLowerCase();
+      return `${cleanP}_${cleanD}`;
+    };
+
+    // 1. From intakeRequests (includes Michael Ben Har - Haimi!)
+    if (intakeRequests && intakeRequests.length > 0) {
+      for (const req of intakeRequests) {
+        if (!req.ownerName?.trim() && !req.dogName?.trim()) continue;
+        const key = makeKey(req.ownerPhone || '', req.dogName || '');
+        if (key && !map.has(key)) {
+          map.set(key, {
+            id: `intake-${req.id}`,
+            ownerName: req.ownerName || '',
+            ownerPhone: req.ownerPhone || '',
+            ownerEmail: req.ownerEmail || '',
+            dogName: req.dogName || '',
+            dogBreed: req.dogBreed || '',
+            source: 'intake',
+            sourceLabel: 'שאלון קליטה / ליד'
+          });
+        }
+      }
+    }
+
+    // 2. From customers (derived from bookings)
+    if (customers && customers.length > 0) {
+      for (const c of customers) {
+        if (!c.name?.trim()) continue;
+        if (c.dogs && c.dogs.length > 0) {
+          for (const d of c.dogs) {
+            const key = makeKey(c.phone || '', d.name || '');
+            if (key && !map.has(key)) {
+              map.set(key, {
+                id: `cust-${c.id}-${d.name}`,
+                ownerName: c.name,
+                ownerPhone: c.phone || '',
+                ownerEmail: c.email || '',
+                dogName: d.name || '',
+                dogBreed: d.breed || '',
+                source: 'booking',
+                sourceLabel: 'לקוח קיים ביומן'
+              });
+            }
+          }
+        } else {
+          const key = makeKey(c.phone || '', '');
+          if (key && !map.has(key)) {
+            map.set(key, {
+              id: `cust-${c.id}`,
+              ownerName: c.name,
+              ownerPhone: c.phone || '',
+              ownerEmail: c.email || '',
+              dogName: '',
+              dogBreed: '',
+              source: 'booking',
+              sourceLabel: 'לקוח קיים ביומן'
+            });
+          }
+        }
+      }
+    }
+
+    // 3. From passesList
+    for (const p of passesList) {
+      const key = makeKey(p.ownerPhone || '', p.dogName || '');
+      if (key && !map.has(key)) {
+        map.set(key, {
+          id: `pass-${p.id}`,
+          ownerName: p.ownerName,
+          ownerPhone: p.ownerPhone,
+          ownerEmail: p.ownerEmail || '',
+          dogName: p.dogName,
+          dogBreed: p.dogBreed || '',
+          source: 'pass',
+          sourceLabel: 'כרטיסייה קודמת'
+        });
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => {
+      const nameA = (a.dogName || a.ownerName).toLowerCase();
+      const nameB = (b.dogName || b.ownerName).toLowerCase();
+      return nameA.localeCompare(nameB, 'he');
+    });
+  }, [customers, intakeRequests, passesList]);
+
+  // Filter candidates matching search query
+  const filteredCandidates = React.useMemo(() => {
+    const q = customerSearchQuery.trim().toLowerCase();
+    if (!q) {
+      return allCandidates.slice(0, 10);
+    }
+    const cleanNum = q.replace(/\D/g, '');
+    return allCandidates.filter(c => {
+      const matchName = c.ownerName.toLowerCase().includes(q);
+      const matchDog = c.dogName.toLowerCase().includes(q);
+      const matchBreed = (c.dogBreed || '').toLowerCase().includes(q);
+      const matchPhone = cleanNum ? c.ownerPhone.replace(/\D/g, '').includes(cleanNum) : false;
+      return matchName || matchDog || matchBreed || matchPhone;
+    });
+  }, [allCandidates, customerSearchQuery]);
+
+  // Handle selecting candidate
+  const handleSelectCandidate = (cand: UnifiedCustomerCandidate) => {
+    setSelectedCandidate(cand);
+    setDogName(cand.dogName);
+    setDogBreed(cand.dogBreed || '');
+    setOwnerName(cand.ownerName);
+    setOwnerPhone(cand.ownerPhone);
+    setOwnerEmail(cand.ownerEmail || '');
+    setCustomerSearchQuery('');
+  };
+
   // Update rates when service type or totalDays changes
   const handleServiceTypeChange = (type: 'daycare' | 'day_training') => {
     setServiceType(type);
-    const rate = type === 'day_training' 
-      ? (settings.defaultDailyRateDayTraining || 250) 
-      : (settings.defaultDailyRateDaycare || 90);
-    setDailyRate(rate);
-    setPricePaid(rate * totalDays);
+    if (type === 'day_training') {
+      const rate = settings.defaultDailyRateDayTraining || 250;
+      setDailyRate(rate);
+      setPricePaid(rate * totalDays);
+    } else {
+      const calc = getDaycareProgressiveRate(totalDays, settings.defaultDailyRateDaycare || 90);
+      setDailyRate(calc.dailyRate);
+      setPricePaid(calc.totalPrice);
+    }
   };
 
   const handleTotalDaysChange = (days: number) => {
     const d = Math.max(1, days);
     setTotalDays(d);
-    setPricePaid(dailyRate * d);
-  };
-
-  // Handle selecting an existing customer
-  const handleSelectCustomer = (customerId: string) => {
-    setSelectedCustomerId(customerId);
-    const match = customers.find(c => c.id === customerId);
-    if (match) {
-      setOwnerName(match.name);
-      setOwnerPhone(match.phone);
-      setOwnerEmail(match.email || '');
-      const firstDog = match.dogs?.[0];
-      setDogName(firstDog?.name || '');
-      setDogBreed(firstDog?.breed || '');
+    if (serviceType === 'daycare') {
+      const calc = getDaycareProgressiveRate(d, settings.defaultDailyRateDaycare || 90);
+      setDailyRate(calc.dailyRate);
+      setPricePaid(calc.totalPrice);
+    } else {
+      const rate = settings.defaultDailyRateDayTraining || 250;
+      setDailyRate(rate);
+      setPricePaid(rate * d);
     }
   };
 
@@ -132,7 +339,13 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
     return d.toISOString().split('T')[0];
   };
 
-  // Submit new pass
+  // Build direct digital questionnaire link for this pass
+  const getPassBookingLink = (pass: DaycarePass) => {
+    const cleanP = cleanPhoneNumber(pass.ownerPhone);
+    return `https://rezort-webapp.vercel.app/?request=true&pass=${pass.passCode}&phone=${encodeURIComponent(cleanP)}&name=${encodeURIComponent(pass.ownerName)}&dog=${encodeURIComponent(pass.dogName)}`;
+  };
+
+  // Submit new pass (Prepaid / Direct)
   const handleCreatePass = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!dogName.trim() || !ownerName.trim() || !ownerPhone.trim()) {
@@ -179,6 +392,86 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
     });
   };
 
+  // Generate Grow Payment Link and send WhatsApp directly
+  const handleGenerateAndSendGrowLink = async () => {
+    if (!dogName.trim() || !ownerName.trim() || !ownerPhone.trim()) {
+      alert('נא למלא את שם הכלב, שם הבעלים ומספר הטלפון');
+      return;
+    }
+
+    setIsGeneratingGrowLink(true);
+    try {
+      const desc = serviceType === 'day_training'
+        ? `כרטיסיית ${totalDays} אילוף ביומיות - ${dogName.trim()}`
+        : `כרטיסיית ${totalDays} יומיות (מעון יום) - ${dogName.trim()}`;
+
+      const growRes = await createGrowDynamicPaymentLink({
+        amount: pricePaid,
+        dogName: dogName.trim(),
+        ownerName: ownerName.trim(),
+        ownerPhone: ownerPhone.trim(),
+        ownerEmail: ownerEmail.trim() || undefined,
+        description: desc
+      });
+
+      const paymentUrl = growRes.paymentUrl;
+      const today = getTodayStr();
+      const expiry = calculateSixMonthsExpiry();
+      const passCode = generatePassCode();
+      const passId = `pass-${Date.now()}`;
+
+      const newPass: DaycarePass = {
+        id: passId,
+        passCode,
+        dogName: dogName.trim(),
+        dogBreed: dogBreed.trim() || undefined,
+        ownerName: ownerName.trim(),
+        ownerPhone: ownerPhone.trim(),
+        ownerEmail: ownerEmail.trim() || undefined,
+        serviceType,
+        totalDays,
+        usedDays: 0,
+        pricePaid,
+        dailyRate,
+        paymentStatus: 'unpaid',
+        paymentMethod: 'credit',
+        notes: customNotes.trim() ? `${customNotes.trim()} | [נשלח קישור לתשלום Grow]` : '[נשלח קישור לתשלום Grow]',
+        validFrom: today,
+        validUntil: expiry,
+        status: 'active',
+        usageHistory: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await saveDaycarePassToDb(newPass);
+      setCreatedPassResult(newPass);
+
+      const progressiveNote = serviceType === 'daycare' && totalDays >= 5
+        ? ` (מחיר מוזל בטור יורד: ₪${dailyRate} ליום במקום ₪90! חיסכון של ₪${((settings.defaultDailyRateDaycare || 90) * totalDays - pricePaid).toFixed(0)} 🎉)`
+        : '';
+
+      const msg = `שלום ${ownerName.trim()}! 🐾
+לבקשתך, מצורף קישור לרכישה מאובטחת של *כרטיסיית ${totalDays} יומיות* עבור *${dogName.trim()}* בריזורט לכלב:
+
+🎟️ *חבילה:* ${totalDays} ימי שהייה ביומיות (מעון יום)
+💰 *סכום לתשלום:* ₪${pricePaid}${progressiveNote}
+⏳ *תוקף הכרטיסייה:* חצי שנה (עד ${formatDateIL(expiry)})
+🎟️ *מספר כרטיסייה שמור עבורכם:* *${passCode}*
+
+💳 *לתשלום מאובטח בלחיצה (כולל Bit, Apple Pay, Google Pay, PayBox וכרטיסי אשראי):*
+👉 \u200E${paymentUrl}
+
+לאחר ביצוע התשלום המערכת מאשרת את הכרטיסייה אוטומטית וניתן לתאם ימי הגעה לריזורט! מחכים לראותכם 🐶✨`;
+
+      openWhatsAppMessage(ownerPhone, msg);
+    } catch (err: any) {
+      alert(`שגיאה בהפקת קישור תשלום: ${err?.message || 'נסה שוב'}`);
+    } finally {
+      setIsGeneratingGrowLink(false);
+    }
+  };
+
   // Send WhatsApp to Customer with instructions and direct digital questionnaire link
   const handleSendWhatsAppToCustomer = (pass: DaycarePass) => {
     const remainingDays = pass.totalDays - pass.usedDays;
@@ -186,8 +479,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       ? 'אילוף ביומיות (ללא לינה)' 
       : 'שהייה יומית בריזורט לכלב (מעון יום)';
 
-    const cleanP = cleanPhoneNumber(pass.ownerPhone);
-    const link = `https://rezort-webapp.vercel.app/?request=true&pass=${pass.passCode}&phone=${encodeURIComponent(cleanP)}&name=${encodeURIComponent(pass.ownerName)}&dog=${encodeURIComponent(pass.dogName)}`;
+    const link = getPassBookingLink(pass);
 
     const msg = `שלום ${pass.ownerName}! 🐾🐶
 הונפקה עבורכם בהצלחה *כרטיסיית ${serviceName}* בריזורט לכלב!
@@ -205,6 +497,14 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
 שמוליק יקבל את הבקשה ישירות במערכת ויאשר את שריון המקום ביומן הריזורט (ללא כל תשלום נוסף)! 🐕🤍`;
 
     openWhatsAppMessage(pass.ownerPhone, msg);
+  };
+
+  // Copy booking link to clipboard
+  const handleCopyPassLink = (pass: DaycarePass) => {
+    const link = getPassBookingLink(pass);
+    navigator.clipboard.writeText(link);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
   };
 
   // Deduct a day and create a real booking in Calendar
@@ -289,10 +589,12 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   const filteredPasses = passesList.filter(p => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return true;
+    const cleanNum = q.replace(/\D/g, '');
     return (
       p.passCode.toLowerCase().includes(q) ||
       p.dogName.toLowerCase().includes(q) ||
       p.ownerName.toLowerCase().includes(q) ||
+      (cleanNum && p.ownerPhone.replace(/\D/g, '').includes(cleanNum)) ||
       p.ownerPhone.includes(q)
     );
   });
@@ -315,7 +617,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-emerald-100/80 mt-0.5">
-                רכישת ימי שהות ואילוף ביומיות מראש, הנפקת שוברים ושריון ימי הגעה
+                תמחור מוזל בטור יורד (עד ₪75 ליום), חיפוש מהיר של כל לקוח, הפקת שוברים ושליחת קישורי תשלום
               </p>
             </div>
           </div>
@@ -376,7 +678,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                       {createdPassResult.dogName} ({createdPassResult.ownerName})
                     </h3>
                     <p className="text-xs text-slate-600 mt-1">
-                      {createdPassResult.serviceType === 'day_training' ? 'אילוף ביומיות' : 'שהייה יומית בריזורט'} • {createdPassResult.totalDays} ימים
+                      {createdPassResult.serviceType === 'day_training' ? 'אילוף ביומיות' : 'שהייה יומית בריזורט (מעון יום)'} • {createdPassResult.totalDays} ימים
                     </p>
                   </div>
 
@@ -395,7 +697,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                             setCopiedCode(true);
                             setTimeout(() => setCopiedCode(false), 2000);
                           }}
-                          className="text-slate-400 hover:text-slate-700 p-1 rounded-md"
+                          className="text-slate-400 hover:text-slate-700 p-1 rounded-md cursor-pointer"
                           title="העתק קוד"
                         >
                           {copiedCode ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
@@ -409,8 +711,8 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                         <span className="font-bold text-slate-800">{createdPassResult.totalDays} ימים</span>
                       </div>
                       <div>
-                        <span className="text-slate-400 block">סכום ששולם:</span>
-                        <span className="font-bold text-emerald-600">₪{createdPassResult.pricePaid}</span>
+                        <span className="text-slate-400 block">סכום לתשלום:</span>
+                        <span className="font-bold text-emerald-600">₪{createdPassResult.pricePaid} (₪{createdPassResult.dailyRate}/יום)</span>
                       </div>
                       <div>
                         <span className="text-slate-400 block">תוקף לחצי שנה:</span>
@@ -419,14 +721,14 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                       <div>
                         <span className="text-slate-400 block">סטטוס תשלום:</span>
                         <span className="font-bold text-slate-800">
-                          {createdPassResult.paymentStatus === 'fully_paid' ? '🟢 שולם במלואו' : '🟡 טרם שולם'}
+                          {createdPassResult.paymentStatus === 'fully_paid' ? '🟢 שולם במלואו' : '🟡 טרם שולם / ממתין ל-Grow'}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => handleSendWhatsAppToCustomer(createdPassResult)}
@@ -434,6 +736,15 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                     >
                       <Share2 className="w-4 h-4" />
                       <span>שלח שובר והסבר בוואטסאפ ללקוח 📲</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyPassLink(createdPassResult)}
+                      className="px-5 py-3 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-sm rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      {copiedLink ? <Check className="w-4 h-4 text-emerald-600" /> : <Link2 className="w-4 h-4" />}
+                      <span>{copiedLink ? 'הקישור הועתק!' : 'העתק קישור ישיר ללקוח 🔗'}</span>
                     </button>
 
                     <button
@@ -452,28 +763,118 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                 /* Pass Creation Form */
                 <form onSubmit={handleCreatePass} className="space-y-5">
                   
-                  {/* Step 1: Select Existing Customer or Enter New */}
+                  {/* Step 1: Smart Unified Customer Selection & Instant Search */}
                   <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
                     <div className="flex items-center justify-between">
                       <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                        <User className="w-4 h-4 text-emerald-600" />
-                        <span>בחר לקוח קיים (או הזן ידנית למטה)</span>
+                        <Search className="w-4 h-4 text-emerald-600" />
+                        <span>איתור מהיר של בעלים או כלב (מכלל הלקוחות, השאלונים והשיחות):</span>
                       </label>
+                      <span className="text-[11px] text-slate-400">
+                        {allCandidates.length} לקוחות במערכת
+                      </span>
                     </div>
 
-                    <select
-                      value={selectedCustomerId}
-                      onChange={(e) => handleSelectCustomer(e.target.value)}
-                      className="w-full bg-white text-slate-800 text-sm px-3 py-2.5 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none cursor-pointer"
-                    >
-                      <option value="">-- בחר מרשימת הלקוחות או מלא ידנית --</option>
-                      {customers.map(c => (
-                        <option key={c.id} value={c.id}>
-                          {c.dogs?.[0]?.name || 'כלב'} ({c.name}) • {c.phone}
-                        </option>
-                      ))}
-                    </select>
+                    {selectedCandidate ? (
+                      /* Selected Customer Banner */
+                      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-400 rounded-2xl p-3 flex items-center justify-between animate-in fade-in">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                            🐶
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-black text-slate-900 text-base">{selectedCandidate.dogName}</span>
+                              {selectedCandidate.dogBreed && (
+                                <span className="text-xs text-slate-600 font-medium">({selectedCandidate.dogBreed})</span>
+                              )}
+                              <span className="text-[10px] bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full font-extrabold">
+                                {selectedCandidate.sourceLabel}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-600 flex items-center gap-2 mt-0.5">
+                              <span className="font-bold">👤 {selectedCandidate.ownerName}</span>
+                              <span>•</span>
+                              <span dir="ltr" className="font-mono">📞 {selectedCandidate.ownerPhone}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCandidate(null);
+                            setCustomerSearchQuery('');
+                          }}
+                          className="text-xs text-slate-600 hover:text-red-700 font-bold px-3 py-1.5 rounded-xl border border-slate-300 hover:border-red-300 bg-white hover:bg-red-50 transition-all cursor-pointer"
+                        >
+                          ✕ החלף לקוח
+                        </button>
+                      </div>
+                    ) : (
+                      /* Live Autocomplete Search Input */
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <Search className="w-4 h-4 text-emerald-600 absolute right-3.5 top-3.5" />
+                          <input
+                            type="text"
+                            value={customerSearchQuery}
+                            onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                            placeholder="הקלד לחיפוש מהיר: מיכאל, חיימי, 058..."
+                            className="w-full bg-white text-slate-900 text-sm pr-10 pl-8 py-2.5 rounded-xl border-2 border-emerald-400 focus:border-emerald-600 focus:outline-none shadow-xs font-medium"
+                          />
+                          {customerSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setCustomerSearchQuery('')}
+                              className="absolute left-3 top-3 text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
 
+                        {/* Matching candidates list */}
+                        {filteredCandidates.length > 0 && (
+                          <div className="max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100">
+                            {filteredCandidates.map((cand) => (
+                              <div
+                                key={cand.id}
+                                onClick={() => handleSelectCandidate(cand)}
+                                className="p-2.5 hover:bg-emerald-50 cursor-pointer flex items-center justify-between transition-colors group"
+                              >
+                                <div className="flex items-center gap-2.5">
+                                  <span className="text-lg">🐶</span>
+                                  <div>
+                                    <div className="text-xs font-black text-slate-900 group-hover:text-emerald-800">
+                                      {cand.dogName || 'כלב'} <span className="text-slate-500 font-normal">({cand.dogBreed || 'מעורב'})</span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-500">
+                                      {cand.ownerName} · <span dir="ltr">{cand.ownerPhone}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-bold group-hover:bg-emerald-200 group-hover:text-emerald-900">
+                                    {cand.sourceLabel}
+                                  </span>
+                                  <span className="text-xs font-bold text-emerald-700 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    בחר ↵
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {customerSearchQuery && filteredCandidates.length === 0 && (
+                          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between">
+                            <span>לא נמצא לקוח בשם זה. ניתן להזין את הפרטים ידנית בשדות למטה ⬇️</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Editable fields */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                       <div>
                         <label className="text-xs text-slate-600 font-bold block mb-1">שם הכלב *</label>
@@ -482,7 +883,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                           required
                           value={dogName}
                           onChange={(e) => setDogName(e.target.value)}
-                          placeholder="למשל: רקסי"
+                          placeholder="למשל: חיימי"
                           className="w-full bg-white text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
                         />
                       </div>
@@ -493,7 +894,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                           type="text"
                           value={dogBreed}
                           onChange={(e) => setDogBreed(e.target.value)}
-                          placeholder="למשל: גולדן רטריבר"
+                          placeholder="למשל: לברדורית"
                           className="w-full bg-white text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
                         />
                       </div>
@@ -505,7 +906,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                           required
                           value={ownerName}
                           onChange={(e) => setOwnerName(e.target.value)}
-                          placeholder="למשל: ישראל ישראלי"
+                          placeholder="למשל: מיכאל בן הר"
                           className="w-full bg-white text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
                         />
                       </div>
@@ -517,7 +918,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                           required
                           value={ownerPhone}
                           onChange={(e) => setOwnerPhone(e.target.value)}
-                          placeholder="050-1234567"
+                          placeholder="058-6275554"
                           className="w-full bg-white text-slate-900 text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none text-left"
                           dir="ltr"
                         />
@@ -543,7 +944,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                         <div className="flex items-center justify-between">
                           <span className="text-xl">🐾</span>
                           <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md font-extrabold">
-                            ₪{settings.defaultDailyRateDaycare || 90}/יום
+                            מ-₪75 עד ₪90 ליום
                           </span>
                         </div>
                         <div className="text-sm font-black mt-2">שהייה יומית בריזורט (מעון יום)</div>
@@ -571,7 +972,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Step 3: Days Quantity & Custom Price */}
+                  {/* Step 3: Progressive Discount Quantity & Total Price */}
                   <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
                     <div>
                       <div className="flex items-center justify-between mb-2">
@@ -581,22 +982,35 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                         </span>
                       </div>
 
-                      {/* Quick chip buttons */}
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {[5, 10, 15, 20].map(cnt => (
-                          <button
-                            key={cnt}
-                            type="button"
-                            onClick={() => handleTotalDaysChange(cnt)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                              totalDays === cnt
-                                ? 'bg-emerald-600 text-white shadow-xs'
-                                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                            }`}
-                          >
-                            {cnt} ימים {cnt === 10 ? '⭐ (פופולרי)' : ''}
-                          </button>
-                        ))}
+                      {/* Quick chip buttons with progressive rates */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                        {[5, 10, 15, 20].map(cnt => {
+                          const isSelected = totalDays === cnt;
+                          const chipCalc = serviceType === 'daycare' 
+                            ? getDaycareProgressiveRate(cnt, settings.defaultDailyRateDaycare || 90)
+                            : null;
+                          return (
+                            <button
+                              key={cnt}
+                              type="button"
+                              onClick={() => handleTotalDaysChange(cnt)}
+                              className={`p-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex flex-col items-center gap-0.5 text-center ${
+                                isSelected
+                                  ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400'
+                                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                              }`}
+                            >
+                              <span className="font-black text-sm">
+                                {cnt} ימים {cnt === 10 ? '⭐' : ''}
+                              </span>
+                              {chipCalc && (
+                                <span className={`text-[10px] ${isSelected ? 'text-emerald-100' : 'text-slate-500'}`}>
+                                  ₪{chipCalc.dailyRate}/יום (₪{chipCalc.totalPrice})
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
 
                       <div className="flex items-center gap-3">
@@ -612,6 +1026,24 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Progressive Rate Banner */}
+                    {serviceType === 'daycare' && (
+                      <div className="p-3 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-300 rounded-xl text-xs text-emerald-950 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">🏷️</span>
+                          <div>
+                            <span className="font-extrabold">תמחור מוזל בטור יורד: </span>
+                            <span>₪{dailyRate} ליום (במקום ₪{settings.defaultDailyRateDaycare || 90})</span>
+                          </div>
+                        </div>
+                        {pricePaid < (settings.defaultDailyRateDaycare || 90) * totalDays && (
+                          <span className="bg-emerald-600 text-white font-black px-2.5 py-0.5 rounded-full text-[11px] shadow-xs">
+                            חיסכון של ₪{((settings.defaultDailyRateDaycare || 90) * totalDays - pricePaid).toFixed(0)} 🎉
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     <div className="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="text-xs text-slate-700 font-bold block mb-1">
@@ -625,7 +1057,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                           className="w-full bg-slate-50 font-black text-lg text-emerald-700 px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
                         />
                         <span className="text-[11px] text-slate-400 mt-1 block">
-                          מחושב: ₪{(pricePaid / (totalDays || 1)).toFixed(0)} ליום
+                          מחושב: ₪{(pricePaid / (totalDays || 1)).toFixed(1)} ליום
                         </span>
                       </div>
 
@@ -651,7 +1083,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                         type="text"
                         value={customNotes}
                         onChange={(e) => setCustomNotes(e.target.value)}
-                        placeholder="למשל: שילם מזומן מראש, מגיע בימי שלישי ורביעי"
+                        placeholder="למשל: סוכם בטלפון, מגיע פעם בשבוע באופן קבוע"
                         className="w-full bg-slate-50 text-slate-800 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
                       />
                     </div>
@@ -668,14 +1100,35 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Submit Button */}
-                  <button
-                    type="submit"
-                    className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-base rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Sparkles className="w-5 h-5" />
-                    <span>הנפק כרטיסייה והפק שובר דיגיטלי ✨</span>
-                  </button>
+                  {/* Dual Action Buttons: Generate & Send Grow Link VS Instant Issue */}
+                  <div className="space-y-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={isGeneratingGrowLink}
+                      onClick={handleGenerateAndSendGrowLink}
+                      className="w-full py-3.5 bg-gradient-to-r from-purple-700 via-indigo-700 to-emerald-700 hover:from-purple-800 hover:to-emerald-800 text-white font-black text-sm sm:text-base rounded-2xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isGeneratingGrowLink ? (
+                        <>
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span>מפיק קישור לתשלום מאובטח...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="w-5 h-5 text-yellow-300" />
+                          <span>שלח קישור לתשלום ב-Grow (₪{pricePaid} / Bit / אשראי) בוואטסאפ 📲</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="submit"
+                      className="w-full py-3 bg-white hover:bg-slate-50 text-slate-800 font-bold text-sm rounded-2xl border-2 border-slate-200 hover:border-emerald-500 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-emerald-600" />
+                      <span>הנפק כרטיסייה מיידית (שולם במזומן / ביט ישיר) ✨</span>
+                    </button>
+                  </div>
                 </form>
               )}
             </div>
@@ -698,10 +1151,27 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
               </div>
 
               {filteredPasses.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 space-y-2">
+                <div className="text-center py-12 text-slate-400 space-y-3">
                   <Ticket className="w-10 h-10 mx-auto stroke-1" />
                   <p className="text-sm font-bold">לא נמצאו כרטיסיות פעילות</p>
-                  <p className="text-xs">הנפק כרטיסייה חדשה בלשונית למעלה</p>
+                  {searchQuery ? (
+                    <div>
+                      <p className="text-xs mb-2">לא נמצאה כרטיסייה עבור "{searchQuery}"</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('create');
+                          setCustomerSearchQuery(searchQuery);
+                        }}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>הנפק כרטיסייה חדשה עבור חיפוש זה</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs">הנפק כרטיסייה חדשה בלשונית למעלה</p>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -755,7 +1225,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                               {remaining} / {pass.totalDays} ימים נותרו
                             </span>
                             <span className="block text-[10px] text-slate-400 mt-0.5">
-                              שולם: ₪{pass.pricePaid} ({pass.paymentMethod})
+                              ₪{pass.pricePaid} (₪{pass.dailyRate}/יום)
                             </span>
                           </div>
                         </div>
@@ -801,25 +1271,36 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                         )}
 
                         {/* Action buttons */}
-                        <div className="flex items-center gap-2 pt-1">
+                        <div className="flex items-center gap-2 pt-1 flex-wrap">
                           {!isCompleted && (
                             <button
                               type="button"
                               onClick={() => setSelectedPassForBooking(pass)}
-                              className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                              className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-w-[140px]"
                             >
                               <CalendarDays className="w-3.5 h-3.5" />
-                              <span>שריין יום מהכרטיסייה עכשיו 📅</span>
+                              <span>שריין יום ביומן 📅</span>
                             </button>
                           )}
 
                           <button
                             type="button"
                             onClick={() => handleSendWhatsAppToCustomer(pass)}
-                            className="p-2 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded-xl transition-all cursor-pointer"
-                            title="שלח תזכורת יתרה בוואטסאפ"
+                            className="p-2 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+                            title="שלח שובר / תזכורת בוואטסאפ ללקוח"
                           >
-                            <Share2 className="w-4 h-4" />
+                            <Share2 className="w-4 h-4 text-emerald-600" />
+                            <span className="hidden sm:inline">שלח שובר</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPassLink(pass)}
+                            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
+                            title="העתק קישור ישיר ללקוח"
+                          >
+                            <Link2 className="w-4 h-4 text-slate-600" />
+                            <span className="hidden sm:inline">העתק קישור</span>
                           </button>
                         </div>
                       </div>
@@ -852,7 +1333,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setSelectedPassForBooking(null)}
-                  className="text-slate-400 hover:text-slate-700 p-1"
+                  className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>

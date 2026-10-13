@@ -24,7 +24,8 @@ import {
   PenTool,
   PhoneCall,
   ChevronRight,
-  UserCheck
+  UserCheck,
+  Ticket
 } from 'lucide-react';
 import { Booking, IntakeRequest, IntakeRequestStatus, ResortSettings } from '../types';
 import { DesktopWhatsAppAuditModal } from './DesktopWhatsAppAuditModal';
@@ -70,6 +71,7 @@ interface WhatsAppLeadsViewProps {
   intakeRequests: IntakeRequest[];
   settings: ResortSettings;
   onOpenNewBookingWithData?: (data: { ownerName: string; ownerPhone: string; dogName?: string }) => void;
+  onOpenDaycarePassModal?: (customer?: { ownerName?: string; ownerPhone?: string; dogName?: string; dogBreed?: string; ownerEmail?: string }) => void;
   onNewCountChange?: (count: number) => void;
   onUpdateIntakeStatus?: (id: string, status: IntakeRequestStatus, notes?: string) => Promise<void> | void;
   onSaveIntakeRequest?: (request: IntakeRequest) => Promise<void> | void;
@@ -80,6 +82,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
   intakeRequests,
   settings,
   onOpenNewBookingWithData,
+  onOpenDaycarePassModal,
   onNewCountChange,
   onUpdateIntakeStatus,
   onSaveIntakeRequest
@@ -1120,6 +1123,26 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                       <span>קלוט ליומן 🟢</span>
                     </button>
                   )}
+
+                  {/* "הנפק כרטיסייה ליומיות" */}
+                  {onOpenDaycarePassModal && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenDaycarePassModal({
+                          ownerName: selectedChat.name,
+                          ownerPhone: selectedChat.cleanPhone,
+                          dogName: selectedChat.matchedDogName || '',
+                          ownerEmail: selectedChat.matchedIntake?.ownerEmail || ''
+                        });
+                      }}
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer shrink-0"
+                      title="הנפק כרטיסיית יומיות עבור לקוח זה עם פרטיו ממולאים מראש"
+                    >
+                      <Ticket className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>כרטיסייה 🎟️</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1514,11 +1537,34 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                   <span>📋 שאלון קליטה</span>
                 </button>
 
+                {/* 2.1 Send Daycare Pass Offer (טור יורד עד 75 ₪ ליום) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const dogText = selectedChat.matchedDogName ? ` עבור ${selectedChat.matchedDogName}` : '';
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾
+לגבי שהייה יומית בריזורט לכלב (מעון יום / יום כיף${dogText}):
+
+• מחיר קבוע ליום בודד: ₪90 ליום
+• 🎟️ כרטיסיית 10 יומיות מראש: ₪75 בלבד ליום (₪750 סה״כ – חיסכון של ₪150!)
+• 🎟️ כרטיסיית 5 יומיות: ₪82.5 ליום (₪412.5 סה״כ)
+
+הכרטיסייה בתוקף לחצי שנה, ומאפשרת גמישות מלאה בתיאום ימי הגעה מראש.
+רוצים שנשריין לכם כרטיסייה וקישור מאובטח להסדרה? 🐶✨`;
+                    setComposerText(text);
+                  }}
+                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען הצעת כרטיסיית יומיות מוזלת בטור יורד (75 ₪ ליום) לעריכה ושליחה"
+                >
+                  <Ticket className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>🎟️ כרטיסיית יומיות (75 ₪/יום)</span>
+                </button>
+
                 {/* 3. Official Price List */}
                 <button
                   type="button"
                   onClick={() => {
-                    const text = `🐾 *מחירון פנסיון לילה בריזורט לכלב:*\n• שהות של 1–6 לילות: ₪180 ללילה\n• שהות של 7–20 לילות (משבוע ומעלה): ₪150 ללילה\n• שהות של 21+ לילות (מעל 3 שבועות): ₪120 ללילה\n\n* כלבי בידוד / טיפול מיוחד: ₪230 ללילה\n* אילוף בתנאי פנסיון מלאים: ₪6,500\n* יום כיף (דייקר): ₪90 ליום\n\nנשמח לעמוד לרשותכם לכל שאלה! צוות ${settings.resortName} 🐾`;
+                    const text = `🐾 *מחירון פנסיון לילה בריזורט לכלב:*\n• שהות של 1–6 לילות: ₪180 ללילה\n• שהות של 7–20 לילות (משבוע ומעלה): ₪150 ללילה\n• שהות של 21+ לילות (מעל 3 שבועות): ₪120 ללילה\n\n* כלבי בידוד / טיפול מיוחד: ₪230 ללילה\n* אילוף בתנאי פנסיון מלאים: ₪6,500\n* שהייה יומית (מעון יום): ₪90 ליום (או ₪75 ליום ברכישת כרטיסיית 10 יומיות מראש)\n\nנשמח לעמוד לרשותכם לכל שאלה! צוות ${settings.resortName} 🐾`;
                     setComposerText(text);
                   }}
                   className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"

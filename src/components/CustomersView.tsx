@@ -14,7 +14,8 @@ import {
   Clock,
   Sparkles,
   Gift,
-  CreditCard
+  CreditCard,
+  Ticket
 } from 'lucide-react';
 import { Booking, Customer, ResortSettings } from '../types';
 import { extractCustomers } from '../utils/storage';
@@ -28,6 +29,7 @@ interface CustomersViewProps {
   onSelectBooking: (booking: Booking) => void;
   onOpenVoucher?: (data: { customerName: string; dogName: string; phone: string; staysCount?: number }) => void;
   onOpenSendPaymentLink?: (booking: Booking) => void;
+  onOpenDaycarePassModal?: (customer?: { ownerName?: string; ownerPhone?: string; dogName?: string; dogBreed?: string; ownerEmail?: string }) => void;
 }
 
 export const CustomersView: React.FC<CustomersViewProps> = ({
@@ -37,6 +39,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   onSelectBooking,
   onOpenVoucher,
   onOpenSendPaymentLink,
+  onOpenDaycarePassModal,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [vipFilter, setVipFilter] = useState<'all' | 'vip' | 'debt'>('all');
@@ -287,6 +290,24 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     >
                       <Gift className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span>שובר מתנה</span>
+                    </button>
+                  )}
+
+                  {onOpenDaycarePassModal && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenDaycarePassModal({
+                        ownerName: customer.name,
+                        ownerPhone: customer.phone,
+                        dogName: customer.dogs[0]?.name || '',
+                        dogBreed: customer.dogs[0]?.breed || '',
+                        ownerEmail: customer.email || ''
+                      })}
+                      className="py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 shrink-0"
+                      title="הנפק כרטיסיית יומיות ללקוח זה"
+                    >
+                      <Ticket className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      <span>כרטיסייה 🎟️</span>
                     </button>
                   )}
 
