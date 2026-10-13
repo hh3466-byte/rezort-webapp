@@ -204,12 +204,48 @@ function processResortEmails() {
         break;
       }
 
-      // 3. טיפול בתשלום Grow / קבלה של הריזורט לכלב - מחיקה לאשפה בלבד!
+      // 3. טיפול בתשלום Grow / קבלה של הריזורט לכלב
       if (isGrow) {
         if (!isOtherBusiness || isResort) {
           threadHandled = true;
           growCount++;
           Logger.log("🗑️ מייל קבלת Grow של הריזורט זוהה ומועבר לאשפה: " + subject);
+
+          // שליחת התראת וואטסאפ מיידית לשמוליק ולחגי על תשלום Grow חדש שנקלט במייל
+          try {
+            var isAuthCode = subject.indexOf("קוד אימות") !== -1 || fullLower.indexOf("קוד אימות") !== -1;
+            var msgId = msg.getId();
+            var alreadyNotified = scriptProperties.getProperty("grow_notified_" + msgId);
+
+            if (!isAuthCode && !alreadyNotified) {
+              var cleanBody = (body + " " + subject).replace(/\s+/g, ' ');
+              var amountMatch = cleanBody.match(/(?:סכום|סך|לתשלום|חויב ב-?)[^\d]*([\d,]+(?:\.\d{2})?)\s*(?:₪|ש"ח|שח|ils)/i) ||
+                                cleanBody.match(/(?:₪|ש"ח|שח)\s*([\d,]+(?:\.\d{2})?)/i) ||
+                                cleanBody.match(/([\d,]+(?:\.\d{2})?)\s*(?:₪|ש"ח|שח)/i);
+              var extractedAmount = amountMatch ? amountMatch[1] : "";
+
+              var payerMatch = cleanBody.match(/(?:שם הלקוח|שם המשלם|שם מלא|לקוח)[:\s]+([א-תA-Za-z\s]+?)(?:טלפון|נייד|סכום|דוא"ל|תאריך|\n|$)/i);
+              var extractedPayer = payerMatch ? payerMatch[1].trim() : "";
+
+              var phoneMatch = cleanBody.match(/(?:טלפון|נייד)[:\s]+([\d\-]{9,13})/i) || cleanBody.match(/(05\d[\-\d]{7,8})/);
+              var extractedPhone = phoneMatch ? phoneMatch[1].trim() : "";
+
+              var waMsg = "🟢 *התקבל תשלום Grow חדש לריזורט לכלב!*\n\n" +
+                          (extractedPayer ? "👤 *משלם:* " + extractedPayer + "\n" : "") +
+                          (extractedAmount ? "💰 *סכום:* ₪" + extractedAmount + "\n" : "") +
+                          (extractedPhone ? "📞 *טלפון:* " + extractedPhone + "\n" : "") +
+                          "📄 *נושא המייל:* " + subject + "\n" +
+                          "✅ *סטטוס:* התשלום זוהה במייל ועודכן במערכת.";
+
+              sendWhatsAppFromAppsScript("972506336896@c.us", waMsg); // שמוליק
+              sendWhatsAppFromAppsScript("972543200007@c.us", waMsg); // חגי
+              scriptProperties.setProperty("grow_notified_" + msgId, "true");
+              Logger.log("✓ נשלחה התראת וואטסאפ על תשלום Grow לשמוליק ולחגי");
+            }
+          } catch (eNotify) {
+            Logger.log("הערה בהתראת וואטסאפ לתשלום Grow: " + eNotify.toString());
+          }
+
           break;
         }
       }
@@ -229,6 +265,29 @@ function processResortEmails() {
   // Motzei Shabbat handled independently
 
   Logger.log("=== סיום ריצה: " + growCount + " תשלומי Grow נקלטו, " + morningDeletedCount + " חשבוניות מורנינג נמחקו, " + yanivDeletedCount + " מיילי יניב נמחקו ===");
+}
+
+/**
+ * שליחת הודעת וואטסאפ ישירה דרך Green-API (קלאסטר 7107)
+ */
+function sendWhatsAppFromAppsScript(chatId, message) {
+  try {
+    var url = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+    var payload = {
+      chatId: chatId,
+      message: message
+    };
+    var options = {
+      method: "post",
+      contentType: "application/json",
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
+    var response = UrlFetchApp.fetch(url, options);
+    Logger.log("Green-API response for " + chatId + ": " + response.getResponseCode());
+  } catch (eWa) {
+    Logger.log("שגיאה במשלוח וואטסאפ מ-Apps Script: " + eWa.toString());
+  }
 }
 
 /**
