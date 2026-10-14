@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { DaycarePass, ResortSettings } from '../types';
 import { formatDateIL, getTodayStr, addDays, getDayNameHebrew, calculateDaysCount } from '../utils/dateUtils';
 import { cleanPhoneNumber, formatIsraeliPhoneDisplay, openWhatsAppMessage } from '../utils/whatsappUtils';
-import { findDaycarePassByCode } from '../services/dbService';
+import { findDaycarePassByCode, findActiveDaycarePassByPhone } from '../services/dbService';
 import { supabase } from '../utils/supabase';
 import confetti from 'canvas-confetti';
 import { 
@@ -53,11 +53,16 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
       setLoading(true);
       try {
         const cleanCode = passCode.trim().toUpperCase();
+        const rawPhone = cleanPhoneNumber(passCode);
 
         // 1. Try settings resort_config
         const { data: sData } = await supabase.from('settings').select('data').eq('id', 'resort_config').single();
         const pList: DaycarePass[] = sData?.data?.daycare_passes || [];
-        const matched = pList.find(p => p.passCode.trim().toUpperCase() === cleanCode || p.id === cleanCode);
+        const matched = pList.find(p => 
+          p.passCode.trim().toUpperCase() === cleanCode || 
+          p.id === cleanCode ||
+          (rawPhone.length >= 7 && cleanPhoneNumber(p.ownerPhone) === rawPhone)
+        );
 
         if (matched && isMounted) {
           setPass(matched);
@@ -66,7 +71,7 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
         }
 
         // 2. Try fallback search via dbService
-        const fallback = findDaycarePassByCode(cleanCode);
+        const fallback = findDaycarePassByCode(cleanCode) || (rawPhone.length >= 7 ? findActiveDaycarePassByPhone(rawPhone) : null);
         if (fallback && isMounted) {
           setPass(fallback);
           setLoading(false);

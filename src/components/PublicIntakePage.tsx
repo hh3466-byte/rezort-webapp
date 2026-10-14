@@ -1374,6 +1374,36 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Active Daycare / Boarding Pass Detected Banner */}
+              {matchedDaycarePass && (
+                <div className="mt-3 p-3.5 bg-gradient-to-r from-emerald-100 via-teal-50 to-indigo-100 border-2 border-emerald-500 rounded-2xl text-xs space-y-2 shadow-xs animate-in fade-in">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-2xl">🎟️</span>
+                      <div>
+                        <div className="font-black text-emerald-950 text-xs sm:text-sm flex items-center gap-1.5 flex-wrap">
+                          <span>{matchedDaycarePass.serviceType === 'boarding' ? 'בנק 21 יממות VIP פעיל!' : 'כרטיסיית יומיות פעילה זוהתה במערכת!'}</span>
+                          <span className="bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-full text-[10px]">
+                            קוד #{matchedDaycarePass.passCode}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-emerald-900 font-bold mt-0.5">
+                          עבור {matchedDaycarePass.dogName} · נותרו <span className="text-emerald-700 font-black text-xs">{Math.max(0, matchedDaycarePass.totalDays - matchedDaycarePass.usedDays)} מתוך {matchedDaycarePass.totalDays} ימים</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <a
+                      href={`/?pass=${matchedDaycarePass.passCode}`}
+                      className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs px-3.5 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <span>פתח כרטיסייה ושריין יום</span>
+                      <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Optional Voucher / Referral Code Section for New Clients or Voucher holders */}

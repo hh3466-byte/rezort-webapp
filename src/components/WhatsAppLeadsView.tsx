@@ -1146,6 +1146,64 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                 </div>
               </div>
 
+              {/* Active Daycare / Boarding Pass Notice for Shmulik in CRM */}
+              {(() => {
+                const activePass = findActiveDaycarePassByPhone(selectedChat.cleanPhone);
+                if (!activePass) return null;
+                const remainingDays = Math.max(0, activePass.totalDays - activePass.usedDays);
+                const isPaid = activePass.paymentStatus === 'fully_paid';
+                const passLink = `https://rezort-webapp.vercel.app/?pass=${activePass.passCode}`;
+
+                return (
+                  <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border-b-2 border-emerald-400 px-4 py-2.5 shadow-2xs shrink-0 text-right" dir="rtl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-base">🎟️</span>
+                        <span className="font-black text-emerald-950 text-xs sm:text-sm">
+                          {activePass.serviceType === 'boarding' ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית יומיות'}: #{activePass.passCode} ({activePass.dogName})
+                        </span>
+                        <span className="text-xs bg-emerald-100 text-emerald-900 font-bold px-2 py-0.5 rounded-full border border-emerald-300">
+                          נותרו {remainingDays} מתוך {activePass.totalDays} ימים
+                        </span>
+                        {!isPaid && (
+                          <span className="text-[11px] bg-amber-100 text-amber-900 font-black px-2 py-0.5 rounded-full border border-amber-300 animate-pulse">
+                            ⚠️ ממתין לתשלום ₪{activePass.totalPrice} ב-Grow
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const shareText = isPaid
+                              ? `שלום ${getFirstName(selectedChat.name)}! 🐾\nמצורף קישור ישיר לכרטיסיית הפעילות של ${activePass.dogName} (נותרו ${remainingDays} מתוך ${activePass.totalDays} ימים):\n👉 ${passLink}\n\nתוכלו לצפות בניקובים ולשלוח בקשת שריון יום בלחיצה אחת! 🐶\nשמוליק וצוות הריזורט לכלב 🐾`
+                              : `שלום ${getFirstName(selectedChat.name)}! 🐾\nהופקה עבורך כרטיסיית 10 יומיות ל${activePass.dogName} בריזורט לכלב בעלות מוזלת של ₪750 (במקום ₪900).\nלצפייה בכרטיסייה ולהסדרת התשלום המאובטח:\n👉 ${passLink}\n\nשמוליק וצוות הריזורט לכלב 🐾`;
+                            setComposerText(shareText);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-[11px] px-2.5 py-1 rounded-lg shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
+                          title="טען הודעת וואטסאפ ללקוח עם קישור ישיר לכרטיסייה"
+                        >
+                          <Send className="w-3 h-3" />
+                          <span>שלח כרטיסייה ללקוח 📲</span>
+                        </button>
+
+                        <a
+                          href={passLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="bg-white hover:bg-slate-50 text-slate-700 font-bold text-[11px] px-2.5 py-1 rounded-lg border border-slate-300 shadow-2xs flex items-center gap-1 transition-all cursor-pointer"
+                          title="פתח כרטיסייה לצפייה"
+                        >
+                          <ExternalLink className="w-3 h-3 text-slate-500" />
+                          <span>צפה 👁️</span>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Returning Customer Past Debt Banner (Rule 21: Displayed ONLY on returning inquiry for Shmulik's decision) */}
               {(() => {
                 const pastDebtInfo = findCustomerPastDebt(selectedChat.cleanPhone, selectedChat.name, bookings);
