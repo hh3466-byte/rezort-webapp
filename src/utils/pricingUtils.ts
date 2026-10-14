@@ -3,12 +3,13 @@ export interface BoardingRateOptions {
   dogGender?: 'male' | 'female' | 'male_intact' | 'female_intact' | string;
   isNeutered?: boolean;
   isolationRate?: number;
+  isReserveDuty?: boolean; // מילואימניק בצו פעיל - 100 ₪ ליום
 }
 
 /**
  * Calculate boarding daily rate based on duration and dog profile:
- * - Isolation / aggressive (isFriendlyWithDogs === 'no' / false) OR unneutered male (male_intact or male + isNeutered === false):
- *   Fixed rate of 230 NIS/night (or isolationRate from settings) with NO duration discounts.
+ * - Reservists on active duty (isReserveDuty === true): Fixed rate of 100 NIS/night!
+ * - Isolation / aggressive (isFriendlyWithDogs === 'no' / false) OR unneutered male: Fixed rate of 230 NIS/night
  * - Regular dogs:
  *   - 1 to 6 nights: 180 NIS/night (defaultDailyRateBoarding)
  *   - 7 to 20 nights (from 1 week): 150 NIS/night
@@ -26,6 +27,17 @@ export function calculateBoardingRate(
   const dogGender = isObj ? optionsOrFriendly.dogGender : undefined;
   const isNeutered = isObj ? optionsOrFriendly.isNeutered : undefined;
   const isolationRate = (isObj && optionsOrFriendly.isolationRate) ? optionsOrFriendly.isolationRate : (isolationRateParam || 230);
+  const isReserveDuty = isObj ? optionsOrFriendly.isReserveDuty : false;
+
+  // 0. Reservist on active duty (Tzav 8 / Active reserve): 100 NIS/night fixed
+  if (isReserveDuty) {
+    return {
+      dailyRate: 100,
+      totalPrice: count * 100,
+      explanation: `${count} לילות × ₪100 (תעריף מילואימניק בצו פעיל 🇮🇱)`,
+      isSpecialRate: true
+    };
+  }
 
   const isAggressiveOrIsolation = isFriendlyWithDogs === 'no' || isFriendlyWithDogs === false;
   const isMaleIntact = dogGender === 'male_intact' || (dogGender === 'male' && isNeutered === false);
