@@ -1558,10 +1558,10 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                             setSelectedDaycarePassCode(p.passCode);
                             setSelectedDaycarePassId(p.id);
                             setIsFreeStay(true);
-                            setFreeStayReason('other');
+                            setFreeStayReason('free');
                             setTotalPrice(0);
                             setDepositAmount(0);
-                            setPaymentStatus('fully_paid');
+                            setPaymentType('full');
                             setPaymentMethod('cash');
                           }}
                           className="bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white text-xs font-black px-3 py-1.5 rounded-lg shadow-xs transition-all cursor-pointer self-start sm:self-auto"
@@ -3672,6 +3672,8 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
               depositAmount,
               serviceType,
               stayStatus: 'booked',
+              paymentStatus: 'unpaid',
+              vaccinationValid: true,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             }}

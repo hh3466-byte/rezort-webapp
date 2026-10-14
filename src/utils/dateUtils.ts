@@ -1017,8 +1017,8 @@ export function isBookingDigitallyPaidInFull(b: Booking, incomingGrow?: any[]): 
 
   const matchedGrowLedger = VERIFIED_GROW_LEDGER.some(t => {
     const tRef = t.ref.toLowerCase();
-    const tCust = t.customer.toLowerCase();
-    const tDog = t.dog.toLowerCase();
+    const tCust = (t.customerName || '').toLowerCase();
+    const tDog = (t.dogName || '').toLowerCase();
     return (tRef && (notes.includes(tRef) || b.id.includes(tRef))) ||
       (tCust && ownerName && (ownerName.includes(tCust) || tCust.includes(ownerName))) ||
       (tDog && dogName && dogName.includes(tDog));

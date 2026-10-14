@@ -867,8 +867,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       dayBookings.map((b, bIdx) => {
                         const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                         const remainingDebt = Math.max(0, Math.round((Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0)));
-                        const isPassBooking = Boolean(b.data?.daycarePassId || b.notes?.includes('כרטיסייה') || b.notes?.includes('מימוש מתוך כרטיסייה'));
-                        const isPassUnpaid = isPassBooking && (b.data?.daycarePassPaid === false || b.paymentStatus === 'unpaid');
+                        const isPassBooking = Boolean((b as any).data?.daycarePassId || b.daycarePassId || b.notes?.includes('כרטיסייה') || b.notes?.includes('מימוש מתוך כרטיסייה'));
+                        const isPassUnpaid = isPassBooking && ((b as any).data?.daycarePassPaid === false || b.daycarePassPaid === false || b.paymentStatus === 'unpaid');
                         const isPaid = (b.paymentStatus === 'fully_paid' && !isPassUnpaid) || (remainingDebt === 0 && (Number(b.totalPrice) || 0) > 0);
                         const isDeposit = !isPaid && (b.paymentStatus === 'deposit_paid' || (Number(b.depositAmount) || 0) > 0);
                         const isUnpaid = !isPaid && !isDeposit && !b.isFreeStay && ((Number(b.totalPrice) || 0) > 0 || isPassUnpaid);

@@ -1421,6 +1421,7 @@ export default function App() {
           paymentStatus: 'unpaid',
           paymentMethod: 'credit',
           stayStatus: 'booked',
+          vaccinationValid: true,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         } : undefined)}

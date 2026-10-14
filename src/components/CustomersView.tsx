@@ -254,6 +254,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                         const targetBooking: Booking = customerBookings[0] || {
                           id: 'cust-' + customer.id,
                           dogName: customer.dogs[0]?.name || 'כלב',
+                          dogBreed: customer.dogs[0]?.breed || 'מעורב',
                           ownerName: customer.name,
                           ownerPhone: customer.phone,
                           startDate: new Date().toISOString().split('T')[0],
@@ -263,6 +264,7 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                           serviceType: 'boarding',
                           stayStatus: 'checked_out',
                           paymentStatus: customer.openDebt > 0 ? 'unpaid' : 'fully_paid',
+                          vaccinationValid: true,
                           createdAt: new Date().toISOString(),
                           updatedAt: new Date().toISOString(),
                         };

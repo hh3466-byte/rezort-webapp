@@ -205,16 +205,19 @@ export const DogMediaLightboxModal: React.FC<DogMediaLightboxModalProps> = ({
           .from('settings')
           .select('data')
           .eq('id', currentItem.mediaSettingsId)
-          .single()
-          .then(({ data, error }) => {
-            setIsLoadingVideo(false);
-            if (!error && data?.data?.videoDataUrl) {
-              setVideoSrc(data.data.videoDataUrl);
-            } else {
-              console.warn('Could not load lazy video:', error);
-            }
-          })
-          .catch(() => setIsLoadingVideo(false));
+          .maybeSingle()
+          .then(
+            (res: any) => {
+              setIsLoadingVideo(false);
+              const row = res?.data;
+              if (!res?.error && row?.data?.videoDataUrl) {
+                setVideoSrc(row.data.videoDataUrl);
+              } else {
+                console.warn('Could not load lazy video:', res?.error);
+              }
+            },
+            () => setIsLoadingVideo(false)
+          );
       }
     } else {
       setVideoSrc('');

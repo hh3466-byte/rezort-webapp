@@ -1,5 +1,5 @@
 import { supabase } from '../utils/supabase';
-import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus, DigitalVoucher, VoucherStatus, DaycarePass } from '../types';
+import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus, DigitalVoucher, VoucherStatus, DaycarePass, PassUsageEntry } from '../types';
 import { initialBookings, defaultSettings } from '../data/initialData';
 import { extractCustomers } from '../utils/storage';
 import { sanitizePhone, cleanPhoneNumber } from '../utils/whatsappUtils';

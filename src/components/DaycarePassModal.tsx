@@ -649,7 +649,7 @@ ${paymentLine}
         updatedAt: new Date().toISOString()
       };
       await saveDaycarePassToDb(updated);
-      setStoredPasses(prev => prev.map(p => p.id === pass.id ? updated : p));
+      setPassesList(prev => prev.map(p => p.id === pass.id ? updated : p));
       handleSendWhatsAppToCustomer(pass);
     } catch (e: any) {
       alert(`שגיאה בעדכון כרטיסייה: ${e?.message}`);
@@ -667,7 +667,7 @@ ${paymentLine}
         updatedAt: new Date().toISOString()
       };
       await saveDaycarePassToDb(updated);
-      setStoredPasses(prev => prev.map(p => p.id === pass.id ? updated : p));
+      setPassesList(prev => prev.map(p => p.id === pass.id ? updated : p));
       if (isNowPaid) {
         confetti({
           particleCount: 50,
@@ -687,7 +687,7 @@ ${paymentLine}
 
     try {
       await deleteDaycarePassFromDb(pass.id);
-      setStoredPasses(prev => prev.filter(p => p.id !== pass.id));
+      setPassesList(prev => prev.filter(p => p.id !== pass.id));
     } catch (e: any) {
       alert(`שגיאה במחיקת כרטיסייה: ${e?.message}`);
     }

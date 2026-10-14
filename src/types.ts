@@ -4,7 +4,7 @@ export type PaymentStatus = 'unpaid' | 'deposit_paid' | 'fully_paid';
 
 export type StayStatus = 'booked' | 'checked_in' | 'checked_out' | 'cancelled' | 'archived';
 
-export type PaymentMethod = 'bit' | 'paybox' | 'cash' | 'credit' | 'bank_transfer' | 'other';
+export type PaymentMethod = 'bit' | 'paybox' | 'cash' | 'credit' | 'bank_transfer' | 'grow' | 'other';
 
 export interface IntakeMediaItem {
   id: string;
@@ -48,6 +48,8 @@ export interface Booking {
   emergencyContact?: string;
   ownerAddress?: string; // כתובת מגורים של הבעלים (חיוני לאיתור במקרה בריחה וחירום)
   ownerCoordinates?: { lat: number; lng: number }; // קואורדינטות GPS לניווט ישיר ב-Waze
+  daycarePassPaid?: boolean;
+  data?: any;
   // Extended fields from the streamlined wizard
   dogAgeGroup?: 'puppy' | 'young' | 'adult' | 'senior';
   dogGender?: 'male_neutered' | 'female_spayed' | 'male_intact' | 'female_intact';
@@ -270,6 +272,8 @@ export interface ResortSettings {
   lastTomorrowOverviewSentDate?: string;
   lastTomorrowOverviewSentTimestamp?: string;
   eveningGreetingsSentDate?: string;
+  daycarePasses?: DaycarePass[];
+  shmulikWhatsAppPhone?: string;
 }
 
 export type AgentIntent = 

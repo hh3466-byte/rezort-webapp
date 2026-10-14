@@ -1,4 +1,4 @@
-import { Booking, TrainerPaymentStage, TrainerReceipt, TrainerStageType } from '../types';
+import { Booking, TrainerPaymentStage, TrainerReceipt, TrainerStageType, TrainerReceiptAllocation } from '../types';
 import { getTodayStr } from './dateUtils';
 
 export const HILA_TRAINER_INFO = {
