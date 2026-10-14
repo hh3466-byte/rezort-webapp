@@ -1498,6 +1498,22 @@ export const findDaycarePassByCode = (code: string): DaycarePass | null => {
   return list.find(p => p.passCode.trim().toUpperCase() === clean || p.id === clean) || null;
 };
 
+export const findActiveDaycarePassByPhone = (phone: string): DaycarePass | null => {
+  const cleanDigits = (phone || '').replace(/\D/g, '').slice(-9);
+  if (!cleanDigits || cleanDigits.length < 7) return null;
+  const list = loadStoredDaycarePasses();
+  const today = new Date().toISOString().split('T')[0];
+
+  return list.find(p => {
+    const pDigits = (p.ownerPhone || '').replace(/\D/g, '').slice(-9);
+    const matchesPhone = pDigits && (pDigits === cleanDigits || pDigits.endsWith(cleanDigits) || cleanDigits.endsWith(pDigits));
+    const isNotExpired = !p.validUntil || p.validUntil >= today;
+    const hasRemaining = p.usedDays < p.totalDays;
+    const isActive = p.status === 'active';
+    return matchesPhone && isActive && isNotExpired && hasRemaining;
+  }) || null;
+};
+
 export const saveDaycarePassToDb = async (pass: DaycarePass): Promise<void> => {
   try {
     // 1. Update local storage
@@ -1556,7 +1572,9 @@ export const deductDayFromPassInDb = async (
   bookingDate: string,
   bookingId?: string,
   addedBy: 'customer' | 'shmulik' = 'shmulik',
-  notes?: string
+  notes?: string,
+  daysCount: number = 1,
+  endDate?: string
 ): Promise<{ success: boolean; pass?: DaycarePass; error?: string }> => {
   try {
     const clean = (passIdOrCode || '').trim().toUpperCase();
@@ -1571,8 +1589,15 @@ export const deductDayFromPassInDb = async (
       return { success: false, error: `הכרטיסייה אינה פעילה (סטטוס: ${match.status})` };
     }
 
-    if (match.usedDays >= match.totalDays) {
+    const requestedDeduction = Math.max(1, Math.round(Number(daysCount) || 1));
+    const availableDays = match.totalDays - match.usedDays;
+
+    if (availableDays <= 0) {
       return { success: false, error: 'כל הימים בכרטיסייה כבר נוצלו במלואם' };
+    }
+
+    if (requestedDeduction > availableDays) {
+      return { success: false, error: `נותרו רק ${availableDays} ימים בכרטיסייה, אך נדרשים ${requestedDeduction} ימים` };
     }
 
     // Check expiry
@@ -1583,11 +1608,13 @@ export const deductDayFromPassInDb = async (
       return { success: false, error: `תוקף הכרטיסייה פג ב-${match.validUntil}` };
     }
 
-    const newUsedDays = match.usedDays + 1;
+    const newUsedDays = match.usedDays + requestedDeduction;
     const isCompleted = newUsedDays >= match.totalDays;
 
-    const newUsageEntry = {
+    const newUsageEntry: PassUsageEntry = {
       date: bookingDate,
+      endDate: endDate || undefined,
+      daysCount: requestedDeduction,
       bookingId: bookingId || '',
       addedBy,
       notes: notes || '',

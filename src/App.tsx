@@ -2571,19 +2571,26 @@ export default function App() {
               setIntakeRequests(prev => prev.map(r => r.id === matchedIntakeId ? { ...r, status: 'approved' } : r));
             }
 
-            // If this booking came from a Daycare Pass, auto-deduct the punch day in DB
+            // If this booking came from a Daycare or Boarding Pass, auto-deduct the punch day in DB
             const passCodeToDeduct = newBooking.daycarePassCode || (bookingWizardOpen.initialData as any)?.daycarePassCode;
             if (passCodeToDeduct) {
+              const isBoardingBooking = newBooking.serviceType === 'boarding';
+              const daysToDeduct = isBoardingBooking
+                ? Math.max(1, calculateDaysCount(newBooking.startDate, newBooking.endDate || newBooking.startDate))
+                : 1;
+
               const deductRes = await deductDayFromPassInDb(
                 passCodeToDeduct,
                 newBooking.startDate,
                 newBooking.id,
                 'customer',
-                `קליטה ליומן משאלון דיגיטלי: ${newBooking.dogName} (${newBooking.ownerName})`
+                `קליטה ליומן משאלון דיגיטלי: ${newBooking.dogName} (${newBooking.ownerName})`,
+                daysToDeduct,
+                newBooking.endDate || newBooking.startDate
               );
               if (deductRes.success && deductRes.pass) {
                 const remaining = deductRes.pass.totalDays - deductRes.pass.usedDays;
-                showToast(`🎟️ יום קוזז מכרטיסייה ${passCodeToDeduct}! נותרו ${remaining} ימים`);
+                showToast(`🎟️ קוזזו ${daysToDeduct} ${isBoardingBooking ? 'יממות' : 'ימים'} מכרטיסייה ${passCodeToDeduct}! נותרו ${remaining} ימים`);
               }
             }
 
@@ -2802,9 +2809,10 @@ export default function App() {
                 isolationRate: Number(settings?.defaultDailyRateIsolation) || 230
               }
             );
-            // Check for Daycare Pass code in request notes
+            // Check for Daycare / Boarding Pass code in request notes
             const passMatch = (req.notes || '').match(/כרטיסיי?ה.*?:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i) ||
-                              (req.notes || '').match(/קוד כרטיסייה:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i);
+                              (req.notes || '').match(/קוד כרטיסייה:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i) ||
+                              (req.notes || '').match(/בנק.*?:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i);
             const daycarePassCode = passMatch ? passMatch[1].trim() : undefined;
             const matchedPass = daycarePassCode ? findDaycarePassByCode(daycarePassCode) : undefined;
             const isDaycarePassBooking = Boolean(daycarePassCode || matchedPass);

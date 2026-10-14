@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { ResortSettings, ServiceType, IntakeRequest, IntakeMediaItem, AdditionalDogIntake, RESORT_BENEFIT_OPTIONS } from '../types';
 import { addDays, getTodayStr, calculateDaysCount, getDayNameHebrew, formatDateIL } from '../utils/dateUtils';
 import { cleanPhoneNumber, isValidIsraeliPhone, formatIsraeliPhoneDisplay } from '../utils/whatsappUtils';
-import { saveIntakeRequestToDb, findVoucherByCode, findDaycarePassByCode, verifyCustomerByPhone, PhoneVerificationResult } from '../services/dbService';
+import { saveIntakeRequestToDb, findVoucherByCode, findDaycarePassByCode, findActiveDaycarePassByPhone, verifyCustomerByPhone, PhoneVerificationResult } from '../services/dbService';
 import { sendResortEmailNotification, sendResortWhatsAppNotification, formatIntakeNotification, saveOrUpdateGreenApiContact } from '../services/notificationService';
 import { supabase } from '../utils/supabase';
 import { 
@@ -215,7 +215,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
     return findDaycarePassByCode(daycarePassCode.trim());
   }, [daycarePassCode]);
 
-  // Auto-fill form fields when Daycare Pass is detected
+  // Auto-fill form fields when Daycare / Boarding Pass is detected
   useEffect(() => {
     if (matchedDaycarePass) {
       if (matchedDaycarePass.dogName && !dogName) setDogName(matchedDaycarePass.dogName);
@@ -223,7 +223,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       if (matchedDaycarePass.ownerName && !ownerName) setOwnerName(matchedDaycarePass.ownerName);
       if (matchedDaycarePass.ownerPhone && !ownerPhone) setOwnerPhone(matchedDaycarePass.ownerPhone);
       if (matchedDaycarePass.serviceType) setServiceType(matchedDaycarePass.serviceType);
-      setEndDate(startDate); // Daycare is single-day arrival
+      if (matchedDaycarePass.serviceType !== 'boarding') {
+        setEndDate(startDate); // Daycare/training is single-day arrival
+      }
     }
   }, [matchedDaycarePass, startDate]);
 
@@ -526,6 +528,16 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
         } else {
           setClientOrigin('new');
         }
+
+        // Auto-match active Daycare / Boarding VIP Pass by phone if client didn't supply a pass code
+        const passByPhone = findActiveDaycarePassByPhone(ownerPhone);
+        if (passByPhone && !daycarePassCode) {
+          setDaycarePassCode(passByPhone.passCode);
+          if (passByPhone.dogName && !dogName.trim()) setDogName(passByPhone.dogName);
+          if (passByPhone.dogBreed && !dogBreed.trim()) setDogBreed(passByPhone.dogBreed);
+          if (passByPhone.ownerName && !ownerName.trim()) setOwnerName(passByPhone.ownerName);
+          if (passByPhone.serviceType) setServiceType(passByPhone.serviceType);
+        }
       } catch (err) {
         console.warn('Phone check error:', err);
       } finally {
@@ -827,7 +839,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       notes: [
         isCallbackOnly ? '[בקשת שיחה חוזרת טלפונית]' : '',
         matchedDaycarePass 
-          ? `[🎟️ שריון מתוך כרטיסייה: ${matchedDaycarePass.passCode} (קוד כרטיסייה: ${matchedDaycarePass.passCode} - יום ${matchedDaycarePass.usedDays + 1}/${matchedDaycarePass.totalDays}) | ללא תשלום]` 
+          ? `[🎟️ שריון מתוך ${matchedDaycarePass.serviceType === 'boarding' ? 'בנק 21 יממות פנסיון מלא VIP' : 'כרטיסייה'}: ${matchedDaycarePass.passCode} (קוד כרטיסייה: ${matchedDaycarePass.passCode} - נותרו ${matchedDaycarePass.totalDays - matchedDaycarePass.usedDays} ימים) | ללא תשלום]` 
           : daycarePassCode.trim() 
           ? `[🎟️ שריון מתוך כרטיסייה: ${daycarePassCode.trim()} (קוד כרטיסייה: ${daycarePassCode.trim()}) | ללא תשלום]` 
           : '',
@@ -1081,45 +1093,65 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
           }} 
           className="bg-white rounded-3xl border border-slate-200/90 shadow-md p-5 sm:p-7 space-y-6"
         >
-          {/* Daycare Pass Active Banner (כרטיסיית פעילות יומית ששולמה מראש) */}
-          {matchedDaycarePass && (
-            <div className="bg-gradient-to-r from-emerald-700 via-teal-800 to-slate-900 text-white rounded-3xl p-5 shadow-lg border-2 border-emerald-400/80 space-y-3 animate-in zoom-in-95">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-2xl shadow-inner backdrop-blur-md">
-                    🎟️
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs bg-emerald-400 text-slate-950 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                        כרטיסיית ימים פעילה
-                      </span>
-                      <span className="text-xs text-emerald-200 font-mono">
-                        מספר {matchedDaycarePass.passCode}
-                      </span>
+          {/* Daycare / Boarding Pass Active Banner */}
+          {matchedDaycarePass && (() => {
+            const isBoarding = matchedDaycarePass.serviceType === 'boarding';
+            const remaining = matchedDaycarePass.totalDays - matchedDaycarePass.usedDays;
+            return (
+              <div className={`rounded-3xl p-5 shadow-lg border-2 space-y-3 animate-in zoom-in-95 text-white ${
+                isBoarding 
+                  ? 'bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 border-indigo-400/80' 
+                  : 'bg-gradient-to-r from-emerald-700 via-teal-800 to-slate-900 border-emerald-400/80'
+              }`}>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-inner backdrop-blur-md ${
+                      isBoarding ? 'bg-amber-400/20 text-amber-300' : 'bg-white/10'
+                    }`}>
+                      {isBoarding ? '🌙' : '🎟️'}
                     </div>
-                    <h3 className="text-base sm:text-lg font-black mt-1">
-                      שריון יום הגעה עבור {matchedDaycarePass.dogName} ({matchedDaycarePass.ownerName})
-                    </h3>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                          isBoarding ? 'bg-amber-400 text-slate-950' : 'bg-emerald-400 text-slate-950'
+                        }`}>
+                          {isBoarding ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית ימים פעילה'}
+                        </span>
+                        <span className={`text-xs font-mono ${isBoarding ? 'text-indigo-200' : 'text-emerald-200'}`}>
+                          מספר {matchedDaycarePass.passCode}
+                        </span>
+                      </div>
+                      <h3 className="text-base sm:text-lg font-black mt-1">
+                        {isBoarding 
+                          ? `שריון מועד פנסיון עבור ${matchedDaycarePass.dogName} (${matchedDaycarePass.ownerName})` 
+                          : `שריון יום הגעה עבור ${matchedDaycarePass.dogName} (${matchedDaycarePass.ownerName})`}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <div className="text-left bg-white/10 px-3.5 py-1.5 rounded-xl backdrop-blur-md border border-white/20">
+                    <span className={`text-xs font-black block ${isBoarding ? 'text-amber-300' : 'text-emerald-200'}`}>
+                      נותרו {remaining} מתוך {matchedDaycarePass.totalDays} {isBoarding ? 'יממות' : 'ימים'}
+                    </span>
+                    <span className={`text-[10px] ${isBoarding ? 'text-indigo-200/80' : 'text-emerald-100/70'}`}>
+                      תוקף עד: {formatDateIL(matchedDaycarePass.validUntil)}
+                    </span>
                   </div>
                 </div>
 
-                <div className="text-left bg-white/10 px-3.5 py-1.5 rounded-xl backdrop-blur-md border border-white/20">
-                  <span className="text-xs font-black text-emerald-200 block">
-                    נותרו {matchedDaycarePass.totalDays - matchedDaycarePass.usedDays} מתוך {matchedDaycarePass.totalDays} ימים
+                <div className={`pt-2 border-t border-white/10 flex items-center justify-between text-xs ${
+                  isBoarding ? 'text-indigo-100' : 'text-emerald-100'
+                }`}>
+                  <span>
+                    ✨ <strong>שריון מתוך הבנק ללא תשלום נוסף:</strong> {isBoarding ? 'היממות יקוזזו אוטומטית עם אישור שמוליק ביומן.' : 'יום אחד יקוזז מיתרת הכרטיסייה שלך.'}
                   </span>
-                  <span className="text-[10px] text-emerald-100/70">
-                    תוקף עד: {formatDateIL(matchedDaycarePass.validUntil)}
+                  <span className={`font-bold px-2 py-0.5 rounded-md ${isBoarding ? 'bg-amber-400/20 text-amber-200' : 'bg-emerald-500/20'}`}>
+                    ₪0 לתשלום
                   </span>
                 </div>
               </div>
-
-              <div className="pt-2 border-t border-white/10 flex items-center justify-between text-xs text-emerald-100">
-                <span>✨ <strong>שריון ללא תשלום נוסף:</strong> יום אחד יקוזז מיתרת הכרטיסייה שלך.</span>
-                <span className="font-bold bg-emerald-500/20 px-2 py-0.5 rounded-md">₪0 לתשלום</span>
-              </div>
-            </div>
-          )}
+            );
+          })()}
           
           {/* Section 0: Phone Identification & VIP Club Benefits */}
           <div className="bg-gradient-to-br from-emerald-50/80 via-slate-50 to-amber-50/60 border-2 border-emerald-200/90 rounded-3xl p-4 sm:p-6 space-y-4 shadow-sm">
@@ -1335,17 +1367,17 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   )}
                 </div>
 
-                {/* Daycare Pass Code Input (כרטיסיית פעילות יומית) */}
+                {/* Daycare / Boarding Pass Code Input */}
                 <div className="pt-2 border-t border-slate-200/80">
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
                     <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                       <Ticket className="w-4 h-4 text-emerald-600" />
-                      <span>יש לכם כרטיסיית פעילות יומית? הזינו מספר כרטיסייה:</span>
+                      <span>יש לכם כרטיסייה או בנק 21 יממות VIP? הזינו מספר שובר / כרטיסייה:</span>
                     </label>
                     {daycarePassCode && matchedDaycarePass && (
                       <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
                         <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>כרטיסייה זוהתה בהצלחה</span>
+                        <span>{matchedDaycarePass.serviceType === 'boarding' ? 'בנק 21 יממות זוהה בהצלחה' : 'כרטיסייה זוהתה בהצלחה'}</span>
                       </span>
                     )}
                   </div>

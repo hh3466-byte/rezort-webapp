@@ -386,6 +386,8 @@ export type PassStatus = 'active' | 'completed' | 'expired' | 'cancelled';
 
 export interface PassUsageEntry {
   date: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD (for multi-day stays)
+  daysCount?: number; // e.g. 4
   bookingId?: string;
   addedBy: 'customer' | 'shmulik';
   notes?: string;
@@ -400,16 +402,16 @@ export interface DaycarePass {
   ownerName: string;
   ownerPhone: string;
   ownerEmail?: string;
-  serviceType: 'daycare' | 'day_training'; // שהייה יומית בריזורט (₪90) או אילוף ביומיות (₪250)
-  totalDays: number; // e.g. 10
+  serviceType: 'daycare' | 'day_training' | 'boarding'; // שהייה יומית בריזורט (₪90), אילוף ביומיות (₪250) או פנסיון מלא (21 יממות ב-₪2,100)
+  totalDays: number; // e.g. 10 or 21
   usedDays: number; // e.g. 2
-  pricePaid: number; // e.g. 900 (ניתן לעריכה חופשית ע"י שמוליק)
-  dailyRate: number; // e.g. 90
+  pricePaid: number; // e.g. 900 or 2100
+  dailyRate: number; // e.g. 90 or 100
   paymentStatus: PaymentStatus;
   paymentMethod?: PaymentMethod;
   notes?: string;
   validFrom: string; // YYYY-MM-DD
-  validUntil: string; // YYYY-MM-DD (6 חודשים / חצי שנה מתאריך ההנפקה)
+  validUntil: string; // YYYY-MM-DD (6 חודשים למעון יום / שנה מלאה לפנסיון 21 יממות)
   status: PassStatus;
   usageHistory: PassUsageEntry[];
   createdAt: string;

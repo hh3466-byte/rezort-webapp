@@ -34,7 +34,7 @@ import { IntakeAlertBanner } from './IntakeAlertBadges';
 import { cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
 import { formatDateIL } from '../utils/dateUtils';
 import { findCustomerPastDebt } from '../utils/pastDebtUtils';
-import { waivePastDebtForBooking } from '../services/dbService';
+import { waivePastDebtForBooking, findActiveDaycarePassByPhone } from '../services/dbService';
 import { 
   WhatsAppChat, 
   WhatsAppMessage, 
@@ -1535,6 +1535,67 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                 >
                   <FileText className="w-3.5 h-3.5 text-emerald-700" />
                   <span>📋 שאלון קליטה</span>
+                </button>
+
+                {/* 2.0 Active Pass Balance & Direct Booking Link Reminder */}
+                {(() => {
+                  const activePass = findActiveDaycarePassByPhone(selectedChat.cleanPhone);
+                  if (!activePass) return null;
+                  const remainingDays = activePass.totalDays - activePass.usedDays;
+                  const isBoarding = activePass.serviceType === 'boarding';
+                  const bookingUrl = `https://rezort-webapp.vercel.app/?request=true&pass=${activePass.passCode}&phone=${encodeURIComponent(selectedChat.cleanPhone)}&name=${encodeURIComponent(selectedChat.name)}&dog=${encodeURIComponent(activePass.dogName)}`;
+
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const text = isBoarding ? `שלום ${getFirstName(selectedChat.name)}! 🐾🐶
+בבנק 21 יממות הפנסיון VIP של ${activePass.dogName} נותרו לכם עוד *${remainingDays} מתוך 21 יממות* פנסיון מלא (בתוקף עד ${formatDateIL(activePass.validUntil)}).
+
+💡 *לבחירת מועדי השהייה והגשת בקשת שריון לשמוליק:*
+👉 \u200E${bookingUrl}
+
+שמוליק יקבל את הבקשה ויאשר את המקום ביומן (היממות יקוזזו אוטומטית מבנק הימים ללא כל תשלום נוסף)! 🐕🤍
+שמוליק וכל צוות הריזורט לכלב 🐾` : `שלום ${getFirstName(selectedChat.name)}! 🐾🐶
+בכרטיסיית הפעילות של ${activePass.dogName} נותרו לכם עוד *${remainingDays} מתוך ${activePass.totalDays} ימים* (בתוקף עד ${formatDateIL(activePass.validUntil)}).
+
+💡 *לבחירת מועד הגעה ושריון מקום ביומן:*
+👉 \u200E${bookingUrl}
+
+שמוליק וכל צוות הריזורט לכלב 🐾`;
+                        setComposerText(text);
+                      }}
+                      className="bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border-2 border-indigo-400 font-black px-2.5 py-1 rounded-xl text-xs flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
+                      title="טען תזכורת יתרת ימים פעילה וקישור לשריון לעריכה ושליחה"
+                    >
+                      <Ticket className="w-3.5 h-3.5 text-indigo-700" />
+                      <span>{isBoarding ? `🌙 תזכורת בנק 21 (${remainingDays} יממות)` : `🎟️ תזכורת כרטיסייה (${remainingDays} ימים)`}</span>
+                    </button>
+                  );
+                })()}
+
+                {/* 2.05 Offer 21-Day Boarding VIP Pass */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const dogText = selectedChat.matchedDogName ? ` עבור ${selectedChat.matchedDogName}` : '';
+                    const text = `שלום ${getFirstName(selectedChat.name)}! 🐾🐶
+רצינו להציע לכם את *חבילת בנק 21 יממות פנסיון מלא (VIP)*${dogText} בריזורט לכלב:
+
+🌟 *במקום ₪180 ללילה – ₪100 בלבד ליממה!*
+📅 *21 יממות פנסיון מלא* בעלות סגורה של ₪2,100 (חיסכון ענק של ₪1,680!)
+⏳ *תוקף לשנה שלמה (12 חודשים)* – מנצלים את הימים מתי שרוצים באופן חופשי (סופ"שים, חגים, חופשות וכו').
+📲 מערכת אישית לשריון תאריכים נוח בלחיצת כפתור ישירות מול שמוליק.
+
+רוצים שנשריין לכם את החבילה ונשלח קישור מאובטח להסדרה? 🐕🤍
+שמוליק וכל צוות הריזורט לכלב 🐾`;
+                    setComposerText(text);
+                  }}
+                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-300 font-bold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="טען הצעת בנק 21 יממות פנסיון VIP (100 ₪ ליממה) לעריכה ושליחה"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>🌙 בנק 21 יממות VIP (100 ₪/יממה)</span>
                 </button>
 
                 {/* 2.1 Send Daycare Pass Offer (טור יורד עד 75 ₪ ליום) */}
