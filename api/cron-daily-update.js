@@ -85,7 +85,7 @@ const SHLOMI_LUNA_TEMPLATES = [
   { id: 304, type: "training", text: "📅 *יום {daysCount} באילוף של אלופים בריזורט* 🎓💔\n\nערב טוב שלומי! 🎓🐾 אני תלמידה מצטיינת והכל פה 5 כוכבים, אבל יש תרגיל אחד שאני פשוט לא מצליחה ללמוד: איך להפסיק להתגעגע אליך... תבטיח שאתה קופץ לראות כמה גדלתי והחכמתי? מחכה לחיבוק שלך, לונה 🐾🥰" }
 ];
 
-function selectDogTemplate(b, isWeekend = false) {
+function selectDogTemplate(b, isWeekend = false, recipientName = null) {
   const oName = (b.owner_name || '').toLowerCase();
   const dName = (b.dog_name || '').toLowerCase();
   const phone = (b.owner_phone || '').replace(/\D/g, '');
@@ -115,7 +115,7 @@ function selectDogTemplate(b, isWeekend = false) {
   }
 
   const chosen = eligible[Math.floor(Math.random() * eligible.length)] || DAILY_DOG_TEMPLATES[0];
-  const cleanOwner = (b.owner_name || 'חבר').trim().split(/\s+/)[0];
+  const cleanOwner = (recipientName || b.owner_name || 'חבר').trim().split(/\s+/)[0];
   const cleanDog = (b.dog_name || 'הכלב').trim();
 
   return chosen.text
@@ -174,47 +174,85 @@ export default async function handler(req, res) {
     const sentDogsMap = new Set();
 
     for (const b of activeBookings) {
-      const cleanPhone = cleanPhoneNumber(b.owner_phone);
       const cleanDog = (b.dog_name || '').trim().toLowerCase();
-      const dogKey = `${cleanPhone}_${cleanDog}`;
-
       const bData = (b.data && typeof b.data === 'object') ? b.data : {};
+      const dogKey = `${b.id}_${cleanDog}`;
+
       if (bData.lastDailyDogUpdateSent === todayStr || sentDogsMap.has(dogKey)) {
         continue;
       }
 
-      if (!cleanPhone || cleanPhone.length < 9) continue;
-      const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.slice(1) : cleanPhone;
-      const chatId = `${intlPhone}@c.us`;
+      // Build recipients list
+      const recipients = [];
+      const mainPhone = cleanPhoneNumber(b.owner_phone);
+      const mainName = (b.owner_name || 'חבר').trim().split(/\s+/)[0];
+      if (mainPhone && mainPhone.length >= 9) {
+        recipients.push({ phone: mainPhone, name: mainName });
+      }
 
-      const msgText = selectDogTemplate(b, weekday === 'Sat');
+      // Extra recipients from booking data
+      const extraList = bData.additionalDailyGreetingRecipients || [];
+      for (const extra of extraList) {
+        const extraP = cleanPhoneNumber(extra.phone);
+        if (extraP && extraP.length >= 9 && !recipients.some(r => r.phone === extraP)) {
+          recipients.push({ phone: extraP, name: extra.name || '' });
+        }
+      }
 
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 12000);
-        const sendUrl = getGreenApiUrl(greenId, 'sendMessage', greenToken);
-        const sendRes = await fetch(sendUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, message: msgText }),
-          signal: controller.signal
-        });
-        clearTimeout(timeout);
+      // Nitza specific family broadcast rule (Eti 052-4467314, Rotem 054-9800300, Nir 054-3400505)
+      if (cleanDog.includes('ניצה')) {
+        const nitzaFamily = [
+          { name: 'אתי', phone: '0524467314' },
+          { name: 'רותם', phone: '0549800300' },
+          { name: 'ניר', phone: '0543400505' }
+        ];
+        for (const fam of nitzaFamily) {
+          const famP = cleanPhoneNumber(fam.phone);
+          if (!recipients.some(r => r.phone === famP)) {
+            recipients.push({ phone: famP, name: fam.name });
+          }
+        }
+      }
 
-        if (sendRes.ok) {
-          dogSentCount++;
-          sentDogsMap.add(dogKey);
-          // Mark in database so it cannot be double-sent
-          await supabase.from('bookings').update({
-            data: { ...bData, lastDailyDogUpdateSent: todayStr },
-            updated_at: new Date().toISOString()
-          }).eq('id', b.id);
-        } else {
+      if (recipients.length === 0) continue;
+
+      let anySent = false;
+      for (const rec of recipients) {
+        const intlPhone = rec.phone.startsWith('0') ? '972' + rec.phone.slice(1) : rec.phone;
+        const chatId = `${intlPhone}@c.us`;
+        const msgText = selectDogTemplate(b, weekday === 'Sat', rec.name);
+
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 12000);
+          const sendUrl = getGreenApiUrl(greenId, 'sendMessage', greenToken);
+          const sendRes = await fetch(sendUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId, message: msgText }),
+            signal: controller.signal
+          });
+          clearTimeout(timeout);
+
+          if (sendRes.ok) {
+            dogSentCount++;
+            anySent = true;
+          } else {
+            dogFailCount++;
+          }
+        } catch (err) {
+          console.error(`Error sending daily dog update for ${b.dog_name} to ${rec.phone}:`, err);
           dogFailCount++;
         }
-      } catch (err) {
-        console.error(`Error sending daily dog update to ${b.dog_name}:`, err);
-        dogFailCount++;
+      }
+
+      if (anySent) {
+        sentDogsMap.add(dogKey);
+        // Mark in database so it cannot be double-sent
+        await supabase.from('bookings').update({
+          data: { ...bData, lastDailyDogUpdateSent: todayStr },
+          updated_at: new Date().toISOString()
+        }).eq('id', b.id);
       }
     }
 

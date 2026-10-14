@@ -971,7 +971,7 @@ function isDogInIsolation(b, allIntakeRequests) {
  * בחירת נוסח יומי מתאים לכלב (מונע כפילויות במהלך השהות)
  * מבצע הפרדה הרמטית בין פנסיון לאילוף ובידוד!
  */
-function getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat) {
+function getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat, recipientName) {
   var props = PropertiesService.getScriptProperties();
   var sentKey = isMotzaeiShabbat ? ("sent_motzash_templates_" + b.id) : ("sent_daily_templates_" + b.id);
   var rawSent = props.getProperty(sentKey);
@@ -1059,7 +1059,7 @@ function getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat) {
   }
 
   // החלפת שמות הבעלים והכלב
-  var cleanOwner = (b.owner_name || "").trim().split(" ")[0] || "שלומי";
+  var cleanOwner = (recipientName || b.owner_name || "").trim().split(" ")[0] || (isShlomiLuna ? "שלומי" : "חבר");
   var cleanDog = isShlomiLuna ? "לונה" : ((b.dog_name || "").trim() || "החבר על 4");
   var msgText = chosen.text
     .replace(/{ownerName}/g, cleanOwner)
@@ -1183,39 +1183,91 @@ function sendDailyDogEveningUpdates() {
       var cleanDog = (b.dog_name || "").trim().toLowerCase();
       var dogGlobalKey = "daily_dog_sent_" + cleanPhone + "_" + cleanDog + "_" + todayStr;
 
-      // מניעת כפילות מוחלטת: אם כבר נשלחה הודעה לכלב זה היום (לפי מזהה הזמנה או לפי טלפון+שם כלב)
+      var bId = b.id || (cleanPhone + "_" + cleanDog);
+      var dogGlobalKey = "daily_dog_sent_" + bId + "_" + todayStr;
+
+      // מניעת כפילות מוחלטת: אם כבר נשלחה הודעה לכלב זה היום
       var bookingData = (b.data && typeof b.data === "object") ? b.data : {};
-      if (props.getProperty(todaySentKey) || props.getProperty(dogGlobalKey) || bookingData.lastDailyDogUpdateSent === todayStr || sentDogsMap[cleanPhone + "_" + cleanDog]) {
+      if (props.getProperty(todaySentKey) || props.getProperty(dogGlobalKey) || bookingData.lastDailyDogUpdateSent === todayStr || sentDogsMap[dogGlobalKey]) {
         Logger.log("מניעת כפילות: דילוג על כלב שכבר קיבל הודעה היום: " + b.dog_name + " (" + b.owner_name + ")");
         continue;
       }
-      sentDogsMap[cleanPhone + "_" + cleanDog] = true;
 
-      var phone = (b.owner_phone || "").replace(/[^0-9]/g, "");
-      if (!phone) continue;
+      // רשימת נמענים למשלוח הד"ש לכלב
+      var recipients = [];
+      if (cleanPhone && cleanPhone.length >= 9) {
+        var ownerFirstName = (b.owner_name || "חבר").trim().split(" ")[0];
+        recipients.push({ phone: cleanPhone, name: ownerFirstName });
+      }
 
-      var intlPhone = phone.indexOf("0") === 0 ? "972" + phone.substring(1) : phone;
-      var chatId = intlPhone + "@c.us";
+      // נמענים נוספים מוגדרים בהזמנה
+      if (bookingData.additionalDailyGreetingRecipients && Array.isArray(bookingData.additionalDailyGreetingRecipients)) {
+        for (var ri = 0; ri < bookingData.additionalDailyGreetingRecipients.length; ri++) {
+          var rec = bookingData.additionalDailyGreetingRecipients[ri];
+          var rPhone = (rec.phone || "").replace(/[^0-9]/g, "");
+          if (rPhone && rPhone.length >= 9) {
+            var exists = false;
+            for (var ci = 0; ci < recipients.length; ci++) {
+              if (recipients[ci].phone.indexOf(rPhone.slice(-7)) !== -1) { exists = true; break; }
+            }
+            if (!exists) recipients.push({ phone: rPhone, name: rec.name || "" });
+          }
+        }
+      }
+
+      // כלל משפחתי ייעודי לניצה: אתי (0524467314), רותם (0549800300), ניר (0543400505)
+      if (cleanDog.indexOf("ניצה") !== -1) {
+        var nitzaFamily = [
+          { name: "אתי", phone: "0524467314" },
+          { name: "רותם", phone: "0549800300" },
+          { name: "ניר", phone: "0543400505" }
+        ];
+        for (var nfi = 0; nfi < nitzaFamily.length; nfi++) {
+          var nfPhone = nitzaFamily[nfi].phone;
+          var nfExists = false;
+          for (var ci = 0; ci < recipients.length; ci++) {
+            if (recipients[ci].phone.indexOf(nfPhone.slice(-7)) !== -1) { nfExists = true; break; }
+          }
+          if (!nfExists) recipients.push({ phone: nfPhone, name: nitzaFamily[nfi].name });
+        }
+      }
+
+      if (recipients.length === 0) continue;
 
       // בדיקת סטטוס בידוד
       var isIsolation = isDogInIsolation(b, allIntake);
+      var anySentForDog = false;
 
-      // בחירת נוסח מותאם
-      var templateData = getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat);
+      for (var rIdx = 0; rIdx < recipients.length; rIdx++) {
+        var targetRecipient = recipients[rIdx];
+        var rIntl = targetRecipient.phone.indexOf("0") === 0 ? "972" + targetRecipient.phone.substring(1) : targetRecipient.phone;
+        var rChatId = rIntl + "@c.us";
 
-      var sendUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
-      var sendRes = UrlFetchApp.fetch(sendUrl, {
-        method: "post",
-        contentType: "application/json",
-        payload: JSON.stringify({ chatId: chatId, message: templateData.text }),
-        muteHttpExceptions: true
-      });
+        var templateData = getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat, targetRecipient.name);
 
-      if (sendRes.getResponseCode() === 200) {
+        var sendUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
+        var sendRes = UrlFetchApp.fetch(sendUrl, {
+          method: "post",
+          contentType: "application/json",
+          payload: JSON.stringify({ chatId: rChatId, message: templateData.text }),
+          muteHttpExceptions: true
+        });
+
+        if (sendRes.getResponseCode() === 200) {
+          anySentForDog = true;
+          sentCount++;
+          Logger.log("נשלח בהצלחה עדכון יומי ל-" + b.dog_name + " אל " + targetRecipient.name + " (" + targetRecipient.phone + ")");
+        } else {
+          Logger.log("שגיאה במשלוח ל-" + b.dog_name + " אל " + targetRecipient.name + " (" + targetRecipient.phone + "): " + sendRes.getContentText());
+        }
+
+        Utilities.sleep(1200);
+      }
+
+      if (anySentForDog) {
+        sentDogsMap[dogGlobalKey] = true;
         props.setProperty(todaySentKey, "true");
         props.setProperty(dogGlobalKey, "true");
-        sentCount++;
-        Logger.log("נשלח בהצלחה עדכון יומי (נוסח #" + templateData.id + ", בידוד=" + isIsolation + ") ל-" + b.dog_name + " (" + b.owner_name + ")");
 
         // סנכרון מיידי ל-Supabase למניעת כפילות מכל דפדפן או מכשיר
         try {
@@ -1234,11 +1286,7 @@ function sendDailyDogEveningUpdates() {
         } catch(eDbSync) {
           Logger.log("סנכרון סטטוס שליחה ל-Supabase נכשל: " + eDbSync.toString());
         }
-      } else {
-        Logger.log("שגיאה במשלוח ל-" + b.dog_name + ": " + sendRes.getContentText());
       }
-
-      Utilities.sleep(1500); // מרווח למניעת עומס
     }
 
     Logger.log("הסתיים משלוח עדכונים יומיים: נשלחו " + sentCount + " הודעות מתוך " + activeBookings.length + " כלבים.");
