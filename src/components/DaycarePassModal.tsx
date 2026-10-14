@@ -25,7 +25,11 @@ import {
   Link2,
   DollarSign,
   Send,
-  Loader2
+  Loader2,
+  Trash2,
+  Lock,
+  Sun,
+  Moon
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -41,6 +45,7 @@ import {
 import { 
   loadStoredDaycarePasses, 
   saveDaycarePassToDb, 
+  deleteDaycarePassFromDb,
   deductDayFromPassInDb,
   subscribeToDaycarePasses 
 } from '../services/dbService';
@@ -634,10 +639,66 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  // Deduct a day and create a real booking in Calendar
+  // 1. Mark pass as Sent to customer
+  const handleMarkPassAsSent = async (pass: DaycarePass) => {
+    try {
+      const updated: DaycarePass = {
+        ...pass,
+        status: 'sent',
+        updatedAt: new Date().toISOString()
+      };
+      await saveDaycarePassToDb(updated);
+      setStoredPasses(prev => prev.map(p => p.id === pass.id ? updated : p));
+      handleSendWhatsAppToCustomer(pass);
+    } catch (e: any) {
+      alert(`שגיאה בעדכון כרטיסייה: ${e?.message}`);
+    }
+  };
+
+  // 2. Mark pass as Paid / Toggle Paid
+  const handleTogglePassPaid = async (pass: DaycarePass) => {
+    try {
+      const isNowPaid = pass.paymentStatus !== 'fully_paid';
+      const updated: DaycarePass = {
+        ...pass,
+        paymentStatus: isNowPaid ? 'fully_paid' : 'unpaid',
+        status: isNowPaid ? 'active' : 'pending_payment',
+        updatedAt: new Date().toISOString()
+      };
+      await saveDaycarePassToDb(updated);
+      setStoredPasses(prev => prev.map(p => p.id === pass.id ? updated : p));
+      if (isNowPaid) {
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.7 }
+        });
+      }
+    } catch (e: any) {
+      alert(`שגיאה בעדכון תשלום כרטיסייה: ${e?.message}`);
+    }
+  };
+
+  // 3. Delete pass from DB & storage
+  const handleDeletePass = async (pass: DaycarePass) => {
+    const confirmMsg = `האם אתה בטוח שברצונך למחוק לצמיתות את הכרטיסייה (${pass.passCode}) של ${pass.dogName} (${pass.ownerName})?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      await deleteDaycarePassFromDb(pass.id);
+      setStoredPasses(prev => prev.filter(p => p.id !== pass.id));
+    } catch (e: any) {
+      alert(`שגיאה במחיקת כרטיסייה: ${e?.message}`);
+    }
+  };
+
   // Deduct a day (or multi-day boarding stay) and create a real booking in Calendar
   const handleConfirmDeductBooking = async () => {
     if (!selectedPassForBooking) return;
+    if (selectedPassForBooking.paymentStatus !== 'fully_paid') {
+      alert('⚠️ לא ניתן לשריין ימים מכרטיסייה שטרם שולמה!\nיש לאשר תחילה קבלת תשלום (לחיצה על "שולמה כרטיסייה 💳") כדי לפתוח שריונים ביומן.');
+      return;
+    }
     if (!bookingDate) {
       alert('נא לבחור תאריך הגעה');
       return;
@@ -1492,9 +1553,9 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                                 ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
                                 : pass.serviceType === 'day_training' 
                                 ? 'bg-purple-100 text-purple-800' 
-                                : 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-100 text-amber-800 border border-amber-200'
                             }`}>
-                              {isBoarding ? '🌙' : pass.serviceType === 'day_training' ? '🦮' : '🐾'}
+                              {isBoarding ? '🌙' : pass.serviceType === 'day_training' ? '🦮' : '☀️'}
                             </div>
 
                             <div>
@@ -1507,6 +1568,19 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                                 {isBoarding && (
                                   <span className="text-[10px] bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full font-black">
                                     בנק 21 יממות VIP ⭐
+                                  </span>
+                                )}
+                                {pass.paymentStatus === 'fully_paid' ? (
+                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
+                                    🟢 שולמה (פעילה)
+                                  </span>
+                                ) : pass.status === 'sent' ? (
+                                  <span className="text-[10px] bg-sky-100 text-sky-800 border border-sky-300 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
+                                    🔵 נשלחה (ממתין לתשלום ₪{pass.pricePaid})
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
+                                    🟠 הונפקה (טרם שולם ₪{pass.pricePaid})
                                   </span>
                                 )}
                               </div>
@@ -1579,37 +1653,70 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                           </div>
                         )}
 
-                        {/* Action buttons */}
-                        <div className="flex items-center gap-2 pt-1 flex-wrap">
+                        {/* Action buttons: 1. שריין ביומן (אם שולמה) / נעול (אם לא שולמה) */}
+                        <div className="flex items-center gap-2 pt-2 border-t border-slate-100 flex-wrap">
                           {!isCompleted && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedPassForBooking(pass);
-                                setBookingDate(getTodayStr());
-                                setBookingEndDate(getTodayStr());
-                              }}
-                              className={`flex-1 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-w-[140px] ${
-                                isBoarding 
-                                  ? 'bg-indigo-600 hover:bg-indigo-700' 
-                                  : 'bg-emerald-600 hover:bg-emerald-700'
-                              }`}
-                            >
-                              <CalendarDays className="w-3.5 h-3.5" />
-                              <span>{isBoarding ? 'שריין פנסיון ביומן 🌙' : 'שריין יום ביומן 📅'}</span>
-                            </button>
+                            pass.paymentStatus === 'fully_paid' ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedPassForBooking(pass);
+                                  setBookingDate(getTodayStr());
+                                  setBookingEndDate(getTodayStr());
+                                }}
+                                className={`flex-1 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-w-[130px] ${
+                                  isBoarding 
+                                    ? 'bg-indigo-600 hover:bg-indigo-700' 
+                                    : 'bg-emerald-600 hover:bg-emerald-700'
+                                }`}
+                              >
+                                <CalendarDays className="w-3.5 h-3.5" />
+                                <span>{isBoarding ? 'שריין פנסיון ביומן 🌙' : 'שריין יום ביומן ☀️'}</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => alert(`⚠️ הכרטיסייה עדיין לא שולמה!\nסמן קודם "שולמה כרטיסייה 💳" לאחר קבלת התשלום כדי לפתוח שריונים ביומן.`)}
+                                className="flex-1 py-2 bg-slate-100 hover:bg-amber-50 text-amber-900 border border-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer min-w-[130px]"
+                                title="לא ניתן לשריין עד שהכרטיסייה תשולם"
+                              >
+                                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                                <span>נעול לשריון (לא שולם)</span>
+                              </button>
+                            )
                           )}
 
+                          {/* Button 2: נשלחה כרטיסייה */}
                           <button
                             type="button"
-                            onClick={() => handleSendWhatsAppToCustomer(pass)}
-                            className="p-2 bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
-                            title="שלח שובר / תזכורת בוואטסאפ ללקוח"
+                            onClick={() => handleMarkPassAsSent(pass)}
+                            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              pass.status === 'sent' 
+                                ? 'bg-sky-100 text-sky-900 border border-sky-300 hover:bg-sky-200' 
+                                : 'bg-white hover:bg-sky-50 text-slate-700 hover:text-sky-800 border border-slate-200'
+                            }`}
+                            title="שלח שובר וקישור בוואטסאפ ללקוח וסמן כ'נשלחה'"
                           >
-                            <Share2 className="w-4 h-4 text-emerald-600" />
-                            <span className="hidden sm:inline">שלח שובר</span>
+                            <Send className="w-3.5 h-3.5 text-sky-600" />
+                            <span>{pass.status === 'sent' ? 'נשלחה כרטיסייה ✓' : 'נשלחה כרטיסייה'}</span>
                           </button>
 
+                          {/* Button 3: שולמה כרטיסייה */}
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePassPaid(pass)}
+                            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              pass.paymentStatus === 'fully_paid'
+                                ? 'bg-emerald-600 text-white shadow-xs hover:bg-emerald-700'
+                                : 'bg-amber-100 hover:bg-emerald-100 text-amber-950 hover:text-emerald-950 border border-amber-300 hover:border-emerald-400'
+                            }`}
+                            title={pass.paymentStatus === 'fully_paid' ? 'שולם במלואו (לחץ לשינוי ללא שולם)' : 'לחץ לאישור קבלת תשלום והפעלת הכרטיסייה'}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>{pass.paymentStatus === 'fully_paid' ? 'שולמה כרטיסייה ✓' : 'שולמה כרטיסייה 💳'}</span>
+                          </button>
+
+                          {/* Copy link button */}
                           <button
                             type="button"
                             onClick={() => handleCopyPassLink(pass)}
@@ -1617,7 +1724,16 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                             title="העתק קישור ישיר ללקוח"
                           >
                             <Link2 className="w-4 h-4 text-slate-600" />
-                            <span className="hidden sm:inline">העתק קישור</span>
+                          </button>
+
+                          {/* Delete pass button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePass(pass)}
+                            className="p-2 bg-white hover:bg-red-50 text-slate-400 hover:text-red-700 border border-slate-200 hover:border-red-300 rounded-xl transition-all cursor-pointer"
+                            title="מחק כרטיסייה לצמיתות"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
                           </button>
                         </div>
                       </div>

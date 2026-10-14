@@ -1567,6 +1567,34 @@ export const saveDaycarePassToDb = async (pass: DaycarePass): Promise<void> => {
   }
 };
 
+export const deleteDaycarePassFromDb = async (passId: string): Promise<boolean> => {
+  try {
+    // 1. Remove from localStorage
+    const current = loadStoredDaycarePasses();
+    const updated = current.filter(p => p.id !== passId);
+    localStorage.setItem(LOCAL_DAYCARE_PASSES_KEY, JSON.stringify(updated));
+
+    // 2. Remove from Supabase daycare_passes table if exists
+    try {
+      await supabase.from(DAYCARE_PASSES_TABLE).delete().eq('id', passId);
+    } catch (e) {}
+
+    // 3. Remove from settings table
+    try {
+      const { data: sData } = await supabase.from(SETTINGS_TABLE).select('data').eq('id', SETTINGS_DOC_ID).single();
+      const settingsObj = sData?.data || {};
+      const pList = settingsObj.daycare_passes || [];
+      const newPList = pList.filter((p: any) => p.id !== passId);
+      await supabase.from(SETTINGS_TABLE).upsert({ id: SETTINGS_DOC_ID, data: { ...settingsObj, daycare_passes: newPList } });
+    } catch (e) {}
+
+    return true;
+  } catch (e) {
+    console.warn('deleteDaycarePassFromDb error:', e);
+    return false;
+  }
+};
+
 export const deductDayFromPassInDb = async (
   passIdOrCode: string,
   bookingDate: string,

@@ -867,9 +867,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       dayBookings.map((b, bIdx) => {
                         const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                         const remainingDebt = Math.max(0, Math.round((Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0)));
-                        const isPaid = b.paymentStatus === 'fully_paid' || (remainingDebt === 0 && (Number(b.totalPrice) || 0) > 0);
+                        const isPassBooking = Boolean(b.data?.daycarePassId || b.notes?.includes('כרטיסייה') || b.notes?.includes('מימוש מתוך כרטיסייה'));
+                        const isPassUnpaid = isPassBooking && (b.data?.daycarePassPaid === false || b.paymentStatus === 'unpaid');
+                        const isPaid = (b.paymentStatus === 'fully_paid' && !isPassUnpaid) || (remainingDebt === 0 && (Number(b.totalPrice) || 0) > 0);
                         const isDeposit = !isPaid && (b.paymentStatus === 'deposit_paid' || (Number(b.depositAmount) || 0) > 0);
-                        const isUnpaid = !isPaid && !isDeposit && !b.isFreeStay && (Number(b.totalPrice) || 0) > 0;
+                        const isUnpaid = !isPaid && !isDeposit && !b.isFreeStay && ((Number(b.totalPrice) || 0) > 0 || isPassUnpaid);
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
                         const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, day.dateStr);
@@ -950,6 +952,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                   title="כלב בתהליך אילוף"
                                   className="w-3.5 h-3.5 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs"
                                 />
+                              ) : b.serviceType === 'daycare' ? (
+                                <span className="text-[11px] shrink-0" title="שהייה יומית (מעון יום)">☀️</span>
+                              ) : b.serviceType === 'boarding' ? (
+                                <span className="text-[11px] shrink-0" title="פנסיון מלא (לינה)">🌙</span>
                               ) : (
                                 <span className={`text-[11px] shrink-0 ${isMatch ? 'text-amber-700' : isHovered ? 'text-indigo-700' : stayColors.iconClass}`}>🐾</span>
                               )}
@@ -1366,6 +1372,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                     title="כלב בתהליך אילוף"
                                     className="w-3.5 h-3.5 object-contain shrink-0 rounded-full border border-amber-300/60 shadow-2xs"
                                   />
+                                ) : b.serviceType === 'daycare' ? (
+                                  <span className="text-xs shrink-0" title="שהייה יומית (מעון יום)">☀️</span>
+                                ) : b.serviceType === 'boarding' ? (
+                                  <span className="text-xs shrink-0" title="פנסיון מלא (לינה)">🌙</span>
                                 ) : (
                                   <Dog className={`w-3 h-3 shrink-0 ${isMatch ? 'text-amber-700' : isHovered ? 'text-indigo-700' : stayColors.iconClass}`} />
                                 )}

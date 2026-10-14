@@ -382,7 +382,7 @@ export interface DigitalVoucher {
   notes?: string;
 }
 
-export type PassStatus = 'active' | 'completed' | 'expired' | 'cancelled';
+export type PassStatus = 'active' | 'completed' | 'expired' | 'cancelled' | 'pending_payment' | 'sent';
 
 export interface PassUsageEntry {
   date: string; // YYYY-MM-DD

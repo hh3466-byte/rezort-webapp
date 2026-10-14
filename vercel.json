@@ -17,10 +17,6 @@
     {
       "path": "/api/cron-daily-update",
       "schedule": "0 17 * * *"
-    },
-    {
-      "path": "/api/cron-weekly-marketing",
-      "schedule": "0 5 * * 0"
     }
   ],
   "headers": [
