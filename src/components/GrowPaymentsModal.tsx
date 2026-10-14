@@ -20,9 +20,10 @@ import {
   RefreshCw,
   Check,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Ticket
 } from 'lucide-react';
-import { GrowIncomingPayment, Booking, IntakeRequest, ResortSettings, ServiceType } from '../types';
+import { GrowIncomingPayment, Booking, IntakeRequest, ResortSettings, ServiceType, DaycarePass } from '../types';
 import { cleanPhoneNumber, formatPhoneForWhatsApp, getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { formatDateIL } from '../utils/dateUtils';
 import { WhatsAppChat, fetchGreenApiChats, formatFullMessageDateIL, extractPhoneFromChatId } from '../services/whatsappCrmService';
@@ -50,6 +51,7 @@ interface GrowPaymentsModalProps {
   intakeRequests?: IntakeRequest[];
   settings?: ResortSettings;
   onAccept: (payment: GrowIncomingPayment, linkedDetails?: LinkedPaymentDetails) => void;
+  onAcceptPass?: (payment: GrowIncomingPayment, pass: DaycarePass) => void;
   onDismiss: (payment: GrowIncomingPayment) => void;
   onCloseLater: () => void;
   onOpenWhatsApp?: (phone: string) => void;
@@ -61,6 +63,7 @@ export const GrowPaymentsModal: React.FC<GrowPaymentsModalProps> = ({
   intakeRequests = [],
   settings,
   onAccept,
+  onAcceptPass,
   onDismiss,
   onCloseLater,
   onOpenWhatsApp,
@@ -205,6 +208,21 @@ export const GrowPaymentsModal: React.FC<GrowPaymentsModalProps> = ({
 
     return null;
   }, [current, intakeRequests, waChats, bookings, payPhoneClean, payNameClean]);
+
+  // 1.5 Calculate matched pass (if customer purchased or holds a pass)
+  const matchedPass = useMemo<DaycarePass | null>(() => {
+    if (!current) return null;
+    const passes: DaycarePass[] = settings?.daycarePasses || [];
+    return passes.find(p => {
+      const pPhone = cleanPhoneNumber(p.ownerPhone || '');
+      if (payPhoneClean.length >= 7 && pPhone.length >= 7) {
+        if (pPhone.includes(payPhoneClean) || payPhoneClean.includes(pPhone) || pPhone.slice(-7) === payPhoneClean.slice(-7)) {
+          return true;
+        }
+      }
+      return payNameClean && p.ownerName?.trim().toLowerCase().includes(payNameClean);
+    }) || null;
+  }, [current, settings?.daycarePasses, payPhoneClean, payNameClean]);
 
   // Active linked details (or null if unlinked)
   const activeLink: LinkedPaymentDetails | null = manualOverride === 'unlinked' 
@@ -627,9 +645,15 @@ export const GrowPaymentsModal: React.FC<GrowPaymentsModalProps> = ({
             )}
           </div>
 
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 text-center leading-relaxed">
-            💡 <strong>הקמת הזמנה מהירה:</strong> לחיצה על הכפתור הירוק תעביר אותך לוויזארד עם כל הפרטים המשויכים מוכנים לשמירה.
-          </div>
+          {matchedPass ? (
+            <div className="bg-emerald-50 border-2 border-emerald-300 rounded-xl p-3.5 text-xs text-emerald-950 text-center leading-relaxed">
+              🎟️ <strong>זוהתה כרטיסיית {matchedPass.totalDays} ימים עבור {matchedPass.dogName} (#{matchedPass.passCode}):</strong> לחיצה על כפתור הכרטיסייה תסמן אותה כשולמה במלואה <strong>ללא צורך בהזנת תאריכים מראש</strong> (הלקוח יבחר ויבקש תאריכים משמוליק מתי שירצה).
+            </div>
+          ) : (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-600 text-center leading-relaxed">
+              💡 <strong>הקמת הזמנה מהירה:</strong> לחיצה על הכפתור הירוק תעביר אותך לוויזארד עם כל הפרטים המשויכים מוכנים לשמירה.
+            </div>
+          )}
         </div>
 
         {/* Modal Action Buttons (Footer) */}
@@ -654,14 +678,32 @@ export const GrowPaymentsModal: React.FC<GrowPaymentsModalProps> = ({
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => onAccept(current, activeLink || undefined)}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-6 py-3 rounded-xl font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer transform active:scale-98"
-          >
-            <span>הקם והשלם הזמנה עכשיו</span>
-            <ArrowLeft className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            {matchedPass && onAcceptPass && (
+              <button
+                type="button"
+                onClick={() => onAcceptPass(current, matchedPass)}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white px-5 py-3 rounded-xl font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer transform active:scale-98"
+                title="שייך תשלום זה ישירות לכרטיסייה (100% תשלום מראש ללא תאריכים)"
+              >
+                <Ticket className="w-4 h-4 text-amber-300" />
+                <span>הפעל כרטיסייה #{matchedPass.passCode} (ללא תאריכים)</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => onAccept(current, activeLink || undefined)}
+              className={`w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-black text-sm shadow-md hover:shadow-lg transition-all cursor-pointer transform active:scale-98 ${
+                matchedPass 
+                  ? 'bg-slate-800 hover:bg-slate-900 text-white border border-slate-700' 
+                  : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white'
+              }`}
+            >
+              <span>{matchedPass ? 'או פתח ביומן' : 'הקם והשלם הזמנה עכשיו'}</span>
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -1099,7 +1099,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
             const isBoarding = matchedDaycarePass.serviceType === 'boarding';
             const remaining = Math.max(0, matchedDaycarePass.totalDays - matchedDaycarePass.usedDays);
             const isUnpaid = matchedDaycarePass.paymentStatus === 'unpaid';
-            const growPayUrl = matchedDaycarePass.paymentUrl || 'https://sandbox.grow.link/9d170a0ec6b695758deaff4e72b60965-NzM1NDg';
+            const growPayUrl = matchedDaycarePass.paymentUrl || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
 
             return (
               <div className="space-y-4 animate-in zoom-in-95">

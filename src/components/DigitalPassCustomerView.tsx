@@ -93,10 +93,8 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
     return Math.max(1, calculateDaysCount(bookingDate, bookingEndDate));
   }, [isBoarding, bookingDate, bookingEndDate]);
 
-  // Fallback payment URL if none exists
-  const paymentUrl = pass?.paymentUrl || (pass?.pricePaid === 720 
-    ? 'https://sandbox.grow.link/9d170a0ec6b695758deaff4e72b60965-NzM1NDg'
-    : 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg');
+  // Official Grow Production Payment URL
+  const paymentUrl = pass?.paymentUrl || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
 
   // Handle single-click reservation
   const handleReserveStay = async () => {
@@ -120,10 +118,10 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
         end_date: targetEndDate,
         arrival_time: arrivalTime,
         pickup_time: pickupTime,
-        is_free_stay: true,
+        is_free_stay: false,
         deposit_requested: 0,
         status: 'pending',
-        notes: `[🎟️ שריון מהיר מכרטיסייה #${pass.passCode}] ${bookingNotes ? `הערות: ${bookingNotes}` : ''}`,
+        notes: `[🎟️ תיאום הגעה מכרטיסייה #${pass.passCode} (שולם מראש / בנק ימים)] ${bookingNotes ? `הערות: ${bookingNotes}` : ''}`,
         created_at: new Date().toISOString()
       };
 
@@ -193,11 +191,11 @@ ${pass.ownerName} (${pass.ownerPhone})`;
           לא הצלחנו לאתר כרטיסייה עם המספר <strong>{passCode}</strong>. אנא בדקו את הקישור שקיבלתם משמוליק.
         </p>
         <a
-          href="https://wa.me/972543200007?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%97%D7%92%D7%99%2C%20%D7%A4%D7%95%D7%A0%D7%94%20%D7%9C%D7%92%D7%91%D7%99%20%D7%94%D7%9B%D7%A8%D7%98%D7%99%D7%A1%D7%99%D7%94%20%D7%A9%D7%9C%D7%99"
+          href="https://wa.me/972506336896?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%A9%D7%9E%D7%95%D7%9C%D7%99%D7%A2%2C%20%D7%A4%D7%95%D7%A0%D7%94%20%D7%9C%D7%92%D7%91%D7%99%20%D7%94%D7%9B%D7%A8%D7%98%D7%99%D7%A1%D7%99%D7%94%20%D7%A9%D7%9C%D7%99"
           className="mt-6 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl transition-all shadow-lg flex items-center gap-2"
         >
           <MessageCircle className="w-5 h-5" />
-          <span>פנייה לעזרה מול חגי (054-3200007)</span>
+          <span>פנייה לעזרה לשמוליק מנהל הריזורט (050-6336896)</span>
         </a>
       </div>
     );
@@ -223,15 +221,15 @@ ${pass.ownerName} (${pass.ownerPhone})`;
           </div>
 
           <a
-            href="https://wa.me/972543200007?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%97%D7%92%D7%99%2C%20%D7%A4%D7%95%D7%A0%D7%94%20%D7%9C%D7%92%D7%91%D7%99%20%D7%94%D7%9B%D7%A8%D7%98%D7%99%D7%A1%D7%99%D7%94%20%D7%A9%D7%9C%D7%99"
+            href="https://wa.me/972506336896?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%A9%D7%9E%D7%95%D7%9C%D7%99%D7%A2%2C%20%D7%A4%D7%95%D7%A0%D7%94%20%D7%9C%D7%92%D7%91%D7%99%20%D7%94%D7%9B%D7%A8%D7%98%D7%99%D7%A1%D7%99%D7%94%20%D7%A9%D7%9C%D7%99"
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs text-amber-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/15 px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5"
-            title="עזרה מחגי הילמן"
+            title="עזרה משמוליק מנהל הריזורט"
           >
             <MessageCircle className="w-3.5 h-3.5 text-amber-400" />
-            <span className="hidden sm:inline">עזרה מחגי:</span>
-            <span className="font-mono font-bold">054-3200007</span>
+            <span className="hidden sm:inline">שמוליק מנהל הריזורט:</span>
+            <span className="font-mono font-bold">050-6336896</span>
           </a>
         </div>
 

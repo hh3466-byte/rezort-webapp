@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 
-import { Booking, ResortSettings, AgentActionProposal, PaymentMethod, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus } from './types';
+import { Booking, ResortSettings, AgentActionProposal, PaymentMethod, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus, DaycarePass } from './types';
 import { initialBookings, defaultSettings } from './data/initialData';
 import { loadStoredBookings, loadStoredSettings, extractCustomers } from './utils/storage';
 import { 
@@ -23,6 +23,7 @@ import {
   updateVoucherStatusInDb,
   findDaycarePassByCode,
   deductDayFromPassInDb,
+  saveDaycarePassToDb,
   autoArchiveOldCheckedOutBookings,
   autoArchiveExpiredIntakes
 } from './services/dbService';
@@ -888,6 +889,35 @@ export default function App() {
       showToast(`✨ תאריכים ופרטי ${dogName || 'הכלב'} נטענו אוטומטית!`);
     } else if (linkedDetails?.dogName) {
       showToast(`✨ פרטי ${linkedDetails.dogName} והלקוח קושרו אוטומטית להזמנה`);
+    }
+  };
+
+  // Grow Pass Payment Direct Acceptance
+  const handleAcceptPassGrowPayment = async (payment: GrowIncomingPayment, pass: DaycarePass) => {
+    try {
+      const updatedPass: DaycarePass = {
+        ...pass,
+        pricePaid: payment.amount,
+        paymentStatus: 'fully_paid',
+        paymentMethod: (payment.payment_method?.toLowerCase().includes('bit') ? 'bit' : 'credit') as any,
+        notes: `${pass.notes || ''} | שולם במלואו ₪${payment.amount} ב-Grow (אסמכתא ${payment.reference_id})`.trim(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await saveDaycarePassToDb(updatedPass);
+      setSettings(prev => ({
+        ...prev,
+        daycarePasses: [
+          updatedPass,
+          ...(prev.daycarePasses || []).filter(p => p.id !== updatedPass.id && p.passCode !== updatedPass.passCode)
+        ]
+      }));
+
+      await updateGrowPaymentStatus(payment.id, 'completed');
+      setPendingGrowPayments(prev => prev.filter(p => p.id !== payment.id));
+      showToast(`🎟️ כרטיסייה #${pass.passCode} של ${pass.dogName} עודכנה כשולמה (₪${payment.amount})!`);
+    } catch (err: any) {
+      showToast(`שגיאה בעדכון כרטיסייה: ${err?.message || 'נסה שוב'}`);
     }
   };
 
@@ -2553,6 +2583,7 @@ export default function App() {
           intakeRequests={intakeRequests}
           settings={settings}
           onAccept={handleAcceptGrowPayment}
+          onAcceptPass={handleAcceptPassGrowPayment}
           onDismiss={handleDismissGrowPayment}
           onCloseLater={() => {
             setIsGrowPaymentsMinimized(true);
