@@ -696,8 +696,10 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   const handleConfirmDeductBooking = async () => {
     if (!selectedPassForBooking) return;
     if (selectedPassForBooking.paymentStatus !== 'fully_paid') {
-      alert('⚠️ לא ניתן לשריין ימים מכרטיסייה שטרם שולמה!\nיש לאשר תחילה קבלת תשלום (לחיצה על "שולמה כרטיסייה 💳") כדי לפתוח שריונים ביומן.');
-      return;
+      const confirmDebt = window.confirm(
+        `⚠️ שים לב: כרטיסייה זו עדיין לא שולמה (חוב פתוח של ₪${selectedPassForBooking.pricePaid}).\n\nהאם לאשר קליטה/שריון בהקפה? (השהייה תסומן ביומן עם התרעת חוב אדומה עד להסדרת התשלום)`
+      );
+      if (!confirmDebt) return;
     }
     if (!bookingDate) {
       alert('נא לבחור תאריך הגעה');
@@ -734,6 +736,8 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       }
 
       // Create booking in the Resort Calendar
+      const isPaid = selectedPassForBooking.paymentStatus === 'fully_paid';
+      const isToday = bookingDate === getTodayStr();
       const newBooking: Booking = {
         id: bookingId,
         dogName: selectedPassForBooking.dogName,
@@ -744,15 +748,16 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
         serviceType: selectedPassForBooking.serviceType,
         startDate: bookingDate,
         endDate: finalEndDate,
-        totalPrice: 0, // Already prepaid via pass
+        totalPrice: 0, // Already prepaid / tracked via pass
         depositAmount: 0,
-        paymentStatus: 'fully_paid',
-        paymentMethod: selectedPassForBooking.paymentMethod || 'bit',
-        stayStatus: 'booked',
+        paymentStatus: isPaid ? 'fully_paid' : 'unpaid',
+        paymentMethod: selectedPassForBooking.paymentMethod || 'credit',
+        stayStatus: isToday ? 'checked_in' : 'booked',
         vaccinationValid: true,
         daycarePassId: selectedPassForBooking.id,
         daycarePassCode: selectedPassForBooking.passCode,
-        notes: `מימוש מתוך ${isBoardingBooking ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסייה'} ${selectedPassForBooking.passCode} (${daysToDeduct} ${isBoardingBooking ? 'יממות' : 'ימים'}, נותרו ${res.pass.totalDays - res.pass.usedDays} ימים)${bookingNotes ? ` | ${bookingNotes}` : ''}`,
+        daycarePassPaid: isPaid,
+        notes: `מימוש מתוך ${isBoardingBooking ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסייה'} ${selectedPassForBooking.passCode} (${daysToDeduct} ${isBoardingBooking ? 'יממות' : 'ימים'}, נותרו ${res.pass.totalDays - res.pass.usedDays} ימים)${!isPaid ? ' | [⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה]' : ''}${bookingNotes ? ` | ${bookingNotes}` : ''}`,
         arrivalTime: isBoardingBooking ? '10:00 - 12:00' : '08:30 - 10:00',
         pickupTime: isBoardingBooking ? '10:00 - 12:00' : '17:00 - 18:30',
         createdAt: new Date().toISOString(),
@@ -1676,12 +1681,19 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
                             ) : (
                               <button
                                 type="button"
-                                onClick={() => alert(`⚠️ הכרטיסייה עדיין לא שולמה!\nסמן קודם "שולמה כרטיסייה 💳" לאחר קבלת התשלום כדי לפתוח שריונים ביומן.`)}
-                                className="flex-1 py-2 bg-slate-100 hover:bg-amber-50 text-amber-900 border border-amber-300 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer min-w-[130px]"
-                                title="לא ניתן לשריין עד שהכרטיסייה תשולם"
+                                onClick={() => {
+                                  setSelectedPassForBooking(pass);
+                                  setBookingDate(getTodayStr());
+                                  setBookingEndDate(getTodayStr());
+                                }}
+                                className={`flex-1 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-w-[130px] ${
+                                  isBoarding ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-600 hover:bg-amber-700'
+                                }`}
+                                title="טרם שולם - לחיצה תאפשר אישור קליטה בהקפה עם התרעת חוב"
                               >
-                                <Lock className="w-3.5 h-3.5 text-amber-600" />
-                                <span>נעול לשריון (לא שולם)</span>
+                                <CalendarDays className="w-3.5 h-3.5" />
+                                <span>{isBoarding ? 'שריין פנסיון ביומן 🌙' : 'שריין יום ביומן ☀️'}</span>
+                                <span className="text-[10px] bg-amber-950/40 text-amber-100 px-1.5 py-0.2 rounded-md font-normal">בהקפה</span>
                               </button>
                             )
                           )}
