@@ -410,6 +410,7 @@ export interface DaycarePass {
   paymentStatus: PaymentStatus;
   paymentMethod?: PaymentMethod;
   notes?: string;
+  paymentUrl?: string;
   validFrom: string; // YYYY-MM-DD
   validUntil: string; // YYYY-MM-DD (6 חודשים למעון יום / שנה מלאה לפנסיון 21 יממות)
   status: PassStatus;

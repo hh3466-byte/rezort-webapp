@@ -39,7 +39,8 @@ import {
   Ticket,
   Camera,
   Video,
-  Play
+  Play,
+  ExternalLink
 } from 'lucide-react';
 import { SendIntakeModal } from './SendIntakeModal';
 import { getCurrentCoordinates, reverseGeocodeCoordinates } from '../utils/geolocationUtils';
@@ -1093,61 +1094,172 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
           }} 
           className="bg-white rounded-3xl border border-slate-200/90 shadow-md p-5 sm:p-7 space-y-6"
         >
-          {/* Daycare / Boarding Pass Active Banner */}
+          {/* Daycare / Boarding Pass Digital Punch Card View */}
           {matchedDaycarePass && (() => {
             const isBoarding = matchedDaycarePass.serviceType === 'boarding';
-            const remaining = matchedDaycarePass.totalDays - matchedDaycarePass.usedDays;
+            const remaining = Math.max(0, matchedDaycarePass.totalDays - matchedDaycarePass.usedDays);
+            const isUnpaid = matchedDaycarePass.paymentStatus === 'unpaid';
+            const growPayUrl = matchedDaycarePass.paymentUrl || 'https://sandbox.grow.link/9d170a0ec6b695758deaff4e72b60965-NzM1NDg';
+
             return (
-              <div className={`rounded-3xl p-5 shadow-lg border-2 space-y-3 animate-in zoom-in-95 text-white ${
-                isBoarding 
-                  ? 'bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-900 border-indigo-400/80' 
-                  : 'bg-gradient-to-r from-emerald-700 via-teal-800 to-slate-900 border-emerald-400/80'
-              }`}>
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-inner backdrop-blur-md ${
-                      isBoarding ? 'bg-amber-400/20 text-amber-300' : 'bg-white/10'
-                    }`}>
-                      {isBoarding ? '🌙' : '🎟️'}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                          isBoarding ? 'bg-amber-400 text-slate-950' : 'bg-emerald-400 text-slate-950'
-                        }`}>
-                          {isBoarding ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית ימים פעילה'}
-                        </span>
-                        <span className={`text-xs font-mono ${isBoarding ? 'text-indigo-200' : 'text-emerald-200'}`}>
-                          מספר {matchedDaycarePass.passCode}
-                        </span>
+              <div className="space-y-4 animate-in zoom-in-95">
+                {/* Main Pass Digital Punch Card */}
+                <div className={`rounded-3xl p-5 sm:p-6 shadow-xl border-2 space-y-4 text-white relative overflow-hidden ${
+                  isBoarding 
+                    ? 'bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 border-indigo-400/80 shadow-indigo-950/30' 
+                    : 'bg-gradient-to-br from-emerald-800 via-teal-900 to-slate-900 border-emerald-400/80 shadow-emerald-950/30'
+                }`}>
+                  {/* Subtle Background Watermark */}
+                  <div className="absolute -left-6 -bottom-6 text-white/5 pointer-events-none text-9xl font-black select-none">
+                    {isBoarding ? '🌙' : '🐾'}
+                  </div>
+
+                  {/* Header Row: Badge, Pass Code, Dog Name & Remaining Days */}
+                  <div className="flex items-start justify-between flex-wrap gap-3 relative z-10">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-inner backdrop-blur-md border ${
+                        isBoarding ? 'bg-amber-400/20 border-amber-400/40 text-amber-300' : 'bg-white/10 border-white/20 text-white'
+                      }`}>
+                        {isBoarding ? '🌙' : '🎟️'}
                       </div>
-                      <h3 className="text-base sm:text-lg font-black mt-1">
-                        {isBoarding 
-                          ? `שריון מועד פנסיון עבור ${matchedDaycarePass.dogName} (${matchedDaycarePass.ownerName})` 
-                          : `שריון יום הגעה עבור ${matchedDaycarePass.dogName} (${matchedDaycarePass.ownerName})`}
-                      </h3>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                            isBoarding ? 'bg-amber-400 text-slate-950' : 'bg-emerald-400 text-slate-950'
+                          }`}>
+                            {isBoarding ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית יומיות (מעון יום)'}
+                          </span>
+                          <span className="text-xs font-mono font-bold bg-white/15 px-2 py-0.5 rounded-lg border border-white/20">
+                            קוד: {matchedDaycarePass.passCode}
+                          </span>
+                        </div>
+                        <h2 className="text-lg sm:text-2xl font-black mt-1 tracking-tight">
+                          כרטיסיית {matchedDaycarePass.dogName}
+                          <span className="text-sm font-normal text-slate-200 mr-2">
+                            ({matchedDaycarePass.ownerName})
+                          </span>
+                        </h2>
+                      </div>
+                    </div>
+
+                    <div className="text-left bg-white/10 px-4 py-2 rounded-2xl backdrop-blur-md border border-white/20">
+                      <span className={`text-sm sm:text-base font-black block ${isBoarding ? 'text-amber-300' : 'text-emerald-300'}`}>
+                        נותרו {remaining} מתוך {matchedDaycarePass.totalDays} {isBoarding ? 'יממות' : 'ימים'}
+                      </span>
+                      <span className="text-[11px] text-slate-200 block">
+                        תוקף עד: {formatDateIL(matchedDaycarePass.validUntil)}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="text-left bg-white/10 px-3.5 py-1.5 rounded-xl backdrop-blur-md border border-white/20">
-                    <span className={`text-xs font-black block ${isBoarding ? 'text-amber-300' : 'text-emerald-200'}`}>
-                      נותרו {remaining} מתוך {matchedDaycarePass.totalDays} {isBoarding ? 'יממות' : 'ימים'}
+                  {/* Visual Punch Circles Grid */}
+                  <div className="pt-2 relative z-10">
+                    <div className="text-xs font-bold text-slate-200 mb-2 flex items-center gap-1.5">
+                      <span>🏷️ מצב ניקובים בכרטיסייה:</span>
+                      <span className="text-[11px] font-normal text-slate-300">
+                        ({matchedDaycarePass.usedDays} נוצלו · {remaining} זמינים לניצול)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                      {Array.from({ length: matchedDaycarePass.totalDays }).map((_, idx) => {
+                        const isUsed = idx < matchedDaycarePass.usedDays;
+                        return (
+                          <div
+                            key={idx}
+                            className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center justify-center ${
+                              isUsed
+                                ? 'bg-emerald-500 text-white border-emerald-300 shadow-sm'
+                                : 'bg-white/10 border-white/20 text-slate-200 hover:bg-white/15'
+                            }`}
+                            title={isUsed ? `יום ${idx + 1} נוצל` : `יום ${idx + 1} פנוי לשריון`}
+                          >
+                            <span className="text-sm">
+                              {isUsed ? '🐾' : '⚪'}
+                            </span>
+                            <span className="text-[10px] font-black mt-0.5">
+                              {idx + 1}
+                            </span>
+                            <span className="text-[9px] opacity-80 leading-none">
+                              {isUsed ? 'נוצל' : 'פנוי'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Payment Alert Banner (If Unpaid) OR Paid Badge (If Paid) */}
+                  <div className="pt-2 relative z-10">
+                    {isUnpaid ? (
+                      <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-400 text-slate-950 p-4 rounded-2xl shadow-lg border-2 border-amber-300 flex items-center justify-between flex-wrap gap-3 animate-pulse">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-slate-950/15 flex items-center justify-center text-xl shrink-0">
+                            💳
+                          </div>
+                          <div>
+                            <div className="font-black text-sm sm:text-base text-slate-950 flex items-center gap-1.5">
+                              <span>הכרטיסייה טרם שולמה (יתרה לתשלום: ₪{matchedDaycarePass.pricePaid})</span>
+                            </div>
+                            <p className="text-xs font-semibold text-slate-900 mt-0.5">
+                              הסדירו כעת בקלות דרך Bit, Apple Pay, Google Pay או כרטיס אשראי
+                            </p>
+                          </div>
+                        </div>
+
+                        <a
+                          href={growPayUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-5 py-2.5 bg-slate-950 hover:bg-slate-900 text-amber-300 hover:text-amber-200 font-black text-xs sm:text-sm rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+                        >
+                          <span>לתשלום מאובטח בלחיצה (₪{matchedDaycarePass.pricePaid}) 💳</span>
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="bg-emerald-500/20 border border-emerald-400/50 p-3 rounded-2xl flex items-center justify-between flex-wrap gap-2 text-xs">
+                        <span className="flex items-center gap-1.5 font-bold text-emerald-200">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                          <span>כרטיסייה שולמה במלואה ופעילה ✅ (יתרה מובטחת)</span>
+                        </span>
+                        <span className="font-mono text-emerald-300 font-bold">
+                          ₪0 לתשלום לשריון הבא
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Personal Assistance by Hagai Heilman */}
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between flex-wrap gap-2 text-xs text-slate-200 relative z-10">
+                    <span className="flex items-center gap-1.5">
+                      <span>💬 נתקלתם בקושי? חגי הילמן לשירותכם:</span>
+                      <a
+                        href="https://wa.me/972543200007?text=%D7%A9%D7%9C%D7%95%D7%9D%20%D7%97%D7%92%D7%99%2C%20%D7%A4%D7%95%D7%A0%D7%94%20%D7%9C%D7%92%D7%91%D7%99%20%D7%94%D7%9B%D7%A8%D7%98%D7%99%D7%A1%D7%99%D7%94%20%D7%A9%D7%9C%D7%99%20%D7%91%D7%A8%D7%99%D7%96%D7%95%D7%A8%D7%98"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-bold underline text-amber-300 hover:text-white flex items-center gap-1"
+                      >
+                        <span>054-3200007</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
                     </span>
-                    <span className={`text-[10px] ${isBoarding ? 'text-indigo-200/80' : 'text-emerald-100/70'}`}>
-                      תוקף עד: {formatDateIL(matchedDaycarePass.validUntil)}
+                    <span className="text-[11px] opacity-80">
+                      שמוליק וצוות הריזורט לכלב
                     </span>
                   </div>
                 </div>
 
-                <div className={`pt-2 border-t border-white/10 flex items-center justify-between text-xs ${
-                  isBoarding ? 'text-indigo-100' : 'text-emerald-100'
-                }`}>
-                  <span>
-                    ✨ <strong>שריון מתוך הבנק ללא תשלום נוסף:</strong> {isBoarding ? 'היממות יקוזזו אוטומטית עם אישור שמוליק ביומן.' : 'יום אחד יקוזז מיתרת הכרטיסייה שלך.'}
-                  </span>
-                  <span className={`font-bold px-2 py-0.5 rounded-md ${isBoarding ? 'bg-amber-400/20 text-amber-200' : 'bg-emerald-500/20'}`}>
-                    ₪0 לתשלום
-                  </span>
+                {/* Instruction banner for booking the next day */}
+                <div className="bg-sky-50 border border-sky-200 text-sky-950 p-4 rounded-2xl flex items-start gap-3 text-xs leading-relaxed">
+                  <span className="text-xl shrink-0">💡</span>
+                  <div>
+                    <span className="font-black text-sky-900 block mb-0.5">
+                      איך משריינים את יום ההגעה הבא מתוך הכרטיסייה?
+                    </span>
+                    <span>
+                      הכלב שלכם כבר רשום ומאומת במערכת! כל שנותר ליום הבא הוא רק לבחור את תאריך ההגעה הרצוי למטה וללחוץ על שליחת בקשה לשמוליק – ללא צורך במילוי שאלון רפואי מחדש.
+                    </span>
+                  </div>
                 </div>
               </div>
             );

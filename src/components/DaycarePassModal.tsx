@@ -433,10 +433,9 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
     return d.toISOString().split('T')[0];
   };
 
-  // Build direct digital questionnaire link for this pass
+  // Build direct digital card link for this pass
   const getPassBookingLink = (pass: DaycarePass) => {
-    const cleanP = cleanPhoneNumber(pass.ownerPhone);
-    return `https://rezort-webapp.vercel.app/?request=true&pass=${pass.passCode}&phone=${encodeURIComponent(cleanP)}&name=${encodeURIComponent(pass.ownerName)}&dog=${encodeURIComponent(pass.dogName)}`;
+    return `https://rezort-webapp.vercel.app/?pass=${pass.passCode}`;
   };
 
   // Submit new pass (Prepaid / Direct)
@@ -599,33 +598,35 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
 
     const link = getPassBookingLink(pass);
 
+    const isPaid = pass.paymentStatus === 'fully_paid';
+    const paymentLine = isPaid 
+      ? `💰 *סטטוס תשלום:* שולם במלואו (₪${pass.pricePaid})` 
+      : `💰 *סכום לתשלום שסוכם:* ₪${pass.pricePaid} (ניתן להסדיר ישירות ובמהירות ב-Bit / אשראי בקישור למטה)`;
+
     const msg = isBoarding ? `שלום ${pass.ownerName}! 🐾🐶
 הונפקה עבורכם בהצלחה *כרטיסיית בנק 21 יממות פנסיון VIP* עבור *${pass.dogName}* בריזורט לכלב! 🌟
 
-🎟️ *מספר הכרטיסייה שלכם:* *${pass.passCode}*
+🎟️ *מספר הכרטיסייה שלכם:* *#${pass.passCode}*
 📅 *כמות ימים בחבילה:* *21 יממות פנסיון מלא* (יתרה נוכחית: *${remainingDays} יממות*)
 ⏳ *תוקף הכרטיסייה:* עד לתאריך *${formatDateIL(pass.validUntil)}* (שנה מלאה)
-💰 *סכום ששולם:* ₪${pass.pricePaid} (₪100 ליממה)
+${paymentLine}
 
-💡 *איך משריינים מועדי אירוח מהבנק שלכם?*
-בכל פעם שתרצו להביא את ${pass.dogName} לפנסיון (סופ"ש, חגים, חופשות וכו'), פשוט נכנסים לקישור הבא, בוחרים את תאריכי הכניסה והיציאה ומגישים בקשת שריון לשמוליק:
+🏷️ *לצפייה בכרטיסייה הדיגיטלית, ביצוע תשלום וניקוב/שריון שהיות בלחיצה:*
 👉 \u200E${link}
 
-שמוליק יקבל את הבקשה ישירות במערכת ויאשר את המקום ביומן הריזורט (היממות יקוזזו אוטומטית מהבנק שלכם ללא כל תשלום נוסף)! 🐕🤍
+(הכלב כבר מאושר במערכת – אין צורך למלא שום שאלון מחדש!)
 שמוליק וכל צוות הריזורט לכלב 🐾` : `שלום ${pass.ownerName}! 🐾🐶
-הונפקה עבורכם בהצלחה *כרטיסיית ${serviceName}* בריזורט לכלב!
+הונפקה עבורכם בהצלחה *כרטיסיית ${serviceName}* עבור *${pass.dogName}* בריזורט לכלב!
 
-🎟️ *מספר הכרטיסייה שלכם:* *${pass.passCode}*
+🎟️ *מספר הכרטיסייה שלכם:* *#${pass.passCode}*
 📅 *כמות ימים:* *${pass.totalDays} ימים* (יתרה נוכחית: *${remainingDays} ימים*)
-⏳ *תוקף הכרטיסייה:* עד לתאריך *${formatDateIL(pass.validUntil)}* (תוקף לחצי שנה)
-💰 *סכום ששולם:* ₪${pass.pricePaid}
+⏳ *תוקף הכרטיסייה:* עד לתאריך *${formatDateIL(pass.validUntil)}* (חצי שנה)
+${paymentLine}
 
-💡 *איך משריינים יום הגעה לריזורט?*
-על מנת להבטיח שריון מקום ולוודא שאין עומס במתחם, *חובה להגיש בקשת שריון קצרה מראש לכל יום הגעה בנפרד*.
-בכל פעם שתרצו להביא את ${pass.dogName}, פשוט נכנסים לקישור הבא ובוחרים את תאריך ההגעה:
+🏷️ *לצפייה בכרטיסיית הניקוב הדיגיטלית, תשלום ושריון הגעה הבאה בלחיצה:*
 👉 \u200E${link}
 
-שמוליק יקבל את הבקשה ישירות במערכת ויאשר את שריון המקום ביומן הריזורט (ללא כל תשלום נוסף)! 🐕🤍
+(הכלב כבר מאושר במערכת – אין צורך למלא שום שאלון מחדש!)
 שמוליק וכל צוות הריזורט לכלב 🐾`;
 
     openWhatsAppMessage(pass.ownerPhone, msg);
@@ -667,37 +668,6 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       };
       await saveDaycarePassToDb(updated);
       setStoredPasses(prev => prev.map(p => p.id === pass.id ? updated : p));
-      
-      // Auto-update associated bookings in calendar (e.g., turn Chaimi green!)
-      if (bookings && bookings.length > 0) {
-        const cleanPassPhone = (pass.ownerPhone || '').replace(/\D/g, '').slice(-7);
-        for (const b of bookings) {
-          const isDirectPass = b.daycarePassId === pass.id || b.daycarePassCode === pass.passCode;
-          const bPhone = (b.ownerPhone || '').replace(/\D/g, '');
-          const isPhoneMatch = Boolean(cleanPassPhone && bPhone.endsWith(cleanPassPhone));
-          const hasDebt = (b.notes || '').includes('חוב כרטיסייה') || b.daycarePassPaid === false || b.paymentStatus !== 'fully_paid';
-
-          if (isDirectPass || (isPhoneMatch && hasDebt && b.serviceType === pass.serviceType)) {
-            const cleanedNotes = (b.notes || '')
-              .replace(/\|\s*\[⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה\]/g, '')
-              .replace(/\[⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה\]/g, '')
-              .replace(/\[⚠️ חוב כרטיסייה\]/g, '')
-              .trim();
-
-            const updatedBooking: Booking = {
-              ...b,
-              paymentStatus: isNowPaid ? 'fully_paid' : 'unpaid',
-              daycarePassPaid: isNowPaid,
-              notes: isNowPaid 
-                ? (cleanedNotes ? `${cleanedNotes} | [שולמה כרטיסייה ✓]` : '[שולמה כרטיסייה ✓]')
-                : (cleanedNotes ? `${cleanedNotes} | [⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה]` : '[⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה]'),
-              updatedAt: new Date().toISOString()
-            };
-            await onSaveBooking(updatedBooking);
-          }
-        }
-      }
-
       if (isNowPaid) {
         confetti({
           particleCount: 50,

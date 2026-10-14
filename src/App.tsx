@@ -76,6 +76,7 @@ import { getDateShabbatOrHoliday, isCustomerMessagingRestrictedNow } from './uti
 import { ShabbatHolidayGreetingModal } from './components/ShabbatHolidayGreetingModal';
 import { VoucherModal } from './components/VoucherModal';
 import { DaycarePassModal } from './components/DaycarePassModal';
+import { DigitalPassCustomerView } from './components/DigitalPassCustomerView';
 import { DailyDogUpdatesModal } from './components/DailyDogUpdatesModal';
 import { TomorrowOverviewModal } from './components/TomorrowOverviewModal';
 import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
@@ -148,6 +149,13 @@ export default function App() {
     window.location.search.toLowerCase().includes('agreement') ||
     window.location.hash.toLowerCase().includes('agreement')
   );
+
+  // Digital Daycare / Boarding Pass Direct Link (?pass=1302 or ?daycare_pass=... or ?card=...)
+  const passParamCode = typeof window !== 'undefined' ? (() => {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get('pass') || params.get('daycare_pass') || params.get('card') || '').trim();
+  })() : '';
+
   const [showTrainingAgreement, setShowTrainingAgreement] = useState(isAgreementParam);
   const [showPublicIntake, setShowPublicIntake] = useState(isIntakeParam);
   const [intakeRequests, setIntakeRequests] = useState<IntakeRequest[]>(() => loadStoredIntakeRequests());
@@ -1391,6 +1399,21 @@ export default function App() {
         isPublicClientView={true}
         onAgreementSigned={() => {
           showToast('✅ הסכם האילוף נחתם בהצלחה!');
+        }}
+      />
+    );
+  }
+
+  // 0. If direct pass link opened (?pass=1302 or ?card=...)
+  if (passParamCode) {
+    return (
+      <DigitalPassCustomerView
+        passCode={passParamCode}
+        settings={settings}
+        onBackToApp={() => {
+          if (typeof window !== 'undefined') {
+            window.location.href = window.location.pathname;
+          }
         }}
       />
     );
