@@ -88,10 +88,12 @@ const SHLOMI_LUNA_TEMPLATES = [
 function selectDogTemplate(b, isWeekend = false) {
   const oName = (b.owner_name || '').toLowerCase();
   const dName = (b.dog_name || '').toLowerCase();
-  const phone = (b.owner_phone || '');
-  const isLuna = (oName.includes('שלומי') && (dName.includes('לונה') || phone.includes('5445512'))) || dName.includes('לונה');
+  const phone = (b.owner_phone || '').replace(/\D/g, '');
+  const isShlomiLuna = (oName.includes('שלומי') && (dName.includes('לונה') || phone.includes('5445512'))) ||
+                       dName.includes('המתגעגעת') ||
+                       oName.includes('שלומי ממן');
 
-  if (isLuna) {
+  if (isShlomiLuna) {
     const t = SHLOMI_LUNA_TEMPLATES[Math.floor(Math.random() * SHLOMI_LUNA_TEMPLATES.length)];
     let days = 160;
     if (b.start_date) {

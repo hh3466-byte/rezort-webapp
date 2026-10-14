@@ -246,13 +246,80 @@ export default async function handler(req, res) {
       }) || null;
     }
 
-    // Check if this payment matches an active Daycare pass
-    const { data: activePasses } = await supabase.from('daycare_passes').select('*');
-    const matchedPass = (activePasses || []).find(p => {
-      const pPhone = cleanPhoneNumber(p.ownerPhone || '');
-      const pName = (p.ownerName || '').toLowerCase().trim();
-      return (cleanPhone && pPhone && pPhone.endsWith(cleanPhone.slice(-7))) || (fullName && pName && (fullName.includes(pName) || pName.includes(fullName)));
-    });
+    // Fetch all Daycare / Boarding passes (from daycare_passes table and settings fallback)
+    let allPasses = [];
+    try {
+      const { data: pData } = await supabase.from('daycare_passes').select('*');
+      if (pData && pData.length > 0) {
+        allPasses = pData.map(p => ({
+          id: p.id,
+          passCode: p.pass_code || p.passCode,
+          ownerName: p.owner_name || p.ownerName,
+          ownerPhone: p.owner_phone || p.ownerPhone,
+          dogName: p.dog_name || p.dogName,
+          pricePaid: Number(p.price_paid || p.pricePaid || 0),
+          serviceType: p.service_type || p.serviceType,
+          paymentStatus: p.payment_status || p.paymentStatus,
+          status: p.status,
+          ...p
+        }));
+      }
+    } catch (_) {}
+
+    try {
+      const { data: sData } = await supabase.from('settings').select('data').eq('id', 'resort_config').maybeSingle();
+      if (sData?.data?.daycare_passes && Array.isArray(sData.data.daycare_passes)) {
+        for (const sp of sData.data.daycare_passes) {
+          if (!allPasses.some(ap => ap.id === sp.id || ap.passCode === sp.passCode)) {
+            allPasses.push(sp);
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Check if this payment matches a Daycare / Boarding pass
+    let matchedPass = null;
+    if (cField1 && (cField1.toLowerCase().startsWith('pass-') || cField1.startsWith('PASS-'))) {
+      const cleanCode = cField1.trim().toUpperCase();
+      matchedPass = allPasses.find(p => (p.passCode && p.passCode.toUpperCase() === cleanCode) || p.id === cField1) || null;
+    }
+
+    if (!matchedPass && cleanPhone && cleanPhone.length >= 7) {
+      const phoneSuffix = cleanPhone.slice(-7);
+      matchedPass = allPasses.find(p => {
+        const pPhone = cleanPhoneNumber(p.ownerPhone || '');
+        const isPhoneMatch = pPhone && pPhone.endsWith(phoneSuffix);
+        const isDebt = p.paymentStatus !== 'fully_paid';
+        return isPhoneMatch && (isDebt || Number(p.pricePaid || 0) === amount);
+      }) || allPasses.find(p => {
+        const pPhone = cleanPhoneNumber(p.ownerPhone || '');
+        return pPhone && pPhone.endsWith(phoneSuffix);
+      }) || null;
+    }
+
+    if (!matchedPass && fullName) {
+      const targetName = fullName.toLowerCase().trim();
+      matchedPass = allPasses.find(p => {
+        const pName = (p.ownerName || '').toLowerCase().trim();
+        const isNameMatch = pName && (pName.includes(targetName) || targetName.includes(pName));
+        const isDebt = p.paymentStatus !== 'fully_paid';
+        return isNameMatch && (isDebt || Number(p.pricePaid || 0) === amount);
+      }) || null;
+    }
+
+    // If matchedPass exists and matchedBooking is an associated pass booking or has pass debt, route to pass flow
+    const isPassBooking = Boolean(
+      matchedPass && matchedBooking && (
+        matchedBooking.daycare_pass_id === matchedPass.id ||
+        matchedBooking.daycare_pass_code === matchedPass.passCode ||
+        (matchedBooking.notes || '').includes('חוב כרטיסייה') ||
+        matchedBooking.data?.daycarePassPaid === false
+      )
+    );
+
+    if (isPassBooking) {
+      matchedBooking = null; // Route to matchedPass handler for complete pass & booking reconciliation
+    }
 
     // Check if payload contains keywords for OTHER Danilov businesses (Zkhuyot HaMoreh, Knaan, etc.)
     const otherBusinessKeywords = ['זכויות המורה', 'זכויות מורה', 'אתי דנילוב', 'כנען', 'טרקטור', 'עפרה', 'שפר'];
@@ -373,18 +440,76 @@ export default async function handler(req, res) {
       alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על שירות ${serviceName} (${paymentClassification}).`;
     } else if (matchedPass) {
       dogName = matchedPass.dogName || 'הכלב';
-      serviceName = 'כרטיסיית פעילות יומית';
+      serviceName = matchedPass.serviceType === 'boarding' ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית פעילות יומית';
       paymentClassification = 'תשלום מלא';
-      alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על ${serviceName} (${paymentClassification} ✅ כרטיסייה ${matchedPass.passCode}).`;
+      alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על ${serviceName} (${paymentClassification} ✅ כרטיסייה ${matchedPass.passCode}). השהייה ביומן עודכנה לירוקה ומאושרת 🟢!`;
       
-      // Update pass payment status in Supabase
+      // 1. Update pass in daycare_passes table
       try {
         await supabase.from('daycare_passes').update({
           payment_status: 'fully_paid',
+          status: 'active',
           updated_at: new Date().toISOString()
         }).eq('id', matchedPass.id);
       } catch (passUpErr) {
-        console.warn('Error updating daycare pass payment status:', passUpErr);
+        console.warn('Error updating daycare pass table:', passUpErr);
+      }
+
+      // 2. Update pass in settings fallback
+      try {
+        const { data: sData } = await supabase.from('settings').select('data').eq('id', 'resort_config').maybeSingle();
+        if (sData?.data?.daycare_passes) {
+          const updatedPasses = sData.data.daycare_passes.map(p => {
+            if (p.id === matchedPass.id || p.passCode === matchedPass.passCode) {
+              return { ...p, paymentStatus: 'fully_paid', status: 'active', updatedAt: new Date().toISOString() };
+            }
+            return p;
+          });
+          await supabase.from('settings').update({
+            data: { ...sData.data, daycare_passes: updatedPasses }
+          }).eq('id', 'resort_config');
+        }
+      } catch (sErr) {
+        console.warn('Error updating daycare pass in settings:', sErr);
+      }
+
+      // 3. Find and update any associated bookings in calendar (e.g. Chaimi today!)
+      try {
+        const { data: allBks } = await supabase.from('bookings').select('*');
+        const passBookings = (allBks || []).filter(b => {
+          const bData = b.data || {};
+          const isDirectMatch = b.daycare_pass_id === matchedPass.id || 
+                                b.daycare_pass_code === matchedPass.passCode ||
+                                bData.daycarePassId === matchedPass.id ||
+                                bData.daycarePassCode === matchedPass.passCode;
+          const isOwnerMatch = cleanPhone && cleanPhoneNumber(b.owner_phone || b.ownerPhone || '').endsWith(cleanPhone.slice(-7));
+          const hasDebtNote = (b.notes || '').includes('חוב כרטיסייה') || bData.daycarePassPaid === false || b.payment_status !== 'fully_paid';
+          return isDirectMatch || (isOwnerMatch && hasDebtNote);
+        });
+
+        for (const pb of passBookings) {
+          const curData = pb.data || {};
+          const cleanedNotes = (pb.notes || '')
+            .replace(/\|\s*\[⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה\]/g, '')
+            .replace(/\[⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה\]/g, '')
+            .replace(/\[⚠️ חוב כרטיסייה\]/g, '')
+            .trim();
+          
+          await supabase.from('bookings').update({
+            payment_status: 'fully_paid',
+            notes: cleanedNotes ? `${cleanedNotes} | כרטיסייה שולמה ב-Grow (אסמכתא ${transactionId})` : `כרטיסייה שולמה ב-Grow (אסמכתא ${transactionId})`,
+            data: {
+              ...curData,
+              daycarePassPaid: true,
+              paymentStatus: 'fully_paid',
+              growTransactionId: transactionId
+            },
+            updated_at: new Date().toISOString()
+          }).eq('id', pb.id);
+          console.log(`Auto-reconciled pass booking ${pb.id} (${pb.dog_name || pb.dogName}) to fully_paid!`);
+        }
+      } catch (bkErr) {
+        console.warn('Error auto-reconciling pass bookings:', bkErr);
       }
     } else {
       alertMsg = `שלום, התקבל תשלום חדש ב-Grow ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} (📞 ${cleanPhone || 'ללא נייד'}). ⚠️ לא אותר שיוך אוטומטי להזמנה ביומן - נדרש שיוך ידני!`;

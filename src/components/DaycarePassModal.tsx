@@ -667,6 +667,37 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       };
       await saveDaycarePassToDb(updated);
       setStoredPasses(prev => prev.map(p => p.id === pass.id ? updated : p));
+      
+      // Auto-update associated bookings in calendar (e.g., turn Chaimi green!)
+      if (bookings && bookings.length > 0) {
+        const cleanPassPhone = (pass.ownerPhone || '').replace(/\D/g, '').slice(-7);
+        for (const b of bookings) {
+          const isDirectPass = b.daycarePassId === pass.id || b.daycarePassCode === pass.passCode;
+          const bPhone = (b.ownerPhone || '').replace(/\D/g, '');
+          const isPhoneMatch = Boolean(cleanPassPhone && bPhone.endsWith(cleanPassPhone));
+          const hasDebt = (b.notes || '').includes('חוב כרטיסייה') || b.daycarePassPaid === false || b.paymentStatus !== 'fully_paid';
+
+          if (isDirectPass || (isPhoneMatch && hasDebt && b.serviceType === pass.serviceType)) {
+            const cleanedNotes = (b.notes || '')
+              .replace(/\|\s*\[⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה\]/g, '')
+              .replace(/\[⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה\]/g, '')
+              .replace(/\[⚠️ חוב כרטיסייה\]/g, '')
+              .trim();
+
+            const updatedBooking: Booking = {
+              ...b,
+              paymentStatus: isNowPaid ? 'fully_paid' : 'unpaid',
+              daycarePassPaid: isNowPaid,
+              notes: isNowPaid 
+                ? (cleanedNotes ? `${cleanedNotes} | [שולמה כרטיסייה ✓]` : '[שולמה כרטיסייה ✓]')
+                : (cleanedNotes ? `${cleanedNotes} | [⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה]` : '[⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה]'),
+              updatedAt: new Date().toISOString()
+            };
+            await onSaveBooking(updatedBooking);
+          }
+        }
+      }
+
       if (isNowPaid) {
         confetti({
           particleCount: 50,

@@ -74,6 +74,37 @@ export default async function handler(req, res) {
       .select('*')
       .neq('status', 'archived');
 
+    // 4. Fetch passes (daycare_passes table & settings fallback)
+    let allPasses = [];
+    try {
+      const { data: pData } = await supabase.from('daycare_passes').select('*');
+      if (pData && pData.length > 0) {
+        allPasses = pData.map(p => ({
+          id: p.id,
+          passCode: p.pass_code || p.passCode,
+          ownerName: p.owner_name || p.ownerName,
+          ownerPhone: p.owner_phone || p.ownerPhone,
+          dogName: p.dog_name || p.dogName,
+          pricePaid: Number(p.price_paid || p.pricePaid || 0),
+          serviceType: p.service_type || p.serviceType,
+          paymentStatus: p.payment_status || p.paymentStatus,
+          status: p.status,
+          ...p
+        }));
+      }
+    } catch (_) {}
+
+    try {
+      const { data: sData } = await supabase.from('settings').select('data').eq('id', 'resort_config').maybeSingle();
+      if (sData?.data?.daycare_passes && Array.isArray(sData.data.daycare_passes)) {
+        for (const sp of sData.data.daycare_passes) {
+          if (!allPasses.some(ap => ap.id === sp.id || ap.passCode === sp.passCode)) {
+            allPasses.push(sp);
+          }
+        }
+      }
+    } catch (_) {}
+
     let reconciledCount = 0;
     const syncLogs = [];
 
@@ -87,6 +118,70 @@ export default async function handler(req, res) {
       const pRef = String(payment.reference_id || payment.id || '');
 
       if (!pAmount || pAmount <= 0) continue;
+
+      // Check if matches an unpaid pass
+      const matchedPass = allPasses.find(p => {
+        const pPassPhone = cleanPhoneNumber(p.ownerPhone || '');
+        const isPhone = pPhone && pPassPhone && pPassPhone.endsWith(pPhone.slice(-7));
+        const pPassName = (p.ownerName || '').trim().toLowerCase();
+        const isName = pName && pPassName && (pPassName.includes(pName) || pName.includes(pPassName));
+        const isUnpaid = p.paymentStatus !== 'fully_paid';
+        return (isPhone || isName) && (isUnpaid || Number(p.pricePaid || 0) === pAmount);
+      });
+
+      if (matchedPass && matchedPass.paymentStatus !== 'fully_paid') {
+        try {
+          await supabase.from('daycare_passes').update({
+            payment_status: 'fully_paid',
+            status: 'active',
+            updated_at: new Date().toISOString()
+          }).eq('id', matchedPass.id);
+        } catch (_) {}
+
+        try {
+          const { data: sData } = await supabase.from('settings').select('data').eq('id', 'resort_config').maybeSingle();
+          if (sData?.data?.daycare_passes) {
+            const upList = sData.data.daycare_passes.map(p => {
+              if (p.id === matchedPass.id || p.passCode === matchedPass.passCode) {
+                return { ...p, paymentStatus: 'fully_paid', status: 'active', updatedAt: new Date().toISOString() };
+              }
+              return p;
+            });
+            await supabase.from('settings').update({ data: { ...sData.data, daycare_passes: upList } }).eq('id', 'resort_config');
+          }
+        } catch (_) {}
+
+        // Reconcile associated bookings
+        const passBookings = (bookings || []).filter(b => {
+          const bData = b.data || {};
+          const isDirect = b.daycare_pass_id === matchedPass.id || b.daycare_pass_code === matchedPass.passCode || bData.daycarePassId === matchedPass.id || bData.daycarePassCode === matchedPass.passCode;
+          const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+          const isPhone = pPhone && bPhone && bPhone.endsWith(pPhone.slice(-7));
+          const hasDebt = (b.notes || '').includes('חוב כרטיסייה') || bData.daycarePassPaid === false || b.payment_status !== 'fully_paid';
+          return isDirect || (isPhone && hasDebt);
+        });
+
+        for (const pb of passBookings) {
+          const curData = pb.data || {};
+          const cleanedNotes = (pb.notes || '')
+            .replace(/\|\s*\[⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה\]/g, '')
+            .replace(/\[⚠️ חוב כרטיסייה טרם שולם - אושר בהקפה\]/g, '')
+            .replace(/\[⚠️ חוב כרטיסייה\]/g, '')
+            .trim();
+          await supabase.from('bookings').update({
+            payment_status: 'fully_paid',
+            notes: cleanedNotes ? `${cleanedNotes} | כרטיסייה שולמה ב-Grow (אסמכתא ${pRef})` : `כרטיסייה שולמה ב-Grow (אסמכתא ${pRef})`,
+            data: { ...curData, daycarePassPaid: true, paymentStatus: 'fully_paid' },
+            updated_at: new Date().toISOString()
+          }).eq('id', pb.id);
+        }
+
+        await supabase.from('grow_incoming_payments').update({ status: 'completed' }).eq('id', payment.id);
+        matchedPass.paymentStatus = 'fully_paid';
+        reconciledCount++;
+        syncLogs.push(`Reconciled pass ₪${pAmount} for ${matchedPass.dogName} (${matchedPass.ownerName})`);
+        continue;
+      }
 
       // Find matching booking
       const match = (bookings || []).find(b => {
