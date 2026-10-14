@@ -180,9 +180,31 @@ export default async function handler(req, res) {
 • *אסמכתא:* ${transactionId}
 • *תאריך ושעה:* ${nowIL}`;
 
-      // Send to both Etti (052-4467314) and Manager (054-3200007)
+      // 1. Send to both Etti (052-4467314) and Manager (054-3200007)
       await sendWhatsAppDirect(ETTI_PHONE, teacherRightsMsg);
       await sendWhatsAppDirect(MANAGER_PHONE, teacherRightsMsg);
+
+      // 2. Persist to grow_incoming_payments so monthly Grow bank deposit totals to Hagai include Teacher Rights
+      try {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+        await supabase.from('grow_incoming_payments').upsert({
+          id: `grow_teacher_${transactionId || Date.now()}`,
+          reference_id: String(transactionId || ''),
+          customer_name: `${fullName || 'לקוח'} (זכויות המורה)`,
+          customer_phone: cleanPhone || '',
+          customer_email: data.email || '',
+          amount: amount,
+          payment_method: methodDisplay,
+          raw_email_snippet: `זכויות המורה: ${serviceDesc} (אסמכתא: ${transactionId})`,
+          status: 'completed',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+        console.log(`✓ Teacher Rights transaction logged into grow_incoming_payments: ${fullName} - ₪${amount}`);
+      } catch (errDb) {
+        console.error('Failed to log Teacher Rights payment into grow_incoming_payments:', errDb);
+      }
 
       return res.status(200).json({
         status: 'success',
