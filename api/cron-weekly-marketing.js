@@ -240,7 +240,7 @@ export default async function handler(req, res) {
     // 6. Build the 3-Part WhatsApp Message
 
     // Part 1: What happened to leads + Occupancy
-    const msgPart1 = `בוקר טוב צוות דיגיטלינקה היקרות! ☀️🎯🐾
+    const msgPart1 = `בוקר טוב צוות דיגיטלינקה היקרות (טלי, דלית, נוי, רז וכל הצוות) ☀️🎯🐾
 להלן *דוח חקר ביצועים שבועי* של הריזורט לכלב (מסכם את השבוע שהסתיים במוצ"ש):
 
 ━━━━━━━━━━━━━━━━━━━━
