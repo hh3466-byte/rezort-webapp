@@ -137,6 +137,9 @@ export const getLatestActionDateFromNotes = (notes: string): Date | null => {
 export const isIntakeRequestExpired = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
   if (r.status === 'approved' || hasActiveBookingForIntake(r, bookings)) return false;
   if (r.status === 'abandoned' || r.status === 'archived') return false;
+  // Requests actively in progress or waiting for payment are NOT auto-expired - Shmulik is actively handling them!
+  if (r.status === 'in_progress' || r.status === 'payment_requested') return false;
+
   const todayStr = new Date().toISOString().split('T')[0];
   const eDate = r.endDate;
   const sDate = r.startDate;
@@ -156,6 +159,28 @@ export const isIntakeMarkedIrrelevant = (r: IntakeRequest): boolean => {
 };
 
 /**
+ * Checks if the internal notes contain actual human notes written by staff (Shmulik),
+ * as opposed to automated system/lead-webhook stamps.
+ */
+export const hasManualStaffNotes = (internalNotes?: string): boolean => {
+  if (!internalNotes || !internalNotes.trim()) return false;
+  const cleaned = internalNotes
+    .replace(/הליד נקלט מקמפיין[^\n|]*/g, '')
+    .replace(/הלקוח השלים טופס מודעה[^\n|]*/g, '')
+    .replace(/פנייה ראשונית בוואטסאפ[^\n|]*/g, '')
+    .replace(/\[📢 ליד מקמפיין[^\]]*\]/g, '')
+    .replace(/\[💬 פנייה חדשה מוואטסאפ[^\]]*\]/g, '')
+    .replace(/\[תזכורת מעקב[^\]]*\]/g, '')
+    .replace(/\[הועבר לארכיון[^\]]*\]/g, '')
+    .replace(/\[מזהה הודעה:[^\]]*\]/g, '')
+    .replace(/\[נשלח שאלון[^\]]*\]/g, '')
+    .replace(/\[נשלח קישור לתשלום Grow\]/g, '')
+    .replace(/[|\s\-\:\.\,]+/g, '')
+    .trim();
+  return cleaned.length > 0;
+};
+
+/**
  * Identifies if a request is archived/abandoned.
  */
 export const isUnansweredIntakeRequest = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
@@ -166,14 +191,15 @@ export const isUnansweredIntakeRequest = (r: IntakeRequest, bookings: Booking[] 
 
 /**
  * Is this a brand new intake questionnaire waiting for initial review by Shmulik?
- * Remains in 'new' until Shmulik adds notes, records a call, sends a payment link, or archives/approves it.
+ * Remains in 'new' until Shmulik adds manual notes, changes status to in_progress, sends payment, or archives/approves it.
  */
 export const isIntakeRequestNew = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
   if (r.status === 'abandoned' || r.status === 'archived' || r.status === 'rejected') return false;
+  if (r.status === 'in_progress' || r.status === 'payment_requested') return false;
   if (isIntakeMarkedIrrelevant(r)) return false;
   if (isIntakeRequestExpired(r, bookings)) return false;
   const effStatus = getEffectiveIntakeStatus(r, bookings);
-  return effStatus === 'pending' && (!r.internalNotes || !r.internalNotes.trim());
+  return effStatus === 'pending' && !hasManualStaffNotes(r.internalNotes);
 };
 
 /**
@@ -183,9 +209,21 @@ export const isIntakeRequestNew = (r: IntakeRequest, bookings: Booking[] = []): 
 export const isIntakeRequestInTreatment = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
   if (r.status === 'abandoned' || r.status === 'archived' || r.status === 'rejected') return false;
   if (isIntakeMarkedIrrelevant(r)) return false;
-  if (isIntakeRequestExpired(r, bookings)) return false;
   const effStatus = getEffectiveIntakeStatus(r, bookings);
-  return effStatus === 'payment_requested' || (effStatus === 'pending' && Boolean(r.internalNotes && r.internalNotes.trim()));
+  if (effStatus === 'approved') return false;
+
+  // 1. Explicit in_progress or payment_requested status (NEVER auto-expires!)
+  if (effStatus === 'in_progress' || effStatus === 'payment_requested' || r.status === 'in_progress' || r.status === 'payment_requested') {
+    return true;
+  }
+
+  // 2. Pending request that has human staff notes from Shmulik
+  if (effStatus === 'pending' && hasManualStaffNotes(r.internalNotes)) {
+    if (isIntakeRequestExpired(r, bookings)) return false;
+    return true;
+  }
+
+  return false;
 };
 
 

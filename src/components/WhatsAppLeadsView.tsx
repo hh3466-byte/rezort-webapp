@@ -1167,7 +1167,7 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                         </span>
                         {!isPaid && (
                           <span className="text-[11px] bg-amber-100 text-amber-900 font-black px-2 py-0.5 rounded-full border border-amber-300 animate-pulse">
-                            ⚠️ ממתין לתשלום ₪{activePass.totalPrice} ב-Grow
+                            ⚠️ ממתין לתשלום ₪{activePass.pricePaid || 0} ב-Grow
                           </span>
                         )}
                       </div>

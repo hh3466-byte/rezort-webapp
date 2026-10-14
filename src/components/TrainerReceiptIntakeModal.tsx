@@ -137,7 +137,9 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
       if (greenApiId && greenApiToken) {
         const phone = HILA_TRAINER_INFO.managerNotificationPhone; // 0543200007
         const chatId = `972${phone.startsWith('0') ? phone.slice(1) : phone}@c.us`;
-        const res = await fetch(`https://api.green-api.com/waInstance${greenApiId}/sendMessage/${greenApiToken}`, {
+        const clusterPrefix = greenApiId.replace(/\D/g, '').substring(0, 4);
+        const host = clusterPrefix ? `https://${clusterPrefix}.api.greenapi.com` : 'https://7107.api.greenapi.com';
+        const res = await fetch(`${host}/waInstance${greenApiId}/sendMessage/${greenApiToken}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chatId, message: messageText }),

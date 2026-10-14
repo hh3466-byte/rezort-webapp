@@ -169,7 +169,10 @@ export async function sendResortWhatsAppNotification(
   // 1. If Green-API is configured (recommended, dedicated instance), send via Green-API
   if (settings.greenApiIdInstance && settings.greenApiToken) {
     try {
-      const greenApiUrl = `https://api.green-api.com/waInstance${settings.greenApiIdInstance.trim()}/sendMessage/${settings.greenApiToken.trim()}`;
+      const cleanId = settings.greenApiIdInstance.trim();
+      const clusterPrefix = cleanId.replace(/\D/g, '').substring(0, 4);
+      const host = clusterPrefix ? `https://${clusterPrefix}.api.greenapi.com` : 'https://7107.api.greenapi.com';
+      const greenApiUrl = `${host}/waInstance${cleanId}/sendMessage/${settings.greenApiToken.trim()}`;
       const chatId = `${intlPhone}@c.us`;
       
       fetch(greenApiUrl, {
@@ -336,10 +339,8 @@ export async function sendGreenApiDirectMessage(
     return { success: true };
   }
 
-  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
-  const stateUrl = clusterPrefix 
-    ? `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/getStateInstance/${cleanTok}`
-    : `https://api.green-api.com/waInstance${cleanId}/getStateInstance/${cleanTok}`;
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '7107';
+  const stateUrl = `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/getStateInstance/${cleanTok}`;
 
   // Pre-flight check: Make sure Green-API WhatsApp session is actually authorized
   try {
@@ -362,10 +363,8 @@ export async function sendGreenApiDirectMessage(
     console.warn('[Green-API Pre-flight] Could not verify instance state:', stateErr);
   }
 
-  const primaryUrl = clusterPrefix 
-    ? `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/sendMessage/${cleanTok}`
-    : `https://api.green-api.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
-  const fallbackUrl = `https://api.green-api.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
+  const primaryUrl = `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
+  const fallbackUrl = `https://7107.api.greenapi.com/waInstance${cleanId}/sendMessage/${cleanTok}`;
 
   async function trySend(url: string, timeoutMs = 25000): Promise<{ success: boolean; error?: string }> {
     try {
@@ -419,10 +418,8 @@ export async function getGreenApiQrCode(
     return { success: false, message: 'חסרים פרטי חיבור Green-API' };
   }
 
-  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
-  const qrUrl = clusterPrefix 
-    ? `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/qr/${cleanTok}`
-    : `https://api.green-api.com/waInstance${cleanId}/qr/${cleanTok}`;
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '7107';
+  const qrUrl = `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/qr/${cleanTok}`;
 
   try {
     const res = await fetch(qrUrl);
@@ -456,7 +453,8 @@ export async function testGreenApiConnection(
   }
 
   try {
-    const stateUrl = `https://api.green-api.com/waInstance${cleanId}/getStateInstance/${cleanTok}`;
+    const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '7107';
+    const stateUrl = `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/getStateInstance/${cleanTok}`;
     const res = await fetch(stateUrl);
     if (!res.ok) {
       return { success: false, message: `שגיאה בגישה ל-Green-API (קוד ${res.status}). בדוק את ה-id וה-Token שהזנת.` };
@@ -520,10 +518,8 @@ export async function addGreenApiGroupParticipant(
   }
   const participantChatId = `${intlPhone}@c.us`;
 
-  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
-  const url = clusterPrefix 
-    ? `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/addGroupParticipant/${cleanTok}`
-    : `https://api.green-api.com/waInstance${cleanId}/addGroupParticipant/${cleanTok}`;
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '7107';
+  const url = `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/addGroupParticipant/${cleanTok}`;
 
   try {
     const res = await fetch(url, {

@@ -575,7 +575,9 @@ export async function checkIfOverviewAlreadySentToday(
     const chatId = intlPhone + '@c.us';
 
     if (greenId && greenToken) {
-      const auditRes = await fetch(`https://api.green-api.com/waInstance${greenId}/getChatHistory/${greenToken}`, {
+      const clusterPrefix = greenId.replace(/\D/g, '').substring(0, 4);
+      const host = clusterPrefix ? `https://${clusterPrefix}.api.greenapi.com` : 'https://7107.api.greenapi.com';
+      const auditRes = await fetch(`${host}/waInstance${greenId}/getChatHistory/${greenToken}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chatId, count: 12 })

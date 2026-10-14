@@ -45,6 +45,12 @@ function getCredentials(settings?: ResortSettings): { id: string; token: string 
   return { id, token };
 }
 
+export function getGreenApiBaseUrl(settings?: ResortSettings): string {
+  const { id } = getCredentials(settings);
+  const clusterPrefix = id.replace(/\D/g, '').substring(0, 4);
+  return clusterPrefix ? `https://${clusterPrefix}.api.greenapi.com` : 'https://7107.api.greenapi.com';
+}
+
 /**
  * Extracts phone digits from Green-API chatId (e.g. 972543200007@c.us -> 0543200007)
  */
@@ -64,14 +70,15 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
   const { id, token } = getCredentials(settings);
   if (!id || !token) return [];
 
+  const baseUrl = getGreenApiBaseUrl(settings);
   const managerPhoneClean = settings?.managerPhone ? cleanPhoneNumber(settings.managerPhone) : '0548765888';
   const notificationPhoneClean = settings?.whatsappNotificationPhone ? cleanPhoneNumber(settings.whatsappNotificationPhone) : '0506336896';
 
   try {
     // 1. Fetch last incoming & outgoing messages from the last 7 days (10080 minutes)
     const [incomingRes, outgoingRes] = await Promise.all([
-      fetch(`https://api.green-api.com/waInstance${id}/lastIncomingMessages/${token}?minutes=10080`).then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch(`https://api.green-api.com/waInstance${id}/lastOutgoingMessages/${token}?minutes=10080`).then(r => r.ok ? r.json() : []).catch(() => [])
+      fetch(`${baseUrl}/waInstance${id}/lastIncomingMessages/${token}?minutes=10080`).then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch(`${baseUrl}/waInstance${id}/lastOutgoingMessages/${token}?minutes=10080`).then(r => r.ok ? r.json() : []).catch(() => [])
     ]);
 
     const incoming: any[] = Array.isArray(incomingRes) ? incomingRes : [];
@@ -80,7 +87,7 @@ export async function fetchGreenApiChats(settings?: ResortSettings): Promise<Wha
     // Optional: get basic contact names from getChats if available
     const nameMap: Record<string, string> = {};
     try {
-      const getChatsRes = await fetch(`https://api.green-api.com/waInstance${id}/getChats/${token}`);
+      const getChatsRes = await fetch(`${baseUrl}/waInstance${id}/getChats/${token}`);
       if (getChatsRes.ok) {
         const rawList: any[] = await getChatsRes.json();
         if (Array.isArray(rawList)) {
@@ -197,7 +204,8 @@ export async function fetchGreenApiChatHistory(
   const { id, token } = getCredentials(settings);
   if (!id || !token) return [];
 
-  const url = `https://api.green-api.com/waInstance${id}/getChatHistory/${token}`;
+  const baseUrl = getGreenApiBaseUrl(settings);
+  const url = `${baseUrl}/waInstance${id}/getChatHistory/${token}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -247,7 +255,8 @@ export async function sendGreenApiChatMessage(
     throw new Error('Green-API credentials not configured');
   }
 
-  const url = `https://api.green-api.com/waInstance${id}/sendMessage/${token}`;
+  const baseUrl = getGreenApiBaseUrl(settings);
+  const url = `${baseUrl}/waInstance${id}/sendMessage/${token}`;
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

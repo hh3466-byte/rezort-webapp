@@ -1245,8 +1245,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                 ? customPrices[req.id] 
                 : (req.depositRequested && req.depositRequested > 0 ? req.depositRequested : defaultPrice);
 
-              const isNew = req.status === 'pending' && (!req.internalNotes || !req.internalNotes.trim());
-              const isInTreatment = req.status === 'payment_requested' || (req.status === 'pending' && Boolean(req.internalNotes && req.internalNotes.trim()));
+              const isNew = isReqNew(req);
+              const isInTreatment = isReqInTreatment(req);
 
               return (
                 <div
@@ -1263,6 +1263,29 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       : 'border-slate-200 bg-white shadow-xs opacity-95'
                   }`}
                 >
+                  {/* Meta Lead / Raw Ad Lead High-Visibility Banner */}
+                  {(req.clientOrigin === 'meta_lead' || req.id.startsWith('lead_') || (req.notes || '').includes('ליד מקמפיין') || req.dogName.includes('ממתין לבירור')) && (
+                    <div className="mb-3.5 bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white p-3 sm:p-3.5 rounded-2xl font-bold text-xs shadow-md border-2 border-blue-400 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-2xl shrink-0">📢</span>
+                        <div>
+                          <div className="font-black text-sm text-white flex items-center gap-2">
+                            <span>ליד חדש מקמפיין ממומן במטא (פייסבוק / אינסטגרם)</span>
+                            <span className="bg-white/20 text-white text-[10px] font-black px-2 py-0.5 rounded-md">ממתין למילוי שאלון</span>
+                          </div>
+                          <div className="text-blue-100 text-xs font-normal mt-0.5 leading-relaxed">
+                            הלקוח השאיר פרטי קשר ראשוניים במודעה, ונשלחה אליו אוטומטית הודעת וואטסאפ עם קישור אישי למילוי שאלון הקליטה המלא. (פרטי הכלב, חיסונים וכתובת יתמלאו כשהלקוח ישלים את השאלון או בשיחה טלפונית).
+                          </div>
+                        </div>
+                      </div>
+                      <div className="shrink-0 self-end sm:self-auto">
+                        <span className="bg-amber-400 text-slate-950 font-black text-xs px-3 py-1.5 rounded-xl shadow-xs inline-block">
+                          📞 מומלץ ליצור קשר טלפוני
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Top Multi-Dog High-Visibility Alert Banner */}
                   {req.additionalDogs && req.additionalDogs.length > 0 && (
                     <div className="mb-3.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white p-3 sm:p-3.5 rounded-2xl font-black text-sm shadow-md border-2 border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-pulse">
@@ -1415,7 +1438,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                                     <span className="text-[10px] text-slate-500 font-normal">כלב ראשי</span>
                                   </div>
                                   <div className="text-[11px] text-slate-600 font-medium">
-                                    גזע: {req.dogBreed || 'מעורב'} {req.dogAge ? `| גיל: ${req.dogAge}` : ''} | {req.dogGender === 'female' ? 'נקבה' : 'זכר'} {req.isNeutered ? '(מסורס/מעוקרת)' : '(לא מסורס)'}
+                                    גזע: {req.dogBreed || 'מעורב'} {req.dogAge ? `| גיל: ${req.dogAge}` : ''} | {req.dogGender === 'female' ? 'נקבה' : 'זכר'} {req.isNeutered === undefined ? '(טרם מולא)' : req.isNeutered ? '(מסורס/מעוקרת)' : req.dogGender === 'female' ? '(לא מעוקרת)' : '(לא מסורס)'}
                                   </div>
                                 </div>
                                 {req.additionalDogs.map((ad, adIdx) => (
@@ -1425,7 +1448,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                                       <span className="text-[10px] text-orange-700 font-bold">כלב נוסף</span>
                                     </div>
                                     <div className="text-[11px] text-slate-600 font-medium">
-                                      גזע: {ad.dogBreed || 'מעורב'} {ad.dogAge ? `| גיל: ${ad.dogAge}` : ''} | {ad.dogGender === 'female' ? 'נקבה' : 'זכר'} {ad.isNeutered ? '(מסורס/מעוקרת)' : '(לא מסורס)'}
+                                      גזע: {ad.dogBreed || 'מעורב'} {ad.dogAge ? `| גיל: ${ad.dogAge}` : ''} | {ad.dogGender === 'female' ? 'נקבה' : 'זכר'} {ad.isNeutered === undefined ? '(טרם מולא)' : ad.isNeutered ? '(מסורס/מעוקרת)' : ad.dogGender === 'female' ? '(לא מעוקרת)' : '(לא מסורס)'}
                                     </div>
                                     <div className="text-[10px] text-orange-800 font-bold">
                                       תאריכים: {ad.sameDatesAsPrimary ? 'אותם תאריכים כמו הכלב הראשי' : `${formatDateIL(ad.startDate || '')} עד ${formatDateIL(ad.endDate || '')}`}
@@ -1720,13 +1743,15 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                           ? 'text-red-900 font-extrabold' 
                           : 'text-amber-900 font-extrabold'
                       }`}>
-                        {req.isNeutered ? 'כן ✂️' : (req.dogGender !== 'female' ? '❌ לא מסורס (₪230)' : '⚠️ לא מעוקרת')}
+                        {req.isNeutered === undefined ? '⏳ טרם מולא' : req.isNeutered ? 'כן ✂️' : (req.dogGender !== 'female' ? '❌ לא מסורס (₪230)' : '⚠️ לא מעוקרת')}
                       </span>
                     </button>
 
                     {/* Vaccinated */}
                     <div className={`p-2.5 rounded-xl border text-right transition-all shadow-2xs ${
-                      req.isVaccinated
+                      req.isVaccinated === undefined
+                        ? 'bg-slate-50 border-slate-200 text-slate-700'
+                        : req.isVaccinated
                         ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
                         : 'bg-red-100 border-red-500 text-red-950 ring-2 ring-red-500/50 animate-pulse'
                     }`}>
@@ -1734,7 +1759,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                         חיסונים בתוקף:
                       </span>
                       <span className={`font-black text-xs ${req.isVaccinated ? 'text-emerald-800' : 'text-red-900 font-extrabold'}`}>
-                        {req.isVaccinated ? 'כן 💉' : '🚨 חסר חיסון! ⚠️'}
+                        {req.isVaccinated === undefined ? '⏳ טרם מולא' : req.isVaccinated ? 'כן 💉' : '🚨 חסר חיסון! ⚠️'}
                       </span>
                     </div>
 

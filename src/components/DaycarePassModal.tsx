@@ -462,8 +462,10 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       serviceType,
       totalDays: serviceType === 'boarding' ? 21 : totalDays,
       usedDays: 0,
-      pricePaid: serviceType === 'boarding' ? 2100 : pricePaid,
-      dailyRate: serviceType === 'boarding' ? 100 : dailyRate,
+      pricePaid: Number(pricePaid) > 0 ? Number(pricePaid) : (serviceType === 'boarding' ? 2100 : pricePaid),
+      dailyRate: serviceType === 'boarding' 
+        ? (Number(pricePaid) > 0 ? Math.round(Number(pricePaid) / 21) : 100) 
+        : dailyRate,
       paymentStatus,
       paymentMethod,
       notes: customNotes.trim() || undefined,
@@ -501,7 +503,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
         ? `כרטיסיית ${totalDays} אילוף ביומיות - ${dogName.trim()}`
         : `כרטיסיית ${totalDays} יומיות (מעון יום) - ${dogName.trim()}`;
 
-      const finalPrice = isBoarding ? 2100 : pricePaid;
+      const finalPrice = Number(pricePaid) > 0 ? Number(pricePaid) : (isBoarding ? 2100 : pricePaid);
       const finalDays = isBoarding ? 21 : totalDays;
 
       const growRes = await createGrowDynamicPaymentLink({
@@ -531,7 +533,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
         totalDays: finalDays,
         usedDays: 0,
         pricePaid: finalPrice,
-        dailyRate: isBoarding ? 100 : dailyRate,
+        dailyRate: isBoarding ? (finalDays > 0 ? Math.round(finalPrice / finalDays) : 100) : dailyRate,
         paymentStatus: 'unpaid',
         paymentMethod: 'credit',
         notes: customNotes.trim() ? `${customNotes.trim()} | [נשלח קישור לתשלום Grow]` : '[נשלח קישור לתשלום Grow]',

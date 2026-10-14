@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { DaycarePass, ResortSettings } from '../types';
+import { DaycarePass, ResortSettings, IntakeRequest } from '../types';
 import { formatDateIL, getTodayStr, addDays, getDayNameHebrew, calculateDaysCount } from '../utils/dateUtils';
 import { cleanPhoneNumber, formatIsraeliPhoneDisplay, openWhatsAppMessage } from '../utils/whatsappUtils';
-import { findDaycarePassByCode, findActiveDaycarePassByPhone } from '../services/dbService';
+import { findDaycarePassByCode, findActiveDaycarePassByPhone, saveIntakeRequestToDb } from '../services/dbService';
 import { supabase } from '../utils/supabase';
 import confetti from 'canvas-confetti';
 import { 
@@ -111,26 +111,39 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
       const targetEndDate = isBoarding ? bookingEndDate : bookingDate;
       const reqId = `req-pass-${Date.now()}`;
 
-      // 1. Save lightweight intake request in Supabase
-      const requestData = {
+      // 1. Save standard intake request to DB and sync channels
+      const cleanOwner = (pass.ownerName || '')
+        .replace(/\[חדש\]/g, '')
+        .replace(/\(.*?\)/g, '')
+        .replace(/הכלב\s+\S+/g, '')
+        .replace(/\s+/g, ' ')
+        .trim() || pass.ownerName;
+
+      const intakeReq: IntakeRequest = {
         id: reqId,
-        dog_name: pass.dogName,
-        dog_breed: pass.dogBreed || '',
-        owner_name: pass.ownerName,
-        owner_phone: pass.ownerPhone,
-        service_type: pass.serviceType,
-        start_date: bookingDate,
-        end_date: targetEndDate,
-        arrival_time: arrivalTime,
-        pickup_time: pickupTime,
-        is_free_stay: false,
-        deposit_requested: 0,
+        dogName: pass.dogName,
+        dogBreed: pass.dogBreed || '',
+        ownerName: cleanOwner,
+        ownerPhone: pass.ownerPhone,
+        ownerEmail: pass.ownerEmail || undefined,
+        serviceType: pass.serviceType,
+        startDate: bookingDate,
+        endDate: targetEndDate,
         status: 'pending',
-        notes: `[🎟️ תיאום הגעה מכרטיסייה #${pass.passCode} (שולם מראש / בנק ימים)] ${bookingNotes ? `הערות: ${bookingNotes}` : ''}`,
-        created_at: new Date().toISOString()
+        calculatedPrice: 0,
+        depositRequested: 0,
+        isFriendlyWithDogs: true,
+        isNeutered: true,
+        isVaccinated: true,
+        isHouseTrained: true,
+        isTreatedParasites: true,
+        notes: `[🎟️ תיאום הגעה מכרטיסייה #${pass.passCode} (שולם מראש / בנק ימים)] שעות: ${arrivalTime} עד ${pickupTime}${bookingNotes ? ` | הערות: ${bookingNotes}` : ''}`,
+        internalNotes: `תיאום הגעה מתוך כרטיסייה #${pass.passCode}. נותרו ${remainingDays} ${isBoarding ? 'יממות' : 'ימים'}.`,
+        createdAt: new Date().toISOString(),
+        termsAccepted: true
       };
 
-      await supabase.from('intake_requests').insert([requestData]);
+      await saveIntakeRequestToDb(intakeReq);
 
       // 2. Fire celebratory confetti
       confetti({

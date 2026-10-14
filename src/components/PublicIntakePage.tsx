@@ -230,12 +230,12 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
     }
   }, [matchedDaycarePass, startDate]);
 
-  // Mandatory Vetting Questions State
-  const [isFriendlyWithDogs, setIsFriendlyWithDogs] = useState<'yes' | 'no' | 'depends'>('yes');
-  const [isNeutered, setIsNeutered] = useState<boolean>(true);
-  const [isVaccinated, setIsVaccinated] = useState<boolean>(true);
-  const [isHouseTrained, setIsHouseTrained] = useState<boolean>(true);
-  const [isTreatedParasites, setIsTreatedParasites] = useState<boolean>(true);
+  // Mandatory Vetting Questions State (strictly null initially to force conscious choice)
+  const [isFriendlyWithDogs, setIsFriendlyWithDogs] = useState<'yes' | 'no' | 'depends' | null>(null);
+  const [isNeutered, setIsNeutered] = useState<boolean | null>(null);
+  const [isVaccinated, setIsVaccinated] = useState<boolean | null>(null);
+  const [isHouseTrained, setIsHouseTrained] = useState<boolean | null>(null);
+  const [isTreatedParasites, setIsTreatedParasites] = useState<boolean | null>(null);
   const [specialNeeds, setSpecialNeeds] = useState('');
   const [freeText, setFreeText] = useState('');
 
@@ -243,6 +243,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [isQuickCallback, setIsQuickCallback] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [invalidFieldId, setInvalidFieldId] = useState<string | null>(null);
   const [saturdayWarning, setSaturdayWarning] = useState<string | null>(null);
   const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
   const [copiedDirectLink, setCopiedDirectLink] = useState(false);
@@ -656,72 +657,110 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
     }
   };
 
+  // Helper to trigger high-visibility flashing validation error and scroll directly to field
+  const triggerValidationError = (fieldId: string, message: string): boolean => {
+    setErrorMessage(message);
+    setInvalidFieldId(fieldId);
+    if (typeof navigator !== 'undefined' && (navigator as any).vibrate) {
+      try { (navigator as any).vibrate([100, 50, 100]); } catch {}
+    }
+    setTimeout(() => {
+      const el = document.getElementById(fieldId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const input = el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ? el : el.querySelector('input, textarea, button');
+        (input as HTMLElement)?.focus?.();
+      }
+    }, 60);
+    return false;
+  };
+
   // Strict Validation Function
   const validateForm = (): boolean => {
     setErrorMessage(null);
-    if (!ownerName.trim()) {
-      setErrorMessage('נא למלא שם בעלים מלא (שדה חובה)');
-      return false;
-    }
+    setInvalidFieldId(null);
+
+    // 1. Phone check
     if (!ownerPhone.trim()) {
-      setErrorMessage('נא למלא מספר טלפון נייד (שדה חובה)');
-      return false;
+      return triggerValidationError('field_ownerPhone', 'נא למלא מספר טלפון נייד (שדה חובה)');
     }
     if (!isValidIsraeliPhone(ownerPhone)) {
-      setErrorMessage('נא להזין מספר טלפון נייד ישראלי תקין (10 ספרות, למשל 054-1234567)');
-      return false;
+      return triggerValidationError('field_ownerPhone', 'נא להזין מספר טלפון נייד ישראלי תקין (10 ספרות, למשל 054-1234567)');
     }
+
+    // 2. Owner Name
+    if (!ownerName.trim()) {
+      return triggerValidationError('field_ownerName', 'נא למלא שם בעלים מלא (שדה חובה)');
+    }
+
+    // 3. Email
     if (!ownerEmail.trim()) {
-      setErrorMessage('חובה למלא כתובת אימייל (שדה חובה)');
-      return false;
+      return triggerValidationError('field_ownerEmail', 'חובה למלא כתובת אימייל (שדה חובה)');
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(ownerEmail.trim())) {
-      setErrorMessage('נא להזין כתובת אימייל תקינה (למשל name@gmail.com)');
-      return false;
+      return triggerValidationError('field_ownerEmail', 'נא להזין כתובת אימייל תקינה (למשל name@gmail.com)');
     }
+
+    // 4. Address
     if (!ownerAddress.trim() || ownerAddress.trim().length < 5) {
-      setErrorMessage('חובה למלא כתובת מגורים מלאה (עיר, רחוב ומספר בית)');
-      return false;
+      return triggerValidationError('field_ownerAddress', 'חובה למלא כתובת מגורים מלאה (עיר, רחוב ומספר בית)');
     }
+
+    // 5. Dog Details
     if (!dogName.trim()) {
-      setErrorMessage('נא למלא את שם הכלב/ה (שדה חובה)');
-      return false;
+      return triggerValidationError('field_dogName', 'נא למלא את שם הכלב/ה (שדה חובה)');
     }
     if (!dogBreed.trim()) {
-      setErrorMessage('נא למלא את גזע הכלב (שדה חובה - אם מעורב כתבו מעורב)');
-      return false;
+      return triggerValidationError('field_dogBreed', 'נא למלא את גזע הכלב (שדה חובה - אם מעורב כתבו מעורב)');
     }
+
+    // 6. Dates
     if (!startDate) {
-      setErrorMessage(serviceType === 'training' 
+      return triggerValidationError('field_startDate', serviceType === 'training' 
         ? 'נא לבחור תאריך כניסה / הגעה לאילוף (שדה חובה)'
         : 'נא לבחור תאריך כניסה / הגעה לריזורט (שדה חובה)');
-      return false;
     }
     if (serviceType !== 'training') {
       if (!endDate) {
-        setErrorMessage('נא לבחור תאריך איסוף / יציאה מהריזורט (שדה חובה)');
-        return false;
+        return triggerValidationError('field_endDate', 'נא לבחור תאריך איסוף / יציאה מהריזורט (שדה חובה)');
       }
       if (endDate < startDate) {
-        setErrorMessage('תאריך היציאה אינו יכול להיות מוקדם מתאריך הכניסה');
-        return false;
+        return triggerValidationError('field_endDate', 'תאריך היציאה אינו יכול להיות מוקדם מתאריך הכניסה');
       }
       if (serviceType === 'boarding') {
         const endD = new Date(endDate + 'T00:00:00');
         if (endD.getDay() === 6) {
-          setErrorMessage('היציאה לא יכולה להיות ביום שבת (אין שחרורים בשבת). היציאה מסופ״ש הינה ביום ראשון בשעה 09:30.');
-          return false;
+          return triggerValidationError('field_endDate', 'היציאה לא יכולה להיות ביום שבת (אין שחרורים בשבת). היציאה מסופ״ש הינה ביום ראשון בשעה 09:30.');
         }
       }
     }
-    if (!specialNeeds.trim()) {
-      setErrorMessage('סעיף 6 הינו שדה חובה: לחצו על הכפתור "הכלב בריא לחלוטין" או פרטו תרופות/צרכים מיוחדים בתיבה');
-      return false;
+
+    // 7. Mandatory Explicit Vetting Questions (NO silent defaults!)
+    if (isFriendlyWithDogs === null) {
+      return triggerValidationError('field_isFriendlyWithDogs', 'סעיף 1 הינו חובה: יש לסמן האם הכלב מסתדר עם כלבים אחרים!');
     }
+    if (isNeutered === null) {
+      return triggerValidationError('field_isNeutered', `סעיף 2 הינו חובה: יש לסמן האם הכלב ${dogGender === 'female' ? 'מעוקרת' : 'מסורס'}!`);
+    }
+    if (isVaccinated === null) {
+      return triggerValidationError('field_isVaccinated', 'סעיף 3 הינו חובה: יש לסמן האם החיסונים בתוקף (משושה וכלבת)!');
+    }
+    if (isHouseTrained === null) {
+      return triggerValidationError('field_isHouseTrained', 'סעיף 4 הינו חובה: יש לסמן האם הכלב מחונך לצרכים!');
+    }
+    if (isTreatedParasites === null) {
+      return triggerValidationError('field_isTreatedParasites', 'סעיף 5 הינו חובה: יש לסמן האם הכלב מטופל נגד קרציות ופשפשים!');
+    }
+
+    // 8. Health and Meds
+    if (!specialNeeds.trim()) {
+      return triggerValidationError('field_specialNeeds', 'סעיף 6 הינו שדה חובה: לחצו על הכפתור "הכלב בריא לחלוטין" או פרטו תרופות/צרכים מיוחדים בתיבה');
+    }
+
+    // 9. Terms Acceptance
     if (!termsAccepted) {
-      setErrorMessage('יש לקרוא ולאשר את תקנון הריזורט לכלב לצורך שליחת הבקשה (שדה חובה)');
-      return false;
+      return triggerValidationError('field_termsAccepted', 'יש לקרוא ולאשר את תקנון הריזורט לכלב לצורך שליחת הבקשה (שדה חובה)');
     }
 
     // Validate additional dogs
@@ -751,8 +790,6 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   // Submit Handler
   const handleProcessSubmit = async (isCallbackOnly: boolean) => {
     if (!validateForm()) {
-      // Scroll to error
-      window.scrollTo({ top: 300, behavior: 'smooth' });
       return;
     }
 
@@ -816,11 +853,11 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       serviceType,
       startDate,
       endDate: finalEndDate,
-      isFriendlyWithDogs,
-      isNeutered,
-      isVaccinated,
-      isHouseTrained,
-      isTreatedParasites,
+      isFriendlyWithDogs: isFriendlyWithDogs || 'yes',
+      isNeutered: isNeutered === true,
+      isVaccinated: isVaccinated === true,
+      isHouseTrained: isHouseTrained === true,
+      isTreatedParasites: isTreatedParasites === true,
       specialNeeds: specialNeeds.trim(),
       termsAccepted: true,
       termsAcceptedAt: new Date().toISOString(),
@@ -1288,12 +1325,29 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
 
               <div className="relative">
                 <input
+                  id="field_ownerPhone"
                   type="tel"
                   required
                   value={ownerPhone}
-                  onChange={(e) => setOwnerPhone(e.target.value)}
+                  onFocus={() => {
+                    if (invalidFieldId === 'field_ownerPhone') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
+                  onChange={(e) => {
+                    setOwnerPhone(e.target.value);
+                    if (invalidFieldId === 'field_ownerPhone') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
                   placeholder="הזינו מספר נייד (למשל: 05X-XXXXXXX)"
-                  className="w-full bg-white border-2 border-slate-300 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/20 rounded-2xl px-4 py-3 text-sm sm:text-base font-black text-slate-900 focus:outline-none transition-all shadow-xs font-mono"
+                  className={`w-full bg-white border-2 rounded-2xl px-4 py-3 text-sm sm:text-base font-black text-slate-900 focus:outline-none transition-all shadow-xs font-mono ${
+                    invalidFieldId === 'field_ownerPhone'
+                      ? 'border-rose-500 ring-4 ring-rose-400 bg-rose-50/80 animate-pulse shadow-lg'
+                      : 'border-slate-300 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/20'
+                  }`}
                 />
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
                   {isCheckingPhone && (
@@ -1308,6 +1362,12 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   )}
                 </div>
               </div>
+              {invalidFieldId === 'field_ownerPhone' && (
+                <p className="text-xs font-black text-rose-700 flex items-center gap-1 mt-1.5 animate-pulse">
+                  <span>🚨</span>
+                  <span>נא למלא מספר טלפון נייד תקין</span>
+                </p>
+              )}
 
               {/* Status Hints & Identification Feedback */}
               {!ownerPhone || ownerPhone.replace(/\D/g, '').length < 8 ? (
@@ -1610,12 +1670,29 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   שם מלא <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="field_ownerName"
                   type="text"
                   required
                   value={ownerName}
-                  onChange={(e) => setOwnerName(e.target.value)}
+                  onFocus={() => {
+                    if (invalidFieldId === 'field_ownerName') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
+                  onChange={(e) => {
+                    setOwnerName(e.target.value);
+                    if (invalidFieldId === 'field_ownerName') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
                   placeholder="למשל: דני לוי"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                  className={`w-full rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:outline-none transition-all ${
+                    invalidFieldId === 'field_ownerName'
+                      ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-400 animate-pulse shadow-lg'
+                      : 'bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20'
+                  }`}
                 />
               </div>
 
@@ -1624,18 +1701,42 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   כתובת אימייל <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="field_ownerEmail"
                   type="email"
                   required
                   value={ownerEmail}
-                  onChange={(e) => setOwnerEmail(e.target.value)}
+                  onFocus={() => {
+                    if (invalidFieldId === 'field_ownerEmail') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
+                  onChange={(e) => {
+                    setOwnerEmail(e.target.value);
+                    if (invalidFieldId === 'field_ownerEmail') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
                   placeholder="name@example.com"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                  className={`w-full rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:outline-none transition-all ${
+                    invalidFieldId === 'field_ownerEmail'
+                      ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-400 animate-pulse shadow-lg'
+                      : 'bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20'
+                  }`}
                 />
               </div>
             </div>
 
             {/* Mandatory Owner Home Address with GPS Auto-detection */}
-            <div className="bg-slate-50/80 border-2 border-emerald-100 rounded-2xl p-3.5 sm:p-4 space-y-2.5">
+            <div 
+              id="field_ownerAddress"
+              className={`rounded-2xl p-3.5 sm:p-4 space-y-2.5 transition-all ${
+                invalidFieldId === 'field_ownerAddress'
+                  ? 'bg-rose-50/90 border-2 border-rose-500 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                  : 'bg-slate-50/80 border-2 border-emerald-100'
+              }`}
+            >
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                   <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -1670,12 +1771,26 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   type="text"
                   required
                   value={ownerAddress}
+                  onFocus={() => {
+                    if (invalidFieldId === 'field_ownerAddress') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
                   onChange={(e) => {
                     setOwnerAddress(e.target.value);
                     if (gpsSuccessNotice) setGpsSuccessNotice(null);
+                    if (invalidFieldId === 'field_ownerAddress') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
                   }}
                   placeholder="למשל: הרצל 15, ראשון לציון"
-                  className="w-full bg-white border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-none transition-all"
+                  className={`w-full rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-none transition-all ${
+                    invalidFieldId === 'field_ownerAddress'
+                      ? 'bg-white border-2 border-rose-500 ring-2 ring-rose-400'
+                      : 'bg-white border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20'
+                  }`}
                 />
               </div>
 
@@ -1738,12 +1853,29 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   שם הכלב/ה <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="field_dogName"
                   type="text"
                   required
                   value={dogName}
-                  onChange={(e) => setDogName(e.target.value)}
+                  onFocus={() => {
+                    if (invalidFieldId === 'field_dogName') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
+                  onChange={(e) => {
+                    setDogName(e.target.value);
+                    if (invalidFieldId === 'field_dogName') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
                   placeholder="למשל: מקס"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                  className={`w-full rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:outline-none transition-all ${
+                    invalidFieldId === 'field_dogName'
+                      ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-400 animate-pulse shadow-lg'
+                      : 'bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20'
+                  }`}
                 />
               </div>
 
@@ -1752,12 +1884,29 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   גזע הכלב <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="field_dogBreed"
                   type="text"
                   required
                   value={dogBreed}
-                  onChange={(e) => setDogBreed(e.target.value)}
+                  onFocus={() => {
+                    if (invalidFieldId === 'field_dogBreed') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
+                  onChange={(e) => {
+                    setDogBreed(e.target.value);
+                    if (invalidFieldId === 'field_dogBreed') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
                   placeholder="למשל: לברדור / מעורב"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                  className={`w-full rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-900 focus:bg-white focus:outline-none transition-all ${
+                    invalidFieldId === 'field_dogBreed'
+                      ? 'bg-rose-50 border-2 border-rose-500 ring-4 ring-rose-400 animate-pulse shadow-lg'
+                      : 'bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20'
+                  }`}
                 />
               </div>
 
@@ -2023,7 +2172,14 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
 
             {/* DAYCARE SINGLE-DAY MODE */}
             {serviceType === 'daycare' ? (
-              <div className="bg-white rounded-2xl p-4 border border-emerald-200 shadow-2xs space-y-3">
+              <div 
+                id="field_startDate"
+                className={`rounded-2xl p-4 border transition-all space-y-3 ${
+                  invalidFieldId === 'field_startDate'
+                    ? 'bg-rose-50/90 border-2 border-rose-500 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                    : 'bg-white border-emerald-200 shadow-2xs'
+                }`}
+              >
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-800 block">
                     ☀️ בחר את תאריך יום הכיף המבוקש *
@@ -2044,7 +2200,11 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                     <button
                       key={chip.label}
                       type="button"
-                      onClick={() => { setStartDate(chip.date); setEndDate(chip.date); }}
+                      onClick={() => { 
+                        setStartDate(chip.date); 
+                        setEndDate(chip.date); 
+                        if (invalidFieldId === 'field_startDate') { setInvalidFieldId(null); setErrorMessage(null); }
+                      }}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         startDate === chip.date
                           ? 'bg-emerald-700 text-white shadow-xs'
@@ -2062,9 +2222,13 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                     required
                     min={today}
                     value={startDate}
+                    onFocus={() => {
+                      if (invalidFieldId === 'field_startDate') { setInvalidFieldId(null); setErrorMessage(null); }
+                    }}
                     onChange={(e) => {
                       setStartDate(e.target.value);
                       setEndDate(e.target.value);
+                      if (invalidFieldId === 'field_startDate') { setInvalidFieldId(null); setErrorMessage(null); }
                     }}
                     className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
                   />
@@ -2075,7 +2239,14 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               </div>
             ) : serviceType === 'training' ? (
               /* TRAINING DEDICATED START DATE MODE */
-              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-emerald-200 shadow-2xs space-y-4">
+              <div 
+                id="field_startDate"
+                className={`rounded-2xl p-4 sm:p-5 border transition-all space-y-4 ${
+                  invalidFieldId === 'field_startDate'
+                    ? 'bg-rose-50/90 border-2 border-rose-500 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                    : 'bg-white border-emerald-200 shadow-2xs'
+                }`}
+              >
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="text-xs font-black text-slate-900 block">
@@ -2114,6 +2285,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                       onClick={() => { 
                         setStartDate(chip.date); 
                         setEndDate(addDays(chip.date, 30)); 
+                        if (invalidFieldId === 'field_startDate') { setInvalidFieldId(null); setErrorMessage(null); }
                       }}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         startDate === chip.date
@@ -2133,10 +2305,14 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                     required
                     min={today}
                     value={startDate}
+                    onFocus={() => {
+                      if (invalidFieldId === 'field_startDate') { setInvalidFieldId(null); setErrorMessage(null); }
+                    }}
                     onChange={(e) => {
                       const val = e.target.value;
                       setStartDate(val);
                       setEndDate(addDays(val, 30));
+                      if (invalidFieldId === 'field_startDate') { setInvalidFieldId(null); setErrorMessage(null); }
                     }}
                     className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
                   />
@@ -2158,7 +2334,14 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               <div className="space-y-3">
                 
                 {/* 1. Check-in Date */}
-                <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-emerald-200 shadow-2xs space-y-2">
+                <div 
+                  id="field_startDate"
+                  className={`p-3.5 sm:p-4 rounded-2xl border transition-all space-y-2 ${
+                    invalidFieldId === 'field_startDate'
+                      ? 'bg-rose-50/90 border-2 border-rose-500 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                      : 'bg-white border-emerald-200 shadow-2xs'
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                       <span>🏨 1. תאריך הגעה / כניסה לריזורט *</span>
@@ -2173,7 +2356,13 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                       required
                       min={today}
                       value={startDate}
-                      onChange={(e) => handleStartDateChange(e.target.value)}
+                      onFocus={() => {
+                        if (invalidFieldId === 'field_startDate') { setInvalidFieldId(null); setErrorMessage(null); }
+                      }}
+                      onChange={(e) => {
+                        handleStartDateChange(e.target.value);
+                        if (invalidFieldId === 'field_startDate') { setInvalidFieldId(null); setErrorMessage(null); }
+                      }}
                       className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
                     />
                     <div className="mt-1 text-[11px] text-slate-500 font-bold flex items-center justify-between">
@@ -2181,14 +2370,20 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                       <div className="flex gap-1.5">
                         <button
                           type="button"
-                          onClick={() => handleStartDateChange(today)}
+                          onClick={() => {
+                            handleStartDateChange(today);
+                            if (invalidFieldId === 'field_startDate') { setInvalidFieldId(null); setErrorMessage(null); }
+                          }}
                           className="text-[10px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer font-bold"
                         >
                           היום
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleStartDateChange(addDays(today, 1))}
+                          onClick={() => {
+                            handleStartDateChange(addDays(today, 1));
+                            if (invalidFieldId === 'field_startDate') { setInvalidFieldId(null); setErrorMessage(null); }
+                          }}
                           className="text-[10px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200 cursor-pointer font-bold"
                         >
                           מחר
@@ -2319,7 +2514,14 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                 </div>
 
                 {/* 3. Check-out Date */}
-                <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-emerald-200 shadow-2xs space-y-2">
+                <div 
+                  id="field_endDate"
+                  className={`p-3.5 sm:p-4 rounded-2xl border transition-all space-y-2 ${
+                    invalidFieldId === 'field_endDate'
+                      ? 'bg-rose-50/90 border-2 border-rose-500 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                      : 'bg-white border-emerald-200 shadow-2xs'
+                  }`}
+                >
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                       <span>🚗 2. תאריך איסוף / יציאה מהריזורט *</span>
@@ -2334,7 +2536,13 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                       required
                       min={startDate}
                       value={endDate}
-                      onChange={(e) => handleEndDateChange(e.target.value)}
+                      onFocus={() => {
+                        if (invalidFieldId === 'field_endDate') { setInvalidFieldId(null); setErrorMessage(null); }
+                      }}
+                      onChange={(e) => {
+                        handleEndDateChange(e.target.value);
+                        if (invalidFieldId === 'field_endDate') { setInvalidFieldId(null); setErrorMessage(null); }
+                      }}
                       className="w-full bg-slate-50 hover:bg-white focus:bg-white border border-emerald-300 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none font-mono transition-all"
                     />
                     <div className="mt-1 text-[11px] text-slate-500 font-bold flex items-center justify-between">
@@ -2674,10 +2882,24 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
             <div className="space-y-3.5 text-xs">
               
               {/* Question 1: Friendly with other dogs */}
-              <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-emerald-200/80 space-y-2">
-                <label className="font-extrabold text-slate-900 block text-xs">
-                  🐕 1. האם הכלב מסתדר עם כלבים אחרים? <span className="text-red-500">*</span>
-                </label>
+              <div 
+                id="field_isFriendlyWithDogs" 
+                className={`p-3.5 rounded-2xl border-2 space-y-2 transition-all ${
+                  invalidFieldId === 'field_isFriendlyWithDogs'
+                    ? 'border-rose-500 bg-rose-50/70 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                    : 'bg-slate-50 border-emerald-200/80'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <label className="font-extrabold text-slate-900 block text-xs">
+                    🐕 1. האם הכלב מסתדר עם כלבים אחרים? <span className="text-red-500">*</span>
+                  </label>
+                  {isFriendlyWithDogs === null && (
+                    <span className="text-[10px] bg-rose-100 text-rose-800 font-black px-2 py-0.5 rounded-full">
+                      חובה לבחור
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { id: 'yes', label: 'כן, חברותי מאוד 🟢' },
@@ -2687,7 +2909,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                     <button
                       key={f.id}
                       type="button"
-                      onClick={() => setIsFriendlyWithDogs(f.id as any)}
+                      onClick={() => {
+                        setIsFriendlyWithDogs(f.id as any);
+                        if (invalidFieldId === 'field_isFriendlyWithDogs') setInvalidFieldId(null);
+                      }}
                       className={`py-2.5 px-2 rounded-xl border text-center font-black transition-all cursor-pointer ${
                         isFriendlyWithDogs === f.id
                           ? 'bg-emerald-700 text-white border-emerald-700 shadow-md ring-2 ring-emerald-500/20'
@@ -2703,79 +2928,160 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               {/* Question 2, 3, 4, 5: Yes/No Vetting Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* 2. Neutered */}
-                <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-emerald-200/80 flex items-center justify-between">
-                  <span className="font-extrabold text-slate-900 text-xs">
-                    ✂️ 2. {dogGender === 'female' ? 'מעוקרת?' : 'מסורס?'} <span className="text-red-500">*</span>
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setIsNeutered(true)}
-                      className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
-                        isNeutered ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
-                      }`}
-                    >
-                      כן
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsNeutered(false)}
-                      className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
-                        !isNeutered ? 'bg-amber-600 text-white border-amber-600 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
-                      }`}
-                    >
-                      לא
-                    </button>
+                <div 
+                  id="field_isNeutered" 
+                  className={`p-3.5 rounded-2xl border-2 flex flex-col justify-between transition-all ${
+                    invalidFieldId === 'field_isNeutered'
+                      ? 'border-rose-500 bg-rose-50/70 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                      : 'bg-slate-50 border-emerald-200/80'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                      <span>✂️ 2. {dogGender === 'female' ? 'מעוקרת?' : 'מסורס?'}</span>
+                      <span className="text-red-500">*</span>
+                      {isNeutered === null && (
+                        <span className="text-[10px] bg-rose-100 text-rose-800 font-black px-1.5 py-0.5 rounded-md">
+                          חובה לבחור
+                        </span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsNeutered(true);
+                          if (invalidFieldId === 'field_isNeutered') setInvalidFieldId(null);
+                        }}
+                        className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
+                          isNeutered === true 
+                            ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' 
+                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        כן
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsNeutered(false);
+                          if (invalidFieldId === 'field_isNeutered') setInvalidFieldId(null);
+                        }}
+                        className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
+                          isNeutered === false 
+                            ? 'bg-rose-600 text-white border-rose-600 shadow-xs' 
+                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        לא
+                      </button>
+                    </div>
                   </div>
+                  {isNeutered === false && (
+                    <div className="mt-2.5 p-2 bg-rose-100/90 border border-rose-300 rounded-xl text-[11px] font-bold text-rose-950 flex items-center gap-1.5 animate-pulse">
+                      <span className="text-sm shrink-0">⚠️</span>
+                      <span>שים לב: זכרים לא מסורסים מחייבים תעריף בידוד של ₪230 ליום והשגחה אישית מופרדת.</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* 3. Vaccinated */}
-                <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-emerald-200/80 flex items-center justify-between">
-                  <span className="font-extrabold text-slate-900 text-xs">
-                    💉 3. חיסונים בתוקף? <span className="text-red-500">*</span>
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setIsVaccinated(true)}
-                      className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
-                        isVaccinated ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
-                      }`}
-                    >
-                      כן בתוקף
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsVaccinated(false)}
-                      className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
-                        !isVaccinated ? 'bg-red-600 text-white border-red-600 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
-                      }`}
-                    >
-                      לא בטוח
-                    </button>
+                <div 
+                  id="field_isVaccinated" 
+                  className={`p-3.5 rounded-2xl border-2 flex flex-col justify-between transition-all ${
+                    invalidFieldId === 'field_isVaccinated'
+                      ? 'border-rose-500 bg-rose-50/70 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                      : 'bg-slate-50 border-emerald-200/80'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                      <span>💉 3. חיסונים בתוקף?</span>
+                      <span className="text-red-500">*</span>
+                      {isVaccinated === null && (
+                        <span className="text-[10px] bg-rose-100 text-rose-800 font-black px-1.5 py-0.5 rounded-md">
+                          חובה לבחור
+                        </span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsVaccinated(true);
+                          if (invalidFieldId === 'field_isVaccinated') setInvalidFieldId(null);
+                        }}
+                        className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
+                          isVaccinated === true 
+                            ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' 
+                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        כן בתוקף
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsVaccinated(false);
+                          if (invalidFieldId === 'field_isVaccinated') setInvalidFieldId(null);
+                        }}
+                        className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
+                          isVaccinated === false 
+                            ? 'bg-rose-600 text-white border-rose-600 shadow-xs' 
+                            : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        לא בתוקף / לא בטוח
+                      </button>
+                    </div>
                   </div>
+                  {isVaccinated === false && (
+                    <div className="mt-2.5 p-2 bg-rose-100/90 border border-rose-300 rounded-xl text-[11px] font-bold text-rose-950 flex items-center gap-1.5 animate-pulse">
+                      <span className="text-sm shrink-0">🚨</span>
+                      <span>שים לב: הריזורט מחייב פנקס חיסונים בתוקף (משושה וכלבת). שמוליק ייצור קשר לבירור הנושא.</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* 4. House / Potty Trained */}
-                <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-emerald-200/80 flex items-center justify-between">
-                  <span className="font-extrabold text-slate-900 text-xs">
-                    🚽 4. מחונך לצרכים? <span className="text-red-500">*</span>
+                <div 
+                  id="field_isHouseTrained" 
+                  className={`p-3.5 rounded-2xl border-2 flex items-center justify-between transition-all ${
+                    invalidFieldId === 'field_isHouseTrained'
+                      ? 'border-rose-500 bg-rose-50/70 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                      : 'bg-slate-50 border-emerald-200/80'
+                  }`}
+                >
+                  <span className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                    <span>🚽 4. מחונך לצרכים?</span>
+                    <span className="text-red-500">*</span>
+                    {isHouseTrained === null && (
+                      <span className="text-[10px] bg-rose-100 text-rose-800 font-black px-1.5 py-0.5 rounded-md">
+                        חובה לבחור
+                      </span>
+                    )}
                   </span>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setIsHouseTrained(true)}
+                      onClick={() => {
+                        setIsHouseTrained(true);
+                        if (invalidFieldId === 'field_isHouseTrained') setInvalidFieldId(null);
+                      }}
                       className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
-                        isHouseTrained ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
+                        isHouseTrained === true ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                       }`}
                     >
                       כן
                     </button>
                     <button
                       type="button"
-                      onClick={() => setIsHouseTrained(false)}
+                      onClick={() => {
+                        setIsHouseTrained(false);
+                        if (invalidFieldId === 'field_isHouseTrained') setInvalidFieldId(null);
+                      }}
                       className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
-                        !isHouseTrained ? 'bg-amber-600 text-white border-amber-600 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
+                        isHouseTrained === false ? 'bg-amber-600 text-white border-amber-600 shadow-xs' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                       }`}
                     >
                       לא
@@ -2784,25 +3090,44 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                 </div>
 
                 {/* 5. Treated against Ticks and Fleas */}
-                <div className="p-3.5 bg-slate-50 rounded-2xl border-2 border-emerald-200/80 flex items-center justify-between">
-                  <span className="font-extrabold text-slate-900 text-xs">
-                    🛡️ 5. מטופל נגד קרציות ופשפשים? <span className="text-red-500">*</span>
+                <div 
+                  id="field_isTreatedParasites" 
+                  className={`p-3.5 rounded-2xl border-2 flex items-center justify-between transition-all ${
+                    invalidFieldId === 'field_isTreatedParasites'
+                      ? 'border-rose-500 bg-rose-50/70 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                      : 'bg-slate-50 border-emerald-200/80'
+                  }`}
+                >
+                  <span className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                    <span>🛡️ 5. מטופל נגד קרציות ופשפשים?</span>
+                    <span className="text-red-500">*</span>
+                    {isTreatedParasites === null && (
+                      <span className="text-[10px] bg-rose-100 text-rose-800 font-black px-1.5 py-0.5 rounded-md">
+                        חובה לבחור
+                      </span>
+                    )}
                   </span>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
-                      onClick={() => setIsTreatedParasites(true)}
+                      onClick={() => {
+                        setIsTreatedParasites(true);
+                        if (invalidFieldId === 'field_isTreatedParasites') setInvalidFieldId(null);
+                      }}
                       className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
-                        isTreatedParasites ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
+                        isTreatedParasites === true ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                       }`}
                     >
                       כן
                     </button>
                     <button
                       type="button"
-                      onClick={() => setIsTreatedParasites(false)}
+                      onClick={() => {
+                        setIsTreatedParasites(false);
+                        if (invalidFieldId === 'field_isTreatedParasites') setInvalidFieldId(null);
+                      }}
                       className={`px-4 py-1.5 rounded-xl border font-black text-xs cursor-pointer transition-all ${
-                        !isTreatedParasites ? 'bg-red-600 text-white border-red-600 shadow-xs' : 'bg-white border-slate-300 text-slate-700'
+                        isTreatedParasites === false ? 'bg-amber-600 text-white border-amber-600 shadow-xs' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                       }`}
                     >
                       לא
@@ -2812,7 +3137,14 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               </div>
 
               {/* Question 6: Special needs or medication */}
-              <div className="p-4 bg-slate-50 rounded-2xl border-2 border-emerald-200/90 space-y-3">
+              <div 
+                id="field_specialNeeds"
+                className={`p-4 rounded-2xl border-2 space-y-3 transition-all ${
+                  invalidFieldId === 'field_specialNeeds'
+                    ? 'bg-rose-50/90 border-rose-500 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                    : 'bg-slate-50 border-emerald-200/90'
+                }`}
+              >
                 <div className="flex items-center justify-between">
                   <label className="font-extrabold text-slate-900 block text-xs">
                     🩺 6. מצב בריאותי, צרכים מיוחדים או תרופות <span className="text-red-500">*</span>
@@ -2825,7 +3157,13 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                 {/* Dominant "Completely Healthy" Button - Prominent, full box size */}
                 <button
                   type="button"
-                  onClick={() => setSpecialNeeds('בריא לחלוטין (אין תרופות או צרכים מיוחדים)')}
+                  onClick={() => {
+                    setSpecialNeeds('בריא לחלוטין (אין תרופות או צרכים מיוחדים)');
+                    if (invalidFieldId === 'field_specialNeeds') {
+                      setInvalidFieldId(null);
+                      setErrorMessage(null);
+                    }
+                  }}
                   className={`w-full py-3.5 px-4 rounded-xl border-2 text-sm font-black flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm ${
                     specialNeeds === 'בריא לחלוטין (אין תרופות או צרכים מיוחדים)'
                       ? 'bg-[#065f46] text-white border-[#065f46] ring-2 ring-emerald-500/40 shadow-emerald-900/20'
@@ -2853,7 +3191,19 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   <input
                     type="text"
                     value={specialNeeds === 'בריא לחלוטין (אין תרופות או צרכים מיוחדים)' ? '' : specialNeeds}
-                    onChange={(e) => setSpecialNeeds(e.target.value)}
+                    onFocus={() => {
+                      if (invalidFieldId === 'field_specialNeeds') {
+                        setInvalidFieldId(null);
+                        setErrorMessage(null);
+                      }
+                    }}
+                    onChange={(e) => {
+                      setSpecialNeeds(e.target.value);
+                      if (invalidFieldId === 'field_specialNeeds') {
+                        setInvalidFieldId(null);
+                        setErrorMessage(null);
+                      }
+                    }}
                     placeholder='למשל: "מקבל חצי כדור בבוקר", "אוכל רפואי בלבד", "רגישות לעוף"...'
                     className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-900 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none placeholder:text-slate-400"
                   />
@@ -2878,13 +3228,26 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
           </div>
 
           {/* Mandatory Terms & Conditions Acceptance */}
-          <div className="bg-slate-50 border-2 border-emerald-300 rounded-2xl p-4 space-y-2.5 shadow-2xs">
+          <div 
+            id="field_termsAccepted"
+            className={`border-2 rounded-2xl p-4 space-y-2.5 shadow-2xs transition-all ${
+              invalidFieldId === 'field_termsAccepted'
+                ? 'bg-rose-50/90 border-rose-500 ring-4 ring-rose-400 shadow-xl animate-pulse'
+                : 'bg-slate-50 border-emerald-300'
+            }`}
+          >
             <div className="flex items-start gap-3">
               <input
                 type="checkbox"
                 id="termsAccepted"
                 checked={termsAccepted}
-                onChange={(e) => setTermsAccepted(e.target.checked)}
+                onChange={(e) => {
+                  setTermsAccepted(e.target.checked);
+                  if (e.target.checked && invalidFieldId === 'field_termsAccepted') {
+                    setInvalidFieldId(null);
+                    setErrorMessage(null);
+                  }
+                }}
                 className="mt-0.5 w-5 h-5 accent-[#065f46] rounded cursor-pointer shrink-0"
               />
               <label htmlFor="termsAccepted" className="text-xs sm:text-sm font-black text-slate-900 cursor-pointer select-none leading-snug">
@@ -2917,6 +3280,38 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               <p className="text-amber-900 leading-relaxed font-medium">
                 על פי נהלי הריזורט לכלב: <strong>אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם</strong>. לאחר הגשת השאלון תקבלו קישור אישי להסכם האילוף הרשמי לחתימה דיגיטלית מאובטחת, ורק לאחר חתימתכם ניתן יהיה להסדיר את התשלום.
               </p>
+            </div>
+          )}
+
+          {/* Floating / Prominent Flashing Validation Error Banner */}
+          {errorMessage && (
+            <div 
+              id="form_error_banner"
+              className="bg-rose-50 border-2 border-rose-500 text-rose-950 p-4 rounded-2xl shadow-xl flex items-center justify-between gap-3 animate-pulse ring-4 ring-rose-300/60 transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl animate-bounce">🚨</span>
+                <div>
+                  <div className="font-black text-sm text-rose-900">ישנם שדות חובה שטרם מולאו בשאלון!</div>
+                  <div className="text-xs text-rose-800 font-bold mt-0.5">{errorMessage}</div>
+                </div>
+              </div>
+              {invalidFieldId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const el = document.getElementById(invalidFieldId);
+                    if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      const input = el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' ? el : el.querySelector('input, textarea, button');
+                      (input as HTMLElement)?.focus?.();
+                    }
+                  }}
+                  className="shrink-0 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow cursor-pointer transition-all flex items-center gap-1"
+                >
+                  <span>קפוץ לשדה ⬆️</span>
+                </button>
+              )}
             </div>
           )}
 

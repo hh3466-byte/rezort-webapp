@@ -183,12 +183,20 @@ export async function runAutoReviewAndVoucherSender(
         (b as any).skip_review_request === true
       );
 
-      if (isExplicitlySkipped) {
+      // 1b. Check if all bookings are daycare or pass bookings (Rule: No double discounts on passes / daycare)
+      const isPassOrDaycareOnly = groupBookings.every(b => {
+        const sType = b.serviceType;
+        const notes = b.notes || '';
+        const isPass = notes.includes('כרטיסיי') || notes.includes('כרטיסיה') || notes.includes('בנק יממות') || notes.includes('בנק 21') || Boolean((b as any).daycarePassId);
+        return sType === 'daycare' || sType === 'day_training' || isPass;
+      });
+
+      if (isExplicitlySkipped || isPassOrDaycareOnly) {
         skippedCount += groupBookings.length;
         groupBookings.forEach(b => {
           const storageKey = `review_request_sent_${b.id}`;
           if (typeof window !== 'undefined' && window.localStorage) {
-            localStorage.setItem(storageKey, 'skipped');
+            localStorage.setItem(storageKey, isPassOrDaycareOnly ? 'skipped_pass_no_double_promo' : 'skipped');
           }
         });
         continue;

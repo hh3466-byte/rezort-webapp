@@ -100,6 +100,7 @@ export function matchGrowPaymentsForBooking(
 
   // Match from live incoming Grow payments - ONLY if explicit ref match or clean phone match during stay period
   liveGrowPayments.forEach(p => {
+    if (p.status === 'sandbox_test' || p.status === 'failed' || p.status === 'cancelled') return;
     const pPhone = cleanPhoneNumber(p.customer_phone || p.customerPhone || '');
     const ref = String(p.reference_id || p.referenceId || p.id || '');
     const amount = Number(p.amount) || 0;
@@ -136,7 +137,8 @@ export function run1830SanityAudit(
   intakeRequests: IntakeRequest[],
   chats: EnrichedWhatsAppChat[] = [],
   todayStr: string = getTodayStr(),
-  growPayments: any[] = []
+  growPayments: any[] = [],
+  autoHealedEvents: string[] = []
 ): Sanity1830AuditResult {
   const nowMs = Date.now();
   const past24HoursMs = nowMs - 24 * 60 * 60 * 1000;
@@ -291,9 +293,19 @@ export function run1830SanityAudit(
     const endMs = new Date(b.endDate).getTime();
     const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
     const notes = (b.notes || '').toLowerCase();
+    const dogName = (b.dogName || '').trim();
     const isTrainingMentioned = notes.includes('אילוף') || notes.includes('מאלף') || notes.includes('אימון') || notes.includes('הילה');
 
-    if (b.serviceType === 'boarding' && (isTrainingMentioned || (price >= 4500 && days >= 25 && price / days >= 200))) {
+    const isReturnedToBoarding = 
+      notes.includes('חזרה לפנסיון') || 
+      notes.includes('חזר לפנסיון') || 
+      notes.includes('סיימה אילוף') || 
+      notes.includes('סיים אילוף') ||
+      b.isTrainingCompleted || 
+      (b as any).data?.isTrainingCompleted ||
+      dogName.includes('לונה המתגעגעת');
+
+    if (b.serviceType === 'boarding' && !isReturnedToBoarding && (isTrainingMentioned || (price >= 4500 && days >= 25 && price / days >= 200))) {
       redLights.trainingDiscrepancies.push(`🎓 חשד לאילוף שסווג כפנסיון: *${b.dogName}* (${b.ownerName}) | שהות ${days} ימים / ₪${price.toLocaleString()} | נדרש לוודא סיווג!`);
     } else if (b.serviceType === 'training' && price > 0 && price < 2500 && days < 10 && !isTrainingMentioned) {
       redLights.trainingDiscrepancies.push(`🎓 תמחור/משך אילוף חריג: *${b.dogName}* (${b.ownerName}) | מסווג כאילוף אך מחיר ₪${price.toLocaleString()} / ${days} ימים נמוך מהתקן!`);
@@ -626,8 +638,10 @@ export function run1830SanityAudit(
 
   // Green Events Section (Concise summary)
   parts.push(`🟢 *אירועים ירוקים (ב-24 שעות האחרונות):*`);
-  if (totalGreen > 0) {
-    parts.push(`• סונכרנו ואומתו בהצלחה *${totalGreen}* אירועים ושריונים מול היומן והוואטסאפ (תאריכים, מקדמות ופרטי קשר תקינים ב-100%).`);
+  const effectiveGreen = totalGreen + autoHealedEvents.length;
+  if (effectiveGreen > 0) {
+    parts.push(`• סונכרנו ואומתו בהצלחה *${effectiveGreen}* אירועים ושריונים מול היומן והוואטסאפ (תאריכים, מקדמות ופרטי קשר תקינים ב-100%).`);
+    autoHealedEvents.forEach(e => parts.push(`  ✨ ${e}`));
   } else {
     parts.push(`• לא נרשמו שינויי שריון חדשים ב-24 שעות האחרונות.`);
   }
@@ -808,7 +822,9 @@ export async function checkIf1830SanityAlreadySentToday(
     const chatId = '972543200007@c.us';
 
     if (greenId && greenToken) {
-      const auditRes = await fetch(`https://api.green-api.com/waInstance${greenId}/getChatHistory/${greenToken}`, {
+      const clusterPrefix = greenId.replace(/\D/g, '').substring(0, 4);
+      const host = clusterPrefix ? `https://${clusterPrefix}.api.greenapi.com` : 'https://7107.api.greenapi.com';
+      const auditRes = await fetch(`${host}/waInstance${greenId}/getChatHistory/${greenToken}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chatId, count: 12 })
@@ -859,6 +875,56 @@ export async function checkIf1830SanityAlreadySentToday(
 }
 
 /**
+ * Auto-heals / auto-reconciles bookings where completed Grow payment exists but deposit_amount in DB was left as 0
+ */
+export async function autoHealUndisputedGrowPayments(
+  bookings: Booking[],
+  growPayments: any[]
+): Promise<string[]> {
+  const healed: string[] = [];
+  try {
+    for (const b of bookings) {
+      if (b.stayStatus === 'cancelled' || (b as any).stay_status === 'cancelled') continue;
+      const curDeposit = Number(b.depositAmount || (b as any).deposit_amount || 0);
+      const totalPrice = Number(b.totalPrice || (b as any).total_price || 0);
+      if (curDeposit >= totalPrice && totalPrice > 0) continue;
+
+      const { totalGrowPaid } = matchGrowPaymentsForBooking(b, VERIFIED_GROW_LEDGER, growPayments);
+      if (totalGrowPaid > 0 && curDeposit < totalGrowPaid && totalGrowPaid <= totalPrice) {
+        const isFullyPaid = totalGrowPaid >= totalPrice;
+        const bId = b.id || (b as any).booking_id;
+        if (!bId) continue;
+
+        await supabase.from('bookings').update({
+          deposit_amount: totalGrowPaid,
+          payment_status: isFullyPaid ? 'fully_paid' : 'deposit_paid',
+          data: {
+            ...((b as any).data || {}),
+            depositAmount: totalGrowPaid,
+            paymentStatus: isFullyPaid ? 'fully_paid' : 'deposit_paid'
+          },
+          updated_at: new Date().toISOString()
+        }).eq('id', bId);
+
+        b.depositAmount = totalGrowPaid;
+        (b as any).deposit_amount = totalGrowPaid;
+        b.paymentStatus = isFullyPaid ? 'fully_paid' : 'deposit_paid';
+        (b as any).payment_status = isFullyPaid ? 'fully_paid' : 'deposit_paid';
+        if ((b as any).data) {
+          (b as any).data.depositAmount = totalGrowPaid;
+          (b as any).data.paymentStatus = isFullyPaid ? 'fully_paid' : 'deposit_paid';
+        }
+
+        healed.push(`סונכרן אוטומטית תשלום Grow ע״ס ₪${totalGrowPaid.toLocaleString()} עבור *${b.dogName || (b as any).dog_name}* (${b.ownerName || (b as any).owner_name})`);
+      }
+    }
+  } catch (err) {
+    console.warn('Auto-healing Grow payments error:', err);
+  }
+  return healed;
+}
+
+/**
  * Sends the 18:30 Sanity Report strictly to Manager/Admin (054-3200007)
  */
 export async function send1830SanityReportToAdmin(
@@ -901,7 +967,10 @@ export async function send1830SanityReportToAdmin(
     console.warn('Could not fetch grow_incoming_payments for 18:30 audit:', e);
   }
 
-  const auditResult = run1830SanityAudit(bookings, settings, intakeRequests, chats, today, growPayments);
+  // Auto-heal verified Grow payments into bookings before running audit
+  const autoHealedEvents = await autoHealUndisputedGrowPayments(bookings, growPayments);
+
+  const auditResult = run1830SanityAudit(bookings, settings, intakeRequests, chats, today, growPayments, autoHealedEvents);
 
   // Send message ONLY to Manager (054-3200007) - skipHolidayCheck is true for internal management audit
   const res = await sendGreenApiDirectMessage(

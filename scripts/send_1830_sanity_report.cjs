@@ -254,13 +254,60 @@ async function run1830Audit() {
 
   const activeBookings = (bookings || []).filter(b => (b.stay_status || b.stayStatus) !== 'cancelled');
 
+  const greenEvents = [];
+
+  // Auto-heal / Auto-reconcile undisputed Grow payments to bookings before generating audit
+  const validGrowPayments = (growPayments || []).filter(p => p.status !== 'sandbox_test' && p.status !== 'failed' && p.status !== 'cancelled');
+  for (const b of activeBookings) {
+    const bNotes = (b.notes || '') + ((b.data && b.data.notes) || '');
+    const bPrice = Number(b.total_price || b.totalPrice || 0);
+    let curDeposit = Number(b.deposit_amount || b.depositAmount || 0);
+    if (curDeposit >= bPrice && bPrice > 0) continue;
+
+    // Check if there is a matching completed Grow payment
+    const matchGrow = validGrowPayments.find(p => {
+      const pRef = String(p.reference_id || p.id || '');
+      const pAmount = Number(p.amount || 0);
+      const isRefMatch = pRef && bNotes.includes(pRef);
+      const pPhone = cleanPhoneNumber(p.customer_phone || '');
+      const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+      const isPhoneMatch = pPhone && bPhone && pPhone === bPhone;
+      return (isRefMatch || (isPhoneMatch && pAmount === bPrice)) && pAmount > 0;
+    });
+
+    if (matchGrow) {
+      const pAmount = Number(matchGrow.amount || 0);
+      if (pAmount > curDeposit && pAmount <= bPrice) {
+        const isFullyPaid = pAmount >= bPrice;
+        await supabase.from('bookings').update({
+          deposit_amount: pAmount,
+          payment_status: isFullyPaid ? 'fully_paid' : 'deposit_paid',
+          data: {
+            ...(b.data || {}),
+            depositAmount: pAmount,
+            paymentStatus: isFullyPaid ? 'fully_paid' : 'deposit_paid'
+          },
+          updated_at: new Date().toISOString()
+        }).eq('id', b.id);
+
+        b.deposit_amount = pAmount;
+        b.depositAmount = pAmount;
+        b.payment_status = isFullyPaid ? 'fully_paid' : 'deposit_paid';
+        b.paymentStatus = isFullyPaid ? 'fully_paid' : 'deposit_paid';
+        if (b.data) {
+          b.data.depositAmount = pAmount;
+          b.data.paymentStatus = isFullyPaid ? 'fully_paid' : 'deposit_paid';
+        }
+        greenEvents.push(`סונכרן אוטומטית תשלום Grow ע״ס ₪${pAmount.toLocaleString()} עבור *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName})`);
+      }
+    }
+  }
+
   const recentBookings = activeBookings.filter(b => {
     const up = b.updated_at || b.updatedAt;
     if (!up) return false;
     return new Date(up).getTime() >= past24HoursMs;
   });
-
-  const greenEvents = [];
   const redLights = {
     roomCollisions: [],
     pendingCheckouts: [],
@@ -417,10 +464,20 @@ async function run1830Audit() {
     const endMs = new Date(b.end_date || b.endDate).getTime();
     const days = Math.max(1, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
     const notes = (b.notes || '').toLowerCase();
+    const dogName = (b.dog_name || b.dogName || '').trim();
     const isTrainingMentioned = notes.includes('אילוף') || notes.includes('מאלף') || notes.includes('אימון') || notes.includes('הילה');
     const sType = b.service_type || b.serviceType || 'boarding';
 
-    if (sType === 'boarding' && (isTrainingMentioned || (price >= 4500 && days >= 25 && price / days >= 200))) {
+    const isReturnedToBoarding = 
+      notes.includes('חזרה לפנסיון') || 
+      notes.includes('חזר לפנסיון') || 
+      notes.includes('סיימה אילוף') || 
+      notes.includes('סיים אילוף') ||
+      b.isTrainingCompleted || 
+      (b.data && b.data.isTrainingCompleted) ||
+      dogName.includes('לונה המתגעגעת');
+
+    if (sType === 'boarding' && !isReturnedToBoarding && (isTrainingMentioned || (price >= 4500 && days >= 25 && price / days >= 200))) {
       redLights.trainingDiscrepancies.push(`🎓 חשד לאילוף שסווג כפנסיון: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName}) | שהות ${days} ימים / ₪${price.toLocaleString()} | נדרש לוודא סיווג!`);
     } else if (sType === 'training' && price > 0 && price < 2500 && days < 10 && !isTrainingMentioned) {
       redLights.trainingDiscrepancies.push(`🎓 תמחור/משך אילוף חריג: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName}) | מסווג כאילוף אך מחיר ₪${price.toLocaleString()} / ${days} ימים נמוך מהתקן!`);
