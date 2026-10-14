@@ -58,6 +58,7 @@ import {
   formatIsraeliPhoneDisplay
 } from '../utils/whatsappUtils';
 import { calculateBoardingRate } from '../utils/pricingUtils';
+import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import { parseVoiceOrWhatsAppText } from '../services/agentService';
 import { TimeSchedulePicker } from './TimeSchedulePicker';
 import { normalizePlacementKey, getPlacementDisplayName } from '../utils/kennelUtils';
