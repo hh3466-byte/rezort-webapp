@@ -296,7 +296,7 @@ export default async function handler(req, res) {
 
 נשמח לשמוע את תובנותיכן ורעיונותיכן לשבוע הקרוב! שבוע מנצח ורווי סגירות! 💪🐾
 
-*שמוליק, חגי וצוות הריזורט לכלב 🐾*`;
+*שמוליק וצוות הריזורט לכלב*`;
 
     // 7. Send to Marketing WhatsApp Group
     console.log('Sending Excel attachment to marketing group...');
