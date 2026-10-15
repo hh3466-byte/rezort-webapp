@@ -91,7 +91,25 @@ export function getStayStatusColors(
     };
   }
 
-  // 2. Booked / Reserved (שוריין אך טרם נקלט בצ'ק אין) -> סגול בולט ומודגש
+  // 2. Releasing on this day (משתחרר באותו היום - כחול רויאל בולט ומודגש)
+  const isReleasing = Boolean(endDate) && endDate === targetDate && stayStatus !== 'cancelled';
+  if (isReleasing) {
+    return {
+      isEnded: false,
+      isCheckedIn: stayStatus === 'checked_in',
+      isBooked: stayStatus === 'booked',
+      isReleasing: true,
+      dogClass: 'text-[#1e3a8a] font-black', // Deep vivid royal blue, high contrast
+      ownerClass: 'text-[#1d4ed8] font-black text-[10px]', // Deep royal blue
+      textClass: 'text-[#1e3a8a]',
+      cardBorderBg: 'bg-blue-100/95 border-blue-400 hover:border-blue-500 hover:bg-blue-100 text-[#1e3a8a] shadow-2xs ring-1 ring-blue-400/70',
+      monthChipBg: 'bg-blue-100 border-blue-400 text-[#1e3a8a] font-black',
+      iconClass: 'text-[#2563eb]',
+      badgeLabel: stayStatus === 'booked' ? 'משתחרר ביום זה (שוריין)' : 'משתחרר היום'
+    };
+  }
+
+  // 3. Booked / Reserved (שוריין אך טרם נקלט בצ'ק אין) -> סגול בולט ומודגש
   const isBooked = stayStatus === 'booked' || (!stayStatus && startDate && startDate > targetDate);
   if (isBooked) {
     return {
@@ -106,24 +124,6 @@ export function getStayStatusColors(
       monthChipBg: 'bg-purple-100 border-purple-300 text-[#581c87] font-black',
       iconClass: 'text-[#7e22ce]',
       badgeLabel: 'שוריין (טרם נקלט)'
-    };
-  }
-
-  // 3. Releasing on this day (משתחרר באותו היום - כחול רויאל בולט ומודגש)
-  const isReleasing = Boolean(endDate) && endDate === targetDate && stayStatus !== 'cancelled';
-  if (isReleasing) {
-    return {
-      isEnded: false,
-      isCheckedIn: true,
-      isBooked: false,
-      isReleasing: true,
-      dogClass: 'text-[#1e3a8a] font-black', // Deep vivid royal blue, high contrast
-      ownerClass: 'text-[#1d4ed8] font-black text-[10px]', // Deep royal blue
-      textClass: 'text-[#1e3a8a]',
-      cardBorderBg: 'bg-blue-100/95 border-blue-400 hover:border-blue-500 hover:bg-blue-100 text-[#1e3a8a] shadow-2xs ring-1 ring-blue-400/70',
-      monthChipBg: 'bg-blue-100 border-blue-400 text-[#1e3a8a] font-black',
-      iconClass: 'text-[#2563eb]',
-      badgeLabel: 'משתחרר היום'
     };
   }
 
