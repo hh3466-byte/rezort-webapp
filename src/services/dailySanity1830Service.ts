@@ -100,7 +100,7 @@ export function matchGrowPaymentsForBooking(
 
   // Match from live incoming Grow payments - ONLY if explicit ref match or clean phone match during stay period
   liveGrowPayments.forEach(p => {
-    if (p.status === 'sandbox_test' || p.status === 'failed' || p.status === 'cancelled') return;
+    if (p.status === 'sandbox_test' || p.status === 'failed' || p.status === 'cancelled' || p.status === 'duplicate') return;
     const pPhone = cleanPhoneNumber(p.customer_phone || p.customerPhone || '');
     const ref = String(p.reference_id || p.referenceId || p.id || '');
     const amount = Number(p.amount) || 0;
@@ -116,10 +116,25 @@ export function matchGrowPaymentsForBooking(
     }
   });
 
-  const transactions = Array.from(matched.values());
-  const totalGrowPaid = transactions.reduce((sum, t) => sum + t.amount, 0);
+  const rawTransactions = Array.from(matched.values());
+  // Deduplicate transactions with identical amount within 15 minutes (e.g. webhook + email scraper for same bit payment)
+  const uniqueTransactions: Array<{ ref: string; amount: number; date?: string; method?: string }> = [];
+  for (const t of rawTransactions) {
+    const isDuplicate = uniqueTransactions.some(prev => {
+      const sameAmount = prev.amount === t.amount;
+      const tTime = t.date ? new Date(t.date).getTime() : 0;
+      const prevTime = prev.date ? new Date(prev.date).getTime() : 0;
+      const within15Min = tTime && prevTime ? Math.abs(tTime - prevTime) < 15 * 60 * 1000 : false;
+      return sameAmount && within15Min;
+    });
+    if (!isDuplicate) {
+      uniqueTransactions.push(t);
+    }
+  }
 
-  return { totalGrowPaid, transactions };
+  const totalGrowPaid = uniqueTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+  return { totalGrowPaid, transactions: uniqueTransactions };
 }
 
 /**

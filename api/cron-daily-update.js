@@ -85,6 +85,64 @@ const SHLOMI_LUNA_TEMPLATES = [
   { id: 304, type: "training", text: "📅 *יום {daysCount} באילוף של אלופים בריזורט* 🎓💔\n\nערב טוב שלומי! 🎓🐾 אני תלמידה מצטיינת והכל פה 5 כוכבים, אבל יש תרגיל אחד שאני פשוט לא מצליחה ללמוד: איך להפסיק להתגעגע אליך... תבטיח שאתה קופץ לראות כמה גדלתי והחכמתי? מחכה לחיבוק שלך, לונה 🐾🥰" }
 ];
 
+function isDogFemale(b) {
+  const g = String(b.dog_gender || b.dogGender || b.data?.dogGender || '').toLowerCase();
+  if (g.includes('female') || g.includes('נקבה') || g.includes('spayed')) return true;
+  const notes = String((b.notes || '') + ' ' + (b.data?.notes || '')).toLowerCase();
+  if (notes.includes('נקבה') || notes.includes('מעוקרת')) return true;
+  const name = String(b.dog_name || b.dogName || '').trim();
+  const knownFemales = ['ניצה', 'פיבי', 'לונה', 'קצ\'טה', 'קאיה', 'מילי', 'בלה', 'לולה', 'מיה', 'נלה', 'טופי', 'לוסי', 'סנדי', 'שוקי'];
+  return knownFemales.includes(name);
+}
+
+function applyFemaleInflection(text, cleanDog) {
+  return text
+    // ברכות סיום וחיבה
+    .replace(/אוהב\s+{dogName}/g, `אוהבת ${cleanDog}`)
+    .replace(/אוהב\s+המון,\s+{dogName}/g, `אוהבת המון, ${cleanDog}`)
+    .replace(/אוהב,\s+{dogName}/g, `אוהבת, ${cleanDog}`)
+    .replace(/אוהב\s+אותכם/g, 'אוהבת אתכם')
+    .replace(/אוהב\s+אתכם/g, 'אוהבת אתכם')
+    .replace(/אוהב\s+המון/g, 'אוהבת המון')
+    .replace(/אוהב\s+מלא/g, 'אוהבת מלא')
+    .replace(/אוהב(?![תותםן])/g, 'אוהבת')
+    // שכיבה ומנוחה
+    .replace(/שוכב\s+רגוע\s+ומרוצה/g, 'שוכבת רגועה ומרוצה')
+    .replace(/שוכב\s+מרוצה/g, 'שוכבת מרוצה')
+    .replace(/שוכב\s+בכיף/g, 'שוכבת בכיף')
+    .replace(/שוכב\s+על\s+הגב/g, 'שוכבת על הגב')
+    .replace(/שוכב(?![תותםן])/g, 'שוכבת')
+    // שינה
+    .replace(/ישן\s+עמוק\s+ושלו/g, 'ישנה עמוק ושלווה')
+    .replace(/ישן\s+עמוק/g, 'ישנה עמוק')
+    .replace(/ישן(?![הותםן])/g, 'ישנה')
+    .replace(/נרדם\s+מחויך\s+ומרופד/g, 'נרדמת מחויכת ומרופדת')
+    .replace(/נרדם\s+מחויך/g, 'נרדמת מחויכת')
+    .replace(/נרדם(?![תותםן])/g, 'נרדמת')
+    // מנוחה ומלכות
+    .replace(/נח\s+כמו\s+מלך\s+אמיתי/g, 'נחה כמו מלכה אמיתית')
+    .replace(/נח\s+כמו\s+מלך/g, 'נחה כמו מלכה')
+    .replace(/נח\s+בסוויטה/g, 'נחה בסוויטה')
+    .replace(/נח\s+בכיף/g, 'נחה בכיף')
+    .replace(/נח(?![הותםן])/g, 'נחה')
+    .replace(/כמו\s+מלך\s+אמיתי/g, 'כמו מלכה אמיתית')
+    .replace(/כמו\s+מלך/g, 'כמו מלכה')
+    .replace(/למלך\s+שלו/g, 'למלכה שלו')
+    // תלמיד / אילוף
+    .replace(/תלמיד\s+מצטיין\s+של\s+אלופים/g, 'תלמידה מצטיינת של אלופים')
+    .replace(/תלמיד\s+מצטיין/g, 'תלמידה מצטיינת')
+    // רגשות ומצב רוח
+    .replace(/אני\s+שליו\s+ושמח/g, 'אני שלווה ושמחה')
+    .replace(/רגוע\s+ומרוצה/g, 'רגועה ומרוצה')
+    .replace(/שבע\s+ומפונק/g, 'שבעה ומפונקת')
+    .replace(/מלא\s+ומאושר/g, 'מלאה ומאושרת')
+    .replace(/עייף\s+אך\s+מאושר/g, 'עייפה אך מאושרת')
+    .replace(/מפונק(?![תותםן])/g, 'מפונקת')
+    .replace(/שמח(?![הותםן])/g, 'שמחה')
+    .replace(/רגוע(?![הותםן])/g, 'רגועה')
+    .replace(/מסודר\s+ללילה/g, 'מסודרת ללילה');
+}
+
 function selectDogTemplate(b, isWeekend = false, recipientName = null) {
   const oName = (b.owner_name || '').toLowerCase();
   const dName = (b.dog_name || '').toLowerCase();
@@ -118,9 +176,15 @@ function selectDogTemplate(b, isWeekend = false, recipientName = null) {
   const cleanOwner = (recipientName || b.owner_name || 'חבר').trim().split(/\s+/)[0];
   const cleanDog = (b.dog_name || 'הכלב').trim();
 
-  return chosen.text
+  let formatted = chosen.text
     .replace(/{ownerName}/g, cleanOwner)
     .replace(/{dogName}/g, cleanDog);
+
+  if (isDogFemale(b)) {
+    formatted = applyFemaleInflection(formatted, cleanDog);
+  }
+
+  return formatted;
 }
 
 export default async function handler(req, res) {
@@ -159,14 +223,13 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'already_sent_today', date: todayStr });
     }
 
-    // 1. Fetch active staying dogs for daily greeting
+    // 1. Fetch active staying dogs for daily greeting - ONLY dogs that are currently checked-in!
     const { data: bookings } = await supabase
       .from('bookings')
       .select('*')
       .lte('start_date', todayStr)
       .gt('end_date', todayStr)
-      .neq('stay_status', 'cancelled')
-      .neq('stay_status', 'archived');
+      .eq('stay_status', 'checked_in');
 
     const activeBookings = bookings || [];
     let dogSentCount = 0;

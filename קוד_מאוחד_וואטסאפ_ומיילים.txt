@@ -1317,6 +1317,58 @@ function isDogInIsolation(b, allIntakeRequests) {
  * בחירת נוסח יומי מתאים לכלב (מונע כפילויות במהלך השהות)
  * מבצע הפרדה הרמטית בין פנסיון לאילוף ובידוד!
  */
+function isDogFemaleAppsScript(b) {
+  var g = String(b.dog_gender || (b.data && b.data.dogGender) || "").toLowerCase();
+  if (g.indexOf("female") !== -1 || g.indexOf("נקבה") !== -1 || g.indexOf("spayed") !== -1) return true;
+  var notes = String((b.notes || "") + " " + ((b.data && b.data.notes) || "")).toLowerCase();
+  if (notes.indexOf("נקבה") !== -1 || notes.indexOf("מעוקרת") !== -1) return true;
+  var name = String(b.dog_name || "").trim();
+  var knownFemales = ["ניצה", "פיבי", "לונה", "קצ'טה", "קאיה", "מילי", "בלה", "לולה", "מיה", "נלה", "טופי", "לוסי", "סנדי", "שוקי"];
+  return knownFemales.indexOf(name) !== -1;
+}
+
+function applyFemaleInflectionAppsScript(text, cleanDog) {
+  return text
+    .replace(/אוהב\s+{dogName}/g, "אוהבת " + cleanDog)
+    .replace(/אוהב\s+המון,\s+{dogName}/g, "אוהבת המון, " + cleanDog)
+    .replace(/אוהב,\s+{dogName}/g, "אוהבת, " + cleanDog)
+    .replace(/אוהב\s+אותכם/g, "אוהבת אתכם")
+    .replace(/אוהב\s+אתכם/g, "אוהבת אתכם")
+    .replace(/אוהב\s+המון/g, "אוהבת המון")
+    .replace(/אוהב\s+מלא/g, "אוהבת מלא")
+    .replace(/אוהב(?![תותםן])/g, "אוהבת")
+    .replace(/שוכב\s+רגוע\s+ומרוצה/g, "שוכבת רגועה ומרוצה")
+    .replace(/שוכב\s+מרוצה/g, "שוכבת מרוצה")
+    .replace(/שוכב\s+בכיף/g, "שוכבת בכיף")
+    .replace(/שוכב\s+על\s+הגב/g, "שוכבת על הגב")
+    .replace(/שוכב(?![תותםן])/g, "שוכבת")
+    .replace(/ישן\s+עמוק\s+ושלו/g, "ישנה עמוק ושלווה")
+    .replace(/ישן\s+עמוק/g, "ישנה עמוק")
+    .replace(/ישן(?![הותםן])/g, "ישנה")
+    .replace(/נרדם\s+מחויך\s+ומרופד/g, "נרדמת מחויכת ומרופדת")
+    .replace(/נרדם\s+מחויך/g, "נרדמת מחויכת")
+    .replace(/נרדם(?![תותםן])/g, "נרדמת")
+    .replace(/נח\s+כמו\s+מלך\s+אמיתי/g, "נחה כמו מלכה אמיתית")
+    .replace(/נח\s+כמו\s+מלך/g, "נחה כמו מלכה")
+    .replace(/נח\s+בסוויטה/g, "נחה בסוויטה")
+    .replace(/נח\s+בכיף/g, "נחה בכיף")
+    .replace(/נח(?![הותםן])/g, "נחה")
+    .replace(/כמו\s+מלך\s+אמיתי/g, "כמו מלכה אמיתית")
+    .replace(/כמו\s+מלך/g, "כמו מלכה")
+    .replace(/למלך\s+שלו/g, "למלכה שלו")
+    .replace(/תלמיד\s+מצטיין\s+של\s+אלופים/g, "תלמידה מצטיינת של אלופים")
+    .replace(/תלמיד\s+מצטיין/g, "תלמידה מצטיינת")
+    .replace(/אני\s+שליו\s+ושמח/g, "אני שלווה ושמחה")
+    .replace(/רגוע\s+ומרוצה/g, "רגועה ומרוצה")
+    .replace(/שבע\s+ומפונק/g, "שבעה ומפונקת")
+    .replace(/מלא\s+ומאושר/g, "מלאה ומאושרת")
+    .replace(/עייף\s+אך\s+מאושר/g, "עייפה אך מאושרת")
+    .replace(/מפונק(?![תותםן])/g, "מפונקת")
+    .replace(/שמח(?![הותםן])/g, "שמחה")
+    .replace(/רגוע(?![הותםן])/g, "רגועה")
+    .replace(/מסודר\s+ללילה/g, "מסודרת ללילה");
+}
+
 function getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat, recipientName) {
   var props = PropertiesService.getScriptProperties();
   var sentKey = isMotzaeiShabbat ? ("sent_motzash_templates_" + b.id) : ("sent_daily_templates_" + b.id);
@@ -1412,6 +1464,10 @@ function getDailyDogTemplateForBooking(b, isIsolation, isMotzaeiShabbat, recipie
     .replace(/{dogName}/g, cleanDog)
     .replace(/{daysCount}/g, String(daysCount));
 
+  if (isDogFemaleAppsScript(b)) {
+    msgText = applyFemaleInflectionAppsScript(msgText, cleanDog);
+  }
+
   return { id: chosen.id, text: msgText, isWeekend: isMotzaeiShabbat };
 }
 
@@ -1485,8 +1541,8 @@ function sendDailyDogEveningUpdates() {
 
     var todayStr = Utilities.formatDate(now, israelTz, "yyyy-MM-dd");
 
-    // 2. שליפת כל הכלבים הלנים הלילה בריזורט מ-Supabase
-    var queryUrl = SUPABASE_URL + "/rest/v1/bookings?start_date=lte." + todayStr + "&end_date=gt." + todayStr + "&stay_status=neq.cancelled&select=*";
+    // 2. שליפת כל הכלבים הלנים הלילה בריזורט מ-Supabase (אך ורק כלבים שנקלטו בפועל בצ'ק-אין!)
+    var queryUrl = SUPABASE_URL + "/rest/v1/bookings?start_date=lte." + todayStr + "&end_date=gt." + todayStr + "&stay_status=eq.checked_in&select=*";
     var res = UrlFetchApp.fetch(queryUrl, {
       method: "get",
       headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },

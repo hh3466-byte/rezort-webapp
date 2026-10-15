@@ -155,7 +155,7 @@ export async function runAutoDailyDogUpdates(
   // Filter dogs active tonight and deduplicate by phone + dog name to avoid duplicate sends if duplicate bookings exist
   const seenDogsMap = new Set<string>();
   const activeTonightUnique = bookings.filter(b => {
-    if (b.stayStatus === 'cancelled') return false;
+    if (b.stayStatus === 'cancelled' || b.stayStatus !== 'checked_in') return false;
     const isStaying = b.startDate <= todayStr && b.endDate > todayStr;
     if (!isStaying) return false;
     
