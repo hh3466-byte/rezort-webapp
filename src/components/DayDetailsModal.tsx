@@ -630,7 +630,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
         </button>
 
         {/* Check-in Button for Booked/Arriving Dogs */}
-        {booking.stayStatus === 'booked' && onToggleStayStatus && (
+        {(booking.stayStatus === 'booked' || (booking.stayStatus as any) === 'confirmed') && onToggleStayStatus && (
           <button
             type="button"
             onClick={(e) => {

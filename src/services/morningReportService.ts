@@ -1,4 +1,4 @@
-import { Booking, ResortSettings, IntakeRequest } from '../types';
+import { Booking, ResortSettings, IntakeRequest, StayStatus } from '../types';
 import { getTodayStr, getDayNameHebrew, formatDateIL, addDays } from '../utils/dateUtils';
 import { cleanPhoneNumber, getFirstName, isValidIsraeliPhone } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from './notificationService';
@@ -674,7 +674,7 @@ export async function sendTomorrowOverviewToShmulik(
             totalPrice: Number(row.total_price ?? rowData.totalPrice ?? 0),
             depositAmount: Number(row.deposit_amount ?? rowData.depositAmount ?? 0),
             paymentStatus: row.payment_status || rowData.paymentStatus || 'unpaid',
-            stayStatus: row.stay_status || rowData.stayStatus || 'booked',
+            stayStatus: ((row.stay_status === 'confirmed' || rowData.stayStatus === 'confirmed') ? 'booked' : (row.stay_status || rowData.stayStatus || 'booked')) as StayStatus,
             kennelNumber: row.kennel_number !== undefined ? row.kennel_number : rowData.kennelNumber,
             notes: row.notes || rowData.notes || '',
             vaccinationValid: Boolean(row.vaccination_valid ?? rowData.vaccinationValid ?? true),

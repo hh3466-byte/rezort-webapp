@@ -97,7 +97,7 @@ export function getStayStatusColors(
     return {
       isEnded: false,
       isCheckedIn: stayStatus === 'checked_in',
-      isBooked: stayStatus === 'booked',
+      isBooked: stayStatus === 'booked' || (stayStatus as any) === 'confirmed',
       isReleasing: true,
       dogClass: 'text-[#1e3a8a] font-black', // Deep vivid royal blue, high contrast
       ownerClass: 'text-[#1d4ed8] font-black text-[10px]', // Deep royal blue
@@ -105,12 +105,12 @@ export function getStayStatusColors(
       cardBorderBg: 'bg-blue-100/95 border-blue-400 hover:border-blue-500 hover:bg-blue-100 text-[#1e3a8a] shadow-2xs ring-1 ring-blue-400/70',
       monthChipBg: 'bg-blue-100 border-blue-400 text-[#1e3a8a] font-black',
       iconClass: 'text-[#2563eb]',
-      badgeLabel: stayStatus === 'booked' ? 'משתחרר ביום זה (שוריין)' : 'משתחרר היום'
+      badgeLabel: (stayStatus === 'booked' || (stayStatus as any) === 'confirmed') ? 'משתחרר ביום זה (שוריין)' : 'משתחרר היום'
     };
   }
 
   // 3. Booked / Reserved (שוריין אך טרם נקלט בצ'ק אין) -> סגול בולט ומודגש
-  const isBooked = stayStatus === 'booked' || (!stayStatus && startDate && startDate > targetDate);
+  const isBooked = stayStatus === 'booked' || (stayStatus as any) === 'confirmed' || (!stayStatus && startDate && startDate > targetDate);
   if (isBooked) {
     return {
       isEnded: false,

@@ -1,5 +1,5 @@
 import { supabase } from '../utils/supabase';
-import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus, DigitalVoucher, VoucherStatus, DaycarePass, PassUsageEntry } from '../types';
+import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, IntakeRequestStatus, DigitalVoucher, VoucherStatus, DaycarePass, PassUsageEntry, StayStatus } from '../types';
 import { initialBookings, defaultSettings } from '../data/initialData';
 import { extractCustomers } from '../utils/storage';
 import { sanitizePhone, cleanPhoneNumber } from '../utils/whatsappUtils';
@@ -317,7 +317,7 @@ export const subscribeToBookings = (
             refundNotes: row.refund_notes || rowData.refundNotes || undefined,
             paymentStatus: row.payment_status || rowData.paymentStatus || 'unpaid',
             paymentMethod: row.payment_method || rowData.paymentMethod || 'bit',
-            stayStatus: row.stay_status || rowData.stayStatus || 'booked',
+            stayStatus: ((row.stay_status === 'confirmed' || rowData.stayStatus === 'confirmed') ? 'booked' : (row.stay_status || rowData.stayStatus || 'booked')) as StayStatus,
             notes: row.notes || rowData.notes || '',
             vaccinationValid: Boolean(row.vaccination_valid ?? rowData.vaccinationValid ?? true),
             createdAt: row.created_at || rowData.createdAt || new Date().toISOString(),

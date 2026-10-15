@@ -446,7 +446,7 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                       )}
 
                       {/* Quick Check-in Button for Booked Dogs */}
-                      {b.stayStatus === 'booked' && onToggleStayStatus && (
+                      {(b.stayStatus === 'booked' || (b.stayStatus as any) === 'confirmed') && onToggleStayStatus && (
                         <button
                           type="button"
                           onClick={(e) => {

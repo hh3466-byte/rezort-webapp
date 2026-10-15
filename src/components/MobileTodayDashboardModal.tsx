@@ -239,7 +239,7 @@ export const MobileTodayDashboardModal: React.FC<MobileTodayDashboardModalProps>
 
                       {/* Fast Action Buttons: Check-in, Phone Call & WhatsApp */}
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {booking.stayStatus === 'booked' && onToggleStayStatus && (
+                        {(booking.stayStatus === 'booked' || (booking.stayStatus as any) === 'confirmed') && onToggleStayStatus && (
                           <button
                             type="button"
                             onClick={(e) => {

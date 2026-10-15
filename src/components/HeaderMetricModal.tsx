@@ -2316,7 +2316,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                       )}
 
                       {/* Quick Check-in Button for Booked Dogs */}
-                      {b.stayStatus === 'booked' && onToggleStayStatus && (
+                      {(b.stayStatus === 'booked' || (b.stayStatus as any) === 'confirmed') && onToggleStayStatus && (
                         <button
                           type="button"
                           onClick={() => onToggleStayStatus(b.id, 'checked_in')}
