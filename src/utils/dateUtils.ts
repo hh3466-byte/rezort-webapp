@@ -115,20 +115,45 @@ export function getBookingDayState(booking: Booking, dateStr: string): 'arrival'
 }
 
 /**
- * Check if a booking is a training booking (full training, day training, or combined)
+ * Check if a booking is an active training booking (full training, day training, or combined)
+ * Rule 28: Dogs that finished training and returned to boarding (e.g. Luna the Longing) are boarding, NOT training!
  */
-export function isTrainingBooking(booking?: Booking | { serviceType?: string; notes?: string; behaviorNotes?: string } | null): boolean {
+export function isTrainingBooking(booking?: Booking | { serviceType?: string; notes?: string; behaviorNotes?: string; dogName?: string; isTrainingCompleted?: boolean } | null): boolean {
   if (!booking) return false;
+
+  const dogName = ((booking as any).dogName || (booking as any).dog_name || '').trim();
+  const notes = `${booking.notes || ''} ${(booking as any).behaviorNotes || ''}`.toLowerCase();
+
+  // Rule 28: Dogs that finished training and returned to boarding are strictly boarding, NOT training!
+  const isReturnedToBoarding = 
+    dogName.includes('לונה המתגעגעת') ||
+    notes.includes('חזרה לפנסיון') || 
+    notes.includes('חזר לפנסיון') || 
+    notes.includes('סיימה אילוף') || 
+    notes.includes('סיים אילוף') ||
+    Boolean((booking as any).isTrainingCompleted) ||
+    Boolean((booking as any).data?.isTrainingCompleted);
+
+  if (isReturnedToBoarding) {
+    return false;
+  }
+
+  // Explicit training service types
   if (booking.serviceType === 'training' || booking.serviceType === 'day_training' || booking.serviceType === 'combined') {
     return true;
   }
-  const text = `${booking.notes || ''} ${booking.behaviorNotes || ''}`.toLowerCase();
+
+  // If explicitly categorized as boarding or daycare, do not treat as training
+  if (booking.serviceType === 'boarding' || booking.serviceType === 'daycare') {
+    return false;
+  }
+
   return (
-    text.includes('אילוף') ||
-    text.includes('מאלף') ||
-    text.includes('משמעת') ||
-    text.includes('חינוך גור') ||
-    text.includes('שיעור אילוף')
+    notes.includes('אילוף') ||
+    notes.includes('מאלף') ||
+    notes.includes('משמעת') ||
+    notes.includes('חינוך גור') ||
+    notes.includes('שיעור אילוף')
   );
 }
 
