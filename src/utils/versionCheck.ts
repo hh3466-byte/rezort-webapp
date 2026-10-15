@@ -52,10 +52,9 @@ export async function checkForNewVersion(): Promise<boolean> {
     const data = await res.json();
     const serverBuildTime = Number(data.buildTime) || 0;
 
-    const savedBuildTime = Number(localStorage.getItem(LOCAL_VERSION_KEY)) || CURRENT_BUILD_TIME;
-
-    if (serverBuildTime > 0 && serverBuildTime > savedBuildTime) {
-      console.log(`[VersionCheck] New version detected on server (${serverBuildTime} > ${savedBuildTime}). Refreshing app...`);
+    // If server has a different build time than what is currently running in RAM, reload!
+    if (serverBuildTime > 0 && CURRENT_BUILD_TIME > 0 && serverBuildTime !== CURRENT_BUILD_TIME) {
+      console.log(`[VersionCheck] New version detected on server (${serverBuildTime} !== ${CURRENT_BUILD_TIME}). Refreshing app...`);
       localStorage.setItem(LOCAL_VERSION_KEY, String(serverBuildTime));
       await purgeStaleCaches();
       window.location.reload();
@@ -80,6 +79,11 @@ export function initAppFreshnessWatcher(onDataRefresh?: () => void): () => void 
   // 1. Initial cleanup of stale service workers
   purgeStaleCaches();
 
+  // Check immediately on startup
+  setTimeout(() => {
+    checkForNewVersion();
+  }, 1000);
+
   // 2. Handler when user returns to app (focus, visibility change, unlock mobile screen, pageshow)
   const handleAppAwake = async () => {
     // Check if new version was deployed
@@ -101,12 +105,12 @@ export function initAppFreshnessWatcher(onDataRefresh?: () => void): () => void 
   };
   document.addEventListener('visibilitychange', handleVisibilityChange);
 
-  // 3. Periodic check every 5 minutes (only when tab is visible)
+  // 3. Periodic check every 20 seconds (when tab is visible)
   const interval = setInterval(() => {
     if (document.visibilityState === 'visible') {
       handleAppAwake();
     }
-  }, 300000);
+  }, 20000);
 
   return () => {
     window.removeEventListener('focus', handleAppAwake);
