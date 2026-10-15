@@ -110,7 +110,7 @@ export default async function handler(req, res) {
 
     // Reconcile unlinked or pending Grow payments
     for (const payment of (recentGrowPayments || [])) {
-      if (payment.status === 'dismissed' || payment.status === 'refunded') continue;
+      if (payment.status === 'dismissed' || payment.status === 'refunded' || payment.status === 'duplicate' || payment.status === 'sandbox_test' || payment.status === 'cancelled') continue;
 
       const pPhone = cleanPhoneNumber(payment.customer_phone);
       const pName = (payment.customer_name || '').trim().toLowerCase();

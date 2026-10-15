@@ -590,7 +590,6 @@ export function run1830SanityAudit(
     const price = Number(b.totalPrice) || 0;
     const notes = (b.notes || '') + ((b as any).data?.notes || '');
     const isFullyPaidAndClosed = b.paymentStatus === 'fully_paid' && deposit >= price && deposit > 0;
-    const isVerifiedInNotes = notes.includes('שולם במלואו') || notes.includes('אסמכתא');
 
     const { totalGrowPaid } = matchGrowPaymentsForBooking(b, VERIFIED_GROW_LEDGER, growPayments);
 
@@ -603,13 +602,23 @@ export function run1830SanityAudit(
       pmStr === 'credit' ||
       (notes && (notes.includes('Grow') || notes.includes('Bit') || notes.includes('אסמכתא')));
 
-    // If booking claims a Grow payment that is higher than actual cleared Grow transactions
-    if (!isFullyPaidAndClosed && !isVerifiedInNotes && isGrowPaymentMethod && totalGrowPaid > 0 && deposit > totalGrowPaid + 10) {
-      redLights.paymentDiscrepancies.push(`🚨 פער סליקת Grow: *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | נרשם ביומן ששולם ₪${deposit.toLocaleString()}, אך ב-Grow נסלקו בפועל ₪${totalGrowPaid.toLocaleString()} בלבד! (חסרים ₪${(deposit - totalGrowPaid).toLocaleString()})`);
-    } else if (totalGrowPaid > 0 && deposit === 0 && !b.isFreeStay) {
-      redLights.paymentDiscrepancies.push(`💡 תשלום Grow שלא הוזן ליומן: *${b.dogName}* (${b.ownerName}) | נקלטו ב-Grow ₪${totalGrowPaid.toLocaleString()} אך ביומן רשום ₪0 מקדמה.`);
-    } else if (!isFullyPaidAndClosed && !isVerifiedInNotes && totalGrowPaid > 0 && totalGrowPaid !== deposit && Math.abs(totalGrowPaid - deposit) > 10 && !isGrowPaymentMethod) {
-      redLights.paymentDiscrepancies.push(`💳 *${b.dogName}* (${b.ownerName}): נקלטו ב-Grow ₪${totalGrowPaid.toLocaleString()} אך ביומן רשום ₪${deposit.toLocaleString()}`);
+    // A. Deposit exceeds total price
+    if (price > 0 && deposit > price + 1 && !b.isFreeStay) {
+      redLights.paymentDiscrepancies.push(`🚨 חריגת סכום: *${b.dogName}* (${b.ownerName}) | מקדמה (₪${deposit.toLocaleString()}) גבוהה מהמחיר הכולל של השהייה (₪${price.toLocaleString()})!`);
+    }
+
+    // B. Marked as fully_paid but deposit < price (and not free stay)
+    if (b.paymentStatus === 'fully_paid' && deposit < price - 1 && !b.isFreeStay && price > 0) {
+      redLights.paymentDiscrepancies.push(`⚠️ סתירה בסטטוס תשלום: *${b.dogName}* (${b.ownerName}) | מסומן כ-שולם במלואו, אך נרשם ששולמו ₪${deposit.toLocaleString()} מתוך ₪${price.toLocaleString()}!`);
+    }
+
+    // C. Grow / Bit payment discrepancy
+    if (isGrowPaymentMethod && !b.isFreeStay) {
+      if (totalGrowPaid > 0 && deposit > totalGrowPaid + 10) {
+        redLights.paymentDiscrepancies.push(`🚨 פער סליקת Grow: *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | נרשם ביומן ששולם ₪${deposit.toLocaleString()}, אך ב-Grow נסלקו בפועל ₪${totalGrowPaid.toLocaleString()} בלבד! (חסרים ₪${(deposit - totalGrowPaid).toLocaleString()})`);
+      } else if (totalGrowPaid > 0 && deposit === 0) {
+        redLights.paymentDiscrepancies.push(`💡 תשלום Grow שלא הוזן ליומן: *${b.dogName}* (${b.ownerName}) | נקלטו ב-Grow ₪${totalGrowPaid.toLocaleString()} אך ביומן רשום ₪0 מקדמה.`);
+      }
     }
   });
 
