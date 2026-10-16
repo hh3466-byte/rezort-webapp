@@ -197,10 +197,10 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
   const nowMs = Date.now();
   const past24HoursMs = nowMs - 24 * 60 * 60 * 1000;
 
-  const greenId = settings.greenApiIdInstance;
-  const greenToken = settings.greenApiToken;
+  const greenId = settings.greenApiIdInstance || settings.data?.greenApiIdInstance || settings.green_api_id || process.env.VITE_GREEN_API_ID || '710722735421';
+  const greenToken = settings.greenApiToken || settings.data?.greenApiToken || settings.green_api_token || process.env.VITE_GREEN_API_TOKEN;
   const isGreenApiHealthy = Boolean(greenId && greenToken);
-  const effectiveGrowLink = settings.growPaymentLink || settings.payboxPaymentLink;
+  const effectiveGrowLink = settings.growPaymentLink || settings.data?.growPaymentLink || settings.paybox_link || settings.payboxPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
   const isGrowLinkHealthy = Boolean(effectiveGrowLink && effectiveGrowLink.includes('http'));
 
   const activeBookings = (bookings || []).filter(b => {
@@ -246,14 +246,13 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
       hasIssue = true;
     }
 
-    const status = b.stay_status || b.stayStatus;
-    if (price > 0 && deposit === 0 && !isFree && end >= todayStr && status !== 'checked_out') {
-      redLights.zeroDepositHolding.push(`🔴 *${dog}* (${owner} - ${phone}) | ${formatDateIL(start)} עד ${formatDateIL(end)} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`);
+    if (end < start) {
+      redLights.dateIssues.push(`🐶 ${dog} (${owner}): תאריך יציאה (${formatDateIL(end)}) קודם לכניסה (${formatDateIL(start)})`);
       hasIssue = true;
     }
 
-    if (end < start) {
-      redLights.dateIssues.push(`🐶 ${dog} (${owner}): תאריך יציאה (${formatDateIL(end)}) קודם לכניסה (${formatDateIL(start)})`);
+    const status = b.stay_status || b.stayStatus;
+    if (price > 0 && deposit === 0 && !isFree && end >= todayStr && status !== 'checked_out') {
       hasIssue = true;
     }
 

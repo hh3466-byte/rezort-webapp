@@ -143,7 +143,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
       owner.includes('מנדל') || owner.includes('ישראל') ||
       owner.includes('מיכאל') || owner.includes('בן הר') ||
       owner.includes('ישי אמון') || owner.includes('אמון') ||
-      owner.includes('דלויה') || owner.includes('פורן') ||
+      owner.includes('דלויה') ||
       owner.includes('ביקאיה') || owner.includes('ירוס');
 
     return isLedger || isGrowMethod || hasGrowKeyword || isKnownGrowCustomer;

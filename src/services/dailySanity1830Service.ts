@@ -328,15 +328,22 @@ export function run1830SanityAudit(
   });
 
   // ==========================================
-  // DEEP CHECK 8: Urgent 48h ₪0 Deposit Bookings
+  // DEEP CHECK 8: ₪0 Deposit on ALL Future Bookings (Urgent 48h & Future Holding)
   // ==========================================
-  activeBookings.filter(b => b.startDate >= todayStr && b.startDate <= in2DaysStr && b.stayStatus !== 'checked_out' && (b as any).stay_status !== 'checked_out').forEach(b => {
+  activeBookings.filter(b => b.startDate >= todayStr && b.stayStatus !== 'checked_out' && (b as any).stay_status !== 'checked_out').forEach(b => {
     const price = Number(b.totalPrice) || 0;
     const deposit = Number(b.depositAmount) || 0;
+    const notes = b.notes || '';
+    const isPairZeroCharge = b.isFreeStay && (notes.includes('זוג') || notes.includes('שולם דרך') || notes.includes('כלב נוסף') || notes.includes('כלב שני'));
+    const isFree = b.isFreeStay || isPairZeroCharge;
     const growRecon = matchGrowPaymentsForBooking(b, VERIFIED_GROW_LEDGER, growPayments);
     const effectiveDeposit = Math.max(deposit, growRecon.totalGrowPaid);
-    if (price > 0 && effectiveDeposit === 0 && !b.isFreeStay) {
-      redLights.urgentZeroDeposit.push(`🚨 כניסה דחופה ב-48 שעות הקרובות ללא מקדמה (₪0): *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | כניסה: ${formatDateIL(b.startDate)} | חוב: ₪${price.toLocaleString()}`);
+    if (price > 0 && effectiveDeposit === 0 && !isFree) {
+      if (b.startDate <= in2DaysStr) {
+        redLights.urgentZeroDeposit.push(`🚨 כניסה דחופה ב-48 שעות הקרובות ללא מקדמה (₪0): *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | כניסה: ${formatDateIL(b.startDate)} | חוב: ₪${price.toLocaleString()}`);
+      } else {
+        redLights.zeroDepositHolding.push(`🔴 *${b.dogName}* (${b.ownerName} - 📞 ${b.ownerPhone}) | ${formatDateIL(b.startDate)} עד ${formatDateIL(b.endDate)} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`);
+      }
     }
   });
 

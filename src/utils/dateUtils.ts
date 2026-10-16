@@ -840,7 +840,7 @@ export function getMonthlyRevenueBreakdown(
       ownerName.includes('מנדל') || ownerName.includes('ישראל') ||
       ownerName.includes('מיכאל') || ownerName.includes('בן הר') ||
       ownerName.includes('ישי אמון') || ownerName.includes('אמון') ||
-      ownerName.includes('דלויה') || ownerName.includes('פורן');
+      ownerName.includes('דלויה');
 
     if (matchedGrow || matchedIncomingGrow || isGrowMethod || hasGrowKeyword || isKnownGrowCustomer) {
       return;
@@ -1038,7 +1038,7 @@ export function isBookingDigitallyPaidInFull(b: Booking, incomingGrow?: any[]): 
     ownerName.includes('מנדל') || ownerName.includes('ישראל') ||
     ownerName.includes('מיכאל') || ownerName.includes('בן הר') ||
     ownerName.includes('ישי אמון') || ownerName.includes('אמון') ||
-    ownerName.includes('דלויה') || ownerName.includes('פורן');
+    ownerName.includes('דלויה');
 
   const matchedGrowLedger = VERIFIED_GROW_LEDGER.some(t => {
     const tRef = t.ref.toLowerCase();
