@@ -85,9 +85,9 @@ import { WhatsAppLeadsView } from './components/WhatsAppLeadsView';
 import { MobileTodayDashboardModal } from './components/MobileTodayDashboardModal';
 import { KennelFeedingBoard } from './components/KennelFeedingBoard';
 import { playNotificationChime, testSystemNotification } from './utils/soundUtils';
-import { initDailyDogAutoSender, runAutoDailyDogUpdates } from './services/dailyDogAutoSender';
-import { initTomorrowOverviewScheduler, init1830SanityScheduler, sendTomorrowOverviewToShmulik } from './services/morningReportService';
-import { initAutoReviewScheduler, runAutoReviewAndVoucherSender } from './services/reviewService';
+import { runAutoDailyDogUpdates } from './services/dailyDogAutoSender';
+import { sendTomorrowOverviewToShmulik } from './services/morningReportService';
+import { runAutoReviewAndVoucherSender } from './services/reviewService';
 import { send1830SanityReportToShmulik } from './services/dailySanity1830Service';
 import { initFeedingReminderScheduler } from './services/feedingReminderService';
 import { fetchNewCrmChatsCount } from './services/whatsappCrmService';
@@ -460,48 +460,12 @@ export default function App() {
   // ההודעות משוגרות אוטומטית בענן 40 דקות בדיוק לאחר צאת השבת/החג!
 
 
-  // 20:00 Daily Dog Evening Updates Auto-Sender Background Runner (Fail-safe auto dispatch)
-  useEffect(() => {
-    const cleanup = initDailyDogAutoSender(
-      () => bookingsRef.current,
-      () => settingsRef.current,
-      () => intakeRequestsRef.current,
-      showToast
-    );
-    return cleanup;
-  }, []);
-
-  // 19:00 Daily Tomorrow Overview Auto-Sender to Shmulik (Arrivals, Departures, Debts, Capacity, Notes)
-  useEffect(() => {
-    const cleanup = initTomorrowOverviewScheduler(
-      () => bookingsRef.current,
-      () => settingsRef.current,
-      () => intakeRequestsRef.current,
-      showToast
-    );
-    return cleanup;
-  }, []);
-
-  // 18:30 Daily Sanity Audit Auto-Sender to Shmulik (Green Events, Red Lights, Integrations & 24h Checks)
-  useEffect(() => {
-    const cleanup = init1830SanityScheduler(
-      () => bookingsRef.current,
-      () => settingsRef.current,
-      () => intakeRequestsRef.current,
-      showToast
-    );
-    return cleanup;
-  }, []);
-
-  // Automatic Day-After-Departure VIP Voucher & Review Request Scheduler (Sent at 19:00 after departure)
-  useEffect(() => {
-    const cleanup = initAutoReviewScheduler(
-      () => bookingsRef.current,
-      () => settingsRef.current,
-      showToast
-    );
-    return cleanup;
-  }, []);
+  // הערה ארכיטקטונית קריטית:
+  // כל מנגנוני התזמון האוטומטיים (18:30 סניטי, 19:00 דוח ערב, 20:00 עדכוני כלבים, דוח שיווק שבועי)
+  // פועלים אך ורק בצד שרת בענן (Vercel Serverless Crons).
+  // הורדו לחלוטין ריצות רקע בדפדפן הלקוח (useEffect/setInterval) כדי למנוע כפילויות,
+  // קריאת נתונים ישנים מהזיכרון של כרטיסיות פתוחות, והתראות שווא!
+  // כפתורי שיגור ידניים בממשק ממשיכים לפעול כרגיל לפי דרישת המשתמש.
 
   // Periodic check for new CRM chats & unread inquiries for the top button badge (Throttled & isolated)
   useEffect(() => {

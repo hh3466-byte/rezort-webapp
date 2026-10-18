@@ -29,7 +29,8 @@ import {
   Trash2,
   Lock,
   Sun,
-  Moon
+  Moon,
+  Pencil
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -138,6 +139,16 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isGeneratingGrowLink, setIsGeneratingGrowLink] = useState(false);
+
+  // Editing / Calibrating an existing pass
+  const [editingPass, setEditingPass] = useState<DaycarePass | null>(null);
+  const [editTotalDays, setEditTotalDays] = useState<number>(10);
+  const [editUsedDays, setEditUsedDays] = useState<number>(0);
+  const [editPricePaid, setEditPricePaid] = useState<number>(750);
+  const [editPaymentStatus, setEditPaymentStatus] = useState<PaymentStatus>('fully_paid');
+  const [editNotes, setEditNotes] = useState<string>('');
+  const [editValidUntil, setEditValidUntil] = useState<string>('');
+  const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
 
   // Form State for creating a new pass
   const [customerSearchQuery, setCustomerSearchQuery] = useState<string>('');
@@ -796,6 +807,45 @@ ${paymentLine}
       alert(`שגיאה בשמירת שריון יום: ${err?.message || 'נסה שוב'}`);
     } finally {
       setIsBookingSubmitting(false);
+    }
+  };
+
+  const handleOpenEditPass = (pass: DaycarePass) => {
+    setEditingPass(pass);
+    setEditTotalDays(pass.totalDays);
+    setEditUsedDays(pass.usedDays);
+    setEditPricePaid(pass.pricePaid || 0);
+    setEditPaymentStatus(pass.paymentStatus);
+    setEditNotes(pass.notes || '');
+    setEditValidUntil(pass.validUntil ? pass.validUntil.slice(0, 10) : '');
+  };
+
+  const handleSaveEditedPass = async () => {
+    if (!editingPass) return;
+    setIsSavingEdit(true);
+    try {
+      const remaining = Math.max(0, Number(editTotalDays) - Number(editUsedDays));
+      const isCompleted = remaining === 0;
+      const updatedPass: DaycarePass = {
+        ...editingPass,
+        totalDays: Number(editTotalDays) || 1,
+        usedDays: Number(editUsedDays) || 0,
+        pricePaid: Number(editPricePaid) || 0,
+        paymentStatus: editPaymentStatus,
+        notes: editNotes,
+        status: isCompleted ? 'completed' : (editingPass.status === 'completed' ? 'active' : editingPass.status),
+        validUntil: editValidUntil || editingPass.validUntil,
+        updatedAt: new Date().toISOString()
+      };
+      await saveDaycarePassToDb(updatedPass);
+      const fresh = await loadStoredDaycarePasses();
+      setPassesList(fresh);
+      setEditingPass(null);
+      alert(`כרטיסייה ${updatedPass.passCode} עודכנה וכויְילה בהצלחה! נותרו: ${remaining} מתוך ${updatedPass.totalDays} ימים.`);
+    } catch (e: any) {
+      alert(`שגיאה בשמירת השינויים בכרטיסייה: ${e?.message || e}`);
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -1731,6 +1781,17 @@ ${paymentLine}
                             <span>{pass.paymentStatus === 'fully_paid' ? 'שולמה כרטיסייה ✓' : 'שולמה כרטיסייה 💳'}</span>
                           </button>
 
+                          {/* Button 4: ערוך כרטיסייה / כיול ימים */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditPass(pass)}
+                            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+                            title="ערוך פרטי כרטיסייה וכייל ימים שנוצלו"
+                          >
+                            <Pencil className="w-3.5 h-3.5 text-slate-600" />
+                            <span>ערוך כרטיסייה ✏️</span>
+                          </button>
+
                           {/* Copy link button */}
                           <button
                             type="button"
@@ -1903,6 +1964,146 @@ ${paymentLine}
             </div>
           );
         })()}
+
+        {/* Modal 3: עריכה וכיול כרטיסייה / בנק ימים */}
+        {editingPass && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-lg w-full p-6 text-slate-900 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-xl">
+                    ✏️
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">
+                      כיול ועריכת כרטיסייה #{editingPass.passCode}
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      {editingPass.dogName} ({editingPass.ownerName} - {editingPass.ownerPhone})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingPass(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Days Calibration Inputs */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">סה"כ ימים/יממות בכרטיסייה</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={editTotalDays}
+                    onChange={(e) => setEditTotalDays(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">ימים שנוצלו בפועל</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={editTotalDays}
+                    value={editUsedDays}
+                    onChange={(e) => setEditUsedDays(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Live Remaining Days Preview Banner */}
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-900">יתרה עדכנית למימוש:</span>
+                <span className="text-sm font-black text-emerald-800 bg-white px-3 py-1 rounded-lg border border-emerald-300 shadow-xs">
+                  🎟️ {Math.max(0, editTotalDays - editUsedDays)} מתוך {editTotalDays} ימים נותרו
+                </span>
+              </div>
+
+              {/* Financial and Expiry Inputs */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">מחיר ששולם (₪)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editPricePaid}
+                    onChange={(e) => setEditPricePaid(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700">סטטוס תשלום</label>
+                  <select
+                    value={editPaymentStatus}
+                    onChange={(e) => setEditPaymentStatus(e.target.value as PaymentStatus)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="fully_paid">שולם במלואו ✓</option>
+                    <option value="unpaid">טרם שולם (חוב) ⚠️</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">תאריך תוקף</label>
+                <input
+                  type="date"
+                  value={editValidUntil}
+                  onChange={(e) => setEditValidUntil(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">הערות / פירוט סופי שבוע ומימושים</label>
+                <textarea
+                  rows={2}
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="פירוט תאריכי מימוש, הערות מיוחדות או אסמכתאות..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={isSavingEdit}
+                  onClick={handleSaveEditedPass}
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingEdit ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>שומר שינויים...</span>
+                    </>
+                  ) : (
+                    <span>שמור שינויים וכייל כרטיסייה ✅</span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEditingPass(null)}
+                  className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl cursor-pointer"
+                >
+                  ביטול
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
