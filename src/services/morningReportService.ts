@@ -352,10 +352,18 @@ export function formatTomorrowOverviewReport(
 
   // 5. Zero Deposit bookings holding spots
   const zeroDepositUpcoming = activeBookings.filter(b => {
-    const price = Number(b.totalPrice) || 0;
-    const deposit = Number(b.depositAmount) || 0;
-    const isFree = b.isFreeStay;
-    return price > 0 && deposit === 0 && !isFree && b.endDate >= todayStr && b.stayStatus !== 'checked_out';
+    const price = Number(b.totalPrice || (b as any).total_price) || 0;
+    const deposit = Number(b.depositAmount || (b as any).deposit_amount) || 0;
+    const isFree = b.isFreeStay || (b as any).is_free_stay;
+    const payStatus = b.paymentStatus || (b as any).payment_status;
+    const bNotes = (b.notes || '') + ((b as any).data?.notes || '');
+    const hasGrowPayment = (growPayments || []).some(gp => {
+      const gpPhone = cleanPhoneNumber(gp.customer_phone || gp.customerPhone || '');
+      const bPhone = cleanPhoneNumber(b.ownerPhone || (b as any).owner_phone || '');
+      return gpPhone && bPhone && gpPhone === bPhone && Number(gp.amount) > 0;
+    });
+    const isPaid = deposit > 0 || payStatus === 'deposit_paid' || payStatus === 'fully_paid' || hasGrowPayment || bNotes.includes('שולמה מקדמה') || bNotes.includes('מקדמה ₪360 ב-Bit');
+    return price > 0 && !isPaid && !isFree && b.endDate >= todayStr && b.stayStatus !== 'checked_out';
   });
   if (zeroDepositUpcoming.length > 0) {
     const list = zeroDepositUpcoming.map((b, idx) => {

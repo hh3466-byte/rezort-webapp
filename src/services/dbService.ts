@@ -33,6 +33,13 @@ export const getDeletedBookingIds = (): Set<string> => {
   return new Set();
 };
 
+const sanitizePaymentLink = (link?: string): string => {
+  if (!link || typeof link !== 'string' || link.includes('paybox.me') || !link.includes('grow.link')) {
+    return defaultSettings.growPaymentLink;
+  }
+  return link.trim();
+};
+
 export const markBookingAsDeleted = (id: string) => {
   if (id.startsWith('b-grow-') || id.startsWith('b-aug-') || id.startsWith('b-tx-') || id.startsWith('b-pay-') || id === 'b-173783725') {
     // Never mark real payment ledger transactions as deleted!
@@ -482,14 +489,14 @@ export const subscribeToSettings = (
           defaultDailyRateCombined: 0,
           defaultDailyRateDaycare: Number(data.default_daily_rate_daycare ?? extraData.defaultDailyRateDaycare) || defaultSettings.defaultDailyRateDaycare,
           bitNumber: sanitizePhone(data.bit_number || extraData.bitNumber),
-          payboxLink: data.paybox_link || extraData.payboxLink || defaultSettings.payboxLink,
-          growPaymentLink: extraData.growPaymentLink || data.paybox_link || extraData.payboxLink || defaultSettings.growPaymentLink,
+          payboxLink: sanitizePaymentLink(extraData.growPaymentLink || data.paybox_link || extraData.payboxLink),
+          growPaymentLink: sanitizePaymentLink(extraData.growPaymentLink || data.paybox_link || extraData.payboxLink),
           bankDetails: (data.bank_details?.includes('123456') || extraData.bankDetails?.includes('123456')) ? '' : (data.bank_details || extraData.bankDetails || ''),
           autoCheckVaccination: data.auto_check_vaccination ?? extraData.autoCheckVaccination ?? defaultSettings.autoCheckVaccination,
           callmebotApiKey: extraData.callmebotApiKey || '',
           greenApiIdInstance: extraData.greenApiIdInstance || '',
           greenApiToken: extraData.greenApiToken || '',
-          payboxPaymentLink: extraData.payboxPaymentLink || '',
+          payboxPaymentLink: sanitizePaymentLink(extraData.payboxPaymentLink || extraData.growPaymentLink || data.paybox_link),
           whatsappBookingConfirmationTemplate: extraData.whatsappBookingConfirmationTemplate || defaultSettings.whatsappBookingConfirmationTemplate,
           whatsappPaymentReminderTemplate: extraData.whatsappPaymentReminderTemplate || defaultSettings.whatsappPaymentReminderTemplate,
         };
@@ -1491,17 +1498,17 @@ export const loadStoredDaycarePasses = (): DaycarePass[] => {
   }
 };
 
-export const findDaycarePassByCode = (code: string): DaycarePass | null => {
+export const findDaycarePassByCode = (code: string, fallbackList?: DaycarePass[]): DaycarePass | null => {
   const clean = (code || '').trim().toUpperCase();
   if (!clean) return null;
-  const list = loadStoredDaycarePasses();
+  const list = (fallbackList && fallbackList.length > 0) ? fallbackList : loadStoredDaycarePasses();
   return list.find(p => p.passCode.trim().toUpperCase() === clean || p.id === clean) || null;
 };
 
-export const findActiveDaycarePassByPhone = (phone: string): DaycarePass | null => {
+export const findActiveDaycarePassByPhone = (phone: string, fallbackList?: DaycarePass[]): DaycarePass | null => {
   const cleanDigits = (phone || '').replace(/\D/g, '').slice(-9);
   if (!cleanDigits || cleanDigits.length < 7) return null;
-  const list = loadStoredDaycarePasses();
+  const list = (fallbackList && fallbackList.length > 0) ? fallbackList : loadStoredDaycarePasses();
   const today = new Date().toISOString().split('T')[0];
 
   return list.find(p => {
@@ -1512,6 +1519,45 @@ export const findActiveDaycarePassByPhone = (phone: string): DaycarePass | null 
     const isActive = p.status === 'active';
     return matchesPhone && isActive && isNotExpired && hasRemaining;
   }) || null;
+};
+
+export const findActiveDaycarePassByPhoneAsync = async (phone: string): Promise<DaycarePass | null> => {
+  const syncMatch = findActiveDaycarePassByPhone(phone);
+  if (syncMatch) return syncMatch;
+
+  const cleanDigits = (phone || '').replace(/\D/g, '').slice(-9);
+  if (!cleanDigits || cleanDigits.length < 7) return null;
+  const today = new Date().toISOString().split('T')[0];
+
+  try {
+    const { data: sRow } = await supabase
+      .from(SETTINGS_TABLE)
+      .select('data')
+      .eq('id', SETTINGS_DOC_ID)
+      .single();
+
+    const passes: DaycarePass[] = sRow?.data?.daycare_passes || [];
+    if (Array.isArray(passes) && passes.length > 0) {
+      // Cache to local storage
+      try {
+        localStorage.setItem(LOCAL_DAYCARE_PASSES_KEY, JSON.stringify(passes));
+      } catch {}
+
+      const found = passes.find(p => {
+        const pDigits = (p.ownerPhone || '').replace(/\D/g, '').slice(-9);
+        const matchesPhone = pDigits && (pDigits === cleanDigits || pDigits.endsWith(cleanDigits) || cleanDigits.endsWith(pDigits));
+        const isNotExpired = !p.validUntil || p.validUntil >= today;
+        const hasRemaining = p.usedDays < p.totalDays;
+        const isActive = p.status === 'active';
+        return matchesPhone && isActive && isNotExpired && hasRemaining;
+      });
+      if (found) return found;
+    }
+  } catch (err) {
+    console.warn('findActiveDaycarePassByPhoneAsync error:', err);
+  }
+
+  return null;
 };
 
 export const saveDaycarePassToDb = async (pass: DaycarePass): Promise<void> => {

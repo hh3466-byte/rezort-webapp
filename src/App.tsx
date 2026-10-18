@@ -22,6 +22,7 @@ import {
   clearAllBookingsFromDb,
   updateVoucherStatusInDb,
   findDaycarePassByCode,
+  findActiveDaycarePassByPhone,
   deductDayFromPassInDb,
   saveDaycarePassToDb,
   autoArchiveOldCheckedOutBookings,
@@ -2868,8 +2869,9 @@ export default function App() {
             const passMatch = (req.notes || '').match(/כרטיסיי?ה.*?:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i) ||
                               (req.notes || '').match(/קוד כרטיסייה:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i) ||
                               (req.notes || '').match(/בנק.*?:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i);
-            const daycarePassCode = passMatch ? passMatch[1].trim() : undefined;
-            const matchedPass = daycarePassCode ? findDaycarePassByCode(daycarePassCode) : undefined;
+            const daycarePassCode = passMatch ? passMatch[1].trim() : (req.daycarePassCode || undefined);
+            const matchedPass = (daycarePassCode ? findDaycarePassByCode(daycarePassCode, settings?.daycare_passes) : null) ||
+                                (req.ownerPhone ? findActiveDaycarePassByPhone(req.ownerPhone, settings?.daycare_passes) : null);
             const isDaycarePassBooking = Boolean(daycarePassCode || matchedPass);
 
             const isFree = req.isFreeStay || isDaycarePassBooking ||

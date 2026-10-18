@@ -59,7 +59,7 @@ import {
   isIntakeRequestInTreatment 
 } from '../utils/intakeUtils';
 import { findCustomerPastDebt, PastStayDebtItem } from '../utils/pastDebtUtils';
-import { waivePastDebtForBooking } from '../services/dbService';
+import { waivePastDebtForBooking, findActiveDaycarePassByPhone, findDaycarePassByCode } from '../services/dbService';
 
 interface IntakeRequestsModalProps {
   requests: IntakeRequest[];
@@ -1263,8 +1263,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       : 'border-slate-200 bg-white shadow-xs opacity-95'
                   }`}
                 >
-                  {/* Meta Lead / Raw Ad Lead High-Visibility Banner */}
-                  {(req.clientOrigin === 'meta_lead' || req.id.startsWith('lead_') || (req.notes || '').includes('ליד מקמפיין') || req.dogName.includes('ממתין לבירור')) && (
+                  {((req.clientOrigin as string) === 'meta_lead' || req.id.startsWith('lead_') || (req.notes || '').includes('ליד מקמפיין') || req.dogName.includes('ממתין לבירור')) && (
                     <div className="mb-3.5 bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white p-3 sm:p-3.5 rounded-2xl font-bold text-xs shadow-md border-2 border-blue-400 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                       <div className="flex items-center gap-2.5">
                         <span className="text-2xl shrink-0">📢</span>
@@ -1609,6 +1608,31 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* Active Prepaid Pass Banner (Rule 29: Customer holds active prepaid Daycare/Boarding pass) */}
+                  {(() => {
+                    const activePass = (req.daycarePassCode ? findDaycarePassByCode(req.daycarePassCode, settings?.daycare_passes) : null) || 
+                                       (req.ownerPhone ? findActiveDaycarePassByPhone(req.ownerPhone, settings?.daycare_passes) : null);
+                    if (!activePass) return null;
+                    const remaining = Math.max(0, activePass.totalDays - activePass.usedDays);
+                    const isBoarding = activePass.serviceType === 'boarding';
+                    return (
+                      <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-400 rounded-2xl p-3 sm:p-4 my-2 shadow-xs text-right animate-fadeIn" dir="rtl">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-1 border-b border-emerald-300">
+                          <div className="flex items-center gap-2 font-black text-emerald-950 text-xs sm:text-sm">
+                            <span className="text-lg">🎟️</span>
+                            <span><strong className="text-emerald-900 font-extrabold">{isBoarding ? 'בנק 21 יממות פנסיון VIP פעיל ומשולם' : 'כרטיסיית ימי כיף פעילה'}</strong> – קוד <span className="font-mono text-emerald-800 font-black">#{activePass.passCode}</span> ({activePass.usedDays} נוצלו · <strong className="text-emerald-700 font-black">{remaining} ימים נותרו לניצול</strong>)</span>
+                          </div>
+                          <span className="text-[11px] bg-emerald-200 text-emerald-950 font-black px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs">
+                            ✅ שולם מראש (יתרה: ₪0)
+                          </span>
+                        </div>
+                        <div className="text-xs text-emerald-800 pt-1.5 flex items-center justify-between flex-wrap gap-1">
+                          <span>כלב: <strong>{activePass.dogName}</strong> | תוקף עד: <strong>{activePass.validUntil || 'שנה'}</strong> | בלחיצה על "קלוט ליומן", הימים יקוזזו אוטומטית מהכרטיסייה ללא חיוב נוסף!</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Returning Customer Past Debt Banner (Rule 21: Displayed ONLY on new intake / returning inquiry for Shmulik's decision) */}
                   {(() => {

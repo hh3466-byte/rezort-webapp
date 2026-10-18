@@ -253,6 +253,7 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
     const s = b.start_date || b.startDate;
     const e = b.end_date || b.endDate;
     const k = b.kennel_number || b.kennelNumber || b.data?.kennelNumber || b.data?.kennel;
+    const isStayingOrIncoming = s <= tomorrowStr && e >= tomorrowStr && (b.stay_status || b.stayStatus) !== 'checked_out';
     return isStayingOrIncoming && !k;
   });
 
@@ -271,8 +272,11 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
     const price = Number(b.total_price || b.totalPrice) || 0;
     const deposit = Number(b.deposit_amount || b.depositAmount) || 0;
     const isFree = b.is_free_stay || b.isFreeStay;
+    const payStatus = b.payment_status || b.paymentStatus;
+    const bNotes = (b.notes || '') + (b.data?.notes || '');
+    const isPaid = deposit > 0 || payStatus === 'deposit_paid' || payStatus === 'fully_paid' || bNotes.includes('שולמה מקדמה') || bNotes.includes('מקדמה ₪360 ב-Bit');
     const end = b.end_date || b.endDate || '';
-    return price > 0 && deposit === 0 && !isFree && end >= todayStr;
+    return price > 0 && !isPaid && !isFree && end >= todayStr && (b.stay_status || b.stayStatus) !== 'checked_out';
   });
   if (zeroDepositUpcoming.length > 0) {
     const list = zeroDepositUpcoming.map((b, idx) => {

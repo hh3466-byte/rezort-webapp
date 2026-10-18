@@ -458,10 +458,10 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       }
     }
 
-    let finalRefundAmount = refundAmount;
-    let finalRefundDate = refundDate;
-    let finalRefundNotes = refundNotes;
-    let finalRefundReason: string | undefined = refundReason;
+    let finalRefundAmount: number | undefined = undefined;
+    let finalRefundDate: string | undefined = undefined;
+    let finalRefundNotes: string | undefined = undefined;
+    let finalRefundReason: string | undefined = undefined;
 
     if (stayStatus === 'cancelled') {
       if (refundWillExecute) {
@@ -478,6 +478,12 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
         finalRefundAmount = 0;
         finalRefundReason = undefined;
       }
+    } else if (initialData?.refundAmount && initialData.refundAmount > 0) {
+      // Preserve prior actual refund if it already existed
+      finalRefundAmount = initialData.refundAmount;
+      finalRefundDate = initialData.refundDate;
+      finalRefundNotes = initialData.refundNotes;
+      finalRefundReason = initialData.refundReason;
     }
 
     let formattedNotes = notes.trim();

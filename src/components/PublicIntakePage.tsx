@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { ResortSettings, ServiceType, IntakeRequest, IntakeMediaItem, AdditionalDogIntake, RESORT_BENEFIT_OPTIONS } from '../types';
 import { addDays, getTodayStr, calculateDaysCount, getDayNameHebrew, formatDateIL } from '../utils/dateUtils';
 import { cleanPhoneNumber, isValidIsraeliPhone, formatIsraeliPhoneDisplay } from '../utils/whatsappUtils';
-import { saveIntakeRequestToDb, findVoucherByCode, findDaycarePassByCode, findActiveDaycarePassByPhone, verifyCustomerByPhone, PhoneVerificationResult } from '../services/dbService';
+import { saveIntakeRequestToDb, findVoucherByCode, findDaycarePassByCode, findActiveDaycarePassByPhone, findActiveDaycarePassByPhoneAsync, verifyCustomerByPhone, PhoneVerificationResult } from '../services/dbService';
 import { sendResortEmailNotification, sendResortWhatsAppNotification, formatIntakeNotification, saveOrUpdateGreenApiContact } from '../services/notificationService';
 import { supabase } from '../utils/supabase';
 import { 
@@ -532,7 +532,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
         }
 
         // Auto-match active Daycare / Boarding VIP Pass by phone if client didn't supply a pass code
-        const passByPhone = findActiveDaycarePassByPhone(ownerPhone);
+        let passByPhone = findActiveDaycarePassByPhone(ownerPhone);
+        if (!passByPhone) {
+          passByPhone = await findActiveDaycarePassByPhoneAsync(ownerPhone);
+        }
         if (passByPhone && !daycarePassCode) {
           setDaycarePassCode(passByPhone.passCode);
           if (passByPhone.dogName && !dogName.trim()) setDogName(passByPhone.dogName);

@@ -201,7 +201,12 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
   const greenToken = settings.greenApiToken || settings.data?.greenApiToken || settings.green_api_token || process.env.VITE_GREEN_API_TOKEN;
   const isGreenApiHealthy = Boolean(greenId && greenToken);
   const effectiveGrowLink = settings.growPaymentLink || settings.data?.growPaymentLink || settings.paybox_link || settings.payboxPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
-  const isGrowLinkHealthy = Boolean(effectiveGrowLink && effectiveGrowLink.includes('http'));
+  const isGrowLinkHealthy = Boolean(
+    effectiveGrowLink && 
+    effectiveGrowLink.startsWith('https://pay.grow.link/') && 
+    !effectiveGrowLink.includes('paybox.me') &&
+    !effectiveGrowLink.includes('sandbox')
+  );
 
   const activeBookings = (bookings || []).filter(b => {
     const st = b.stay_status || b.stayStatus;
@@ -216,6 +221,15 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
 
   const greenEvents = [];
   const redLights = {
+    paymentLinkIssues: [],
+    unreconciledGrowPayments: [],
+    unadmittedGhostBookings: [],
+    overdueUnreleasedStays: [],
+    pendingCheckouts: [],
+    pendingCheckins: [],
+    expiredGhostBookings: [],
+    corruptedBookingState: [],
+    overcapacity: [],
     unansweredChats: [],
     unpaidLinks: [],
     unfilledIntakes: [],
@@ -227,6 +241,134 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     customerIssues: [],
     paymentDiscrepancies: []
   };
+
+  // Infrastructure & Payment link validation
+  if (!isGrowLinkHealthy) {
+    redLights.paymentLinkIssues.push(`🚨 קישור תשלום Grow אינו תקין: הקישור בהגדרות ("${effectiveGrowLink || 'חסר'}") אינו קישור רשמי תקין של Grow (חייב להתחיל ב-https://pay.grow.link/)!`);
+  }
+  const oldPaybox = settings.paybox_link || settings.payboxPaymentLink || settings.data?.paybox_link;
+  if (oldPaybox && String(oldPaybox).includes('paybox.me')) {
+    redLights.paymentLinkIssues.push(`🚨 שריד קישור Paybox לא פעיל: אותרה כתובת "${oldPaybox}" בהגדרות המערכת. יש לוודא שימוש בקישור Grow הרשמי בלבד.`);
+  }
+
+  // Unreconciled incoming Grow payments (past 7 days)
+  const past7DaysMs = nowMs - 7 * 24 * 60 * 60 * 1000;
+  const recentGrowPayments = (growPayments || []).filter(p => {
+    if (p.status === 'sandbox_test' || p.status === 'failed' || p.status === 'cancelled' || p.status === 'duplicate') return false;
+    const pTime = p.created_at || p.createdAt ? new Date(p.created_at || p.createdAt).getTime() : 0;
+    return pTime >= past7DaysMs;
+  });
+
+  for (const p of recentGrowPayments) {
+    const pRef = String(p.reference_id || p.referenceId || p.id || '');
+    const pPhone = cleanPhoneNumber(p.customer_phone || p.customerPhone || '');
+    const pAmount = Number(p.amount || 0);
+    const pName = p.customer_name || p.customerName || 'לקוח';
+    const pEmail = (p.customer_email || p.customerEmail || '').trim().toLowerCase();
+    const pDateStr = (p.created_at || p.createdAt || '').slice(0, 10);
+    const rawSnippet = String(p.raw_email_snippet || '');
+
+    // Skip payments belonging to "זכויות המורה" - they are tracked for overall bank payout, not dog stays!
+    if (pName.includes('זכויות המורה') || rawSnippet.includes('זכויות המורה')) {
+      continue;
+    }
+
+    const isMatched = activeBookings.some(b => {
+      const notes = (b.notes || '') + ((b.data && b.data.notes) || '');
+      if (pRef && notes.includes(pRef)) return true;
+      const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+      const bPayerPhone = cleanPhoneNumber(b.data?.payerPhone || b.payerPhone || '');
+      const bEmail = (b.owner_email || b.ownerEmail || b.data?.ownerEmail || '').trim().toLowerCase();
+
+      const phoneMatches = (pPhone && bPhone && pPhone === bPhone) || (pPhone && bPayerPhone && pPhone === bPayerPhone) || (pPhone && notes.includes(pPhone));
+      const emailMatches = pEmail && bEmail && pEmail === bEmail;
+
+      if (phoneMatches || emailMatches) {
+        const bDeposit = Number(b.deposit_amount || b.depositAmount || 0);
+        const bTotal = Number(b.total_price || b.totalPrice || 0);
+        if (bDeposit === pAmount || bTotal === pAmount) return true;
+        const s = b.start_date || b.startDate;
+        const e = b.end_date || b.endDate;
+        if (s <= pDateStr && e >= pDateStr) return true;
+      }
+      return false;
+    });
+
+    if (!isMatched && pAmount > 0) {
+      redLights.unreconciledGrowPayments.push(`💳 תשלום Grow שלא שויך: *${pName}* (📞 ${pPhone || 'ללא טלפון'}) | שילם ₪${pAmount.toLocaleString()} ב-${formatDateIL(pDateStr)} (אסמכתא: ${pRef}) | לא אותר שריון תואם ביומן!`);
+    }
+  }
+
+  // Corrupted booking state & fundamental data sanity audit on ALL active bookings
+  activeBookings.forEach(b => {
+    const st = b.stay_status || b.stayStatus;
+    const dog = (b.dog_name || b.dogName || '').trim();
+    const owner = (b.owner_name || b.ownerName || '').trim();
+    const phone = b.owner_phone || b.ownerPhone || '';
+    const start = b.start_date || b.startDate || '';
+    const end = b.end_date || b.endDate || '';
+    const price = Number(b.total_price || b.totalPrice || 0);
+    const deposit = Number(b.deposit_amount || b.depositAmount || 0);
+
+    if (st !== 'cancelled') {
+      const rNotes = b.refund_notes || b.refundNotes || (b.data && b.data.refundNotes) || '';
+      const rAmt = Number(b.refund_amount || b.refundAmount || (b.data && b.data.refundAmount) || 0);
+      const notes = b.notes || (b.data && b.data.notes) || '';
+      if (rNotes.includes('בוצע ביטול') || (rAmt > 0 && !notes.includes('החזר חלקי'))) {
+        redLights.corruptedBookingState.push(`⚠️ סתירת סטטוס ביטול בהזמנה פעילה: *${dog || 'ללא שם'}* (${owner || 'ללא בעלים'}) פעיל ביומן אך מכיל הערת החזר/ביטול ("${rNotes}")!`);
+      }
+    }
+
+    if (end && start && end < start) {
+      redLights.dateIssues.push(`🐶 *${dog || 'ללא שם'}* (${owner || 'ללא בעלים'}): תאריך יציאה (${formatDateIL(end)}) קודם לתאריך כניסה (${formatDateIL(start)})!`);
+    }
+
+    if (phone && !isValidIsraeliPhone(phone)) {
+      redLights.phoneIssues.push(`🐶 הזמנה ל-*${dog || 'ללא שם'}* (${owner || 'ללא בעלים'}): טלפון לא תקין "${phone}" (חובה מספר נייד ישראלי תקני)!`);
+    }
+
+    if (!dog || !owner) {
+      redLights.customerIssues.push(`⚠️ הזמנה חסרת פרטי זיהוי קריטיים: מזהה הזמנה ${b.id || 'ללא מזהה'} חסרה שם כלב או שם בעלים!`);
+    }
+
+    if (price < 0 || deposit < 0) {
+      redLights.paymentDiscrepancies.push(`🚨 סכום כספי שלילי: *${dog}* (${owner}) מוגדר עם סכום שלילי (סה״כ: ₪${price}, מקדמה: ₪${deposit})!`);
+    }
+  });
+
+  // Check pending checkins, checkouts, and ghost bookings
+  activeBookings.filter(b => (b.end_date || b.endDate) === todayStr && (b.stay_status || b.stayStatus) === 'checked_in').forEach(b => {
+    redLights.pendingCheckouts.push(`🚪 שחרור ממתין מהיום: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${b.owner_phone || b.ownerPhone}) | רשום לסיום שהות היום אך טרם סומן שחרור או הוארכה שהותו!`);
+  });
+
+  activeBookings.filter(b => (b.start_date || b.startDate) === todayStr && (b.stay_status || b.stayStatus) === 'booked').forEach(b => {
+    redLights.pendingCheckins.push(`📥 כניסה של היום שטרם סומנה: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${b.owner_phone || b.ownerPhone}) | רשום לכניסה היום אך טרם סומן שנכנס בפועל!`);
+  });
+
+  // Unadmitted No-Show Bookings (שריוני עבר שלא נקלטו / No-Show רפאים - תיקון מקרה ניצה)
+  activeBookings.filter(b => (b.start_date || b.startDate) < todayStr && (b.end_date || b.endDate) >= todayStr && (b.stay_status || b.stayStatus) === 'booked').forEach(b => {
+    redLights.unadmittedGhostBookings.push(`🚨 שריון עבר שלא נקלט (No-Show רפאים): *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${b.owner_phone || b.ownerPhone}) | תאריך הגעה ${formatDateIL(b.start_date || b.startDate)} עבר ומעולם לא סומנה קליטה (checked_in) ולא בוטל! נדרש לסמן קליטה בדיעבד או לבטל את השריון.`);
+  });
+
+  // Overdue Unreleased Stays (שהות עבר שטרם שוחררה / Check-out באיחור)
+  activeBookings.filter(b => (b.end_date || b.endDate) < todayStr && (b.stay_status || b.stayStatus) === 'checked_in').forEach(b => {
+    redLights.overdueUnreleasedStays.push(`🚪 שהות עבר שטרם שוחררה: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${b.owner_phone || b.ownerPhone}) | תאריך יציאה ${formatDateIL(b.end_date || b.endDate)} עבר אך הכלב עדיין מסומן כשוהה (checked_in)! נדרש לסמן שחרור (checked_out) או להאריך שהות.`);
+  });
+
+  // Expired Ghost Bookings
+  activeBookings.filter(b => {
+    const end = b.end_date || b.endDate;
+    const st = b.stay_status || b.stayStatus;
+    return end < todayStr && st === 'booked';
+  }).forEach(b => {
+    redLights.expiredGhostBookings.push(`👻 שריון עבר שלא נסגר ולא מומש: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName}) | תאריכים ${formatDateIL(b.start_date || b.startDate)}-${formatDateIL(b.end_date || b.endDate)} עברו, נדרש שחרור או ארכיון.`);
+  });
+
+  // Overcapacity Alert (Peak capacity 15 dogs - strictly checked_in dogs!)
+  const stayingToday = activeBookings.filter(b => (b.start_date || b.startDate) <= todayStr && (b.end_date || b.endDate) >= todayStr && (b.stay_status || b.stayStatus) === 'checked_in');
+  if (stayingToday.length >= 15) {
+    redLights.overcapacity.push(`⚠️ תפוסת שיא בריזורט: *${stayingToday.length} כלבים* שוהים כעת (תפוסה מלאה / קיבולת שיא: 15 כלבים)!`);
+  }
 
   // Reconcile recent bookings
   recentBookings.forEach(b => {
@@ -332,7 +474,15 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     if (lastMsg.type === 'outgoing' && (text.includes('grow.link') || text.includes('pay.grow'))) {
       const matching = activeBookings.find(b => cleanPhoneNumber(b.owner_phone || b.ownerPhone || '') === phone);
       const dep = matching ? Number(matching.deposit_amount || matching.depositAmount) || 0 : 0;
-      if (dep === 0) {
+      const payStatus = matching?.payment_status || matching?.paymentStatus || matching?.data?.paymentStatus;
+      const isFree = matching?.is_free_stay || matching?.isFreeStay || matching?.data?.isFreeStay;
+      const bNotes = (matching?.notes || '') + ((matching?.data && matching.data.notes) || '');
+      const hasGrowPayment = (payments || []).some(gp => {
+        const gpPhone = cleanPhoneNumber(gp.customer_phone || gp.customerPhone || '');
+        return gpPhone && phone && gpPhone === phone && Number(gp.amount) > 0;
+      });
+      const isPaid = dep > 0 || payStatus === 'deposit_paid' || payStatus === 'fully_paid' || hasGrowPayment || bNotes.includes('שולמה מקדמה') || bNotes.includes('מקדמה ₪360 ב-Bit');
+      if (!isFree && !isPaid) {
         redLights.unpaidLinks.push(`💳 *${name}* (📞 ${phone}): קישור תשלום Grow נשלח בוואטסאפ וטרם נקלטה מקדמה.`);
       }
     }
@@ -374,8 +524,15 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     const phone = b.owner_phone || b.ownerPhone || '';
     const start = b.start_date || b.startDate;
     const end = b.end_date || b.endDate;
+    const bNotes = (b.notes || '') + ((b.data && b.data.notes) || '');
+    const hasGrowPayment = (payments || []).some(gp => {
+      const gpPhone = cleanPhoneNumber(gp.customer_phone || gp.customerPhone || '');
+      const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+      return gpPhone && bPhone && gpPhone === bPhone && Number(gp.amount) > 0;
+    });
+    const isPaid = dep > 0 || payStatus === 'deposit_paid' || payStatus === 'fully_paid' || hasGrowPayment || bNotes.includes('שולמה מקדמה') || bNotes.includes('מקדמה ₪360 ב-Bit');
 
-    if (price > 0 && dep === 0 && !isFree && payStatus !== 'fully_paid') {
+    if (price > 0 && !isPaid && !isFree) {
       const line = `🔴 *${dog}* (${owner} - ${phone}) | ${formatDateIL(start)} עד ${formatDateIL(end)} | ₪0 מקדמה (חוב: ₪${price.toLocaleString()})`;
       if (!redLights.zeroDepositHolding.includes(line)) {
         redLights.zeroDepositHolding.push(line);
@@ -425,6 +582,15 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
 
   const totalGreen = greenEvents.length;
   const totalRed =
+    redLights.paymentLinkIssues.length +
+    redLights.unreconciledGrowPayments.length +
+    redLights.unadmittedGhostBookings.length +
+    redLights.overdueUnreleasedStays.length +
+    redLights.pendingCheckouts.length +
+    redLights.pendingCheckins.length +
+    redLights.expiredGhostBookings.length +
+    redLights.corruptedBookingState.length +
+    redLights.overcapacity.length +
     redLights.unansweredChats.length +
     redLights.unpaidLinks.length +
     redLights.unfilledIntakes.length +
@@ -441,7 +607,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     `תאריך: ${formatDateIL(todayStr)} | שעה: 18:30\n`,
     `⚙️ *בדיקת תשתיות ופונקציות:*`,
     isGreenApiHealthy ? `✅ Green-API: מחובר ותקין` : `❌ Green-API: שגיאת חיבור!`,
-    isGrowLinkHealthy ? `✅ קישור Grow לתשלומים: פעיל ומאובטח (ללא חשבון בנק)` : `❌ קישור Grow: חסר קישור תשלום פעיל!`,
+    isGrowLinkHealthy ? `✅ קישור Grow לתשלומים: פעיל ומאובטח (ללא חשבון בנק)` : `❌ קישור Grow: חסר קישור תשלום פעיל או מפנה לספק לא תקין!`,
     `✅ סנכרון Supabase Cloud: תקין`,
     `✅ הודעות ב-24 שעות האחרונות: נבדקו ונמצאו תקינות (ללא מספרי בנק וללא שגיאות).`,
     ''
@@ -460,6 +626,42 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
   if (totalRed === 0) {
     parts.push(`✅ אין אורות אדומים! כל הנתונים, השיחות, השריונים והמקדמות תקינים לחלוטין. 🎉`);
   } else {
+    if (redLights.paymentLinkIssues.length > 0) {
+      parts.push(`\n🔗 *תקלות קישורי תשלום ו-Grow:*`);
+      redLights.paymentLinkIssues.forEach(l => parts.push(`   • ${l}`));
+    }
+    if (redLights.unreconciledGrowPayments.length > 0) {
+      parts.push(`\n💳 *תשלומי Grow שנקלטו וטרם שויכו להזמנה:*`);
+      redLights.unreconciledGrowPayments.forEach(p => parts.push(`   • ${p}`));
+    }
+    if (redLights.unadmittedGhostBookings.length > 0) {
+      parts.push(`\n🚨 *שריוני עבר שלא נקלטו (No-Show רפאים):*`);
+      redLights.unadmittedGhostBookings.forEach(g => parts.push(`   • ${g}`));
+    }
+    if (redLights.overdueUnreleasedStays.length > 0) {
+      parts.push(`\n🚪 *שהות עבר שטרם שוחררה (Check-out באיחור):*`);
+      redLights.overdueUnreleasedStays.forEach(o => parts.push(`   • ${o}`));
+    }
+    if (redLights.corruptedBookingState.length > 0) {
+      parts.push(`\n⚠️ *סתירות נתונים והערות ביטול בהזמנות פעילות:*`);
+      redLights.corruptedBookingState.forEach(c => parts.push(`   • ${c}`));
+    }
+    if (redLights.pendingCheckouts.length > 0) {
+      parts.push(`\n🚪 *שחרורים ממתינים מהיום (טרם נסגרו):*`);
+      redLights.pendingCheckouts.forEach(r => parts.push(`   • ${r}`));
+    }
+    if (redLights.pendingCheckins.length > 0) {
+      parts.push(`\n📥 *כניסות של היום שטרם סומנו:*`);
+      redLights.pendingCheckins.forEach(r => parts.push(`   • ${r}`));
+    }
+    if (redLights.expiredGhostBookings.length > 0) {
+      parts.push(`\n👻 *שריוני עבר שטרם נסגרו:*`);
+      redLights.expiredGhostBookings.forEach(r => parts.push(`   • ${r}`));
+    }
+    if (redLights.overcapacity.length > 0) {
+      parts.push(`\n⚠️ *בקרת תפוסה וקיבולת שיא:*`);
+      redLights.overcapacity.forEach(r => parts.push(`   • ${r}`));
+    }
     if (unassignedKennels.length > 0) {
       parts.push(`\n🚨 *כלבים שוהים ללא שיבוץ תא לינה/דלי מזון (${unassignedKennels.length}):*`);
       unassignedKennels.forEach(k => parts.push(`   • ${k}`));

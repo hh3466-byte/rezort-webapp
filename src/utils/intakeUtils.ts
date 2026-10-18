@@ -138,7 +138,7 @@ export const isIntakeRequestExpired = (r: IntakeRequest, bookings: Booking[] = [
   if (r.status === 'approved' || hasActiveBookingForIntake(r, bookings)) return false;
   if (r.status === 'abandoned' || r.status === 'archived') return false;
   // Requests actively in progress or waiting for payment are NOT auto-expired - Shmulik is actively handling them!
-  if (r.status === 'in_progress' || r.status === 'payment_requested') return false;
+  if ((r.status as string) === 'in_progress' || r.status === 'payment_requested') return false;
 
   const todayStr = new Date().toISOString().split('T')[0];
   const eDate = r.endDate;
@@ -195,7 +195,7 @@ export const isUnansweredIntakeRequest = (r: IntakeRequest, bookings: Booking[] 
  */
 export const isIntakeRequestNew = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
   if (r.status === 'abandoned' || r.status === 'archived' || r.status === 'rejected') return false;
-  if (r.status === 'in_progress' || r.status === 'payment_requested') return false;
+  if ((r.status as string) === 'in_progress' || r.status === 'payment_requested') return false;
   if (isIntakeMarkedIrrelevant(r)) return false;
   if (isIntakeRequestExpired(r, bookings)) return false;
   const effStatus = getEffectiveIntakeStatus(r, bookings);
@@ -213,7 +213,7 @@ export const isIntakeRequestInTreatment = (r: IntakeRequest, bookings: Booking[]
   if (effStatus === 'approved') return false;
 
   // 1. Explicit in_progress or payment_requested status (NEVER auto-expires!)
-  if (effStatus === 'in_progress' || effStatus === 'payment_requested' || r.status === 'in_progress' || r.status === 'payment_requested') {
+  if ((effStatus as string) === 'in_progress' || effStatus === 'payment_requested' || (r.status as string) === 'in_progress' || r.status === 'payment_requested') {
     return true;
   }
 

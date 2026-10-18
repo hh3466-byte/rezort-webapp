@@ -526,23 +526,27 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
   switch (metricType) {
     case 'occupancy': {
-      const stayingToday = todayBookings.filter(b => b.stayStatus !== 'checked_out');
+      const stayingToday = todayBookings.filter(b => b.stayStatus === 'checked_in');
+      const pendingToday = todayBookings.filter(b => b.stayStatus === 'booked');
       const checkedOutToday = todayBookings.filter(b => b.stayStatus === 'checked_out');
       title = 'תפוסה כוללת להיום';
-      subtitle = `${stayingToday.length} כלבים שוהים כעת בריזורט מתוך ${settings.maxCapacity} מקומות מקסימום${checkedOutToday.length > 0 ? ` (${checkedOutToday.length} השתחרר/ו היום)` : ''}`;
+      subtitle = `${stayingToday.length} כלבים שוהים בפועל בריזורט (נקלטו ב-Check-in) מתוך ${settings.maxCapacity} מקומות מקסימום${pendingToday.length > 0 ? ` • ${pendingToday.length} שוריינו/ממתינים לקליטה` : ''}${checkedOutToday.length > 0 ? ` (${checkedOutToday.length} השתחרר/ו היום)` : ''}`;
       icon = <Dog className="w-5 h-5 text-emerald-600" />;
       badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
       filteredItems = todayBookings;
       break;
     }
 
-    case 'boarding':
+    case 'boarding': {
+      const actualBoardingStaying = todayBookings.filter(b => (b.serviceType === 'boarding' || b.serviceType === 'daycare') && b.stayStatus === 'checked_in');
+      const plannedBoarding = todayBookings.filter(b => (b.serviceType === 'boarding' || b.serviceType === 'daycare') && b.stayStatus === 'booked');
       title = 'כלבי פנסיון ושהות יומית';
-      subtitle = 'כלבים השוהים בפנסיון לילה או יום כיף פעיל';
+      subtitle = `${actualBoardingStaying.length} כלבים שוהים בפועל בפנסיון לילה או יום כיף${plannedBoarding.length > 0 ? ` • ${plannedBoarding.length} שוריינו/טרם נקלטו` : ''}`;
       icon = <Building2 className="w-5 h-5 text-sky-600" />;
       badgeColor = 'bg-sky-50 text-sky-800 border-sky-200';
       filteredItems = todayBookings.filter(b => b.serviceType === 'boarding' || b.serviceType === 'daycare');
       break;
+    }
 
     case 'training':
       if (trainingViewTab === 'completed') {

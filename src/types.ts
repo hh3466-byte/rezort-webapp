@@ -216,6 +216,7 @@ export interface IntakeRequest {
   isFreeStay?: boolean;
   linkedDogName?: string;
   additionalDogs?: AdditionalDogIntake[];
+  daycarePassCode?: string;
 }
 
 export interface AdditionalDogIntake {
@@ -274,6 +275,7 @@ export interface ResortSettings {
   eveningGreetingsSentDate?: string;
   last2000DailyUpdateSentDate?: string;
   daycarePasses?: DaycarePass[];
+  daycare_passes?: DaycarePass[];
   shmulikWhatsAppPhone?: string;
 }
 

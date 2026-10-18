@@ -315,7 +315,14 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
     const isFree = b.is_free_stay || b.isFreeStay || b.data?.isFreeStay || b.data?.is_free_stay;
     const payStatus = b.payment_status || b.paymentStatus || b.data?.paymentStatus;
     const end = b.end_date || b.endDate || '';
-    return price > 0 && deposit === 0 && !isFree && payStatus !== 'fully_paid' && end >= todayStr;
+    const bNotes = (b.notes || '') + ((b.data && b.data.notes) || '');
+    const hasGrowPayment = (payments || []).some(gp => {
+      const gpPhone = cleanPhoneNumber(gp.customer_phone || gp.customerPhone || '');
+      const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+      return gpPhone && bPhone && gpPhone === bPhone && Number(gp.amount) > 0;
+    });
+    const isPaid = deposit > 0 || payStatus === 'deposit_paid' || payStatus === 'fully_paid' || hasGrowPayment || bNotes.includes('שולמה מקדמה') || bNotes.includes('מקדמה ₪360 ב-Bit');
+    return price > 0 && !isPaid && !isFree && end >= todayStr;
   });
   if (zeroDepositUpcoming.length > 0) {
     const list = zeroDepositUpcoming.map((b, idx) => {
