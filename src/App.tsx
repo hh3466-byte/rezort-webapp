@@ -39,8 +39,11 @@ import {
   getMonthlyRevenueBreakdown,
   getGrowClearedRevenueForMonth,
   getCashClearedRevenueForMonth,
-  isBookingDigitallyPaidInFull
+  isBookingDigitallyPaidInFull,
+  formatStayDatesDisplay
 } from './utils/dateUtils';
+import { getFirstName, getBookingConfirmationMessage } from './utils/whatsappUtils';
+import { sendGreenApiDirectMessage } from './services/notificationService';
 
 import { CalendarView } from './components/CalendarView';
 import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricModal';
@@ -2611,6 +2614,55 @@ export default function App() {
               if (deductRes.success && deductRes.pass) {
                 const remaining = deductRes.pass.totalDays - deductRes.pass.usedDays;
                 showToast(`🎟️ קוזזו ${daysToDeduct} ${isBoardingBooking ? 'יממות' : 'ימים'} מכרטיסייה ${passCodeToDeduct}! נותרו ${remaining} ימים`);
+
+                // Automatic WhatsApp confirmation dispatch to customer via Green-API
+                try {
+                  const passConfirmMsg = `שלום ${getFirstName(newBooking.ownerName)}! 🐾🐶
+שמחים לעדכן כי השריון עבור *${newBooking.dogName}* אושר ונקלט בהצלחה ביומן הריזורט לכלב! ✨
+
+📋 *פרטי השריון המאושר:*
+🐕 *שם הכלב:* ${newBooking.dogName}
+📅 *תאריכים:* ${formatStayDatesDisplay(newBooking.startDate, newBooking.endDate || newBooking.startDate, newBooking.serviceType)}
+🎟️ *סוג כרטיסייה:* ${isBoardingBooking ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית ימי כיף'} (#${passCodeToDeduct})
+⏱️ *קיזוז:* נוצלו ${daysToDeduct} ${isBoardingBooking ? 'יממות' : 'ימים'}
+📊 *יתרה עדכנית למימוש:* *${remaining} מתוך ${deductRes.pass.totalDays} ${isBoardingBooking ? 'יממות' : 'ימים'} נותרו!*
+✅ *סטטוס תשלום:* מומש ושולם מראש מתוך הכרטיסייה (יתרה לתשלום: ₪0)
+
+⏰ *שעות פעילות והגעה בריזורט:*
+• ימים א'-ה': 08:30 - 18:30 | שישי וערבי חג: עד 14:00
+📍 *מיקום (Waze):* https://maps.app.goo.gl/8bm2Rdt7DtHeUS5J9
+
+מחכים לראותכם! 🐕🤍
+*שמוליק וצוות הריזורט לכלב*`;
+
+                  const waRes = await sendGreenApiDirectMessage(
+                    newBooking.ownerPhone,
+                    passConfirmMsg,
+                    settings?.greenApiIdInstance,
+                    settings?.greenApiToken
+                  );
+                  if (waRes.success) {
+                    showToast(`📲 אישור שריון ועדכון יתרה נשלחו אוטומטית ל-${newBooking.ownerName} בוואטסאפ! 🐾`);
+                  }
+                } catch (waErr) {
+                  console.warn('Auto-send pass confirmation error:', waErr);
+                }
+              }
+            } else if (matchedIntakeId && newBooking.ownerPhone) {
+              // Regular non-pass booking admitted from intake: send automatic confirmation
+              try {
+                const regularConfirmMsg = getBookingConfirmationMessage(newBooking, settings);
+                const waRes = await sendGreenApiDirectMessage(
+                  newBooking.ownerPhone,
+                  regularConfirmMsg,
+                  settings?.greenApiIdInstance,
+                  settings?.greenApiToken
+                );
+                if (waRes.success) {
+                  showToast(`📲 אישור שריון נשלח אוטומטית ל-${newBooking.ownerName} בוואטסאפ! 🐾`);
+                }
+              } catch (waErr) {
+                console.warn('Auto-send regular confirmation error:', waErr);
               }
             }
 
