@@ -227,10 +227,35 @@ async function isExistingClient(phoneSuffix) {
       .ilike('phone', `%${phoneSuffix}%`)
       .limit(1);
     if (Array.isArray(cData) && cData.length > 0) return true;
+
+    // Check daycare passes in resort_config
+    const { data: sData } = await supabase.from('settings').select('data').eq('id', 'resort_config').single();
+    const passes = sData?.data?.daycare_passes || [];
+    if (passes.some(p => (p.ownerPhone || '').replace(/\D/g, '').endsWith(phoneSuffix))) {
+      return true;
+    }
   } catch (e) {
     console.warn('Supabase client check warning:', e);
   }
   return false;
+}
+
+async function getActivePassByPhone(cleanPhone) {
+  if (!cleanPhone || cleanPhone.length < 7) return null;
+  const suffix = cleanPhone.slice(-7);
+  try {
+    const { data: sData } = await supabase.from('settings').select('data').eq('id', 'resort_config').single();
+    const passes = sData?.data?.daycare_passes || [];
+    const match = passes.find(p => {
+      const pPhone = (p.ownerPhone || '').replace(/\D/g, '');
+      const remaining = Number(p.totalDays) - Number(p.usedDays);
+      return pPhone.endsWith(suffix) && remaining > 0;
+    });
+    return match || null;
+  } catch (e) {
+    console.warn('Supabase pass check warning:', e);
+    return null;
+  }
 }
 
 async function checkIsShabbatOrHoliday(israelDateStr) {
@@ -1136,8 +1161,42 @@ export default async function handler(req, res) {
   const isWeekdayNight = (israelDay >= 0 && israelDay <= 4) && (timeInMinutes >= 19 * 60 + 30 || timeInMinutes < 8 * 60 + 30);
   const isClosedHours = isWeekendClosed || isHolidayClosed || isWeekdayNight;
 
-  // 6. Check client status (Existing vs New)
-  const isExisting = await isExistingClient(phoneSuffix);
+  // 6. Check client status (Pass holder / Existing client vs New lead)
+  const activePass = await getActivePassByPhone(cleanPhone);
+  const isExisting = activePass ? true : await isExistingClient(phoneSuffix);
+
+  // Active pass holder logic: instant balance, instructions & direct booking link
+  if (activePass) {
+    const remainingDays = Math.max(0, Number(activePass.totalDays) - Number(activePass.usedDays));
+    const isBoarding = activePass.serviceType === 'boarding';
+    const passTypeStr = isBoarding ? 'בנק 21 יממות פנסיון VIP' : `כרטיסיית ${activePass.totalDays} ימי כיף`;
+    const daysUnitStr = isBoarding ? 'יממות' : 'ימים';
+    const link = `https://rezort-webapp.vercel.app/?pass=${activePass.passCode}`;
+
+    // Did the client ask about pass, days, balance, booking, weekend, dates or arrival?
+    const asksAboutPass = /(?:כרטיסי|יתר|כמה|נשאר|נותר|ימים|יממות|לשריין|שריון|להביא|מקום|תוקף|סופש|מתי|הגעה)/i.test(incomingText);
+
+    // If asking about booking/pass OR if contacting during closed hours:
+    if (asksAboutPass || isClosedHours) {
+      const canSend = await canSendAutoReplyToClient(cleanPhone);
+      if (canSend) {
+        const passReplyMsg = `שלום ${activePass.ownerName}! 🐾🐶
+במערכת הריזורט לכלב מוגדרת עבור *${activePass.dogName}* ${passTypeStr} פעילה (#${activePass.passCode}).
+
+🎟️ *יתרה עדכנית למימוש:* נותרו *${remainingDays} מתוך ${activePass.totalDays} ${daysUnitStr}*!
+${activePass.validUntil ? `⏳ *תוקף הכרטיסייה:* עד ${formatDateIL(activePass.validUntil)}\n` : ''}
+📅 *לתיאום הגעה ושריון שהייה בלחיצה אחת מתוך הכרטיסייה:*
+👉 \u200E${link}
+
+(הבקשה תועבר ישירות לשמוליק לאישור בהתאם לתפוסת החדרים הפנויים בריזורט).
+שמוליק וצוות הריזורט לכלב 🐾`;
+
+        console.log('--- Sending tailored Pass Holder auto-reply ---', { cleanPhone, passCode: activePass.passCode, remainingDays });
+        await sendWhatsAppMessage(chatId, passReplyMsg);
+        return res.status(200).json({ ok: true, handled: 'pass_holder_auto_reply', passCode: activePass.passCode, remainingDays });
+      }
+    }
+  }
 
   // 7. Weekend / Holiday Closed Hours: Send EXACTLY ONE notice per 24 hours
   if (isClosedHours) {
