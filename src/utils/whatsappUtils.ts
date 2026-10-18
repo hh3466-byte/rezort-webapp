@@ -173,14 +173,18 @@ export function generateBookingConfirmationMessage(booking: Booking, settings: R
   msg += `🐕 *שם הכלב:* ${booking.dogName} (${booking.dogBreed || 'גזע כללי'})\n`;
   msg += `🌟 *שירות:* ${serviceHebrew}\n`;
   msg += `📅 *תאריכים:* ${datesText}\n`;
-  msg += `💵 *סה״כ עלות:* ₪${booking.totalPrice}\n`;
-  
-  if (booking.depositAmount > 0) {
-    msg += `✅ *מקדמה ששולמה:* ₪${booking.depositAmount}\n`;
-    if (remainingBalance > 0) {
-      msg += `⏳ *יתרה בעת האיסוף:* ₪${remainingBalance}\n`;
-    } else {
-      msg += `🎉 *החשבון שולם במלואו!*\n`;
+  if (booking.daycarePassCode) {
+    msg += `🎟️ *שריון מתוך כרטיסייה / בנק VIP:* קוד *#${booking.daycarePassCode}*\n`;
+    msg += `✅ *סטטוס תשלום:* מומש ושולם מראש מתוך הכרטיסייה (יתרה: ₪0)\n`;
+  } else {
+    msg += `💵 *סה״כ עלות:* ₪${booking.totalPrice}\n`;
+    if (booking.depositAmount > 0) {
+      msg += `✅ *מקדמה ששולמה:* ₪${booking.depositAmount}\n`;
+      if (remainingBalance > 0) {
+        msg += `⏳ *יתרה בעת האיסוף:* ₪${remainingBalance}\n`;
+      } else {
+        msg += `🎉 *החשבון שולם במלואו!*\n`;
+      }
     }
   }
 
