@@ -611,6 +611,46 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
           </button>
         </div>
 
+        {/* Pass Redemption Info Banner (Rule 29: Shows pass code and remaining days balance) */}
+        {(() => {
+          const passesList = ((settings?.daycare_passes || settings?.daycarePasses || []) as any[]);
+          const passCode = initialData?.daycarePassCode || (initialData as any)?.daycare_pass_code ||
+                           (initialData?.notes || '').match(/קוד כרטיסייה:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i)?.[1] ||
+                           (initialData?.notes || '').match(/בנק.*?:\s*#?([A-Za-z0-9\u0590-\u05FF-]+)/i)?.[1] ||
+                           (initialData?.notes || '').match(/כרטיסיי?ה.*?#?([A-Za-z0-9\u0590-\u05FF-]+)/i)?.[1];
+          const matchedPass = passCode
+            ? passesList.find((p: any) => p.passCode.toUpperCase() === String(passCode).trim().toUpperCase() || p.id === passCode)
+            : passesList.find((p: any) => {
+                const cleanP = (p.ownerPhone || '').replace(/\D/g, '').slice(-7);
+                const cleanB = (ownerPhone || '').replace(/\D/g, '').slice(-7);
+                return cleanP && cleanB && cleanP === cleanB && p.status === 'active';
+              });
+
+          if (!matchedPass) return null;
+          const remaining = Math.max(0, matchedPass.totalDays - matchedPass.usedDays);
+          const isBoarding = matchedPass.serviceType === 'boarding';
+
+          return (
+            <div className="my-3 p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-400 text-right animate-fadeIn" dir="rtl">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-emerald-300">
+                <div className="flex items-center gap-2 font-black text-emerald-950 text-xs sm:text-sm">
+                  <span className="text-lg">🎟️</span>
+                  <span>{isBoarding ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית ימי כיף'} – קוד <strong className="font-mono text-emerald-800">#{matchedPass.passCode}</strong></span>
+                </div>
+                <span className="text-xs bg-emerald-200 text-emerald-950 font-black px-2.5 py-0.5 rounded-lg border border-emerald-300">
+                  ✅ שולם מראש (₪0 לתשלום)
+                </span>
+              </div>
+              <div className="text-xs text-emerald-800 pt-2 flex items-center justify-between flex-wrap gap-2">
+                <span>יתרת ימים בכרטיסייה: <strong className="text-emerald-950 text-sm font-black">{remaining} מתוך {matchedPass.totalDays} {isBoarding ? 'יממות' : 'ימים'}</strong> ({matchedPass.usedDays} נוצלו)</span>
+                <span className="text-[11px] text-emerald-700 bg-white/80 px-2 py-0.5 rounded-md border border-emerald-200 font-bold">
+                  חופשה זו מקוזזת מתוך הכרטיסייה
+                </span>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Top Voice Dictation Bar inside Form (Default as requested) */}
         <div className="my-4 p-3.5 rounded-xl bg-slate-50 border border-green-200 space-y-2">
           <div className="flex items-center justify-between gap-2">

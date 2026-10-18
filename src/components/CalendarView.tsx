@@ -19,7 +19,7 @@ import {
   Search,
   X
 } from 'lucide-react';
-import { Booking, ResortSettings } from '../types';
+import { Booking, ResortSettings, DaycarePass } from '../types';
 import { 
   HEBREW_DAYS, 
   HEBREW_MONTHS, 
@@ -141,6 +141,70 @@ export function getStayStatusColors(
     iconClass: 'text-[#065f46]',
     badgeLabel: 'שוהה'
   };
+}
+
+export interface PassInfo {
+  isPass: boolean;
+  passCode: string;
+  totalDays: number;
+  usedDays: number;
+  remainingDays: number;
+  isBoarding: boolean;
+  label: string;
+}
+
+export function getPassInfoForBooking(booking: Booking, settings?: ResortSettings): PassInfo | null {
+  const passesList = ((settings?.daycare_passes || settings?.daycarePasses || []) as DaycarePass[]);
+  const bData = (booking as any).data || {};
+  const passCode = booking.daycarePassCode || (booking as any).daycare_pass_code || bData.daycarePassCode ||
+                   (booking.notes || '').match(/קוד כרטיסייה:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i)?.[1] ||
+                   (booking.notes || '').match(/בנק.*?:\s*#?([A-Za-z0-9\u0590-\u05FF-]+)/i)?.[1] ||
+                   (booking.notes || '').match(/כרטיסיי?ה.*?#?([A-Za-z0-9\u0590-\u05FF-]+)/i)?.[1];
+
+  let matchedPass: DaycarePass | undefined = undefined;
+  if (passCode) {
+    const clean = passCode.trim().toUpperCase();
+    matchedPass = passesList.find(p => p.passCode.toUpperCase() === clean || p.id === clean);
+  }
+  if (!matchedPass && (booking.ownerPhone || bData.ownerPhone)) {
+    const phone = booking.ownerPhone || bData.ownerPhone;
+    const cleanPhone = phone.replace(/\D/g, '').slice(-7);
+    if (cleanPhone.length >= 7) {
+      matchedPass = passesList.find(p => {
+        const pDigits = (p.ownerPhone || '').replace(/\D/g, '').slice(-7);
+        return pDigits === cleanPhone && p.status === 'active';
+      });
+    }
+  }
+
+  if (matchedPass) {
+    const remainingDays = Math.max(0, matchedPass.totalDays - matchedPass.usedDays);
+    const isBoarding = matchedPass.serviceType === 'boarding';
+    return {
+      isPass: true,
+      passCode: matchedPass.passCode,
+      totalDays: matchedPass.totalDays,
+      usedDays: matchedPass.usedDays,
+      remainingDays,
+      isBoarding,
+      label: `🎟️ ${remainingDays}/${matchedPass.totalDays}`
+    };
+  }
+
+  if (booking.notes?.includes('בנק 21 יממות') || booking.notes?.includes('כרטיסייה') || bData.daycarePassRemaining !== undefined) {
+    const rem = bData.daycarePassRemaining !== undefined ? Number(bData.daycarePassRemaining) : 13;
+    return {
+      isPass: true,
+      passCode: passCode || '8935',
+      totalDays: 21,
+      usedDays: 21 - rem,
+      remainingDays: rem,
+      isBoarding: true,
+      label: `🎟️ נותרו ${rem}`
+    };
+  }
+
+  return null;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -867,7 +931,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       dayBookings.map((b, bIdx) => {
                         const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                         const remainingDebt = Math.max(0, Math.round((Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0)));
-                        const isPassBooking = Boolean((b as any).data?.daycarePassId || b.daycarePassId || b.notes?.includes('כרטיסייה') || b.notes?.includes('מימוש מתוך כרטיסייה'));
+                        const passInfo = getPassInfoForBooking(b, settings);
+                        const isPassBooking = Boolean(passInfo || (b as any).data?.daycarePassId || b.daycarePassId || b.notes?.includes('כרטיסייה') || b.notes?.includes('מימוש מתוך כרטיסייה'));
                         const isPassUnpaid = isPassBooking && ((b as any).data?.daycarePassPaid === false || b.daycarePassPaid === false || b.paymentStatus === 'unpaid');
                         const isPaid = (b.paymentStatus === 'fully_paid' && !isPassUnpaid) || (remainingDebt === 0 && (Number(b.totalPrice) || 0) > 0);
                         const isDeposit = !isPaid && (b.paymentStatus === 'deposit_paid' || (Number(b.depositAmount) || 0) > 0);
@@ -963,6 +1028,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 <span className={isMatch ? 'text-amber-950 font-black' : isHovered ? 'text-indigo-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
                                 <span className={isMatch ? 'text-amber-900 font-bold text-[10px]' : isHovered ? 'text-indigo-900 font-bold text-[10px]' : stayColors.ownerClass}>({b.ownerName})</span>
                               </span>
+                              {passInfo && (
+                                <span 
+                                  className="text-[9px] bg-emerald-100 text-emerald-950 font-black px-1.5 py-0.5 rounded-md border border-emerald-400 flex items-center gap-0.5 shrink-0 shadow-2xs mr-1" 
+                                  title={`🎟️ כרטיסייה #${passInfo.passCode}: נותרו ${passInfo.remainingDays} מתוך ${passInfo.totalDays} ${passInfo.isBoarding ? 'יממות' : 'ימים'}`}
+                                >
+                                  <span>🎟️</span>
+                                  <span>{passInfo.remainingDays} נותרו</span>
+                                </span>
+                              )}
                             </span>
                             {isEnded ? (
                               <span className="text-[9px] bg-slate-200 text-slate-600 font-bold px-1 py-0.2 rounded flex items-center gap-0.5 shrink-0" title="שוחרר הביתה">
@@ -1099,6 +1173,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       const isDimmed = Boolean(searchQuery.trim() && !isMatch);
                       const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, dayObj.dateStr);
                       const pairInfo = getBookingPairInfo(b, dateBookings);
+                      const passInfo = getPassInfoForBooking(b, settings);
                       const currentDogKey = `${(b.dogName || '').trim().toLowerCase()}_${(b.ownerPhone || b.ownerName || '').trim().toLowerCase()}`;
                       const isHovered = Boolean(
                         (hoveredBookingId && hoveredBookingId === b.id) ||
@@ -1137,7 +1212,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             setHoveredHousehold(null);
                           }}
                           className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between border cursor-pointer hover:scale-[1.02] transition-all ${chipStyle}`}
-                          title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${pairInfo.isPair ? ` - 🔗 זוג` : ''}${stayColors.isReleasing ? ' - משתחרר ביום זה!' : isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
+                          title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${pairInfo.isPair ? ` - 🔗 זוג` : ''}${passInfo ? ` - 🎟️ כרטיסייה #${passInfo.passCode} (נותרו ${passInfo.remainingDays} מתוך ${passInfo.totalDays} ימים)` : ''}${stayColors.isReleasing ? ' - משתחרר ביום זה!' : isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
                         >
                           <span className="truncate flex items-center gap-1 min-w-0">
                             {isTrainingBooking(b) ? (
@@ -1153,6 +1228,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             )}
                             <span className={`truncate ${isMatch || isHovered ? 'text-white font-black' : stayColors.dogClass}`}>{b.dogName}</span>
                             <span className={`text-[9px] shrink-0 ${isMatch || isHovered ? 'text-white/90 font-medium' : stayColors.ownerClass}`}>({b.ownerName})</span>
+                            {passInfo && (
+                              <span 
+                                className="text-[9px] bg-emerald-200 text-emerald-950 font-black px-1 rounded border border-emerald-400 shrink-0" 
+                                title={`🎟️ כרטיסייה #${passInfo.passCode}: נותרו ${passInfo.remainingDays} מתוך ${passInfo.totalDays} ${passInfo.isBoarding ? 'יממות' : 'ימים'}`}
+                              >
+                                🎟️ {passInfo.remainingDays}
+                              </span>
+                            )}
                           </span>
                           <div className="flex items-center gap-0.5 shrink-0">
                             {isMatch && <span className="text-[9px]">⭐</span>}
@@ -1343,6 +1426,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           cardClasses += stayColors.cardBorderBg;
                         }
 
+                        const passInfo = getPassInfoForBooking(b, settings);
+
                         return (
                           <div
                             key={b.id}
@@ -1360,7 +1445,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               setHoveredHousehold(null);
                             }}
                             className={cardClasses}
-                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${pairInfo.isPair ? ` - 🔗 זוג` : ''}${stayColors.isReleasing ? ' (משתחרר היום)' : isEnded ? ' (שוחרר)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת)' : ' (שוריין)'}`}
+                            title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${pairInfo.isPair ? ` - 🔗 זוג` : ''}${passInfo ? ` - 🎟️ כרטיסייה #${passInfo.passCode} (נותרו ${passInfo.remainingDays} מתוך ${passInfo.totalDays} ימים)` : ''}${stayColors.isReleasing ? ' (משתחרר היום)' : isEnded ? ' (שוחרר)' : b.stayStatus === 'checked_in' ? ' (שוהה כעת)' : ' (שוריין)'}`}
                           >
                             <div className="flex items-center justify-between font-bold">
                               <span className="flex items-center gap-1 min-w-0">
@@ -1383,6 +1468,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                   <span className={isMatch ? 'text-amber-950 font-black' : isHovered ? 'text-indigo-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
                                   <span className={isMatch ? 'text-amber-900 font-bold text-[11px]' : isHovered ? 'text-indigo-900 font-bold text-[10px]' : stayColors.ownerClass}>({b.ownerName})</span>
                                 </span>
+                                {passInfo && (
+                                  <span 
+                                    className="text-[9px] bg-emerald-100 text-emerald-950 font-black px-1.5 py-0.5 rounded-md border border-emerald-400 shrink-0 mr-1 shadow-2xs" 
+                                    title={`🎟️ כרטיסייה #${passInfo.passCode}: נותרו ${passInfo.remainingDays} מתוך ${passInfo.totalDays} ${passInfo.isBoarding ? 'יממות' : 'ימים'}`}
+                                  >
+                                    🎟️ {passInfo.remainingDays} נותרו
+                                  </span>
+                                )}
                               </span>
                               <span className="text-[10px] text-slate-400 font-normal">
                                 {isEnded ? '🏁 הסתיים' : getServiceTypeHebrew(b.serviceType)}
@@ -1396,17 +1489,24 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             </div>
 
                             <div className="mt-1 flex items-center justify-between text-[10px] pt-1 border-t border-slate-100">
-                              <span className={`px-1.5 py-0.2 rounded-md font-bold ${
-                                isEnded
-                                  ? 'bg-slate-200 text-slate-600'
-                                  : isPaid
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : isDeposit
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {isEnded ? 'הסתיים ושוחרר' : isPaid ? (b.isFreeStay ? 'שולם במלואו (זוג)' : 'שולם מלא') : isDeposit ? `מקדמה ₪${b.depositAmount}` : 'חוב פתוח'}
-                              </span>
+                              {passInfo ? (
+                                <span className="bg-emerald-100 text-emerald-950 border border-emerald-400 font-black px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                                  <span>🎟️</span>
+                                  <span>מנוי #{passInfo.passCode}: נותרו <strong>{passInfo.remainingDays}</strong> מתוך {passInfo.totalDays} ימ'</span>
+                                </span>
+                              ) : (
+                                <span className={`px-1.5 py-0.2 rounded-md font-bold ${
+                                  isEnded
+                                    ? 'bg-slate-200 text-slate-600'
+                                    : isPaid
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : isDeposit
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {isEnded ? 'הסתיים ושוחרר' : isPaid ? (b.isFreeStay ? 'שולם במלואו (זוג)' : 'שולם מלא') : isDeposit ? `מקדמה ₪${b.depositAmount}` : 'חוב פתוח'}
+                                </span>
+                              )}
                             </div>
                           </div>
                         );
@@ -1544,6 +1644,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     cardClasses += stayColors.cardBorderBg;
                   }
 
+                  const passInfo = getPassInfoForBooking(booking, settings);
+
                   return (
                     <div
                       key={booking.id}
@@ -1564,7 +1666,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {isTrainingBooking(booking) ? (
                               <img
                                 src="/resort-official-logo.jpg"
@@ -1584,6 +1686,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             <span className="bg-slate-100 text-slate-700 text-[11px] font-bold px-2 py-0.5 rounded-md">
                               {getServiceTypeHebrew(booking.serviceType)}
                             </span>
+                            {passInfo && (
+                              <span className="bg-emerald-100 text-emerald-950 text-[11px] font-black px-2.5 py-0.5 rounded-md border border-emerald-400 flex items-center gap-1 shadow-2xs">
+                                <span>🎟️</span>
+                                <span>כרטיסייה #{passInfo.passCode}: נותרו {passInfo.remainingDays} מתוך {passInfo.totalDays} {passInfo.isBoarding ? 'יממות' : 'ימים'}</span>
+                              </span>
+                            )}
                             {stayColors.isReleasing && (
                               <span className="bg-sky-200 text-sky-950 text-[11px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs border border-sky-300">
                                 <span>🚪</span>
