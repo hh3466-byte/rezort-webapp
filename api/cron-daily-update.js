@@ -237,6 +237,9 @@ export default async function handler(req, res) {
     const sentDogsMap = new Set();
 
     for (const b of activeBookings) {
+      if (b.stay_status !== 'checked_in') {
+        continue;
+      }
       const cleanDog = (b.dog_name || '').trim().toLowerCase();
       const bData = (b.data && typeof b.data === 'object') ? b.data : {};
       const dogKey = `${b.id}_${cleanDog}`;
@@ -378,21 +381,28 @@ export default async function handler(req, res) {
 
     // 3. Send confirmation WhatsApp strictly to Hagai (0543200007) as per Rule 1
     const totalFails = dogFailCount + reviewFailCount;
-    const confirmationText = `נשלחו ד"ש ל-${dogSentCount} בעלי כלבים ו-${reviewSentCount} בקשות חוות דעת. כולם קיבלו. ${totalFails > 0 ? `יש ${totalFails} כשלים` : 'אין כשל ✅'}`;
+    const hasDispatches = (dogSentCount > 0 || reviewSentCount > 0 || totalFails > 0);
+    const confirmationText = hasDispatches 
+      ? `נשלחו ד"ש ל-${dogSentCount} בעלי כלבים ו-${reviewSentCount} בקשות חוות דעת. כולם קיבלו. ${totalFails > 0 ? `יש ${totalFails} כשלים` : 'אין כשל ✅'}`
+      : 'כל הכלבים השוהים כבר קיבלו ד"ש מוקדם יותר היום, ואין שחרורים חדשים. אין כשל ✅';
 
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12000);
-      const sendUrl = getGreenApiUrl(greenId, 'sendMessage', greenToken);
-      await fetch(sendUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: MANAGER_CHAT_ID, message: confirmationText }),
-        signal: controller.signal
-      });
-      clearTimeout(timeout);
-    } catch (confErr) {
-      console.error('Error sending confirmation message to Hagai:', confErr);
+    if (hasDispatches) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 12000);
+        const sendUrl = getGreenApiUrl(greenId, 'sendMessage', greenToken);
+        await fetch(sendUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId: MANAGER_CHAT_ID, message: confirmationText }),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+      } catch (confErr) {
+        console.error('Error sending confirmation message to Hagai:', confErr);
+      }
+    } else {
+      console.log('No new dog greetings or review requests to dispatch (all dogs already greeted earlier today). Skipping redundant admin message.');
     }
 
     // Update settings table with timestamp

@@ -272,6 +272,7 @@ export interface ResortSettings {
   lastTomorrowOverviewSentDate?: string;
   lastTomorrowOverviewSentTimestamp?: string;
   eveningGreetingsSentDate?: string;
+  last2000DailyUpdateSentDate?: string;
   daycarePasses?: DaycarePass[];
   shmulikWhatsAppPhone?: string;
 }

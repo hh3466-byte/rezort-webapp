@@ -1576,10 +1576,20 @@ function sendDailyDogEveningUpdates() {
 
     var props = PropertiesService.getScriptProperties();
     var sentCount = 0;
+    var dogsSentCount = 0;
     var sentDogsMap = {};
 
     for (var i = 0; i < activeBookings.length; i++) {
       var b = activeBookings[i];
+      var bookingData = (b.data && typeof b.data === "object") ? b.data : {};
+
+      // סינון קשיח והרמטי: אך ורק כלבים שנקלטו בפועל בצ'ק-אין (דילוג על שריונים עתידיים booked)
+      var bStayStatus = b.stay_status || bookingData.stayStatus;
+      if (bStayStatus !== "checked_in") {
+        Logger.log("מניעת שליחה: דילוג על כלב שאינו בצ'ק-אין (סטטוס: " + bStayStatus + "): " + b.dog_name + " (" + b.owner_name + ")");
+        continue;
+      }
+
       var todaySentKey = "daily_dog_sent_" + b.id + "_" + todayStr;
       var cleanPhone = (b.owner_phone || "").replace(/[^0-9]/g, "");
       var cleanDog = (b.dog_name || "").trim().toLowerCase();
@@ -1587,7 +1597,6 @@ function sendDailyDogEveningUpdates() {
       var dogGlobalKey = "daily_dog_sent_" + bId + "_" + todayStr;
 
       // מניעת כפילות מוחלטת: אם כבר נשלחה הודעה לכלב זה היום
-      var bookingData = (b.data && typeof b.data === "object") ? b.data : {};
       if (props.getProperty(todaySentKey) || props.getProperty(dogGlobalKey) || bookingData.lastDailyDogUpdateSent === todayStr || sentDogsMap[dogGlobalKey]) {
         Logger.log("מניעת כפילות: דילוג על כלב שכבר קיבל הודעה היום: " + b.dog_name + " (" + b.owner_name + ")");
         continue;
@@ -1665,6 +1674,7 @@ function sendDailyDogEveningUpdates() {
       }
 
       if (anySentForDog) {
+        dogsSentCount++;
         sentDogsMap[dogGlobalKey] = true;
         props.setProperty(todaySentKey, "true");
         props.setProperty(dogGlobalKey, "true");
@@ -1689,17 +1699,17 @@ function sendDailyDogEveningUpdates() {
       }
     }
 
-    Logger.log("הסתיים משלוח עדכונים יומיים: נשלחו " + sentCount + " הודעות מתוך " + activeBookings.length + " כלבים.");
+    Logger.log("הסתיים משלוח עדכונים יומיים: נשלחו " + sentCount + " הודעות עבור " + dogsSentCount + " מתוך " + activeBookings.length + " כלבים.");
 
     // דיווח אוטומטי למנהל (054-3200007) על תוצאות השליחה היומית
     try {
-      if (sentCount === 0) {
+      if (dogsSentCount === 0 || sentCount === 0) {
         Logger.log("כל הכלבים כבר קיבלו הודעות מוקדם יותר היום. אין צורך בדיווח נוסף למנהל.");
         return;
       }
 
       var managerChatId = "972543200007@c.us";
-      var managerMsg = "נשלחו הודעות יומיות ל " + sentCount + " בעלי כלבים נוספים. כולם קיבלו. אין כשל ✅";
+      var managerMsg = "נשלחו הודעות יומיות ל-" + dogsSentCount + " כלבים שוהים נוספים (" + sentCount + " הודעות). כולם קיבלו. אין כשל ✅";
 
       var mgrSendUrl = "https://7107.api.greenapi.com/waInstance" + GREEN_API_ID + "/sendMessage/" + GREEN_API_TOKEN;
       UrlFetchApp.fetch(mgrSendUrl, {

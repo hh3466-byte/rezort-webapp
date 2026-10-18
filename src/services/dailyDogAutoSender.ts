@@ -2,7 +2,7 @@ import { Booking, ResortSettings, IntakeRequest } from '../types';
 import { getTodayStr, addDays } from '../utils/dateUtils';
 import { cleanPhoneNumber } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from './notificationService';
-import { saveBookingToDb } from './dbService';
+import { saveBookingToDb, saveSettingsToDb } from './dbService';
 import { 
   pickDailyDogTemplate, 
   isDogIsolationRequired, 
@@ -303,6 +303,17 @@ export async function runAutoDailyDogUpdates(
       console.log(`[AutoSender 20:00] אישור נשלח בהצלחה למנהל (${adminPhone})`);
     } catch (errAdmin) {
       console.warn('[AutoSender 20:00] שגיאה בשליחת עדכון למנהל:', errAdmin);
+    }
+
+    // Sync to Supabase settings so Vercel Cron knows the daily update was already dispatched
+    try {
+      await saveSettingsToDb({
+        ...settings,
+        last2000DailyUpdateSentDate: todayStr
+      });
+      console.log(`[AutoSender 20:00] סונכרן תאריך שליחה מוצלחת להגדרות ב-Supabase (${todayStr})`);
+    } catch (errSet) {
+      console.warn('[AutoSender 20:00] שגיאה בסנכרון תאריך שליחה להגדרות:', errSet);
     }
   }
 
