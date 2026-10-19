@@ -64,6 +64,7 @@ import { TimeSchedulePicker } from './TimeSchedulePicker';
 import { normalizePlacementKey, getPlacementDisplayName } from '../utils/kennelUtils';
 import { IntakeAlertBanner } from './IntakeAlertBadges';
 import { loadStoredDaycarePasses } from '../services/dbService';
+import { ISRAELI_CITIES_LIST } from '../utils/israeliCities';
 
 interface SimpleBookingWizardProps {
   isOpen: boolean;
@@ -1193,12 +1194,17 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   </div>
 
                   {/* Owner Home Address (Emergency & Recovery) */}
-                  <div className="space-y-1 sm:col-span-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-800 flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>כתובת מגורים מלאה (עיר, רחוב ומספר בית) - לצורכי חירום ואיתור כלב</span>
-                      </label>
+                  <div className="space-y-1.5 sm:col-span-2 bg-emerald-50/40 p-3 rounded-2xl border border-emerald-100">
+                    <div className="flex items-center justify-between flex-wrap gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-xs font-black text-slate-800 flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>כתובת מגורים מלאה (עיר, רחוב ומספר בית)</span>
+                        </label>
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full">
+                          🛡️ לתיק הבטיחות ומקרה חירום
+                        </span>
+                      </div>
                       {ownerAddress && (
                         <a
                           href={getWazeNavigationUrl(ownerAddress, ownerCoordinates)}
@@ -1212,11 +1218,17 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     </div>
                     <input
                       type="text"
+                      list="israeli-cities-wizard"
                       value={ownerAddress}
                       onChange={(e) => setOwnerAddress(e.target.value)}
-                      placeholder="למשל: הרצל 15, ראשון לציון"
-                      className="w-full bg-white text-sm font-semibold text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-600 focus:outline-none"
+                      placeholder="התחל להקליד עיר או רחוב (למשל: תל אביב, חדרה, חריש...)"
+                      className="w-full bg-white text-sm font-bold text-slate-900 px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-emerald-600 focus:outline-none shadow-xs"
                     />
+                    <datalist id="israeli-cities-wizard">
+                      {ISRAELI_CITIES_LIST.map((city) => (
+                        <option key={city} value={city} />
+                      ))}
+                    </datalist>
                   </div>
                 </div>
 

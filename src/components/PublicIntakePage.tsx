@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { SendIntakeModal } from './SendIntakeModal';
 import { getCurrentCoordinates, reverseGeocodeCoordinates } from '../utils/geolocationUtils';
+import { ISRAELI_CITIES_LIST } from '../utils/israeliCities';
 
 // 7 Clauses of Resort By-Laws (תקנון הריזורט לכלב)
 const RESORT_BYLAWS_SECTIONS = [
@@ -1731,39 +1732,44 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               </div>
             </div>
 
-            {/* Mandatory Owner Home Address with GPS Auto-detection */}
+            {/* Mandatory Owner Home Address with GPS Auto-detection & Safety Reassurance */}
             <div 
               id="field_ownerAddress"
-              className={`rounded-2xl p-3.5 sm:p-4 space-y-2.5 transition-all ${
+              className={`rounded-2xl p-4 sm:p-5 space-y-3 transition-all ${
                 invalidFieldId === 'field_ownerAddress'
                   ? 'bg-rose-50/90 border-2 border-rose-500 ring-4 ring-rose-400 shadow-xl animate-pulse'
-                  : 'bg-slate-50/80 border-2 border-emerald-100'
+                  : 'bg-emerald-50/40 border-2 border-emerald-200/80 shadow-xs'
               }`}
             >
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>כתובת מגורים (עיר, רחוב ומספר בית)</span>
-                  <span className="text-red-500">*</span>
-                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>כתובת מגורים מלאה (עיר, רחוב ומספר בית)</span>
+                    <span className="text-red-500 font-bold">*</span>
+                  </label>
+                  <span className="text-[11px] bg-emerald-100 text-emerald-800 font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
+                    🛡️ שדה חיוני לתיק הבטיחות ולמקרה חירום רפואי
+                  </span>
+                </div>
 
-                {/* GPS Auto-Detect Button */}
+                {/* GPS Auto-Detect Button - Prominent & One-Click */}
                 <button
                   type="button"
                   onClick={handleDetectGpsAddress}
                   disabled={isLocatingGps}
-                  className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                  title="זהה את הכתובת הנוכחית שלי באמצעות GPS"
+                  className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                  title="זהה את הכתובת הנוכחית שלי באמצעות GPS בלחיצה אחת"
                 >
                   {isLocatingGps ? (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="w-4 h-4 animate-spin" />
                       <span>מאתר כתובת ב-GPS...</span>
                     </>
                   ) : (
                     <>
-                      <Navigation className="w-3.5 h-3.5" />
-                      <span>זהה כתובת ב-GPS 📍</span>
+                      <Navigation className="w-4 h-4 text-amber-300" />
+                      <span>📍 מלא כתובת מהמיקום הנוכחי (GPS)</span>
                     </>
                   )}
                 </button>
@@ -1773,6 +1779,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                 <input
                   type="text"
                   required
+                  list="israeli-cities-intake"
                   value={ownerAddress}
                   onFocus={() => {
                     if (invalidFieldId === 'field_ownerAddress') {
@@ -1788,13 +1795,27 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                       setErrorMessage(null);
                     }
                   }}
-                  placeholder="למשל: הרצל 15, ראשון לציון"
-                  className={`w-full rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-none transition-all ${
+                  placeholder="התחל להקליד עיר או רחוב (למשל: תל אביב, חדרה, חריש...)"
+                  className={`w-full rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none transition-all shadow-inner ${
                     invalidFieldId === 'field_ownerAddress'
                       ? 'bg-white border-2 border-rose-500 ring-2 ring-rose-400'
                       : 'bg-white border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20'
                   }`}
                 />
+
+                <datalist id="israeli-cities-intake">
+                  {ISRAELI_CITIES_LIST.map((city) => (
+                    <option key={city} value={city} />
+                  ))}
+                </datalist>
+              </div>
+
+              {/* Explanatory Safety Reassurance Note */}
+              <div className="text-[11px] text-slate-600 bg-white/90 border border-emerald-100 rounded-xl p-2.5 font-medium flex items-center gap-1.5 shadow-2xs">
+                <span className="text-base shrink-0">💡</span>
+                <span>
+                  <strong>למה נחוצה הכתובת?</strong> הכתובת נשמרת באופן מאובטח ומשמשת אותנו בלבד למקרה חירום רפואי (אמבולנס וטרינרי) או איתור מהיר אם הכלב חלילה יתרחק מהמתחם.
+                </span>
               </div>
 
               {isReturningAddress && (
@@ -1818,14 +1839,14 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               )}
 
               {gpsSuccessNotice && (
-                <div className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-300 rounded-xl p-2 flex items-center gap-2 animate-in fade-in">
+                <div className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-300 rounded-xl p-2.5 flex items-center gap-2 animate-in fade-in">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>{gpsSuccessNotice} (ניתן לערוך ידנית במידת הצורך).</span>
                 </div>
               )}
 
               <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium pt-0.5">
-                <span>🔄 <strong>לקוח חוזר ועברת דירה?</strong> ניתן לעדכן כתובת חופשית בכל עת או בלחיצה על זיהוי GPS.</span>
+                <span>🔄 <strong>עברתם דירה?</strong> ניתן לעדכן כתובת חופשית בכל עת או בלחיצה על כפתור ה-GPS.</span>
                 {ownerAddress && (
                   <button
                     type="button"

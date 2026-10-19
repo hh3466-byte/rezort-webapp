@@ -116,13 +116,17 @@ export function formatClientPaymentLinkMessage(
     ? ` (הסכום ₪${agreedAmount.toLocaleString('he-IL')} מעודכן ונעול לתשלום)` 
     : (agreedAmount > 0 ? ` (סכום מוסכם: ₪${agreedAmount.toLocaleString('he-IL')})` : '');
 
+  const addressPrompt = (!request.ownerAddress || request.ownerAddress.trim().length < 5)
+    ? `\n🏠 *השלמת כרטיס בטיחות:* שמנו לב שלא צוינה כתובת מגורים מלאה. אנא השב להודעה זו עם כתובתכם (עיר, רחוב ומספר בית) כדי שנשלים את תיק הבטיחות של *${request.dogName}* למקרה חירום רפואי.\n`
+    : '';
+
   return `היי ${firstName}, שמחנו לשוחח! 🐾🐶
 שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר ${stayText}.${agreedAmount > 0 ? ` (סכום מוסכם: ₪${agreedAmount.toLocaleString('he-IL')})` : ''}
 להשלמת השריון, יש ללחוץ על הקישור המאובטח${amountInstruction}:
 👉 \u200E${paymentLink}
 
 💡 *לתשלום ב-Bit, Apple Pay, Google Pay, PayBox, אשראי או העברה בנקאית:* פשוט לוחצים על הקישור למעלה ובוחרים באמצעי התשלום הרצוי (התשלום נקלט ומעדכן את המערכת אוטומטית עם קבלה וחשבונית מס מיידית למייל ולטלפון!).
-
+${addressPrompt}
 ⏰ *שעות פעילות הריזורט לכלב בימים א-ה הן 09:30 - 18:30*
 • בשישי וערב חג: עד שעה 14:00, ובצאת השבת / החג (למחרת השבת / חג) משעה 09:30
 • מעבר לשעות הפעילות (לפני 09:30 ואחרי 18:30), ובסופי שבוע וחגים על הבעלים להתגבר ולהתאפק! בשעות אלו אנו לא עוסקים בהולכים על 2, אלא מתמקדים אך ורק בטיפול וברווחה של מי שיש לו 4 רגליים וזנב 🐾

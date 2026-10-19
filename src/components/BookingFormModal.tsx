@@ -434,7 +434,9 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
     }
 
     // Layer 1 Safeguard: Prevent inventing unverified digital payments
-    if (depositAmount > 0 && !isFreeStay && paymentMethod !== 'cash') {
+    // Only check if adding a NEW or INCREASED digital deposit amount
+    const isNewOrIncreasedDeposit = !isEditing || depositAmount > (initialData?.depositAmount || 0);
+    if (depositAmount > 0 && !isFreeStay && paymentMethod !== 'cash' && isNewOrIncreasedDeposit) {
       if (growVerification && !growVerification.isVerified && !manualOverrideConfirmed) {
         alert('🛑 לא ניתן לרשום תשלום דיגיטלי (ביט/אשראי/העברה) שלא אומת מול Grow!\n\nלשמירה, יש לאפס את המקדמה ל-₪0 (ולשלוח ללקוח קישור לתשלום ב-Grow), או לסמן "אישור חריג" אם קיבלת את הכסף ישירות בביט הפרטי.');
         return;
@@ -506,7 +508,15 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       initialData?.signatureDataUrl
     );
 
-    if (isTraining && !isAgreementSigned && (finalDeposit > 0 || finalPaymentStatus === 'fully_paid' || finalPaymentStatus === 'deposit_paid')) {
+    // Only block if NEW payment is being registered without an agreement.
+    // Do not block editing existing bookings that were already fully paid in the past (e.g. Joy) when Shmulik just extends dates or edits notes!
+    const isAlreadyPaidLegacy = Boolean(
+      isEditing && 
+      initialData?.paymentStatus === 'fully_paid' && 
+      finalDeposit <= (initialData?.depositAmount || 0)
+    );
+
+    if (isTraining && !isAgreementSigned && !isAlreadyPaidLegacy && (finalDeposit > 0 || finalPaymentStatus === 'fully_paid' || finalPaymentStatus === 'deposit_paid')) {
       alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.\n\nחובה להחתים תחילה את הלקוח על הסכם האילוף הרשמי לפני רישום תשלום או מקדמה.');
       return;
     }

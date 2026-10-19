@@ -247,6 +247,12 @@ export function getBookingPairInfo(booking: Booking, allBookingsInContext: Booki
 
   const siblings = (allBookingsInContext || []).filter(other => {
     if (other.id === booking.id) return false;
+    const oStay = other.stayStatus || (other as any).stay_status;
+    if (oStay === 'cancelled' || oStay === 'archived' || other.isArchived) return false;
+    // A dog cannot be paired with another booking of the exact same dog name
+    const currentDog = (booking.dogName || (booking as any).dog_name || '').trim().toLowerCase();
+    const otherDog = (other.dogName || (other as any).dog_name || '').trim().toLowerCase();
+    if (currentDog && otherDog && currentDog === otherDog) return false;
     return areBookingsInSameHousehold(booking, other);
   });
 
@@ -866,6 +872,12 @@ export function getMonthlyRevenueBreakdown(
     const isKnownCashCustomer = ownerName.includes('שיין') || ownerName.includes('מהדי') || ownerName.includes('שיגינה') || ownerName.includes('מרינה');
 
     if (isExplicitCash || isKnownCashCustomer) {
+      // Check if cash was actually collected in a prior month (e.g. September cash advance for October stay)
+      const createdMonth = (b.createdAt || d.createdAt || (b as any).created_at || '').substring(0, 7);
+      if (createdMonth && createdMonth < targetMonthKey && paymentStatus === 'fully_paid') {
+        // Collected in prior month, do not count in current month cash drawer!
+        return;
+      }
       const amt = paymentStatus === 'fully_paid' ? totalPrice : depAmount;
       if (amt > 0) {
         cashCollected += amt;
