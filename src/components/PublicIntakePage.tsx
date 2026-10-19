@@ -1814,7 +1814,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               <div className="text-[11px] text-slate-600 bg-white/90 border border-emerald-100 rounded-xl p-2.5 font-medium flex items-center gap-1.5 shadow-2xs">
                 <span className="text-base shrink-0">💡</span>
                 <span>
-                  <strong>למה נחוצה הכתובת?</strong> הכתובת נשמרת באופן מאובטח ומשמשת אותנו בלבד למקרה חירום רפואי (אמבולנס וטרינרי) או איתור מהיר אם הכלב חלילה יתרחק מהמתחם.
+                  <strong>למה נחוצה הכתובת?</strong> הכתובת נשמרת באופן מאובטח ומשמשת אותנו לפתיחת תיק בריאות אישי, רישום ביטוחי כחוק ותיאום מהיר מול המרכז הווטרינרי בעת הצורך.
                 </span>
               </div>
 

@@ -1202,7 +1202,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                           <span>כתובת מגורים מלאה (עיר, רחוב ומספר בית)</span>
                         </label>
                         <span className="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full">
-                          🛡️ לתיק הבטיחות ומקרה חירום
+                          🛡️ לכרטיס הבריאות והבטיחות הווטרינרי
                         </span>
                       </div>
                       {ownerAddress && (
