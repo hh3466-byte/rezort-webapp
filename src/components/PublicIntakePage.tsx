@@ -1753,13 +1753,13 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   </span>
                 </div>
 
-                {/* GPS Auto-Detect Button - Prominent & One-Click */}
+                {/* GPS Auto-Detect Button - Prominent, One-Click & Highly Recommended */}
                 <button
                   type="button"
                   onClick={handleDetectGpsAddress}
                   disabled={isLocatingGps}
-                  className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                  title="זהה את הכתובת הנוכחית שלי באמצעות GPS בלחיצה אחת"
+                  className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 ring-2 ring-emerald-400/50 hover:ring-emerald-500"
+                  title="מומלץ ביותר: זהה את הכתובת הנוכחית שלי באמצעות GPS בלחיצה אחת"
                 >
                   {isLocatingGps ? (
                     <>
@@ -1768,8 +1768,11 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                     </>
                   ) : (
                     <>
+                      <span className="bg-amber-400 text-amber-950 text-[10px] font-black px-1.5 py-0.5 rounded-md shadow-2xs">
+                        מומלץ ⭐
+                      </span>
                       <Navigation className="w-4 h-4 text-amber-300" />
-                      <span>📍 מלא כתובת מהמיקום הנוכחי (GPS)</span>
+                      <span>מלא כתובת מהמיקום הנוכחי (GPS) 📍</span>
                     </>
                   )}
                 </button>
@@ -1795,7 +1798,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                       setErrorMessage(null);
                     }
                   }}
-                  placeholder="התחל להקליד עיר או רחוב (למשל: תל אביב, חדרה, חריש...)"
+                  placeholder="התחל להקליד עיר או רחוב, או לחץ על כפתור ה-GPS למעלה למילוי מהיר 📍"
                   className={`w-full rounded-xl px-4 py-3 text-sm font-bold text-slate-900 focus:outline-none transition-all shadow-inner ${
                     invalidFieldId === 'field_ownerAddress'
                       ? 'bg-white border-2 border-rose-500 ring-2 ring-rose-400'
@@ -1810,12 +1813,15 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                 </datalist>
               </div>
 
-              {/* Explanatory Safety Reassurance Note */}
-              <div className="text-[11px] text-slate-600 bg-white/90 border border-emerald-100 rounded-xl p-2.5 font-medium flex items-center gap-1.5 shadow-2xs">
-                <span className="text-base shrink-0">💡</span>
-                <span>
-                  <strong>למה נחוצה הכתובת?</strong> הכתובת נשמרת באופן מאובטח ומשמשת אותנו לפתיחת תיק בריאות אישי, רישום ביטוחי כחוק ותיאום מהיר מול המרכז הווטרינרי בעת הצורך.
-                </span>
+              {/* Explanatory Safety Reassurance Note with Strong GPS Recommendation */}
+              <div className="text-[11px] text-slate-700 bg-white/95 border border-emerald-200/80 rounded-xl p-3 font-medium space-y-1 shadow-2xs">
+                <div className="flex items-center gap-1.5 font-bold text-emerald-900">
+                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span>💡 מומלץ ביותר: לחצו על כפתור ה-GPS הירוק למעלה!</span>
+                </div>
+                <p className="text-slate-600 pr-5">
+                  לחיצה אחת ממלאת את כתובתכם המדויקת אוטומטית וחוסכת הקלדה. הכתובת נשמרת באופן מאובטח לפתיחת תיק בריאות אישי, רישום ביטוחי ותיאום מול המרכז הווטרינרי בעת הצורך.
+                </p>
               </div>
 
               {isReturningAddress && (

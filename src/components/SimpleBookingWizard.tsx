@@ -1229,6 +1229,9 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                         <option key={city} value={city} />
                       ))}
                     </datalist>
+                    <p className="text-[10px] text-slate-500 font-medium pt-0.5">
+                      💡 <strong>טיפ:</strong> בשאלון הדיגיטלי הלקוח יכול ללחוץ על כפתור ה-GPS והכתובת המדויקת נשלפת אוטומטית.
+                    </p>
                   </div>
                 </div>
 
