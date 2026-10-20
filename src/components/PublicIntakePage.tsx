@@ -177,7 +177,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   const [selectedBenefitId, setSelectedBenefitId] = useState<string>(initialProfile?.selectedBenefitId || 'discount_100');
 
   // GPS Auto-Detect Handler
-  const handleDetectGpsAddress = async () => {
+  const handleDetectGpsAddress = async (targetSetter?: (addr: string) => void) => {
     setIsLocatingGps(true);
     setErrorMessage(null);
     setGpsSuccessNotice(null);
@@ -188,6 +188,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       const res = await reverseGeocodeCoordinates(coords.lat, coords.lng);
       if (res.address) {
         setOwnerAddress(res.address);
+        if (targetSetter) {
+          targetSetter(res.address);
+        }
         setGpsSuccessNotice(`הכתובת זוהתה בהצלחה: ${res.address}`);
       }
     } catch (err: any) {
@@ -258,6 +261,12 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   // Mandatory Terms & Conditions Acceptance State
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
+
+  // Address Second-Chance Reminder Modal State (prompts on submit if address was omitted, without forcing)
+  const [showAddressReminderModal, setShowAddressReminderModal] = useState(false);
+  const [pendingSubmitCallbackOnly, setPendingSubmitCallbackOnly] = useState(false);
+  const [addressReminderInput, setAddressReminderInput] = useState('');
+  const [hasConfirmedNoAddress, setHasConfirmedNoAddress] = useState(false);
 
   // Helper: Read file as Data URL
   const readFileAsDataUrl = (file: File): Promise<string> => {
@@ -706,10 +715,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       return triggerValidationError('field_ownerEmail', 'נא להזין כתובת אימייל תקינה (למשל name@gmail.com)');
     }
 
-    // 4. Address
-    if (!ownerAddress.trim() || ownerAddress.trim().length < 5) {
-      return triggerValidationError('field_ownerAddress', 'חובה למלא כתובת מגורים מלאה (עיר, רחוב ומספר בית)');
-    }
+    // 4. Address (no hard blocker - if omitted, handleProcessSubmit offers a polite second-chance prompt)
 
     // 5. Dog Details
     if (!dogName.trim()) {
@@ -792,8 +798,18 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
   };
 
   // Submit Handler
-  const handleProcessSubmit = async (isCallbackOnly: boolean) => {
+  const handleProcessSubmit = async (isCallbackOnly: boolean, bypassAddressCheck: boolean = false, overrideAddress?: string) => {
     if (!validateForm()) {
+      return;
+    }
+
+    const effectiveAddress = (overrideAddress !== undefined ? overrideAddress : ownerAddress).trim();
+
+    // If address is omitted and client has not yet confirmed skipping, offer an unforced second chance
+    if (!effectiveAddress && !bypassAddressCheck && !hasConfirmedNoAddress) {
+      setAddressReminderInput('');
+      setPendingSubmitCallbackOnly(isCallbackOnly);
+      setShowAddressReminderModal(true);
       return;
     }
 
@@ -844,7 +860,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
       ownerName: ownerName.trim(),
       ownerPhone: formattedPhone,
       ownerEmail: ownerEmail.trim() || undefined,
-      ownerAddress: ownerAddress.trim(),
+      ownerAddress: effectiveAddress,
       ownerCoordinates: ownerCoordinates,
       dogName: dogName.trim(),
       dogBreed: dogBreed.trim(),
@@ -1746,7 +1762,6 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                   <label className="text-sm font-black text-slate-900 flex items-center gap-1.5">
                     <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
                     <span>כתובת מגורים מלאה (עיר, רחוב ומספר בית)</span>
-                    <span className="text-red-500 font-bold">*</span>
                   </label>
                   <span className="text-[11px] bg-emerald-100 text-emerald-800 font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-200">
                     🛡️ שדה חיוני לתיק הבטיחות ולמקרה חירום רפואי
@@ -1781,7 +1796,6 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               <div className="relative">
                 <input
                   type="text"
-                  required
                   list="israeli-cities-intake"
                   value={ownerAddress}
                   onFocus={() => {
@@ -3393,6 +3407,153 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
         <footer className="text-center text-xs text-slate-400 font-medium pb-6">
           הריזורט לכלב · פנסיון, אילוף ושיקום התנהגותי 🐾
         </footer>
+
+        {/* Second-Chance Address Reminder Modal */}
+        {showAddressReminderModal && (
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 animate-in fade-in" dir="rtl">
+            <div className="bg-white rounded-3xl max-w-lg w-full flex flex-col shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95">
+              
+              {/* Modal Header */}
+              <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center text-lg shadow-xs shrink-0">
+                    🏥
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-slate-900">
+                      בטיחות ובריאות הכלב בריזורט
+                    </h3>
+                    <p className="text-[11px] text-emerald-800 font-bold">
+                      הזדמנות להשלמת פרטי התיק הווטרינרי
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddressReminderModal(false);
+                    const el = document.getElementById('field_ownerAddress');
+                    if (el) {
+                      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      el.querySelector('input')?.focus();
+                    }
+                  }}
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+                  title="סגירה"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 sm:p-6 space-y-4">
+                {/* Highlighted Message Requested by Hagai */}
+                <div className="bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl p-4 text-center space-y-2 shadow-xs">
+                  <p className="text-base sm:text-lg font-black text-emerald-950 leading-snug">
+                    "להשלמת התיק הרפואי ובטיחות הכלב, נשמח לעדכון כתובת המגורים שלכם:"
+                  </p>
+                  <p className="text-xs text-slate-600 font-medium">
+                    הכתובת נשמרת באופן מאובטח ומשמשת לכיסוי ביטוחי, הגעה מהירה של שירותי רפואה במקרה חירום ובטיחות וטרינרית.
+                  </p>
+                </div>
+
+                {/* Inline Address Entry with GPS and Israeli cities autocomplete */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <label className="text-xs font-black text-slate-800">
+                      כתובת מגורים (עיר, רחוב ומספר בית):
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleDetectGpsAddress((detectedAddr) => setAddressReminderInput(detectedAddr))}
+                      disabled={isLocatingGps}
+                      className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white font-black text-xs px-3 py-1.5 rounded-xl shadow-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isLocatingGps ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>מאתר כתובת...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="bg-amber-400 text-amber-950 text-[10px] font-black px-1 rounded-sm">מומלץ ⭐</span>
+                          <Navigation className="w-3.5 h-3.5 text-amber-200" />
+                          <span>מילוי מהיר בלחיצה (GPS) 📍</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <input
+                    type="text"
+                    list="israeli-cities-intake"
+                    value={addressReminderInput}
+                    onChange={(e) => setAddressReminderInput(e.target.value)}
+                    placeholder="לדוגמה: כפר סבא, ויצמן 12"
+                    className="w-full bg-white border-2 border-slate-300 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:outline-none transition-all shadow-inner"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Modal Action Buttons */}
+                <div className="pt-2 space-y-2.5">
+                  {/* Save and submit */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const finalAddr = addressReminderInput.trim();
+                      setShowAddressReminderModal(false);
+                      if (finalAddr) {
+                        setOwnerAddress(finalAddr);
+                        handleProcessSubmit(pendingSubmitCallbackOnly, true, finalAddr);
+                      } else {
+                        setHasConfirmedNoAddress(true);
+                        handleProcessSubmit(pendingSubmitCallbackOnly, true, '');
+                      }
+                    }}
+                    className="w-full bg-[#065f46] hover:bg-[#044e45] active:scale-[0.99] text-white font-black py-3.5 rounded-2xl text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>
+                      {addressReminderInput.trim() ? 'שמירה והמשך בשליחת השאלון ✓' : 'המשך ושליחה ללא כתובת ➔'}
+                    </span>
+                  </button>
+
+                  {/* Respect choice: Submit without address or return to form */}
+                  {addressReminderInput.trim() ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddressReminderModal(false);
+                        setHasConfirmedNoAddress(true);
+                        handleProcessSubmit(pendingSubmitCallbackOnly, true, '');
+                      }}
+                      className="w-full text-slate-500 hover:text-slate-800 text-xs font-bold py-2 text-center transition-colors cursor-pointer"
+                    >
+                      המשך ושליחה ללא ציון כתובת ➔
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddressReminderModal(false);
+                        const el = document.getElementById('field_ownerAddress');
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          el.querySelector('input')?.focus();
+                        }
+                      }}
+                      className="w-full text-emerald-700 hover:text-emerald-900 text-xs font-bold py-2 text-center transition-colors cursor-pointer"
+                    >
+                      חזור לטופס כדי למלא בנחת
+                    </button>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
 
         {/* Full Terms & Conditions Modal */}
         {isTermsModalOpen && (
