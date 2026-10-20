@@ -1831,10 +1831,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               <div className="text-[11px] text-slate-700 bg-white/95 border border-emerald-200/80 rounded-xl p-3 font-medium space-y-1 shadow-2xs">
                 <div className="flex items-center gap-1.5 font-bold text-emerald-900">
                   <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span>💡 מומלץ ביותר: לחצו על כפתור ה-GPS הירוק למעלה!</span>
+                  <span>💡 מילוי מהיר: מומלץ ללחוץ על כפתור ה-GPS הירוק למעלה!</span>
                 </div>
                 <p className="text-slate-600 pr-5">
-                  לחיצה אחת ממלאת את כתובתכם המדויקת אוטומטית וחוסכת הקלדה. הכתובת נשמרת באופן מאובטח לפתיחת תיק בריאות אישי, רישום ביטוחי ותיאום מול המרכז הווטרינרי בעת הצורך.
+                  לחיצה אחת ממלאת את כתובתכם המדויקת אוטומטית וחוסכת הקלדה.
                 </p>
               </div>
 
@@ -3448,12 +3448,9 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               {/* Modal Body */}
               <div className="p-5 sm:p-6 space-y-4">
                 {/* Highlighted Message Requested by Hagai */}
-                <div className="bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl p-4 text-center space-y-2 shadow-xs">
+                <div className="bg-emerald-50/90 border-2 border-emerald-300 rounded-2xl p-4 text-center shadow-xs">
                   <p className="text-base sm:text-lg font-black text-emerald-950 leading-snug">
-                    "להשלמת התיק הרפואי ובטיחות הכלב, נשמח לעדכון כתובת המגורים שלכם:"
-                  </p>
-                  <p className="text-xs text-slate-600 font-medium">
-                    הכתובת נשמרת באופן מאובטח ומשמשת לכיסוי ביטוחי, הגעה מהירה של שירותי רפואה במקרה חירום ובטיחות וטרינרית.
+                    להשלמת התיק הרפואי ובטיחות הכלב, נשמח לעדכון כתובת המגורים שלכם:
                   </p>
                 </div>
 

@@ -117,7 +117,7 @@ export function formatClientPaymentLinkMessage(
     : (agreedAmount > 0 ? ` (סכום מוסכם: ₪${agreedAmount.toLocaleString('he-IL')})` : '');
 
   const addressPrompt = (!request.ownerAddress || request.ownerAddress.trim().length < 5)
-    ? `\n🏠 *השלמת כרטיס בריאות ובטיחות:* שמנו לב שלא צוינה כתובת מגורים מלאה. אנא השב להודעה זו עם כתובתכם (עיר, רחוב ומספר בית) כדי שנשלים את תיק הבריאות והבטיחות הווטרינרי של *${request.dogName}*.\n`
+    ? `\n🏠 *להשלמת התיק הרפואי ובטיחות הכלב:* נשמח לעדכון כתובת המגורים שלכם (עיר, רחוב ומספר בית).\n`
     : '';
 
   return `היי ${firstName}, שמחנו לשוחח! 🐾🐶
