@@ -404,15 +404,18 @@ export default async function handler(req, res) {
   } catch (err) {
     console.error('Error in cron-hourly-sync:', err);
     try {
-      const emergencyUrl = getGreenApiUrl('710722735421', 'sendMessage', 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b');
-      await fetch(emergencyUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatId: '972543200007@c.us',
-          message: `🚨 *התראת כשל מערכת בסנכרון שעתי (cron-hourly-sync)*\nשגיאה: ${err.message}\nנא לבדוק את התקלה באופן מיידי!`
-        })
+      const { data: sRows } = await supabase.from('settings').select('*').limit(1);
+      const sRow = sRows?.[0] || {};
+      const curData = sRow.data || {};
+      const errors = Array.isArray(curData.systemHealthErrors) ? curData.systemHealthErrors.slice(-20) : [];
+      errors.push({
+        function: 'cron-hourly-sync',
+        timestamp: new Date().toISOString(),
+        error: err.message
       });
+      await supabase.from('settings').update({
+        data: { ...curData, systemHealthErrors: errors }
+      }).eq('id', sRow.id || 'resort_config');
     } catch (_) {}
     return res.status(500).json({ error: err.message });
   }
