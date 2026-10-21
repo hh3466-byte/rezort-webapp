@@ -82,7 +82,7 @@ function formatPhoneFormatted(phone) {
   return phone;
 }
 
-export function formatReport(managerName, bookings, settings, intakes, payments, todayStr, unansweredChats = []) {
+export function formatReport(managerName, bookings, settings, intakes, payments, todayStr, unansweredChats = [], recipientType = 'shmulik') {
   const tomorrowStr = addDays(todayStr, 1);
   const tomDate = new Date(tomorrowStr + 'T00:00:00');
   const dayName = HEBREW_DAYS[tomDate.getDay()] || '';
@@ -211,7 +211,7 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
     const rStart = r.startDate || r.start_date || '';
     const rEnd = r.endDate || r.end_date || '';
     // Auto-archive rule: if dates have already passed without a booking, ignore from report
-    if ((rEnd && rEnd < todayStr) || (rStart && rStart < todayStr)) return false;
+    if ((rEnd && rEnd <= todayStr) || (rStart && rStart <= todayStr)) return false;
 
     const rDog = (r.dogName || r.dog_name || '').trim().toLowerCase();
     const rPhone = cleanPhoneNumber(r.ownerPhone || r.owner_phone || '');
@@ -236,7 +236,10 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
       else if (pi.status === 'in_progress' || notes.length > 0) statusBadge = '🟡 בתהליך';
       return `${idx + 1}. ${statusBadge}: *${dog}* (${owner} - 📞 ${phone}) | מיועד: ${sDate} עד ${eDate}`;
     }).join('\n');
-    actionBlocks.push(`📋 *שאלוני קליטה לבדיקה / בתהליך שממתינים לטיפול וסגירה (${unhandledIntakes.length}):*\n${pList}\n👉 *שמוליק, אנא היכנס למסך שאלוני קליטה כדי לאשר, לקלוט ליומן או לסגור טיפול.*`);
+    const ctaPrompt = recipientType === 'hagai'
+      ? '👉 שמוליק והצוות קיבלו הנחיה להיכנס למסך שאלוני קליטה כדי לאשר, לקלוט או לסגור טיפול.'
+      : '👉 שמוליק, אנא היכנס למסך שאלוני קליטה כדי לאשר, לקלוט ליומן או לסגור טיפול.';
+    actionBlocks.push(`📋 *שאלוני קליטה לבדיקה / בתהליך שממתינים לטיפול וסגירה (${unhandledIntakes.length}):*\n${pList}\n${ctaPrompt}`);
   }
 
   // 2. Unanswered WhatsApp messages
@@ -451,13 +454,18 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
   const todayDate = new Date(todayStr + 'T00:00:00');
   const isWeekendOrFriday = todayDate.getDay() === 5 || todayDate.getDay() === 6; // 5=Friday, 6=Saturday
 
+  const regardsPromiseTarget = recipientType === 'hagai' ? 'אליך' : 'למנהל';
   const regardsStatusSection = isWeekendOrFriday
     ? `\n🐾 *עדכוני לקוחות (סופ״ש):*\nסגור ומנוטר (ללא שליחת הודעות יזומות ללקוחות בשישי/שבת/חג).\n`
     : (activeTonightCount > 0
-      ? `\n🐾 *עדכוני ד"ש ללקוחות:*\nמתוזמנים לשעה 20:00 עבור ${activeTonightCount} כלבים השוהים הלילה בריזורט (אישור יישלח למנהל מיד בסיום המשלוח).\n`
+      ? `\n🐾 *עדכוני ד"ש ללקוחות:*\nמתוזמנים לשעה 20:00 עבור ${activeTonightCount} כלבים השוהים הלילה בריזורט (אישור יישלח ${regardsPromiseTarget} מיד בסיום המשלוח).\n`
       : '');
 
-  return `📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾
+  const headerTitle = recipientType === 'hagai'
+    ? `📋 *מה קורה מחר? סקירה יומית לבעלים (חגי) – הריזורט לכלב* 🐾`
+    : `📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾`;
+
+  return `${headerTitle}
 📅 יום ${dayName}, ${formattedDate} | הפקה: 19:00
 
 🐾 *נוכחות כללית במתחם מחר:* ${presentDogsCount} כלבים${presentDogsCount !== presentDaytimeDogs.length ? ` (${presentDaytimeDogs.length} הזמנות, כולל זוגות)` : ''}
@@ -583,19 +591,29 @@ export default async function handler(req, res) {
       }
     }
 
-    const reportText = formatReport(settings.managerName || 'שמוליק', bookings || [], settings, intakes || [], payments || [], todayStr);
-
     const recipients = ['972506336896@c.us', '972543200007@c.us'];
     const sendResults = [];
 
     for (const chatId of recipients) {
       try {
+        const isHagai = chatId === '972543200007@c.us';
+        const personalizedMsg = formatReport(
+          settings.managerName || 'שמוליק',
+          bookings || [],
+          settings,
+          intakes || [],
+          payments || [],
+          todayStr,
+          [],
+          isHagai ? 'hagai' : 'shmulik'
+        );
+
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 12000);
         const sendRes = await fetch(getGreenApiUrl(greenId, 'sendMessage', greenToken), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, message: reportText }),
+          body: JSON.stringify({ chatId, message: personalizedMsg }),
           signal: controller.signal
         });
         clearTimeout(timeout);
@@ -625,6 +643,17 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('Error in cron-evening-report:', err);
+    try {
+      const emergencyUrl = getGreenApiUrl('710722735421', 'sendMessage', 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b');
+      await fetch(emergencyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: '972543200007@c.us',
+          message: `🚨 *התראת כשל מערכת בדוח מה קורה מחר (19:00)*\nפונקציה: cron-evening-report\nשגיאה: ${err.message}\nנא לבדוק את התקלה באופן מיידי!`
+        })
+      });
+    } catch (_) {}
     return res.status(500).json({ error: err.message });
   }
 }

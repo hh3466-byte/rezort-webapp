@@ -279,8 +279,11 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
       const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
       const bPayerPhone = cleanPhoneNumber(b.data?.payerPhone || b.payerPhone || '');
       const bEmail = (b.owner_email || b.ownerEmail || b.data?.ownerEmail || '').trim().toLowerCase();
+      const notesCleanDigits = notes.replace(/\D/g, '');
 
-      const phoneMatches = (pPhone && bPhone && pPhone === bPhone) || (pPhone && bPayerPhone && pPhone === bPayerPhone) || (pPhone && notes.includes(pPhone));
+      const phoneMatches = (pPhone && bPhone && pPhone === bPhone) || 
+                           (pPhone && bPayerPhone && pPhone === bPayerPhone) || 
+                           (pPhone && notesCleanDigits.includes(pPhone));
       const emailMatches = pEmail && bEmail && pEmail === bEmail;
 
       if (phoneMatches || emailMatches) {
@@ -292,7 +295,11 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
         if (s <= pDateStr && e >= pDateStr) return true;
       }
       return false;
-    });
+    }) || ((settings.daycare_passes || settings.data?.daycare_passes || []).some(pass => {
+      const passPhone = cleanPhoneNumber(pass.ownerPhone || pass.owner_phone || '');
+      const passPrice = Number(pass.pricePaid || pass.price_paid || 0);
+      return (passPhone && pPhone && passPhone === pPhone) || (passPrice > 0 && passPrice === pAmount && passPhone && pPhone && passPhone.endsWith(pPhone.slice(-7)));
+    }));
 
     if (!isMatched && pAmount > 0) {
       redLights.unreconciledGrowPayments.push(`💳 תשלום Grow שלא שויך: *${pName}* (📞 ${pPhone || 'ללא טלפון'}) | שילם ₪${pAmount.toLocaleString()} ב-${formatDateIL(pDateStr)} (אסמכתא: ${pRef}) | לא אותר שריון תואם ביומן!`);
@@ -525,7 +532,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     const start = b.start_date || b.startDate;
     const end = b.end_date || b.endDate;
     const bNotes = (b.notes || '') + ((b.data && b.data.notes) || '');
-    const hasGrowPayment = (payments || []).some(gp => {
+    const hasGrowPayment = (growPayments || []).some(gp => {
       const gpPhone = cleanPhoneNumber(gp.customer_phone || gp.customerPhone || '');
       const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
       return gpPhone && bPhone && gpPhone === bPhone && Number(gp.amount) > 0;
@@ -863,6 +870,17 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('Error in cron-sanity-check:', err);
+    try {
+      const emergencyUrl = getGreenApiUrl('710722735421', 'sendMessage', 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b');
+      await fetch(emergencyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: MANAGER_CHAT_ID,
+          message: `🚨 *התראת כשל מערכת בדוח בדיקת שפיות (18:30)*\nפונקציה: cron-sanity-check\nשגיאה: ${err.message}\nנא לבדוק את התקלה באופן מיידי!`
+        })
+      });
+    } catch (_) {}
     return res.status(500).json({ error: err.message });
   }
 }

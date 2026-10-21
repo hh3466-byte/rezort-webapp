@@ -27,6 +27,13 @@ function cleanPhoneNumber(phone) {
   return cleaned;
 }
 
+function getGreenApiUrl(id, endpoint, token) {
+  const cleanId = String(id || '').trim();
+  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
+  const domain = clusterPrefix ? `${clusterPrefix}.api.greenapi.com` : 'api.greenapi.com';
+  return `https://${domain}/waInstance${cleanId}/${endpoint}/${token}`;
+}
+
 function getIsraelDateInfo() {
   const now = new Date();
   const dtf = new Intl.DateTimeFormat('en-US', {
@@ -294,7 +301,15 @@ export default async function handler(req, res) {
         const isExpired = (eDate && eDate <= todayStr) || (sDate && sDate < todayStr);
         const hasIrrelevantNote = req.internalNotes && (req.internalNotes.includes('לא רלוונטי') || req.internalNotes.includes('הוסר מהרשימה') || req.internalNotes.includes('בוטל'));
         
-        if ((isExpired || hasIrrelevantNote) && req.status !== 'archived' && req.status !== 'abandoned' && req.status !== 'approved') {
+        const reqDog = (req.dogName || req.dog_name || '').trim().toLowerCase();
+        const reqPhone = cleanPhoneNumber(req.ownerPhone || req.owner_phone || '');
+        const hasBooking = (bookings || []).some(b => {
+          const bDog = (b.dog_name || b.dogName || '').trim().toLowerCase();
+          const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+          return (reqDog && bDog && reqDog === bDog && (bPhone.slice(-7) === reqPhone.slice(-7) || !reqPhone));
+        });
+
+        if ((isExpired || hasIrrelevantNote) && req.status !== 'archived' && req.status !== 'abandoned' && (!hasBooking || req.status !== 'approved')) {
           autoArchivedIntakesCount++;
           return {
             ...req,
@@ -304,6 +319,55 @@ export default async function handler(req, res) {
         }
         return req;
       });
+    }
+
+    // 8. WATCHDOG: Self-healing check for missed critical daily reports
+    const watchdogLogs = [];
+    const baseUrl = 'https://rezort-webapp.vercel.app';
+
+    // A. 18:30 Sanity Report watchdog (runs if Israel hour >= 18:35 and not yet sent today)
+    if (hour > 18 || (hour === 18 && minute >= 35)) {
+      const alreadySent1830 = curSettingsData.last1830SanitySentDate === todayStr;
+      if (!alreadySent1830) {
+        try {
+          console.log('[WATCHDOG] Triggering missed 18:30 Sanity Report...');
+          const sanityRes = await fetch(`${baseUrl}/api/cron-sanity-check?force=true`);
+          const sJson = await sanityRes.json();
+          watchdogLogs.push({ task: '1830_sanity', triggered: true, status: sJson.status });
+        } catch (we) {
+          watchdogLogs.push({ task: '1830_sanity', triggered: true, error: we.message });
+        }
+      }
+    }
+
+    // B. 19:00 Tomorrow Overview watchdog (runs if Israel hour >= 19:15 and not yet sent today)
+    if (hour > 19 || (hour === 19 && minute >= 15)) {
+      const alreadySent1900 = curSettingsData.lastTomorrowOverviewSentDate === todayStr;
+      if (!alreadySent1900) {
+        try {
+          console.log('[WATCHDOG] Triggering missed 19:00 Evening Report...');
+          const eveRes = await fetch(`${baseUrl}/api/cron-evening-report?force=true`);
+          const eJson = await eveRes.json();
+          watchdogLogs.push({ task: '1900_evening_report', triggered: true, status: eJson.status });
+        } catch (we) {
+          watchdogLogs.push({ task: '1900_evening_report', triggered: true, error: we.message });
+        }
+      }
+    }
+
+    // C. 20:00 Daily Regards watchdog (runs if Israel hour >= 20:15 and not yet sent today)
+    if (hour > 20 || (hour === 20 && minute >= 15)) {
+      const alreadySent2000 = curSettingsData.last2000DailyUpdateSentDate === todayStr;
+      if (!alreadySent2000) {
+        try {
+          console.log('[WATCHDOG] Triggering missed 20:00 Daily Update...');
+          const duRes = await fetch(`${baseUrl}/api/cron-daily-update?force=true`);
+          const duJson = await duRes.json();
+          watchdogLogs.push({ task: '2000_daily_update', triggered: true, status: duJson.status });
+        } catch (we) {
+          watchdogLogs.push({ task: '2000_daily_update', triggered: true, error: we.message });
+        }
+      }
     }
 
     await supabase.from('settings').update({
@@ -318,7 +382,8 @@ export default async function handler(req, res) {
           autoArchivedIntakesCount,
           growApiHealthy,
           growLatencyMs,
-          durationMs: Date.now() - startTime
+          durationMs: Date.now() - startTime,
+          watchdogLogs
         }
       },
       updated_at: new Date().toISOString()
@@ -333,10 +398,22 @@ export default async function handler(req, res) {
       growApiHealthy,
       growLatencyMs,
       durationMs: Date.now() - startTime,
+      watchdogLogs,
       syncLogs
     });
   } catch (err) {
     console.error('Error in cron-hourly-sync:', err);
+    try {
+      const emergencyUrl = getGreenApiUrl('710722735421', 'sendMessage', 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b');
+      await fetch(emergencyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: '972543200007@c.us',
+          message: `🚨 *התראת כשל מערכת בסנכרון שעתי (cron-hourly-sync)*\nשגיאה: ${err.message}\nנא לבדוק את התקלה באופן מיידי!`
+        })
+      });
+    } catch (_) {}
     return res.status(500).json({ error: err.message });
   }
 }
