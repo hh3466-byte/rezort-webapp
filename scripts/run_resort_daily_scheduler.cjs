@@ -179,7 +179,7 @@ async function execute1830Sanity(settings, bookings, intakes, todayStr, isForced
     redLights.forEach(r => parts.push(`   • ${r}`));
   }
 
-  parts.push(`\n📱 *דוח זה הופק ונשלח ישירות למנהל (${MANAGER_PHONE}) כהוראת ברזל.*`);
+  parts.push(`\n📱 *דוח זה הופק ונשלח ישירות לחגי (${MANAGER_PHONE}) כהוראת ברזל.*`);
 
   const reportText = parts.join('\n');
   console.log('[18:30] שולח דוח שפיות למנהל...');

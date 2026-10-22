@@ -8,6 +8,12 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import {
+  validateDispatchTimeWindow,
+  preflightValidateDailyDogMessage,
+  autoHealCompletedStays,
+  HAGAI_CHAT_ID
+} from './_preflightValidator.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ydlynqqmulojhrxbfjsc.supabase.co";
 const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
@@ -80,9 +86,9 @@ const WEEKEND_DOG_TEMPLATES = [
 ];
 
 const SHLOMI_LUNA_TEMPLATES = [
-  { id: 301, type: "training", text: "📅 *יום {daysCount} בריזורט (וכבר שבועות מאז ראש השנה...)* 💔\n\nשלומי אהוב שלי... 🥺 שמעתי שראש השנה כבר עבר, סוכות עוד רגע כאן, ואני עדיין מריחה את השבילים בטבע ותוהה לאן נעלם הריח של אבא שלי? מתגעגעת ברמות ששמוליק כבר לא יודע איפה ללטף אותי קודם כדי לנחם... מתי אתה בא לחבק אותי? לונה המתגעגעת 🐾💔" },
-  { id: 302, type: "training", text: "📅 *יום {daysCount} של געגועים עמוקים לאבא שלומי* 🥺🐾\n\nהיי שלומי... 🐾 היום באילוף שמוליק לימד אותי להקשיב ולהיות הכי טובה בעולם, אבל האמת? בכל פעם שנפתח השער של הריזורט האוזניים שלי מזדקרות ואני בטוחה שזה אתה שבא לבקר. אל תשאיר אותי במתח יותר מדי זמן, אני מחכה לך! שלך תמיד, לונה 🐶❤️" },
-  { id: 304, type: "training", text: "📅 *יום {daysCount} באילוף של אלופים בריזורט* 🎓💔\n\nערב טוב שלומי! 🎓🐾 אני תלמידה מצטיינת והכל פה 5 כוכבים, אבל יש תרגיל אחד שאני פשוט לא מצליחה ללמוד: איך להפסיק להתגעגע אליך... תבטיח שאתה קופץ לראות כמה גדלתי והחכמתי? מחכה לחיבוק שלך, לונה 🐾🥰" }
+  { id: 301, type: "training", text: "📅 *יום {daysCount} בריזורט לכלב* 🐾❤️\n\nערב טוב שלומי! 🌿 קיבלתי היום את ארוחת המלכים שלי בדיוק בזמן, רצתי בטבע ונהניתי מליטופים מפנקים משמוליק. שולחת לך המון אהבה וחיבוקים חמים! שלך תמיד, לונה המתגעגעת 🐶🛋️✨" },
+  { id: 302, type: "training", text: "📅 *יום {daysCount} של פינוק ורוגע בריזורט* 🐕✨\n\nהיי שלומי! 🐾 היום היה יום משגע של טיול בטבע, ריחות נהדרים והמון יחס אישי חם מכל הצוות. עכשיו אני שוכבת בסוויטה שלי רגועה ומאושרת. מתגעגעת ואוהבת מלא, לונה 🐶❤️" },
+  { id: 303, type: "training", text: "📅 *יום {daysCount} בריזורט לכלב* 🌲🐾\n\nערב טוב שלומי אהוב שלי! 🐾 רק רציתי לעדכן שכיף לי ונעים לי, שמוליק דואג לי לכל מה שאני צריכה וכולם פה אוהבים אותי. שולחת לך נשיקה רטובה על האף ומחכה לראות אותך! לונה 🐶🥰" }
 ];
 
 function isDogFemale(b) {
@@ -191,6 +197,9 @@ export default async function handler(req, res) {
   try {
     const { dateStr: todayStr, hour, minute, weekday } = getIsraelDateInfo();
     const isForced = req.query?.force === 'true';
+    const isDryRun = req.query?.dryRun === 'true';
+    const isPreflight = req.query?.preflight === 'true';
+    const allowOutOfWindow = req.query?.allowOutOfWindow === 'true';
 
     // Quiet time enforcement (Rule 1 & Rule 10)
     // Friday after 14:00
@@ -201,15 +210,18 @@ export default async function handler(req, res) {
     if (!isForced && weekday === 'Sat' && hour < 20) {
       return res.status(200).json({ status: 'skipped', reason: 'Saturday daytime - quiet until Motzei Shabbat.' });
     }
-    // Regular weekday before 20:00 (unless forced)
-    if (!isForced && (hour < 20 || (hour === 20 && minute < 0))) {
-      return res.status(200).json({ status: 'skipped', reason: `Current Israel time is ${hour}:${minute}, scheduled for 20:00.` });
-    }
+
+    // 1. Strict Dispatch Time Window Check (19:57 to 20:05)
+    const timeCheck = validateDispatchTimeWindow(20, 0, 3, 5);
+
+    // Auto-heal ghost stays and past checkouts in Supabase before greeting active dogs
+    await autoHealCompletedStays(supabase, todayStr);
 
     // Fetch settings for Green-API credentials
     const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
     const sRow = settingsRows?.[0] || {};
     const settings = { ...sRow, ...(sRow.data || {}) };
+    const curData = sRow.data || {};
 
     const greenId = settings.greenApiIdInstance;
     const greenToken = settings.greenApiToken;
@@ -218,12 +230,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Missing Green-API credentials in settings' });
     }
 
-    // Check if daily update was already dispatched today
-    if (!isForced && settings.last2000DailyUpdateSentDate === todayStr) {
-      return res.status(200).json({ status: 'already_sent_today', date: todayStr });
-    }
-
-    // 1. Fetch active staying dogs for daily greeting - ONLY dogs that are currently checked-in!
+    // 1. Fetch active staying dogs for daily greeting - ONLY dogs that are currently checked-in and staying tomorrow!
     const { data: bookings } = await supabase
       .from('bookings')
       .select('*')
@@ -232,6 +239,44 @@ export default async function handler(req, res) {
       .eq('stay_status', 'checked_in');
 
     const activeBookings = bookings || [];
+
+    // Pre-flight check (5-10m before 20:00) OR early execution: stage data without sending WhatsApp
+    if (isPreflight || (timeCheck.isEarly && !allowOutOfWindow)) {
+      await supabase.from('settings').update({
+        data: {
+          ...curData,
+          staged2000DailyUpdate: {
+            date: todayStr,
+            timestamp: new Date().toISOString(),
+            activeStayingDogsCount: activeBookings.length,
+            preflightVerified: true
+          }
+        },
+        updated_at: new Date().toISOString()
+      }).eq('id', sRow.id || 'resort_config');
+
+      return res.status(200).json({
+        status: 'preflight_staged',
+        time: timeCheck.currentFormatted,
+        note: `Pre-flight check passed 5-10m before dispatch. ${activeBookings.length} dogs verified for 20:00 greeting. Awaiting 20:00 dispatch window.`
+      });
+    }
+
+    // Strict Out-of-Window Block (Rule 25: Never send late!)
+    if (timeCheck.isLate && !allowOutOfWindow) {
+      console.warn(`[TIME_GATEKEEPER] 20:00 daily update blocked: current time ${timeCheck.currentFormatted} is past window ${timeCheck.maxAllowedFormatted}`);
+      return res.status(200).json({
+        status: 'blocked_out_of_window',
+        time: timeCheck.currentFormatted,
+        reason: `Current time ${timeCheck.currentFormatted} is outside the allowed 20:00 window (19:57 - 20:05). Late dispatch strictly blocked as per ironclad rule.`
+      });
+    }
+
+    // Check if daily update was already dispatched today
+    if (!isForced && settings.last2000DailyUpdateSentDate === todayStr) {
+      return res.status(200).json({ status: 'already_sent_today', date: todayStr });
+    }
+
     let dogSentCount = 0;
     let dogFailCount = 0;
     const sentDogsMap = new Set();
@@ -286,7 +331,14 @@ export default async function handler(req, res) {
       for (const rec of recipients) {
         const intlPhone = rec.phone.startsWith('0') ? '972' + rec.phone.slice(1) : rec.phone;
         const chatId = `${intlPhone}@c.us`;
-        const msgText = selectDogTemplate(b, weekday === 'Sat', rec.name);
+        let msgText = selectDogTemplate(b, weekday === 'Sat', rec.name);
+        msgText = preflightValidateDailyDogMessage(msgText, b.dog_name || 'הכלב', rec.name || 'חבר');
+
+        if (isDryRun) {
+          dogSentCount++;
+          anySent = true;
+          continue;
+        }
 
         try {
           const controller = new AbortController();
@@ -383,10 +435,12 @@ export default async function handler(req, res) {
     const totalFails = dogFailCount + reviewFailCount;
     const hasDispatches = (dogSentCount > 0 || reviewSentCount > 0 || totalFails > 0);
     const confirmationText = hasDispatches 
-      ? `נשלחו ד"ש ל-${dogSentCount} בעלי כלבים ו-${reviewSentCount} בקשות חוות דעת. כולם קיבלו. ${totalFails > 0 ? `יש ${totalFails} כשלים` : 'אין כשל ✅'}`
+      ? (reviewSentCount > 0 
+          ? `נשלחו ד"ש ל-${dogSentCount} בעלי כלבים ו-${reviewSentCount} בקשות חוות דעת. כולם קיבלו. ${totalFails > 0 ? `יש ${totalFails} כשלים` : 'אין כשל ✅'}`
+          : `נשלחו ד"ש ל-${dogSentCount} בעלי כלבים. כולם קיבלו. ${totalFails > 0 ? `יש ${totalFails} כשלים` : 'אין כשל ✅'}`)
       : 'כל הכלבים השוהים כבר קיבלו ד"ש מוקדם יותר היום, ואין שחרורים חדשים. אין כשל ✅';
 
-    if (hasDispatches) {
+    if (hasDispatches && !isDryRun) {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 12000);
@@ -401,12 +455,11 @@ export default async function handler(req, res) {
       } catch (confErr) {
         console.error('Error sending confirmation message to Hagai:', confErr);
       }
-    } else {
+    } else if (!hasDispatches) {
       console.log('No new dog greetings or review requests to dispatch (all dogs already greeted earlier today). Skipping redundant admin message.');
     }
 
     // Update settings table with timestamp
-    const curData = sRow.data || {};
     await supabase.from('settings').update({
       data: {
         ...curData,

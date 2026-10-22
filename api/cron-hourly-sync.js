@@ -321,51 +321,87 @@ export default async function handler(req, res) {
       });
     }
 
-    // 8. WATCHDOG: Self-healing check for missed critical daily reports
+    // 8. WATCHDOG & PRE-FLIGHT: Self-healing check and pre-flight triggers
     const watchdogLogs = [];
     const baseUrl = 'https://rezort-webapp.vercel.app';
 
-    // A. 18:30 Sanity Report watchdog (runs if Israel hour >= 18:35 and not yet sent today)
-    if (hour > 18 || (hour === 18 && minute >= 35)) {
+    // A. 18:30 Sanity Report
+    // Pre-flight preparation (18:20 - 18:27)
+    if (hour === 18 && minute >= 20 && minute < 28) {
+      try {
+        console.log('[PRE-FLIGHT] Staging 18:30 Sanity Report...');
+        const pRes = await fetch(`${baseUrl}/api/cron-sanity-check?preflight=true`);
+        const pJson = await pRes.json();
+        watchdogLogs.push({ task: '1830_preflight', status: pJson.status });
+      } catch (pe) {
+        watchdogLogs.push({ task: '1830_preflight', error: pe.message });
+      }
+    }
+    // Live window (18:28 - 18:34)
+    else if (hour === 18 && minute >= 28 && minute <= 34) {
       const alreadySent1830 = curSettingsData.last1830SanitySentDate === todayStr;
       if (!alreadySent1830) {
         try {
-          console.log('[WATCHDOG] Triggering missed 18:30 Sanity Report...');
-          const sanityRes = await fetch(`${baseUrl}/api/cron-sanity-check?force=true`);
+          console.log('[WATCHDOG] Dispatching 18:30 Sanity Report in live window...');
+          const sanityRes = await fetch(`${baseUrl}/api/cron-sanity-check`);
           const sJson = await sanityRes.json();
-          watchdogLogs.push({ task: '1830_sanity', triggered: true, status: sJson.status });
+          watchdogLogs.push({ task: '1830_sanity_live', status: sJson.status });
         } catch (we) {
-          watchdogLogs.push({ task: '1830_sanity', triggered: true, error: we.message });
+          watchdogLogs.push({ task: '1830_sanity_live', error: we.message });
         }
       }
     }
 
-    // B. 19:00 Tomorrow Overview watchdog (runs if Israel hour >= 19:15 and not yet sent today)
-    if (hour > 19 || (hour === 19 && minute >= 15)) {
+    // B. 19:00 Tomorrow Overview
+    // Pre-flight preparation (18:50 - 18:57)
+    if (hour === 18 && minute >= 50 && minute < 58) {
+      try {
+        console.log('[PRE-FLIGHT] Staging 19:00 Tomorrow Overview...');
+        const pRes = await fetch(`${baseUrl}/api/cron-evening-report?preflight=true`);
+        const pJson = await pRes.json();
+        watchdogLogs.push({ task: '1900_preflight', status: pJson.status });
+      } catch (pe) {
+        watchdogLogs.push({ task: '1900_preflight', error: pe.message });
+      }
+    }
+    // Live window (18:58 - 19:04)
+    else if ((hour === 18 && minute >= 58) || (hour === 19 && minute <= 4)) {
       const alreadySent1900 = curSettingsData.lastTomorrowOverviewSentDate === todayStr;
       if (!alreadySent1900) {
         try {
-          console.log('[WATCHDOG] Triggering missed 19:00 Evening Report...');
-          const eveRes = await fetch(`${baseUrl}/api/cron-evening-report?force=true`);
+          console.log('[WATCHDOG] Dispatching 19:00 Evening Report in live window...');
+          const eveRes = await fetch(`${baseUrl}/api/cron-evening-report`);
           const eJson = await eveRes.json();
-          watchdogLogs.push({ task: '1900_evening_report', triggered: true, status: eJson.status });
+          watchdogLogs.push({ task: '1900_evening_report_live', status: eJson.status });
         } catch (we) {
-          watchdogLogs.push({ task: '1900_evening_report', triggered: true, error: we.message });
+          watchdogLogs.push({ task: '1900_evening_report_live', error: we.message });
         }
       }
     }
 
-    // C. 20:00 Daily Regards watchdog (runs if Israel hour >= 20:15 and not yet sent today)
-    if (hour > 20 || (hour === 20 && minute >= 15)) {
+    // C. 20:00 Daily Regards
+    // Pre-flight preparation (19:50 - 19:57)
+    if (hour === 19 && minute >= 50 && minute < 58) {
+      try {
+        console.log('[PRE-FLIGHT] Staging 20:00 Daily Update...');
+        const pRes = await fetch(`${baseUrl}/api/cron-daily-update?preflight=true`);
+        const pJson = await pRes.json();
+        watchdogLogs.push({ task: '2000_preflight', status: pJson.status });
+      } catch (pe) {
+        watchdogLogs.push({ task: '2000_preflight', error: pe.message });
+      }
+    }
+    // Live window (19:58 - 20:04)
+    else if ((hour === 19 && minute >= 58) || (hour === 20 && minute <= 4)) {
       const alreadySent2000 = curSettingsData.last2000DailyUpdateSentDate === todayStr;
       if (!alreadySent2000) {
         try {
-          console.log('[WATCHDOG] Triggering missed 20:00 Daily Update...');
-          const duRes = await fetch(`${baseUrl}/api/cron-daily-update?force=true`);
+          console.log('[WATCHDOG] Dispatching 20:00 Daily Update in live window...');
+          const duRes = await fetch(`${baseUrl}/api/cron-daily-update`);
           const duJson = await duRes.json();
-          watchdogLogs.push({ task: '2000_daily_update', triggered: true, status: duJson.status });
+          watchdogLogs.push({ task: '2000_daily_update_live', status: duJson.status });
         } catch (we) {
-          watchdogLogs.push({ task: '2000_daily_update', triggered: true, error: we.message });
+          watchdogLogs.push({ task: '2000_daily_update_live', error: we.message });
         }
       }
     }

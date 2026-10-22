@@ -9,6 +9,13 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import {
+  preflightValidateSanityReport,
+  validateDispatchTimeWindow,
+  autoHealCompletedStays,
+  HAGAI_PHONE,
+  HAGAI_CHAT_ID
+} from './_preflightValidator.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ydlynqqmulojhrxbfjsc.supabase.co";
 const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
@@ -741,7 +748,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
   parts.push(`\n🏦 *תזרים בנקאי עתידי (Grow - סה״כ מכלל העסקים):*`);
   parts.push(`ב-10 לחודש הבא (${nextPayoutDate}), ייכנס לבנק ${Math.round(totalAccumulatedForNextMonth).toLocaleString()} שקלים`);
 
-  parts.push(`\n📱 *דוח זה הופק ונשלח ישירות למנהל (${MANAGER_PHONE}) כהוראת ברזל.*`);
+  parts.push(`\n📱 *דוח זה הופק ונשלח ישירות לחגי (${MANAGER_PHONE}) כהוראת ברזל.*`);
 
   return {
     totalGreen,
@@ -755,9 +762,15 @@ export default async function handler(req, res) {
     const { dateStr: todayStr, hour, minute } = getIsraelDateInfo();
 
     const isForced = req.query?.force === 'true';
-    if (!isForced && (hour < 18 || (hour === 18 && minute < 25))) {
-      return res.status(200).json({ status: 'skipped', reason: `Current Israel time is ${hour}:${minute}, scheduled for 18:30.` });
-    }
+    const isDryRun = req.query?.dryRun === 'true';
+    const isPreflight = req.query?.preflight === 'true';
+    const allowOutOfWindow = req.query?.allowOutOfWindow === 'true';
+
+    // 1. Strict Dispatch Time Window Check (18:27 to 18:35)
+    const timeCheck = validateDispatchTimeWindow(18, 30, 3, 5);
+
+    // Auto-heal ghost stays and past checkouts in Supabase before running audit
+    await autoHealCompletedStays(supabase, todayStr);
 
     const { data: bookings } = await supabase.from('bookings').select('*');
     const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
@@ -766,6 +779,60 @@ export default async function handler(req, res) {
 
     const sRow = settingsRows?.[0] || {};
     const settings = { ...sRow, ...(sRow.data || {}) };
+    const curData = sRow.data || {};
+
+    const greenId = settings.greenApiIdInstance;
+    const greenToken = settings.greenApiToken;
+
+    const chats = (greenId && greenToken) ? await fetchGreenApiChats(greenId, greenToken, 80) : [];
+
+    const { totalGreen, totalRed, reportText } = run1830SanityAudit(
+      bookings || [],
+      settings,
+      intakes || [],
+      chats,
+      todayStr,
+      growPayments || []
+    );
+
+    // Run Pre-flight Validation and Auto-healing on text
+    const { cleanedText: finalReportText } = preflightValidateSanityReport(reportText, MANAGER_CHAT_ID);
+
+    // Pre-flight check (5-10m before 18:30) OR early execution: stage data without sending WhatsApp
+    if (isPreflight || (timeCheck.isEarly && !allowOutOfWindow)) {
+      await supabase.from('settings').update({
+        data: {
+          ...curData,
+          staged1830SanityReport: {
+            date: todayStr,
+            timestamp: new Date().toISOString(),
+            reportText: finalReportText,
+            totalGreen,
+            totalRed,
+            preflightVerified: true
+          }
+        },
+        updated_at: new Date().toISOString()
+      }).eq('id', sRow.id || 'resort_config');
+
+      return res.status(200).json({
+        status: 'preflight_staged',
+        time: timeCheck.currentFormatted,
+        note: 'Pre-flight check passed 5-10m before dispatch. Report staged cleanly in cloud. Awaiting 18:30 dispatch window.',
+        totalGreen,
+        totalRed
+      });
+    }
+
+    // Strict Out-of-Window Block (Rule 25: Never send late!)
+    if (timeCheck.isLate && !allowOutOfWindow) {
+      console.warn(`[TIME_GATEKEEPER] 18:30 sanity report blocked: current time ${timeCheck.currentFormatted} is past window ${timeCheck.maxAllowedFormatted}`);
+      return res.status(200).json({
+        status: 'blocked_out_of_window',
+        time: timeCheck.currentFormatted,
+        reason: `Current time ${timeCheck.currentFormatted} is outside the allowed 18:30 window (18:27 - 18:35). Late dispatch strictly blocked as per ironclad rule.`
+      });
+    }
 
     // Evening window check: 18:00 onwards
     const todayEveningStartMs = new Date(`${todayStr}T18:00:00+03:00`).getTime();
@@ -776,10 +843,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: 'already_sent', date: todayStr });
     }
 
-    const greenId = settings.greenApiIdInstance;
-    const greenToken = settings.greenApiToken;
-
-    // Additional Ironclad Guard: Check directly in Green-API manager chat history (only for evening messages sent after 18:00)
+    // Check directly in Green-API manager chat history (only for evening messages sent after 18:00)
     if (!isForced && greenId && greenToken) {
       try {
         const controller = new AbortController();
@@ -811,27 +875,16 @@ export default async function handler(req, res) {
       }
     }
 
-    const chats = await fetchGreenApiChats(greenId, greenToken, 80);
-
-    const { totalGreen, totalRed, reportText } = run1830SanityAudit(
-      bookings || [],
-      settings,
-      intakes || [],
-      chats,
-      todayStr,
-      growPayments || []
-    );
-
-    // Send WhatsApp directly to Hagai (0543200007)
+    // Send WhatsApp directly to Hagai (0543200007) - only if not dryRun
     let sendResult = null;
-    if (greenId && greenToken) {
+    if (!isDryRun && greenId && greenToken) {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 12000);
         const sendRes = await fetch(getGreenApiUrl(greenId, 'sendMessage', greenToken), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId: MANAGER_CHAT_ID, message: reportText }),
+          body: JSON.stringify({ chatId: MANAGER_CHAT_ID, message: finalReportText }),
           signal: controller.signal
         });
         clearTimeout(timeout);
@@ -842,7 +895,6 @@ export default async function handler(req, res) {
       }
     }
 
-    const curData = sRow.data || {};
     await supabase.from('settings').update({
       data: {
         ...curData,
@@ -853,7 +905,7 @@ export default async function handler(req, res) {
           timestamp: new Date().toISOString(),
           totalGreen,
           totalRed,
-          summaryText: reportText
+          summaryText: finalReportText
         }
       },
       updated_at: new Date().toISOString()
@@ -866,7 +918,7 @@ export default async function handler(req, res) {
       totalGreen,
       totalRed,
       sendResult,
-      reportText
+      reportText: finalReportText
     });
   } catch (err) {
     console.error('Error in cron-sanity-check:', err);

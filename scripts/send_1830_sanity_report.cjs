@@ -1021,7 +1021,7 @@ async function run1830Audit() {
   parts.push(`\n🏦 *תזרים בנקאי עתידי (Grow - סה״כ מכלל העסקים):*`);
   parts.push(`ב-10 לחודש הבא (${nextPayoutDate}), ייכנס לבנק ${Math.round(totalAccumulatedForNextMonth).toLocaleString()} שקלים`);
 
-  parts.push(`\n📱 *דוח זה הופק ונשלח ישירות למנהל (${MANAGER_PRIVATE_PHONE}) כהוראת ברזל.*`);
+  parts.push(`\n📱 *דוח זה הופק ונשלח ישירות לחגי (${MANAGER_PRIVATE_PHONE}) כהוראת ברזל.*`);
 
   const reportText = parts.join('\n');
 

@@ -7,6 +7,13 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import {
+  preflightValidateTomorrowReport,
+  validateDispatchTimeWindow,
+  autoHealCompletedStays,
+  HAGAI_CHAT_ID,
+  SHMULIK_CHAT_ID
+} from './_preflightValidator.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ydlynqqmulojhrxbfjsc.supabase.co";
 const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
@@ -297,8 +304,9 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
   const unassignedKennelDogs = activeBookings.filter(b => {
     const status = b.stay_status || b.stayStatus || b.status;
     const isStayingNow = status === 'checked_in';
+    const end = b.end_date || b.endDate || '';
     const k = getPlacement(b);
-    return isStayingNow && !k;
+    return isStayingNow && !k && end > todayStr;
   });
 
   if (unassignedKennelDogs.length > 0) {
@@ -515,21 +523,24 @@ export default async function handler(req, res) {
     const { dateStr: todayStr, hour, minute } = getIsraelDateInfo();
 
     const isForced = req.query?.force === 'true';
+    const isDryRun = req.query?.dryRun === 'true';
+    const isPreflight = req.query?.preflight === 'true';
+    const allowOutOfWindow = req.query?.allowOutOfWindow === 'true';
+
     if (!isForced && isYomKippurActiveNow(new Date())) {
       return res.status(200).json({ status: 'skipped', reason: 'ערב יום כיפור / יום כיפור קדוש: שקט מוחלט - לא נשלחות הודעות.' });
     }
 
-    if (!isForced && (hour < 19 || (hour === 19 && minute < 0))) {
-      return res.status(200).json({ status: 'skipped', reason: `Current hour in Israel is ${hour}:${minute}, scheduled for 19:00.` });
-    }
+    // 1. Strict Dispatch Time Window Check (18:57 to 19:05)
+    const timeCheck = validateDispatchTimeWindow(19, 0, 3, 5);
+
+    // Auto-heal ghost stays and past checkouts in Supabase
+    await autoHealCompletedStays(supabase, todayStr);
 
     const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
     const sRow = settingsRows?.[0] || {};
     const settings = { ...sRow, ...(sRow.data || {}) };
-
-    if (!isForced && settings.lastTomorrowOverviewSentDate === todayStr) {
-      return res.status(200).json({ status: 'already_sent', date: todayStr });
-    }
+    const curData = sRow.data || {};
 
     const { data: bookingsRaw } = await supabase.from('bookings').select('*');
     const bookings = (bookingsRaw || []).map(b => ({
@@ -557,7 +568,51 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Missing GreenAPI credentials' });
     }
 
-    // Additional Ironclad Guard: Check if tomorrow report was already sent today
+    // Generate and preflight-validate messages for both Shmulik and Hagai
+    const rawShmulikMsg = formatReport(settings.managerName || 'שמוליק', bookings || [], settings, intakes || [], payments || [], todayStr, [], 'shmulik');
+    const rawHagaiMsg = formatReport(settings.managerName || 'שמוליק', bookings || [], settings, intakes || [], payments || [], todayStr, [], 'hagai');
+
+    const { cleanedText: cleanShmulikMsg } = preflightValidateTomorrowReport(rawShmulikMsg, bookings, todayStr);
+    const { cleanedText: cleanHagaiMsg } = preflightValidateTomorrowReport(rawHagaiMsg, bookings, todayStr);
+
+    // Pre-flight check (5-10m before 19:00) OR early execution: stage data without sending WhatsApp
+    if (isPreflight || (timeCheck.isEarly && !allowOutOfWindow)) {
+      await supabase.from('settings').update({
+        data: {
+          ...curData,
+          stagedTomorrowReport: {
+            date: todayStr,
+            timestamp: new Date().toISOString(),
+            shmulikMsg: cleanShmulikMsg,
+            hagaiMsg: cleanHagaiMsg,
+            preflightVerified: true
+          }
+        },
+        updated_at: new Date().toISOString()
+      }).eq('id', sRow.id || 'resort_config');
+
+      return res.status(200).json({
+        status: 'preflight_staged',
+        time: timeCheck.currentFormatted,
+        note: 'Pre-flight check passed 5-10m before dispatch. Tomorrow report staged cleanly. Awaiting 19:00 dispatch window.'
+      });
+    }
+
+    // Strict Out-of-Window Block (Rule 25: Never send late!)
+    if (timeCheck.isLate && !allowOutOfWindow) {
+      console.warn(`[TIME_GATEKEEPER] 19:00 tomorrow report blocked: current time ${timeCheck.currentFormatted} is past window ${timeCheck.maxAllowedFormatted}`);
+      return res.status(200).json({
+        status: 'blocked_out_of_window',
+        time: timeCheck.currentFormatted,
+        reason: `Current time ${timeCheck.currentFormatted} is outside the allowed 19:00 window (18:57 - 19:05). Late dispatch strictly blocked as per ironclad rule.`
+      });
+    }
+
+    if (!isForced && settings.lastTomorrowOverviewSentDate === todayStr) {
+      return res.status(200).json({ status: 'already_sent', date: todayStr });
+    }
+
+    // Additional Ironclad Guard: Check directly in Green-API chat history
     if (!isForced) {
       try {
         const controller = new AbortController();
@@ -591,46 +646,101 @@ export default async function handler(req, res) {
       }
     }
 
-    const recipients = ['972506336896@c.us', '972543200007@c.us'];
+    const recipients = [
+      { chatId: '972506336896@c.us', message: cleanShmulikMsg },
+      { chatId: '972543200007@c.us', message: cleanHagaiMsg }
+    ];
     const sendResults = [];
 
-    for (const chatId of recipients) {
+    for (const item of recipients) {
       try {
-        const isHagai = chatId === '972543200007@c.us';
-        const personalizedMsg = formatReport(
-          settings.managerName || 'שמוליק',
-          bookings || [],
-          settings,
-          intakes || [],
-          payments || [],
-          todayStr,
-          [],
-          isHagai ? 'hagai' : 'shmulik'
-        );
-
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 12000);
-        const sendRes = await fetch(getGreenApiUrl(greenId, 'sendMessage', greenToken), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, message: personalizedMsg }),
-          signal: controller.signal
-        });
-        clearTimeout(timeout);
-        const sendData = await sendRes.json();
-        sendResults.push({ chatId, sendData });
+        if (!isDryRun) {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 12000);
+          const sendRes = await fetch(getGreenApiUrl(greenId, 'sendMessage', greenToken), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId: item.chatId, message: item.message }),
+            signal: controller.signal
+          });
+          clearTimeout(timeout);
+          const sendData = await sendRes.json();
+          sendResults.push({ chatId: item.chatId, sendData });
+        } else {
+          sendResults.push({ chatId: item.chatId, status: 'dry_run_success' });
+        }
       } catch (sendErr) {
-        console.error(`Error sending tomorrow report to ${chatId}:`, sendErr);
-        sendResults.push({ chatId, error: sendErr.message });
+        console.error(`Error sending tomorrow report to ${item.chatId}:`, sendErr);
+        sendResults.push({ chatId: item.chatId, error: sendErr.message });
       }
     }
 
-    const curData = sRow.data || {};
+    // 19:00 Rule 1: Dispatch departure reviews for dogs checking out today!
+    let reviewSentCount = 0;
+    if (!isDryRun) {
+      const { data: departures } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('end_date', todayStr)
+        .neq('stay_status', 'cancelled')
+        .neq('stay_status', 'archived');
+
+      for (const d of (departures || [])) {
+        const dData = (d.data && typeof d.data === 'object') ? d.data : {};
+        const notes = (d.notes || '');
+        if (notes.includes('סקר_נשלח') || notes.includes('[סקר_נשלח]') || dData.reviewRequestSent) {
+          continue;
+        }
+
+        const cleanPhone = cleanPhoneNumber(d.owner_phone);
+        if (!cleanPhone || cleanPhone.length < 9) continue;
+        const intlPhone = cleanPhone.startsWith('0') ? '972' + cleanPhone.slice(1) : cleanPhone;
+        const chatId = `${intlPhone}@c.us`;
+
+        const firstName = (d.owner_name || 'לקוח').trim().split(/\s+/)[0];
+        const dogName = (d.dog_name || 'הכלב').trim();
+
+        // Review request with VIP benefit and strictly 3 months validity (Rule 5 & Rule 14)
+        const reviewMsg = `שלום ${firstName}! 🐾\nאיזה כיף היה לנו לארח את ${dogName} בריזורט לכלב! 🐕❤️\n\nנשמח מאוד לשמוע איך הייתה החוויה שלכם ולקבל דירוג קצר בגוגל:\n👉 https://g.page/r/CUeOaXgB89vSEBM/review\n\n🎁 כמחווה של תודה, מגיע לכם שובר VIP ע״ס ₪50 לשהות הבאה!\n⏰ שימו לב: תוקף השובר הינו ל-3 חודשים בלבד מיום השחרור.\n\nבברכה חמה,\nשמוליק וכל צוות הריזורט לכלב 🐾✨`;
+
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 12000);
+          const sendRes = await fetch(getGreenApiUrl(greenId, 'sendMessage', greenToken), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId, message: reviewMsg }),
+            signal: controller.signal
+          });
+          clearTimeout(timeout);
+
+          if (sendRes.ok) {
+            reviewSentCount++;
+            // Rule 13: Automatically set stayStatus to checked_out so kennels are freed and no ghosts remain
+            await supabase.from('bookings').update({
+              stay_status: 'checked_out',
+              notes: (notes ? notes + ' ' : '') + '[סקר_נשלח]',
+              data: {
+                ...dData,
+                stayStatus: 'checked_out',
+                actualCheckoutDate: todayStr,
+                reviewRequestSent: todayStr
+              },
+              updated_at: new Date().toISOString()
+            }).eq('id', d.id);
+          }
+        } catch (rErr) {
+          console.error(`Error sending 19:00 review request to ${d.owner_name}:`, rErr);
+        }
+      }
+    }
+
     await supabase.from('settings').update({
       data: {
         ...curData,
         lastTomorrowOverviewSentDate: todayStr,
-        lastTomorrowOverviewSentTimestamp: new Date().toISOString()
+        lastTomorrowOverviewSentTimestamp: new Date().toISOString(),
+        last1900ReviewsSentCount: reviewSentCount
       },
       updated_at: new Date().toISOString()
     }).eq('id', sRow.id || 'resort_config');
@@ -638,8 +748,9 @@ export default async function handler(req, res) {
     return res.status(200).json({
       status: 'success',
       sentDate: todayStr,
-      recipients,
-      sendResults
+      recipients: recipients.map(r => r.chatId),
+      sendResults,
+      reviewsSent: reviewSentCount
     });
   } catch (err) {
     console.error('Error in cron-evening-report:', err);
