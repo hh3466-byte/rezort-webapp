@@ -92,9 +92,9 @@ const RESORT_BYLAWS_SECTIONS = [
   },
   {
     num: 8,
-    title: '8. מדיניות ביטולים ושמירת מקום',
-    icon: '🚫',
-    content: 'ביטול שהייה/הגעה יתאפשר עד 24 שעות לפני מועד ההגעה שנקבע. אין אפשרות לביטול שהייה בפחות מ-24 שעות ממועד הקבלה/ההגעה שסוכם, היות ונשמר עבור הכלב מקום ייעודי ומאובטח במתקן שנמנע מלקוחות אחרים.'
+    title: '8. מדיניות ביטולים, שמירת מקום וזיכויים',
+    icon: '🗓️',
+    content: 'ביטול שהייה או שריון יום מתאפשר בהודעה מראש של עד 24 שעות לפני מועד ההגעה שנקבע. במקרה של ביטול שהות בפחות מ-24 שעות ממועד הקבלה, יחויב יום השהייה הראשון בלבד (בשל שמירת המקום וההיערכות לקליטת הכלב), ויתרת התשלום תישמר במלואה לזכות הלקוח כזיכוי למימוש בשהיות עתידיות בריזורט (בכרטיסייה יקוזז יום אחד). מובהר כי בביטול של פחות מ-24 שעות לא יינתן החזר כספי, אלא זיכוי מלא לשהיות הבאות.'
   }
 ];
 
@@ -3306,11 +3306,11 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
               </label>
             </div>
 
-            <div className="bg-amber-500/10 border border-amber-400/40 rounded-xl p-2.5 text-xs text-amber-950 flex items-start gap-2">
-              <span className="text-base leading-none shrink-0">🚫</span>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-600 flex items-start gap-2">
+              <span className="text-sm leading-none shrink-0 mt-0.5">ℹ️</span>
               <div>
-                <strong className="block font-black text-amber-900">מדיניות ביטולים:</strong>
-                <span>אין ביטולים בפחות מ-24 שעות מיום הקבלה, היות ונשמר עבור הכלב מקום ייעודי במתקן.</span>
+                <span className="font-bold text-slate-700">מדיניות ביטולים וזיכויים: </span>
+                <span>ביטול שהייה מתאפשר עד 24 שעות מראש. בביטול בפחות מ-24 שעות יחויב יום השהייה הראשון בלבד, ויתרת התשלום תישמר לזכותכם כזיכוי מלא לפעמים הבאות.</span>
               </div>
             </div>
             

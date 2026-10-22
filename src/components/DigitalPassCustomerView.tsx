@@ -158,7 +158,7 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
 📅 *תאריכים:* ${formatDateIL(bookingDate)}${isBoarding ? ` עד ${formatDateIL(targetEndDate)}` : ''} (${daysToDeduct} ${isBoarding ? 'יממות' : 'ימים'})
 ⏰ *שעות:* הגעה ב-${arrivalTime} | איסוף ב-${pickupTime}
 📊 *יתרה בכרטיסייה:* נותרו ${remainingDays} ${isBoarding ? 'יממות' : 'ימים'} לניצול
-${bookingNotes ? `💬 *הערות לקוח:* ${bookingNotes}\n` : ''}🚫 *מדיניות ביטולים:* אין אפשרות לביטול בפחות מ-24 שעות מיום הקבלה (נשמר מקום ייעודי).
+${bookingNotes ? `💬 *הערות לקוח:* ${bookingNotes}\n` : ''}ℹ️ *מדיניות ביטולים:* ביטול או עדכון שריון יום מתאפשר עד 24 שעות מראש (נשמר מקום ייעודי).
 --------------------------------
 🗓️ *לבדיקה ביומן על התאריכים המבוקשים, אישור או דחייה בלחיצה:*
 ${directCalendarLink}
@@ -188,7 +188,7 @@ ${directCalendarLink}
       setBookingSuccess(true);
 
       // 4. Prepare direct WhatsApp text for Shmulik (client backup action)
-      const cancellationClauseNotice = `🚫 *מדיניות ביטולים:* אין אפשרות לביטול בפחות מ-24 שעות מיום הקבלה (שומרים מקום ייעודי עבור ${pass.dogName}).`;
+      const cancellationClauseNotice = `ℹ️ *מדיניות ביטולים וזיכויים:* ביטול מתאפשר עד 24 שעות מראש. בביטול בפחות מ-24 שעות יחויב יום אחד והיתרה תישמר כזיכוי לפעמים הבאות.`;
       const shmulikMsg = isBoarding 
         ? `היי שמוליק! 🐾🐶
 מבקש לשריין פנסיון מלא עבור *${pass.dogName}* מתוך *בנק 21 יממות VIP (כרטיסייה #${pass.passCode})*:
@@ -608,13 +608,13 @@ ${pass.ownerName} (${pass.ownerPhone})`;
                 />
               </div>
 
-              {/* Cancellation Policy Banner */}
-              <div className="bg-amber-500/15 border border-amber-400/50 rounded-2xl p-3.5 text-xs text-amber-200 flex items-start gap-2.5">
-                <span className="text-base shrink-0">🚫</span>
-                <div>
-                  <strong className="block font-black text-amber-300">שימו לב – מדיניות ביטולים ושמירת מקום:</strong>
-                  <span className="text-slate-300 leading-relaxed">
-                    אין אפשרות לביטול שהייה/הגעה בפחות מ-24 שעות מיום הקבלה, היות ואנו משריינים ושומרים עבור {pass.dogName} מקום ייעודי ומאובטח בריזורט.
+              {/* Cancellation Policy Note */}
+              <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-3 text-xs text-slate-300 flex items-start gap-2.5">
+                <span className="text-sm shrink-0 mt-0.5">ℹ️</span>
+                <div className="leading-relaxed">
+                  <span className="font-semibold text-slate-200">מדיניות ביטולים וזיכויים: </span>
+                  <span className="text-slate-400">
+                    ביטול או עדכון שריון יום מתאפשר עד 24 שעות מראש. בביטול שהות ארוכה בפחות מ-24 שעות יחויב היום הראשון בלבד והיתרה תישמר כזיכוי מלא לפעמים הבאות.
                   </span>
                 </div>
               </div>
