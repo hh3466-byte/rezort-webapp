@@ -563,9 +563,10 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
     return () => clearTimeout(timer);
   }, [ownerPhone]);
 
-  // Benefits are unlocked ONLY if phone is verified/known OR an active voucher is entered
+  // Benefits are unlocked ONLY if customer has verified past visits (totalVisits > 0) OR an active voucher in system
   const isBenefitsUnlocked = Boolean(
-    phoneCheckResult?.isKnown || (matchedVoucher && matchedVoucher.status === 'active') || voucherCode.trim().length >= 4
+    (phoneCheckResult?.isKnown && (phoneCheckResult.totalVisits || 0) > 0) || 
+    (matchedVoucher && matchedVoucher.status === 'active')
   );
 
   // Auto adjust dates when service is selected
@@ -903,7 +904,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
           : '',
         isFlexibleDates ? '[תאריכים גמישים / בירור זמינות כללי]' : '',
         additionalDogs.length > 0 ? `[🐾 ${additionalDogs.length + 1} אורחים בטופס: ${dogName} + ${additionalDogs.map(d => `${d.dogName} (${d.dogBreed})`).join(', ')}]` : '',
-        phoneCheckResult?.isKnown ? `[💎 לקוח חוזר מוכר: ${phoneCheckResult.name || ownerName} (${phoneCheckResult.totalVisits} ביקורים)]` : '[🐶 לקוח חדש]',
+        (phoneCheckResult?.isKnown && (phoneCheckResult.totalVisits || 0) > 0) ? `[💎 לקוח חוזר מוכר: ${phoneCheckResult.name || ownerName} (${phoneCheckResult.totalVisits} ביקורים)]` : '[🐶 לקוח חדש]',
         clientOrigin === 'referral' ? `[🤝 חבר מביא חבר${referralFriendName.trim() ? `: הופנה ע״י ${referralFriendName.trim()}` : ''}]` : '',
         (isBenefitsUnlocked && chosenBenefit) ? `[🎁 הטבה שנבחרה: ${chosenBenefit.title} (${chosenBenefit.badge})]` : '',
         voucherCode.trim() ? `[🎟️ קוד שובר: ${voucherCode.trim()}]` : '',

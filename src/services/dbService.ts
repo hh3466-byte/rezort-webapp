@@ -1862,7 +1862,7 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
   try {
     const { data: custData, error: custErr } = await supabase
       .from(CUSTOMERS_TABLE)
-      .select('name, phone, dogs, total_visits, is_vip, address, data')
+      .select('name, phone, dogs, total_visits, is_vip, data')
       .ilike('phone', `%${matchSuffix}%`);
 
     if (!custErr && custData && Array.isArray(custData)) {
@@ -1873,16 +1873,17 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
 
       if (match) {
         const dog = Array.isArray(match.dogs) && match.dogs.length > 0 ? match.dogs[0] : undefined;
-        const addr = match.address || match.data?.address || match.data?.ownerAddress;
+        const addr = match.data?.address || match.data?.ownerAddress;
+        const totalVisits = Number(match.total_visits) || 0;
         return {
-          isKnown: true,
+          isKnown: totalVisits > 0,
           name: match.name,
           dogName: typeof dog === 'string' ? dog : dog?.name,
           dogBreed: typeof dog === 'object' ? dog?.breed : undefined,
           address: addr,
           coordinates: match.data?.ownerCoordinates,
-          totalVisits: Number(match.total_visits) || 1,
-          isVip: Boolean(match.is_vip) || (Number(match.total_visits) >= 4)
+          totalVisits,
+          isVip: Boolean(match.is_vip) || (totalVisits >= 4)
         };
       }
     }
@@ -1890,15 +1891,16 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
     console.warn('verifyCustomerByPhone supabase customers query warning:', e);
   }
 
-  // 4. Query Supabase bookings table
+  // 4. Query Supabase bookings table (only non-cancelled bookings count as visits)
   try {
     const { data: bkData, error: bkErr } = await supabase
       .from(BOOKINGS_TABLE)
-      .select('owner_name, owner_phone, dog_name, dog_breed, data')
+      .select('owner_name, owner_phone, dog_name, dog_breed, stay_status, data')
       .ilike('owner_phone', `%${matchSuffix}%`);
 
     if (!bkErr && bkData && Array.isArray(bkData)) {
       const matches = bkData.filter((b: any) => {
+        if (b.stay_status === 'cancelled') return false;
         const bDigits = (b.owner_phone || '').replace(/\D/g, '');
         return bDigits && (bDigits.endsWith(matchSuffix) || bDigits.includes(matchSuffix));
       });
@@ -1924,57 +1926,32 @@ export const verifyCustomerByPhone = async (rawPhone: string): Promise<PhoneVeri
     console.warn('verifyCustomerByPhone supabase bookings query warning:', e);
   }
 
-  // 5. Query Supabase intake_requests table
-  try {
-    const { data: intakeData } = await supabase
-      .from('intake_requests')
-      .select('owner_name, owner_phone, dog_name, dog_breed, data')
-      .ilike('owner_phone', `%${matchSuffix}%`);
-
-    if (intakeData && Array.isArray(intakeData)) {
-      const match = intakeData.find((r: any) => {
-        const rDigits = (r.owner_phone || '').replace(/\D/g, '');
-        return rDigits && (rDigits.endsWith(matchSuffix) || rDigits.includes(matchSuffix));
-      });
-      if (match) {
-        const addr = match.data?.ownerAddress || (match as any).owner_address;
-        const coords = match.data?.ownerCoordinates;
-        return {
-          isKnown: true,
-          name: match.owner_name,
-          dogName: match.dog_name,
-          dogBreed: match.dog_breed,
-          address: addr,
-          coordinates: coords,
-          totalVisits: 1,
-          isVip: false
-        };
-      }
-    }
-  } catch (e) {
-    console.warn('verifyCustomerByPhone supabase intake_requests query warning:', e);
-  }
-
-  // 6. Check local/cloud settings intakeRequests
+  // 5. Query local/cloud settings intakeRequests for autofill ONLY (strictly isKnown: false, totalVisits: 0)
   try {
     const localSettingsStr = localStorage.getItem('dog_resort_settings') || localStorage.getItem('shmulik_dog_resort_settings_v2');
+    let reqList: any[] = [];
     if (localSettingsStr) {
-      const parsed = JSON.parse(localSettingsStr);
-      const reqList = parsed?.intakeRequests || parsed?.data?.intakeRequests || [];
-      const match = reqList.find((r: any) => {
-        const rDigits = (r.ownerPhone || '').replace(/\D/g, '');
-        return rDigits && (rDigits.endsWith(matchSuffix) || rDigits.includes(matchSuffix));
-      });
-      if (match) {
-        return {
-          isKnown: true,
-          name: match.ownerName,
-          dogName: match.dogName,
-          dogBreed: match.dogBreed,
-          totalVisits: 1,
-          isVip: false
-        };
-      }
+      try {
+        const parsed = JSON.parse(localSettingsStr);
+        reqList = parsed?.intakeRequests || parsed?.data?.intakeRequests || [];
+      } catch {}
+    }
+    const match = reqList.find((r: any) => {
+      const rDigits = (r.ownerPhone || '').replace(/\D/g, '');
+      return rDigits && (rDigits.endsWith(matchSuffix) || rDigits.includes(matchSuffix));
+    });
+    if (match) {
+      // Return details for form autofill convenience, but NEVER treat inquiry/lead as returning customer or visit!
+      return {
+        isKnown: false,
+        name: match.ownerName,
+        dogName: match.dogName && !match.dogName.includes('ממתין לבירור') ? match.dogName : undefined,
+        dogBreed: match.dogBreed,
+        address: match.ownerAddress,
+        coordinates: match.ownerCoordinates,
+        totalVisits: 0,
+        isVip: false
+      };
     }
   } catch (e) {}
 
