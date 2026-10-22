@@ -824,14 +824,20 @@ export default async function handler(req, res) {
       });
     }
 
-    // Strict Out-of-Window Block (Rule 25: Never send late!)
-    if (timeCheck.isLate && !allowOutOfWindow) {
-      console.warn(`[TIME_GATEKEEPER] 18:30 sanity report blocked: current time ${timeCheck.currentFormatted} is past window ${timeCheck.maxAllowedFormatted}`);
+    // Wrong time of day (e.g. morning 05:00 - 17:50) - stage report, do not dispatch to WhatsApp
+    if (timeCheck.isWrongTimeOfDay && !isForced && !allowOutOfWindow) {
+      console.warn(`[TIME_GATEKEEPER] 18:30 sanity report skipped WhatsApp dispatch: current time ${timeCheck.currentFormatted} is morning/daytime, not evening.`);
       return res.status(200).json({
-        status: 'blocked_out_of_window',
+        status: 'blocked_wrong_time_of_day',
         time: timeCheck.currentFormatted,
-        reason: `Current time ${timeCheck.currentFormatted} is outside the allowed 18:30 window (18:27 - 18:35). Late dispatch strictly blocked as per ironclad rule.`
+        reason: `Current time ${timeCheck.currentFormatted} is morning/daytime. Staged only. Evening reports are dispatched strictly during the evening window (18:00+).`
       });
+    }
+
+    // If running with delay during the evening window, prepend the apology prefix as explicitly requested by Hagai!
+    let dispatchReportText = finalReportText;
+    if (timeCheck.shouldSendWithApology && !dispatchReportText.includes('התנצלות על העיכוב')) {
+      dispatchReportText = timeCheck.apologyPrefix + dispatchReportText;
     }
 
     // Evening window check: 18:00 onwards
@@ -884,7 +890,7 @@ export default async function handler(req, res) {
         const sendRes = await fetch(getGreenApiUrl(greenId, 'sendMessage', greenToken), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId: MANAGER_CHAT_ID, message: finalReportText }),
+          body: JSON.stringify({ chatId: MANAGER_CHAT_ID, message: dispatchReportText }),
           signal: controller.signal
         });
         clearTimeout(timeout);

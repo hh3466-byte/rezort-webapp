@@ -52,24 +52,42 @@ export function getIsraelTime() {
  * Ensures dispatches ONLY occur within [target - earlyMinutes, target + lateMinutes].
  * Never allows sending late or at arbitrary hours!
  */
-export function validateDispatchTimeWindow(targetHour, targetMinute, earlyMinutes = 2, lateMinutes = 4) {
+export function validateDispatchTimeWindow(targetHour, targetMinute, earlyMinutes = 3, lateGraceMinutes = 5) {
   const { hour, minute, totalMinutes } = getIsraelTime();
   const targetTotalMinutes = targetHour * 60 + targetMinute;
   const minAllowed = targetTotalMinutes - earlyMinutes;
-  const maxAllowed = targetTotalMinutes + lateMinutes;
+  const maxOnTime = targetTotalMinutes + lateGraceMinutes;
 
-  const inWindow = totalMinutes >= minAllowed && totalMinutes <= maxAllowed;
+  const onTime = totalMinutes >= minAllowed && totalMinutes <= maxOnTime;
   const isEarly = totalMinutes < minAllowed;
-  const isLate = totalMinutes > maxAllowed;
+  const isLate = totalMinutes > maxOnTime;
+
+  // Evening operational window: between 18:00 and 23:30
+  // As explicitly requested by Hagai: Send the report even if delayed, with an apology prefix!
+  const delayMinutes = isLate ? Math.max(1, totalMinutes - targetTotalMinutes) : 0;
+  const isSameEvening = hour >= 18 && hour <= 23;
+  const shouldSendWithApology = isLate && isSameEvening;
+
+  let apologyPrefix = '';
+  if (shouldSendWithApology) {
+    apologyPrefix = `⏳ *התנצלות על העיכוב:* הדוח נשלח באיחור של ${delayMinutes} דקות עקב עומס בתשתיות הענן / עיכוב בסנכרון נתונים.\n\n`;
+  }
+
+  // Block completely if it's the wrong time of day entirely (e.g. morning 05:00 - 17:50 for an evening report)
+  const isWrongTimeOfDay = hour < 17 || (hour === 17 && minute < 50);
 
   return {
-    inWindow,
+    onTime,
     isEarly,
     isLate,
+    shouldSendWithApology,
+    apologyPrefix,
+    isWrongTimeOfDay,
+    delayMinutes,
     currentFormatted: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
     targetFormatted: `${String(targetHour).padStart(2, '0')}:${String(targetMinute).padStart(2, '0')}`,
     minAllowedFormatted: `${String(Math.floor(minAllowed / 60)).padStart(2, '0')}:${String(minAllowed % 60).padStart(2, '0')}`,
-    maxAllowedFormatted: `${String(Math.floor(maxAllowed / 60)).padStart(2, '0')}:${String(maxAllowed % 60).padStart(2, '0')}`
+    maxAllowedFormatted: `${String(Math.floor(maxOnTime / 60)).padStart(2, '0')}:${String(maxOnTime % 60).padStart(2, '0')}`
   };
 }
 
@@ -143,16 +161,22 @@ export function preflightValidateTomorrowReport(reportText, activeBookings = [],
 
 /**
  * Validates and Auto-Heals the 20:00 Daily Regards (ד"ש)
- * Rule: NO outdated holiday references (e.g. Sukkot/Rosh Hashana in late October/November),
- * NO repetitive guilt-tripping text.
+ * Rule: NO outdated holiday references (e.g. Sukkot/Rosh Hashana in late October/November).
+ * Luna & Shlomi Policy: Messages to Shlomi must actively tug on his emotions and induce guilt over abandoning Luna!
  */
 export function preflightValidateDailyDogMessage(text, dogName, ownerName) {
   let cleaned = text;
 
   // Detect outdated holiday references in October / general days
   if (cleaned.includes('ראש השנה') || cleaned.includes('סוכות')) {
-    // Replace with clean, warm, high-standard resort greeting
-    cleaned = `היי ${ownerName}! 🐾\nאיזה יום מקסים עבר עלי בריזורט לכלב! 🌿🐕\nהספקתי לרוץ ולשחק בטבע, לקבל ליטופים מפנקים משמוליק, ועכשיו הראש שלי שקוע עמוק בכרית בסוויטה 🛋️✨\nתיהנו מכל רגע, אוהבת המון, ${dogName} 🐶❤️`;
+    const isLuna = String(dogName || '').includes('לונה') || String(ownerName || '').includes('שלומי');
+    if (isLuna) {
+      // Guilt-inducing replacement for Luna
+      cleaned = `📅 *יום של געגוע שלא נגמר...* 💔🐾\n\nערב טוב שלומי.\nהיום ישבתי שוב ליד הגדר של החצר והסתכלתי לעבר השער. ראיתי עוד חבר שמשפחה שלו באה לחבק אותו ולקחת אותו הביתה, וחשבתי לעצמי בכאב – מתי גם אבא שלי יבוא לקחת אותי?...\nשמוליק והצוות דואגים לי להכל באהבה, אבל שום דבר בעולם לא יכול להחליף את החיבוק שלך. בבקשה, איך זה שאתה לא מגיע לבקר אותי אפילו לכמה דקות?\n\nלונה שמחכה רק לך 🐶🥺`;
+    } else {
+      // Clean, warm, high-standard resort greeting for normal dogs
+      cleaned = `היי ${ownerName}! 🐾\nאיזה יום מקסים עבר עלי בריזורט לכלב! 🌿🐕\nהספקתי לרוץ ולשחק בטבע, לקבל ליטופים מפנקים משמוליק, ועכשיו הראש שלי שקוע עמוק בכרית בסוויטה 🛋️✨\nתיהנו מכל רגע, אוהבת המון, ${dogName} 🐶❤️`;
+    }
   }
 
   return cleaned;

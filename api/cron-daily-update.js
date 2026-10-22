@@ -86,9 +86,36 @@ const WEEKEND_DOG_TEMPLATES = [
 ];
 
 const SHLOMI_LUNA_TEMPLATES = [
-  { id: 301, type: "training", text: "📅 *יום {daysCount} בריזורט לכלב* 🐾❤️\n\nערב טוב שלומי! 🌿 קיבלתי היום את ארוחת המלכים שלי בדיוק בזמן, רצתי בטבע ונהניתי מליטופים מפנקים משמוליק. שולחת לך המון אהבה וחיבוקים חמים! שלך תמיד, לונה המתגעגעת 🐶🛋️✨" },
-  { id: 302, type: "training", text: "📅 *יום {daysCount} של פינוק ורוגע בריזורט* 🐕✨\n\nהיי שלומי! 🐾 היום היה יום משגע של טיול בטבע, ריחות נהדרים והמון יחס אישי חם מכל הצוות. עכשיו אני שוכבת בסוויטה שלי רגועה ומאושרת. מתגעגעת ואוהבת מלא, לונה 🐶❤️" },
-  { id: 303, type: "training", text: "📅 *יום {daysCount} בריזורט לכלב* 🌲🐾\n\nערב טוב שלומי אהוב שלי! 🐾 רק רציתי לעדכן שכיף לי ונעים לי, שמוליק דואג לי לכל מה שאני צריכה וכולם פה אוהבים אותי. שולחת לך נשיקה רטובה על האף ומחכה לראות אותך! לונה 🐶🥰" }
+  {
+    id: 301,
+    type: "training",
+    text: "📅 *יום {daysCount} שאני מחכה לך בריזורט...* 💔🐾\n\nערב טוב שלומי.\nהיום ישבתי שוב ליד הגדר של החצר והסתכלתי לעבר השער. ראיתי עוד חבר שמשפחה שלו באה לחבק אותו ולקחת אותו הביתה בשמחה אחרי כמה ימים, וחשבתי לעצמי בכאב – מתי גם אבא שלי יבוא לקחת אותי?...\nשמוליק והצוות דואגים לי להכל באהבה, אבל שום דבר בעולם לא יכול להחליף את החיבוק שלך. עברו כבר {daysCount} ימים שבהם לא ראיתי אותך. בבקשה, איך זה שאתה לא מגיע לבקר אותי אפילו לכמה דקות?\n\nלונה שמחכה רק לך 🐶🥺"
+  },
+  {
+    id: 302,
+    type: "training",
+    text: "📅 *יום {daysCount} בלעדיך, שלומי...* 🐾💔\n\nערב טוב שלומי.\nעבר עוד יום ארוך וכואב של געגוע. בכל פעם שרכב עוצר ליד השער של הריזורט, האוזניים שלי מזדקפות והלב שלי קופץ בתקווה ענקית שאולי סוף סוף זה אתה שבאת... ואז הדלת נפתחת וזה שוב לא אתה.\nעברו כבר {daysCount} ימים תמימים שבהם לא הרחתי אותך, לא שמעתי את הקול שלך ולא זכיתי לליטוף מאבא. אני שואלת את עצמי איך אפשר לא לבוא לראות אותי כל כך הרבה חודשים? הלב הקטן שלי שייך רק לך ומחכה רק לך.\n\nלונה שמתגעגעת אליך בכל הלב 🐶"
+  },
+  {
+    id: 303,
+    type: "training",
+    text: "📅 *יום {daysCount} של שתיקה וגעגוע שלא נגמר...* 🐾\n\nהיי שלומי.\nכולם כאן אומרים לי כמה שאני כלבה מדהימה ומחבקים אותי, אבל בערב כשאני שוכבת בסוויטה לבד, הדמעות עולות לי בעיניים. אני פשוט לא מצליחה להבין למה עברו כבר {daysCount} ימים ואתה לא בא לבקר אפילו פעם אחת.\nאפילו ביקור קצר של 10 דקות להגיד שלום היה נותן לי כוח. שלומי, שכחת אותי?... אני עדיין אותה הילדה הנאמנה שלך, והלב שלי נשבר מלחכות לך יום אחרי יום.\n\nאוהבת ומחכה, לונה 🐶💔"
+  },
+  {
+    id: 304,
+    type: "training",
+    text: "📅 *יום {daysCount} – הלב שלי עדיין מחכה לך בשער* 💔🐾\n\nערב טוב שלומי.\nיצאתי היום לטיול בטבע עם שמוליק, אבל הראש והעיניים שלי היו שקועים רק במחשבות עליך. כל יום שעובר כאן מרגיש כמו נצח. {daysCount} ימים... כמעט חצי שנה שבה נשארתי כאן בלעדיך בלי אף חיבוק מאבא.\nאני מתחננת, תמצא רגע אחד בלו״ז שלך ותבוא לבקר אותי. אני כל כך מתגעגעת אליך, וקשה לי להמשיך להאמין שיום אחד עוד תבוא אם אתה אף פעם לא מגיע.\n\nלונה שלך 🐶🥺"
+  },
+  {
+    id: 305,
+    type: "training",
+    text: "📅 *יום {daysCount} בריזורט... למה אתה לא בא, שלומי?* 🐾\n\nערב טוב שלומי.\nעוד ערב יורד על הריזורט, ועוד יום של בדידות נספר ביומן. שמוליק והמטפלים דואגים לי במסירות רבה ומלטפים אותי, אבל הם יודעים שבעיניים שלי יש עצב עמוק שרק אדם אחד בעולם יכול לרפא.\nכלבים אחרים מגיעים לכמה ימים וחוזרים לבעלים שלהם, ורק אני נשארת כאן שבוע אחרי שבוע, חודש אחרי חודש. בבקשה אל תנטוש אותי ככה. תבוא לראות אותי.\n\nלונה שמחכה לך בנאמנות אינסופית 🐶💔"
+  },
+  {
+    id: 306,
+    type: "training",
+    text: "📅 *יום {daysCount} – געגוע שנשרף בלב* 🥺🐾\n\nשלומי שלום.\nאומרים שכלב לעולם לא שוכח את הבעלים שלו, וזה כל כך נכון. עברו {daysCount} ימים מאז שהשארת אותי כאן, ואני זוכרת כל רגע איתך כאילו זה היה אתמול. אבל נראה שרק צד אחד זוכר...\nאיך אפשר לעבור חודשים שלמים בלי לרצות לחבק את הכלבה שלך? אני מתגעגעת אליך עד כאב ומקווה בכל בוקר מחדש שהיום יהיה היום שבו תיכנס בדלת.\n\nשלך תמיד, לונה 🐶💔"
+  }
 ];
 
 function isDogFemale(b) {
@@ -262,13 +289,13 @@ export default async function handler(req, res) {
       });
     }
 
-    // Strict Out-of-Window Block (Rule 25: Never send late!)
-    if (timeCheck.isLate && !allowOutOfWindow) {
-      console.warn(`[TIME_GATEKEEPER] 20:00 daily update blocked: current time ${timeCheck.currentFormatted} is past window ${timeCheck.maxAllowedFormatted}`);
+    // Wrong time of day (e.g. morning/daytime before 17:50) - stage report, do not dispatch to WhatsApp
+    if (timeCheck.isWrongTimeOfDay && !isForced && !allowOutOfWindow) {
+      console.warn(`[TIME_GATEKEEPER] 20:00 daily update skipped WhatsApp dispatch: current time ${timeCheck.currentFormatted} is morning/daytime.`);
       return res.status(200).json({
-        status: 'blocked_out_of_window',
+        status: 'blocked_wrong_time_of_day',
         time: timeCheck.currentFormatted,
-        reason: `Current time ${timeCheck.currentFormatted} is outside the allowed 20:00 window (19:57 - 20:05). Late dispatch strictly blocked as per ironclad rule.`
+        reason: `Current time ${timeCheck.currentFormatted} is morning/daytime. Greetings are dispatched strictly during the evening window (20:00).`
       });
     }
 
@@ -434,11 +461,15 @@ export default async function handler(req, res) {
     // 3. Send confirmation WhatsApp strictly to Hagai (0543200007) as per Rule 1
     const totalFails = dogFailCount + reviewFailCount;
     const hasDispatches = (dogSentCount > 0 || reviewSentCount > 0 || totalFails > 0);
-    const confirmationText = hasDispatches 
+    let confirmationText = hasDispatches 
       ? (reviewSentCount > 0 
           ? `נשלחו ד"ש ל-${dogSentCount} בעלי כלבים ו-${reviewSentCount} בקשות חוות דעת. כולם קיבלו. ${totalFails > 0 ? `יש ${totalFails} כשלים` : 'אין כשל ✅'}`
           : `נשלחו ד"ש ל-${dogSentCount} בעלי כלבים. כולם קיבלו. ${totalFails > 0 ? `יש ${totalFails} כשלים` : 'אין כשל ✅'}`)
       : 'כל הכלבים השוהים כבר קיבלו ד"ש מוקדם יותר היום, ואין שחרורים חדשים. אין כשל ✅';
+
+    if (timeCheck.shouldSendWithApology) {
+      confirmationText = `⏳ *התנצלות על העיכוב:* משלוח הד"ש נשלח באיחור של ${timeCheck.delayMinutes} דקות עקב עומס בתשתיות הענן.\n\n` + confirmationText;
+    }
 
     if (hasDispatches && !isDryRun) {
       try {

@@ -598,14 +598,26 @@ export default async function handler(req, res) {
       });
     }
 
-    // Strict Out-of-Window Block (Rule 25: Never send late!)
-    if (timeCheck.isLate && !allowOutOfWindow) {
-      console.warn(`[TIME_GATEKEEPER] 19:00 tomorrow report blocked: current time ${timeCheck.currentFormatted} is past window ${timeCheck.maxAllowedFormatted}`);
+    // Wrong time of day (e.g. morning/daytime before 17:50) - stage report, do not dispatch to WhatsApp
+    if (timeCheck.isWrongTimeOfDay && !isForced && !allowOutOfWindow) {
+      console.warn(`[TIME_GATEKEEPER] 19:00 tomorrow report skipped WhatsApp dispatch: current time ${timeCheck.currentFormatted} is morning/daytime, not evening.`);
       return res.status(200).json({
-        status: 'blocked_out_of_window',
+        status: 'blocked_wrong_time_of_day',
         time: timeCheck.currentFormatted,
-        reason: `Current time ${timeCheck.currentFormatted} is outside the allowed 19:00 window (18:57 - 19:05). Late dispatch strictly blocked as per ironclad rule.`
+        reason: `Current time ${timeCheck.currentFormatted} is morning/daytime. Staged only. Evening reports are dispatched strictly during the evening window (18:00+).`
       });
+    }
+
+    // If running with delay during the evening window, prepend the apology prefix as explicitly requested by Hagai!
+    let dispatchShmulikMsg = cleanShmulikMsg;
+    let dispatchHagaiMsg = cleanHagaiMsg;
+    if (timeCheck.shouldSendWithApology) {
+      if (!dispatchShmulikMsg.includes('התנצלות על העיכוב')) {
+        dispatchShmulikMsg = timeCheck.apologyPrefix + dispatchShmulikMsg;
+      }
+      if (!dispatchHagaiMsg.includes('התנצלות על העיכוב')) {
+        dispatchHagaiMsg = timeCheck.apologyPrefix + dispatchHagaiMsg;
+      }
     }
 
     if (!isForced && settings.lastTomorrowOverviewSentDate === todayStr) {
@@ -647,8 +659,8 @@ export default async function handler(req, res) {
     }
 
     const recipients = [
-      { chatId: '972506336896@c.us', message: cleanShmulikMsg },
-      { chatId: '972543200007@c.us', message: cleanHagaiMsg }
+      { chatId: '972506336896@c.us', message: dispatchShmulikMsg },
+      { chatId: '972543200007@c.us', message: dispatchHagaiMsg }
     ];
     const sendResults = [];
 

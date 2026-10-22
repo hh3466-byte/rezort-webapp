@@ -337,12 +337,12 @@ export default async function handler(req, res) {
         watchdogLogs.push({ task: '1830_preflight', error: pe.message });
       }
     }
-    // Live window (18:28 - 18:34)
-    else if (hour === 18 && minute >= 28 && minute <= 34) {
+    // Live window & Evening Recovery (18:28 to 23:30)
+    else if ((hour === 18 && minute >= 28) || (hour >= 19 && hour <= 23)) {
       const alreadySent1830 = curSettingsData.last1830SanitySentDate === todayStr;
       if (!alreadySent1830) {
         try {
-          console.log('[WATCHDOG] Dispatching 18:30 Sanity Report in live window...');
+          console.log('[WATCHDOG] Dispatching 18:30 Sanity Report...');
           const sanityRes = await fetch(`${baseUrl}/api/cron-sanity-check`);
           const sJson = await sanityRes.json();
           watchdogLogs.push({ task: '1830_sanity_live', status: sJson.status });
@@ -364,12 +364,12 @@ export default async function handler(req, res) {
         watchdogLogs.push({ task: '1900_preflight', error: pe.message });
       }
     }
-    // Live window (18:58 - 19:04)
-    else if ((hour === 18 && minute >= 58) || (hour === 19 && minute <= 4)) {
+    // Live window & Evening Recovery (18:58 to 23:30)
+    else if ((hour === 18 && minute >= 58) || (hour >= 19 && hour <= 23)) {
       const alreadySent1900 = curSettingsData.lastTomorrowOverviewSentDate === todayStr;
       if (!alreadySent1900) {
         try {
-          console.log('[WATCHDOG] Dispatching 19:00 Evening Report in live window...');
+          console.log('[WATCHDOG] Dispatching 19:00 Evening Report...');
           const eveRes = await fetch(`${baseUrl}/api/cron-evening-report`);
           const eJson = await eveRes.json();
           watchdogLogs.push({ task: '1900_evening_report_live', status: eJson.status });
@@ -391,12 +391,12 @@ export default async function handler(req, res) {
         watchdogLogs.push({ task: '2000_preflight', error: pe.message });
       }
     }
-    // Live window (19:58 - 20:04)
-    else if ((hour === 19 && minute >= 58) || (hour === 20 && minute <= 4)) {
+    // Live window & Evening Recovery (19:58 to 23:30)
+    else if ((hour === 19 && minute >= 58) || (hour >= 20 && hour <= 23)) {
       const alreadySent2000 = curSettingsData.last2000DailyUpdateSentDate === todayStr;
       if (!alreadySent2000) {
         try {
-          console.log('[WATCHDOG] Dispatching 20:00 Daily Update in live window...');
+          console.log('[WATCHDOG] Dispatching 20:00 Daily Update...');
           const duRes = await fetch(`${baseUrl}/api/cron-daily-update`);
           const duJson = await duRes.json();
           watchdogLogs.push({ task: '2000_daily_update_live', status: duJson.status });
