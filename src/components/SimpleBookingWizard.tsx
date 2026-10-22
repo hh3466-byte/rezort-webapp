@@ -187,11 +187,11 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     return settings.defaultDailyRateBoarding;
   });
 
-  // Add-on extra services
+  // Add-on extra services (strictly existing services: walks, brain games, gourmet treat, premium food - NO bath/grooming)
   const [extraServices, setExtraServices] = useState<{ id: string; name: string; price: number; selected: boolean }[]>([
-    { id: 'bath', name: 'מקלחת וטיפוח לפני יציאה', price: 50, selected: false },
     { id: 'walk', name: 'טיול ארוך יומי בטבע', price: 30, selected: false },
-    { id: 'brush', name: 'הברשת פרווה והתרעננות', price: 40, selected: false },
+    { id: 'brain_games', name: 'משחקי חשיבה והעשרה (Brain Games)', price: 45, selected: false },
+    { id: 'treat', name: 'מארז שף גורמה מעושן', price: 35, selected: false },
     { id: 'food', name: 'מזון סופר פרמיום מהפנסיון', price: 20, selected: false },
   ]);
 

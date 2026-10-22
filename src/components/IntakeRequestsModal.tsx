@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { IntakeRequest, IntakeRequestStatus, ResortSettings, Booking, IntakeMediaItem } from '../types';
+import { IntakeRequest, IntakeRequestStatus, ResortSettings, Booking, IntakeMediaItem, RESORT_BENEFIT_OPTIONS } from '../types';
 import { cleanPhoneNumber, getServiceTypeHebrew, getFirstName, formatIntakeDirectWhatsAppMessage } from '../utils/whatsappUtils';
 import { formatClientPaymentLinkMessage, formatClientRejectionMessage, sendGreenApiDirectMessage } from '../services/notificationService';
 import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
@@ -1608,6 +1608,50 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* Selected VIP Benefit or Referral Voucher Banner (Integrated in app for Shmulik) */}
+                  {(() => {
+                    const chosenBenefit = RESORT_BENEFIT_OPTIONS.find(b => b.id === req.selectedBenefitId);
+                    const hasBenefit = Boolean(chosenBenefit || req.selectedBenefitId);
+                    const hasVoucher = Boolean(req.voucherCode);
+                    const isReferral = req.clientOrigin === 'referral' || (req.notes && req.notes.includes('חבר מביא חבר'));
+
+                    if (!hasBenefit && !hasVoucher && !isReferral) return null;
+
+                    return (
+                      <div className="bg-gradient-to-r from-amber-50 via-yellow-50 to-amber-50 border-2 border-amber-400 rounded-2xl p-3 my-2 shadow-xs text-right animate-fadeIn" dir="rtl">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pb-1 border-b border-amber-300/80">
+                          <div className="flex items-center gap-2 font-black text-amber-950 text-xs sm:text-sm">
+                            <span className="text-lg">🎁</span>
+                            <span>
+                              <strong className="text-amber-900 font-extrabold">הטבת VIP שנבחרה בשאלון:</strong>{' '}
+                              {chosenBenefit ? `${chosenBenefit.icon} ${chosenBenefit.title}` : (req.selectedBenefitId || 'הטבת VIP')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {req.voucherCode && (
+                              <span className="text-[11px] bg-amber-200/90 text-amber-950 font-mono font-black px-2.5 py-0.5 rounded-lg border border-amber-300 shadow-2xs">
+                                קוד שובר: #{req.voucherCode}
+                              </span>
+                            )}
+                            {isReferral && (
+                              <span className="text-[11px] bg-teal-100 text-teal-950 font-black px-2.5 py-0.5 rounded-lg border border-teal-300 shadow-2xs">
+                                🤝 חבר מביא חבר
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {chosenBenefit && (
+                          <div className="text-xs text-amber-900 font-medium pt-1.5 flex items-center justify-between flex-wrap gap-1">
+                            <span>{chosenBenefit.description}</span>
+                            <span className="font-bold text-amber-950 text-[11px] bg-amber-100/90 px-2 py-0.5 rounded-md border border-amber-200">
+                              תוקף: 3 חודשים · בהזמנת 3 ימים ומעלה
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Active Prepaid Pass Banner (Rule 29: Customer holds active prepaid Daycare/Boarding pass) */}
                   {(() => {

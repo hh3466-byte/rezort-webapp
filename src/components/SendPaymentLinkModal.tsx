@@ -507,7 +507,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
                 }`}
               >
-                שירות אקסטרה / מקלחת 🛁
+                שירות אקסטרה / פינוק ✨
               </button>
               <button
                 type="button"
