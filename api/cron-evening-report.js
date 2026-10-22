@@ -747,15 +747,17 @@ export default async function handler(req, res) {
       }
     }
 
-    await supabase.from('settings').update({
-      data: {
-        ...curData,
-        lastTomorrowOverviewSentDate: todayStr,
-        lastTomorrowOverviewSentTimestamp: new Date().toISOString(),
-        last1900ReviewsSentCount: reviewSentCount
-      },
-      updated_at: new Date().toISOString()
-    }).eq('id', sRow.id || 'resort_config');
+    if (!isDryRun) {
+      await supabase.from('settings').update({
+        data: {
+          ...curData,
+          lastTomorrowOverviewSentDate: todayStr,
+          lastTomorrowOverviewSentTimestamp: new Date().toISOString(),
+          last1900ReviewsSentCount: reviewSentCount
+        },
+        updated_at: new Date().toISOString()
+      }).eq('id', sRow.id || 'resort_config');
+    }
 
     return res.status(200).json({
       status: 'success',
