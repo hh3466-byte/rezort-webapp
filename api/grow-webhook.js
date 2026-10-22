@@ -14,6 +14,7 @@
  */
 
 import { sendMetaPurchaseEvent } from './meta-capi.js';
+import { syncMorningCustomer } from './morning-service.js';
 
 const SUPABASE_URL = "https://ydlynqqmulojhrxbfjsc.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
@@ -205,6 +206,17 @@ export default async function handler(req, res) {
       } catch (errDb) {
         console.error('Failed to log Teacher Rights payment into grow_incoming_payments:', errDb);
       }
+
+      // 3. Automatically ensure customer is created in Morning with Teacher Rights remarks
+      syncMorningCustomer({
+        fullName: fullName || 'לקוח',
+        phone: cleanPhone || '',
+        email: data.email || data.payerEmail || '',
+        amount: amount,
+        transactionId: transactionId,
+        businessType: 'teacher_rights',
+        serviceName: serviceDesc
+      }).catch(mErr => console.warn('[Morning] Non-blocking teacher rights sync warning:', mErr));
 
       return res.status(200).json({
         status: 'success',
@@ -536,6 +548,18 @@ export default async function handler(req, res) {
     } else {
       alertMsg = `שלום, התקבל תשלום חדש ב-Grow ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} (📞 ${cleanPhone || 'ללא נייד'}). ⚠️ לא אותר שיוך אוטומטי להזמנה ביומן - נדרש שיוך ידני!`;
     }
+
+    // Automatically ensure customer is created in Morning and associate Grow document
+    syncMorningCustomer({
+      fullName: fullName || 'לקוח',
+      phone: cleanPhone || '',
+      email: data.email || data.payerEmail || data.customer_email || payload.email || '',
+      amount: amount,
+      transactionId: transactionId,
+      businessType: 'resort',
+      serviceName: serviceName,
+      dogName: dogName
+    }).catch(mErr => console.warn('[Morning] Non-blocking resort customer sync warning:', mErr));
 
     await sendWhatsAppDirect(MANAGER_PHONE, alertMsg);
     await sendWhatsAppDirect(SHMULIK_PHONE, alertMsg);
