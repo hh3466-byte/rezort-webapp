@@ -3,6 +3,7 @@ import { DaycarePass, ResortSettings, IntakeRequest } from '../types';
 import { formatDateIL, getTodayStr, addDays, getDayNameHebrew, calculateDaysCount } from '../utils/dateUtils';
 import { cleanPhoneNumber, formatIsraeliPhoneDisplay, openWhatsAppMessage } from '../utils/whatsappUtils';
 import { findDaycarePassByCode, findActiveDaycarePassByPhone, saveIntakeRequestToDb } from '../services/dbService';
+import { sendGreenApiDirectMessage } from '../services/notificationService';
 import { supabase } from '../utils/supabase';
 import confetti from 'canvas-confetti';
 import { 
@@ -132,20 +133,52 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
         endDate: targetEndDate,
         status: 'pending',
         calculatedPrice: 0,
+        daycarePassCode: pass.passCode,
         isFriendlyWithDogs: 'yes',
         isNeutered: true,
         isVaccinated: true,
         isHouseTrained: true,
         isTreatedParasites: true,
         notes: `[🎟️ תיאום הגעה מכרטיסייה #${pass.passCode} (שולם מראש / בנק ימים)] שעות: ${arrivalTime} עד ${pickupTime}${bookingNotes ? ` | הערות: ${bookingNotes}` : ''}`,
-        internalNotes: `תיאום הגעה מתוך כרטיסייה #${pass.passCode}. נותרו ${remainingDays} ${isBoarding ? 'יממות' : 'ימים'}.`,
+        internalNotes: '',
         createdAt: new Date().toISOString(),
         termsAccepted: true
       };
 
       await saveIntakeRequestToDb(intakeReq);
 
-      // 2. Fire celebratory confetti
+      // 2. Direct autonomous WhatsApp notification to Shmulik (050-6336896) via Green-API from official resort number (054-8765888)
+      const directCalendarLink = `https://rezort-webapp.vercel.app/?view=calendar&date=${bookingDate}&reqId=${reqId}`;
+      const shmulikAlertMsg = `🎟️ *בקשה חדשה לשיריון מתוך כרטיסייה!*
+--------------------------------
+👤 *בעלים:* ${pass.ownerName}
+📞 *טלפון:* ${pass.ownerPhone}
+🐶 *כלב:* ${pass.dogName} (${pass.dogBreed || 'מעורב'})
+🏷️ *סוג:* ${isBoarding ? 'בנק 21 יממות פנסיון VIP' : `כרטיסיית ${pass.totalDays} יומיות`} (#${pass.passCode})
+📅 *תאריכים:* ${formatDateIL(bookingDate)}${isBoarding ? ` עד ${formatDateIL(targetEndDate)}` : ''} (${daysToDeduct} ${isBoarding ? 'יממות' : 'ימים'})
+⏰ *שעות:* הגעה ב-${arrivalTime} | איסוף ב-${pickupTime}
+📊 *יתרה בכרטיסייה:* נותרו ${remainingDays} ${isBoarding ? 'יממות' : 'ימים'} לניצול
+${bookingNotes ? `💬 *הערות לקוח:* ${bookingNotes}\n` : ''}🚫 *מדיניות ביטולים:* אין אפשרות לביטול בפחות מ-24 שעות מיום הקבלה (נשמר מקום ייעודי).
+--------------------------------
+🗓️ *לבדיקה ביומן על התאריכים המבוקשים, אישור או דחייה בלחיצה:*
+${directCalendarLink}
+
+צוות הריזורט לכלב 🐾`;
+
+      try {
+        const shmulikPhone = settings?.shmulikWhatsAppPhone || '050-6336896';
+        await sendGreenApiDirectMessage(
+          shmulikPhone,
+          shmulikAlertMsg,
+          settings?.greenApiIdInstance,
+          settings?.greenApiToken,
+          { skipHolidayCheck: true }
+        );
+      } catch (notifyErr) {
+        console.warn('Could not send Green-API notification to Shmulik:', notifyErr);
+      }
+
+      // 3. Fire celebratory confetti
       confetti({
         particleCount: 80,
         spread: 70,
@@ -154,14 +187,15 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
 
       setBookingSuccess(true);
 
-      // 3. Prepare direct WhatsApp text for Shmulik
+      // 4. Prepare direct WhatsApp text for Shmulik (client backup action)
+      const cancellationClauseNotice = `🚫 *מדיניות ביטולים:* אין אפשרות לביטול בפחות מ-24 שעות מיום הקבלה (שומרים מקום ייעודי עבור ${pass.dogName}).`;
       const shmulikMsg = isBoarding 
         ? `היי שמוליק! 🐾🐶
 מבקש לשריין פנסיון מלא עבור *${pass.dogName}* מתוך *בנק 21 יממות VIP (כרטיסייה #${pass.passCode})*:
 📅 *תאריך כניסה:* ${formatDateIL(bookingDate)} (יום ${getDayNameHebrew(bookingDate)}) - ${arrivalTime}
 🌙 *תאריך יציאה:* ${formatDateIL(bookingEndDate)} (יום ${getDayNameHebrew(bookingEndDate)}) - ${pickupTime}
 ⏱️ *משך שהייה:* ${nightsCount} יממות (לקיזוז מהבנק, נותרו ${remainingDays} יממות)
-${bookingNotes ? `💬 *הערות:* ${bookingNotes}\n` : ''}
+${bookingNotes ? `💬 *הערות:* ${bookingNotes}\n` : ''}${cancellationClauseNotice}
 תודה רבה!
 ${pass.ownerName} (${pass.ownerPhone})`
         : `היי שמוליק! 🐾🐶
@@ -169,7 +203,7 @@ ${pass.ownerName} (${pass.ownerPhone})`
 📅 *תאריך הגעה:* ${formatDateIL(bookingDate)} (יום ${getDayNameHebrew(bookingDate)})
 ⏰ *שעות:* הגעה ב-${arrivalTime}, איסוף ב-${pickupTime}
 🎟️ *קיזוז:* יום 1 מתוך היתרה (נותרו ${remainingDays} ימים)
-${bookingNotes ? `💬 *הערות:* ${bookingNotes}\n` : ''}
+${bookingNotes ? `💬 *הערות:* ${bookingNotes}\n` : ''}${cancellationClauseNotice}
 תודה רבה!
 ${pass.ownerName} (${pass.ownerPhone})`;
 
@@ -572,6 +606,17 @@ ${pass.ownerName} (${pass.ownerPhone})`;
                   placeholder="הערה קצרה לשמוליק (למשל: תספורת, האכלה וכו' - לא חובה)"
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none placeholder:text-slate-500"
                 />
+              </div>
+
+              {/* Cancellation Policy Banner */}
+              <div className="bg-amber-500/15 border border-amber-400/50 rounded-2xl p-3.5 text-xs text-amber-200 flex items-start gap-2.5">
+                <span className="text-base shrink-0">🚫</span>
+                <div>
+                  <strong className="block font-black text-amber-300">שימו לב – מדיניות ביטולים ושמירת מקום:</strong>
+                  <span className="text-slate-300 leading-relaxed">
+                    אין אפשרות לביטול שהייה/הגעה בפחות מ-24 שעות מיום הקבלה, היות ואנו משריינים ושומרים עבור {pass.dogName} מקום ייעודי ומאובטח בריזורט.
+                  </span>
+                </div>
               </div>
 
               {/* Big 1-Click Action Button */}

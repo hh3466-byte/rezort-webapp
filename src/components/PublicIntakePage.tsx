@@ -89,6 +89,12 @@ const RESORT_BYLAWS_SECTIONS = [
     title: '7. שעות פעילות',
     icon: '⏰',
     content: 'שעות פעילות המתקן הן בימים א׳–ה׳ בין השעות 09:30–18:30, ובימי שישי עד השעה 14:00. בשבתות המתקן סגור למעט מקרה חירום. מסירה או איסוף של הכלב מחוץ לשעות אלה, ככל שתואמו מראש, יחויבו בתשלום נוסף.'
+  },
+  {
+    num: 8,
+    title: '8. מדיניות ביטולים ושמירת מקום',
+    icon: '🚫',
+    content: 'ביטול שהייה/הגעה יתאפשר עד 24 שעות לפני מועד ההגעה שנקבע. אין אפשרות לביטול שהייה בפחות מ-24 שעות ממועד הקבלה/ההגעה שסוכם, היות ונשמר עבור הכלב מקום ייעודי ומאובטח במתקן שנמנע מלקוחות אחרים.'
   }
 ];
 
@@ -1772,7 +1778,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                 {/* GPS Auto-Detect Button - Prominent, One-Click & Highly Recommended */}
                 <button
                   type="button"
-                  onClick={handleDetectGpsAddress}
+                  onClick={() => handleDetectGpsAddress()}
                   disabled={isLocatingGps}
                   className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 active:scale-95 text-white font-black text-xs px-3.5 py-2 rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50 ring-2 ring-emerald-400/50 hover:ring-emerald-500"
                   title="מומלץ ביותר: זהה את הכתובת הנוכחית שלי באמצעות GPS בלחיצה אחת"
@@ -3299,6 +3305,14 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                 קראתי ואישרתי את <button type="button" onClick={() => setIsTermsModalOpen(true)} className="text-emerald-700 hover:text-emerald-900 underline font-black cursor-pointer mx-1">תקנון הריזורט לכלב</button> <span className="text-red-500">*</span>
               </label>
             </div>
+
+            <div className="bg-amber-500/10 border border-amber-400/40 rounded-xl p-2.5 text-xs text-amber-950 flex items-start gap-2">
+              <span className="text-base leading-none shrink-0">🚫</span>
+              <div>
+                <strong className="block font-black text-amber-900">מדיניות ביטולים:</strong>
+                <span>אין ביטולים בפחות מ-24 שעות מיום הקבלה, היות ונשמר עבור הכלב מקום ייעודי במתקן.</span>
+              </div>
+            </div>
             
             <div className="flex items-center justify-between text-[11px] text-slate-600 pt-2 border-t border-slate-200 flex-wrap gap-1">
               <span className="font-medium text-slate-500">
@@ -3310,7 +3324,7 @@ export const PublicIntakePage: React.FC<PublicIntakePageProps> = ({
                 className="text-emerald-800 hover:text-emerald-950 font-bold underline flex items-center gap-1 cursor-pointer transition-colors"
               >
                 <FileText className="w-3.5 h-3.5 text-emerald-700" />
-                <span>לקריאת התקנון המלא (7 סעיפים)</span>
+                <span>לקריאת התקנון המלא (8 סעיפים)</span>
               </button>
             </div>
           </div>

@@ -81,6 +81,8 @@ export interface Booking {
   isTrainingAgreementSigned?: boolean;
   trainingAgreementSignedAt?: string;
   trainingAgreement?: TrainingAgreementData;
+  isArchived?: boolean;
+  additionalDogs?: AdditionalDogIntake[];
   createdAt: string;
   updatedAt: string;
 }
@@ -222,6 +224,7 @@ export interface IntakeRequest {
 export interface AdditionalDogIntake {
   dogName: string;
   dogBreed: string;
+  dogPhotoUrl?: string;
   dogAge?: string;
   dogGender?: 'male' | 'female';
   dogSize?: 'small' | 'medium' | 'large' | 'giant';

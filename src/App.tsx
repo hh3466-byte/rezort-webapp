@@ -40,10 +40,10 @@ import {
   getGrowClearedRevenueForMonth,
   getCashClearedRevenueForMonth,
   isBookingDigitallyPaidInFull,
-  formatStayDatesDisplay
+  formatStayDatesDisplay,
+  formatDateIL
 } from './utils/dateUtils';
-import { getFirstName, getBookingConfirmationMessage } from './utils/whatsappUtils';
-import { sendGreenApiDirectMessage } from './services/notificationService';
+import { getBookingConfirmationMessage } from './utils/whatsappUtils';
 
 import { CalendarView } from './components/CalendarView';
 import { HeaderMetricModal, HeaderMetricType } from './components/HeaderMetricModal';
@@ -62,7 +62,8 @@ import { ExtremeChangeModal, ExtremeChangeImpact } from './components/ExtremeCha
 import { ManagerAuthModal } from './components/ManagerAuthModal';
 import { ManagerLoginGate } from './components/ManagerLoginGate';
 import { Settings as SettingsIcon, Star, ChevronUp, ChevronDown, MessageCircle, Bell, Volume2, LogOut, Lock, ArrowLeft, Search, BarChart3 } from 'lucide-react';
-import { formatPhoneForWhatsApp, cleanPhoneNumber } from './utils/whatsappUtils';
+import { formatPhoneForWhatsApp, cleanPhoneNumber, getFirstName, openWhatsAppMessage } from './utils/whatsappUtils';
+import { sendGreenApiDirectMessage } from './services/notificationService';
 import { TrainingAgreementModal } from './components/TrainingAgreementModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ReportsModal } from './components/ReportsModal';
@@ -164,6 +165,7 @@ export default function App() {
   const [showTrainingAgreement, setShowTrainingAgreement] = useState(isAgreementParam);
   const [showPublicIntake, setShowPublicIntake] = useState(isIntakeParam);
   const [intakeRequests, setIntakeRequests] = useState<IntakeRequest[]>(() => loadStoredIntakeRequests());
+  const [focusedIntakeRequestId, setFocusedIntakeRequestId] = useState<string | null>(null);
   const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false);
   const [intakeModalFilter, setIntakeModalFilter] = useState<'new' | 'in_progress' | 'all' | 'payment_requested' | 'approved' | 'rejected'>('new');
   const [isSendIntakeModalOpen, setIsSendIntakeModalOpen] = useState(false);
@@ -343,6 +345,35 @@ export default function App() {
       unsubIntake();
       unsubFeedingReminders();
     };
+  }, []);
+
+  // Deep-link handling: ?view=calendar&date=YYYY-MM-DD&reqId=... (e.g. from WhatsApp notifications to Shmulik)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const targetDate = params.get('date');
+      const targetReqId = params.get('reqId') || params.get('openReq');
+      const targetView = params.get('view');
+
+      if (targetDate && /^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+        const [y, m] = targetDate.split('-').map(Number);
+        if (y && m) {
+          setCurrentYear(y);
+          setCurrentMonth(m - 1);
+        }
+        setSelectedDateForDetails(targetDate);
+        if (targetView === 'calendar' || !targetView) {
+          setActiveTab('calendar');
+        }
+      }
+
+      if (targetReqId) {
+        setFocusedIntakeRequestId(targetReqId);
+      }
+    } catch (e) {
+      console.warn('Error parsing deep link params:', e);
+    }
   }, []);
 
   // Customers derived from bookings
@@ -1340,6 +1371,294 @@ export default function App() {
       showToast(`⭐ הופעלה שליחת בקשת חוות דעת עבור ${booking.dogName}`);
     }
     await saveBookingToDb(updated);
+  };
+
+  // Handle direct approval of intake / pass reservation request
+  const handleApproveAndBookIntake = async (req: IntakeRequest) => {
+    const daysCount = Math.max(1, calculateDaysCount(req.startDate, req.endDate));
+    const boardingRateInfo = calculateBoardingRate(
+      daysCount,
+      Number(settings?.defaultDailyRateBoarding) || 180,
+      {
+        isFriendlyWithDogs: req.isFriendlyWithDogs,
+        dogGender: req.dogGender,
+        isNeutered: req.isNeutered,
+        isolationRate: Number(settings?.defaultDailyRateIsolation) || 230
+      }
+    );
+    // Check for Daycare / Boarding Pass code in request notes
+    const passMatch = (req.notes || '').match(/כרטיסיי?ה.*?:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i) ||
+                      (req.notes || '').match(/קוד כרטיסייה:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i) ||
+                      (req.notes || '').match(/בנק.*?:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i);
+    const daycarePassCode = passMatch ? passMatch[1].trim() : (req.daycarePassCode || undefined);
+    const matchedPass = (daycarePassCode ? findDaycarePassByCode(daycarePassCode, settings?.daycare_passes) : null) ||
+                        (req.ownerPhone ? findActiveDaycarePassByPhone(req.ownerPhone, settings?.daycare_passes) : null);
+    const isDaycarePassBooking = Boolean(daycarePassCode || matchedPass);
+
+    // DIRECT 1-CLICK ADMISSION FOR PASS HOLDERS:
+    if (isDaycarePassBooking && (matchedPass || daycarePassCode)) {
+      const activePass = matchedPass || (daycarePassCode ? findDaycarePassByCode(daycarePassCode, settings?.daycare_passes) : null);
+      const isBoardingBooking = req.serviceType === 'boarding' || activePass?.serviceType === 'boarding';
+      const daysToDeduct = isBoardingBooking ? daysCount : 1;
+      const remainingBefore = activePass ? Math.max(0, activePass.totalDays - activePass.usedDays) : 99;
+
+      if (activePass && remainingBefore < daysToDeduct) {
+        const proceed = window.confirm(`⚠️ שימו לב: בכרטיסייה #${activePass.passCode} נותרו רק ${remainingBefore} ימים, אך הבקשה היא ל-${daysToDeduct} ימים.\nהאם לקלוט בכל זאת?`);
+        if (!proceed) return;
+      }
+
+      const newBookingId = `b_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+      const passCodeVal = activePass?.passCode || daycarePassCode || '';
+      const primaryBooking: Booking = {
+        id: newBookingId,
+        intakeRequestId: req.id,
+        dogName: req.dogName,
+        dogBreed: req.dogBreed || '',
+        dogPhotoUrl: req.dogPhotoUrl,
+        dogMediaList: req.dogMediaList,
+        dogVideoUrl: req.dogVideoUrl,
+        dogGender: req.dogGender === 'female'
+          ? (req.isNeutered ? 'female_spayed' : 'female_intact')
+          : (req.isNeutered ? 'male_neutered' : 'male_intact'),
+        ownerName: req.ownerName,
+        ownerPhone: req.ownerPhone,
+        ownerEmail: req.ownerEmail,
+        serviceType: req.serviceType,
+        startDate: req.startDate,
+        endDate: req.endDate,
+        notes: [
+          `🎟️ מימוש מתוך ${isBoardingBooking ? 'בנק 21 יממות VIP' : 'כרטיסיית ימי כיף'} (#${passCodeVal})`,
+          req.specialNeeds,
+          req.notes,
+          req.internalNotes ? `הערות שמוליק: ${req.internalNotes}` : ''
+        ].filter(Boolean).join(' | '),
+        totalPrice: 0,
+        dailyRate: 0,
+        depositAmount: 0,
+        paymentStatus: 'fully_paid',
+        isFreeStay: true,
+        stayStatus: 'booked',
+        vaccinationValid: req.isVaccinated,
+        daycarePassCode: passCodeVal,
+        daycarePassId: activePass?.id,
+        additionalDogs: req.additionalDogs,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      const createdBookings: Booking[] = [primaryBooking];
+
+      if (req.additionalDogs && req.additionalDogs.length > 0) {
+        req.additionalDogs.forEach((extraDog, idx) => {
+          createdBookings.push({
+            id: `b_${Date.now()}_${idx + 1}_${Math.random().toString(36).substr(2, 6)}`,
+            intakeRequestId: req.id,
+            dogName: extraDog.dogName,
+            dogBreed: extraDog.dogBreed || '',
+            dogPhotoUrl: extraDog.dogPhotoUrl,
+            dogGender: extraDog.dogGender === 'female'
+              ? (extraDog.isNeutered ? 'female_spayed' : 'female_intact')
+              : (extraDog.isNeutered ? 'male_neutered' : 'male_intact'),
+            ownerName: req.ownerName,
+            ownerPhone: req.ownerPhone,
+            ownerEmail: req.ownerEmail,
+            serviceType: req.serviceType,
+            startDate: req.startDate,
+            endDate: req.endDate,
+            notes: `🎟️ כלב נוסף מתוך כרטיסייה #${passCodeVal} (יחד עם ${req.dogName})`,
+            totalPrice: 0,
+            dailyRate: 0,
+            depositAmount: 0,
+            paymentStatus: 'fully_paid',
+            isFreeStay: true,
+            stayStatus: 'booked',
+            vaccinationValid: true,
+            daycarePassCode: passCodeVal,
+            daycarePassId: activePass?.id,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+        });
+      }
+
+      // Save bookings to DB & state
+      for (const b of createdBookings) {
+        await saveBookingToDb(b);
+      }
+      setBookings(prev => [...prev, ...createdBookings]);
+
+      // Deduct day(s) from pass in DB
+      let updatedPass = activePass;
+      if (passCodeVal) {
+        const deductRes = await deductDayFromPassInDb(
+          passCodeVal,
+          req.startDate,
+          primaryBooking.id,
+          'customer',
+          `קליטה ישירה ליומן משאלון: ${req.dogName} (${req.ownerName})`,
+          daysToDeduct,
+          req.endDate || req.startDate
+        );
+        if (deductRes.success && deductRes.pass) {
+          updatedPass = deductRes.pass;
+          setSettings(prev => {
+            if (!prev) return prev;
+            const updatedPasses = (prev.daycare_passes || []).map(p =>
+              p.passCode === updatedPass!.passCode ? updatedPass! : p
+            );
+            return { ...prev, daycare_passes: updatedPasses };
+          });
+        }
+      }
+
+      // Mark intake request approved in DB & state
+      await updateIntakeRequestStatusInDb(req.id, 'approved');
+      setIntakeRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'approved' } : r));
+
+      // Auto-redeem voucher if present in request notes
+      const voucherMatch = (req.notes || '').match(/שובר.*?:\s*([A-Z0-9\u0590-\u05FF-]+)/i);
+      if (voucherMatch && voucherMatch[1]) {
+        const code = voucherMatch[1].trim();
+        await updateVoucherStatusInDb(code, 'redeemed', {
+          redeemedByOwner: req.ownerName,
+          redeemedByDog: req.dogName
+        });
+        showToast(`🎁 שובר ${code} עודכן כנוצל במערכת`);
+      }
+
+      const remainingAfter = updatedPass ? Math.max(0, updatedPass.totalDays - updatedPass.usedDays) : 0;
+
+      // AUTOMATIC WhatsApp confirmation to client via Green-API right upon clicking "קלוט ליומן"
+      try {
+        const passConfirmMsg = `שלום ${getFirstName(req.ownerName)}! 🐾🐶
+שמחים לעדכן כי השריון עבור *${req.dogName}* אושר ונקלט בהצלחה ביומן הריזורט לכלב! ✨
+
+📋 *פרטי השריון המאושר:*
+🐕 *שם הכלב:* ${req.dogName}
+📅 *תאריכים:* ${formatStayDatesDisplay(req.startDate, req.endDate || req.startDate, req.serviceType)}
+🎟️ *סוג כרטיסייה:* ${isBoardingBooking ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית ימי כיף'} (#${passCodeVal})
+⏱️ *קיזוז:* נוצלו ${daysToDeduct} ${isBoardingBooking ? 'יממות' : 'ימים'}
+📊 *יתרה עדכנית למימוש:* *${remainingAfter} מתוך ${updatedPass?.totalDays || 0} ${isBoardingBooking ? 'יממות' : 'ימים'} נותרו!*
+✅ *סטטוס תשלום:* מומש ושולם מראש מתוך הכרטיסייה (יתרה לתשלום: ₪0)
+
+🚫 *מדיניות ביטולים ושמירת מקום:* אין אפשרות לביטול בפחות מ-24 שעות ממועד הקבלה, היות ונשמר עבור ${req.dogName} מקום ייעודי ומאובטח במתקן.
+
+⏰ *שעות פעילות והגעה בריזורט:*
+• ימים א'-ה': 08:30 - 18:30 | שישי וערבי חג: עד 14:00
+📍 *מיקום (Waze):* https://maps.app.goo.gl/8bm2Rdt7DtHeUS5J9
+
+מחכים לראותכם! 🐕🤍
+*שמוליק וצוות הריזורט לכלב*`;
+
+        const waRes = await sendGreenApiDirectMessage(
+          req.ownerPhone,
+          passConfirmMsg,
+          settings?.greenApiIdInstance,
+          settings?.greenApiToken
+        );
+        if (waRes.success) {
+          showToast(`📲 אישור שריון ויתרה (${remainingAfter} נותרו) נשלחו אוטומטית ל-${req.ownerName} בוואטסאפ! 🐾`);
+        }
+      } catch (waErr) {
+        console.warn('Auto send pass confirmation error:', waErr);
+      }
+
+      confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      showToast(`🎟️ ${req.dogName} נקלט/ה ישירות ליומן ב-₪0! נותרו ${remainingAfter} ימים בכרטיסייה.`);
+      setIsIntakeModalOpen(false);
+      return;
+    }
+
+    const isFree = req.isFreeStay || isDaycarePassBooking ||
+      (req.notes && (req.notes.includes('חינם') || req.notes.includes('ללא תשלום') || req.notes.includes('כלב נוסף'))) ||
+      (req.internalNotes && (req.internalNotes.includes('חינם') || req.internalNotes.includes('ללא תשלום') || req.internalNotes.includes('כלב נוסף')));
+
+    const calculatedDefault = req.serviceType === 'training'
+      ? (Number(settings?.defaultDailyRateTraining) || 6500)
+      : req.serviceType === 'daycare'
+      ? (daysCount * (Number(settings?.defaultDailyRateDaycare) || 90))
+      : boardingRateInfo.totalPrice;
+    const finalPrice = isFree ? 0 : (req.depositRequested && req.depositRequested > 0 ? req.depositRequested : calculatedDefault);
+    const secondDogData = req.additionalDogs && req.additionalDogs.length > 0
+      ? {
+          hasSecondDog: true,
+          name: req.additionalDogs[0].dogName || '',
+          breed: req.additionalDogs[0].dogBreed || '',
+          gender: req.additionalDogs[0].dogGender === 'female'
+            ? (req.additionalDogs[0].isNeutered ? 'female_spayed' : 'female_intact')
+            : (req.additionalDogs[0].isNeutered ? 'male_neutered' : 'male_intact'),
+          consolidatePayment: true
+        }
+      : undefined;
+    const dailyRateVal = isFree ? 0 : (boardingRateInfo.dailyRate || Number(settings?.defaultDailyRateBoarding) || 180);
+
+    setBookingWizardOpen({
+      isOpen: true,
+      initialData: {
+        intakeRequestId: req.id,
+        dogName: req.dogName,
+        dogBreed: req.dogBreed,
+        dogPhotoUrl: req.dogPhotoUrl,
+        dogMediaList: req.dogMediaList,
+        dogVideoUrl: req.dogVideoUrl,
+        dogGender: req.dogGender === 'female'
+          ? (req.isNeutered ? 'female_spayed' : 'female_intact')
+          : (req.isNeutered ? 'male_neutered' : 'male_intact'),
+        ownerName: req.ownerName,
+        ownerPhone: req.ownerPhone,
+        ownerEmail: req.ownerEmail,
+        serviceType: req.serviceType,
+        startDate: req.startDate,
+        endDate: req.endDate,
+        vaccinationValid: req.isVaccinated,
+        notes: [req.specialNeeds, req.notes, req.internalNotes ? `הערות שמוליק: ${req.internalNotes}` : ''].filter(Boolean).join(' | '),
+        totalPrice: finalPrice,
+        dailyRate: dailyRateVal,
+        depositAmount: 0,
+        paymentStatus: isFree ? 'fully_paid' : 'unpaid',
+        isFreeStay: isFree,
+        stayStatus: 'booked',
+        secondDog: secondDogData,
+        additionalDogs: req.additionalDogs,
+        isTrainingAgreementSigned: req.isTrainingAgreementSigned,
+        trainingAgreementSignedAt: req.trainingAgreementSignedAt,
+        trainingAgreement: req.trainingAgreement,
+        daycarePassCode: daycarePassCode || matchedPass?.passCode,
+        daycarePassId: matchedPass?.id
+      } as any
+    });
+
+    // Auto-redeem voucher if present in request notes
+    const voucherMatch = (req.notes || '').match(/שובר.*?:\s*([A-Z0-9\u0590-\u05FF-]+)/i);
+    if (voucherMatch && voucherMatch[1]) {
+      const code = voucherMatch[1].trim();
+      await updateVoucherStatusInDb(code, 'redeemed', {
+        redeemedByOwner: req.ownerName,
+        redeemedByDog: req.dogName
+      });
+      showToast(`🎁 שובר ${code} עודכן כנוצל במערכת`);
+    }
+
+    setIsIntakeModalOpen(false);
+  };
+
+  const handleRejectIntakeRequest = async (req: IntakeRequest) => {
+    const reason = window.prompt(`האם לדחות את בקשת השריון של ${req.dogName} (${req.ownerName})?\nהכנס סיבת דחייה:`, 'מצטערים, אין מקום פנוי בתאריכים אלו בריזורט');
+    if (reason === null) return;
+
+    await updateIntakeRequestStatusInDb(req.id, 'rejected', reason ? `סיבת דחייה: ${reason}` : undefined);
+    setIntakeRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'rejected' } : r));
+    showToast(`הבקשה עבור ${req.dogName} נדחתה`);
+
+    const rejectMsg = `שלום ${getFirstName(req.ownerName)}, תודה על פנייתך לריזורט לכלב 🐾
+לצערנו, לא נוכל לאשר את בקשת השריון עבור *${req.dogName}* לתאריכים ${formatDateIL(req.startDate)}${req.endDate && req.endDate !== req.startDate ? ` עד ${formatDateIL(req.endDate)}` : ''}.
+${reason ? `💬 *סיבה:* ${reason}\n` : ''}
+נשמח לעמוד לרשותכם ולתאם מועדים חלופיים! 🐕🤍
+שמוליק וצוות הריזורט לכלב`;
+
+    if (window.confirm(`האם לפתוח הודעת וואטסאפ מנומסת ללקוח (${req.ownerPhone})?`)) {
+      openWhatsAppMessage(req.ownerPhone, rejectMsg);
+    }
   };
 
   // Clear all bookings
@@ -2495,9 +2814,14 @@ export default function App() {
           highlightedBookingId={selectedBookingIdForDetails}
           bookings={bookings}
           settings={settings}
+          intakeRequests={intakeRequests}
+          focusedIntakeRequestId={focusedIntakeRequestId}
+          onApproveIntakeRequest={handleApproveAndBookIntake}
+          onRejectIntakeRequest={handleRejectIntakeRequest}
           onClose={() => {
             setSelectedDateForDetails(null);
             setSelectedBookingIdForDetails(null);
+            setFocusedIntakeRequestId(null);
           }}
           onOpenVoucher={(data) => setVoucherModalData({ isOpen: true, ...data })}
           onSelectBooking={(booking) => {
@@ -2869,271 +3193,17 @@ export default function App() {
               console.error('Failed to save intake request in DB:', err);
             }
           }}
-          onApproveAndBook={async (req) => {
-            const daysCount = Math.max(1, calculateDaysCount(req.startDate, req.endDate));
-            const boardingRateInfo = calculateBoardingRate(
-              daysCount,
-              Number(settings?.defaultDailyRateBoarding) || 180,
-              {
-                isFriendlyWithDogs: req.isFriendlyWithDogs,
-                dogGender: req.dogGender,
-                isNeutered: req.isNeutered,
-                isolationRate: Number(settings?.defaultDailyRateIsolation) || 230
-              }
-            );
-            // Check for Daycare / Boarding Pass code in request notes
-            const passMatch = (req.notes || '').match(/כרטיסיי?ה.*?:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i) ||
-                              (req.notes || '').match(/קוד כרטיסייה:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i) ||
-                              (req.notes || '').match(/בנק.*?:\s*([A-Za-z0-9\u0590-\u05FF-]+)/i);
-            const daycarePassCode = passMatch ? passMatch[1].trim() : (req.daycarePassCode || undefined);
-            const matchedPass = (daycarePassCode ? findDaycarePassByCode(daycarePassCode, settings?.daycare_passes) : null) ||
-                                (req.ownerPhone ? findActiveDaycarePassByPhone(req.ownerPhone, settings?.daycare_passes) : null);
-            const isDaycarePassBooking = Boolean(daycarePassCode || matchedPass);
-
-            // DIRECT 1-CLICK ADMISSION FOR PASS HOLDERS:
-            // The single action of Shmulik: click "קלוט ליומן" -> auto-deducts days, places in calendar at 0₪ with 🎟️ tag, and sends WhatsApp confirmation automatically!
-            if (isDaycarePassBooking && (matchedPass || daycarePassCode)) {
-              const activePass = matchedPass || (daycarePassCode ? findDaycarePassByCode(daycarePassCode, settings?.daycare_passes) : null);
-              const isBoardingBooking = req.serviceType === 'boarding' || activePass?.serviceType === 'boarding';
-              const daysToDeduct = isBoardingBooking ? daysCount : 1;
-              const remainingBefore = activePass ? Math.max(0, activePass.totalDays - activePass.usedDays) : 99;
-
-              if (activePass && remainingBefore < daysToDeduct) {
-                const proceed = window.confirm(`⚠️ שימו לב: בכרטיסייה #${activePass.passCode} נותרו רק ${remainingBefore} ימים, אך הבקשה היא ל-${daysToDeduct} ימים.\nהאם לקלוט בכל זאת?`);
-                if (!proceed) return;
-              }
-
-              const newBookingId = `b_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-              const passCodeVal = activePass?.passCode || daycarePassCode || '';
-              const primaryBooking: Booking = {
-                id: newBookingId,
-                intakeRequestId: req.id,
-                dogName: req.dogName,
-                dogBreed: req.dogBreed || '',
-                dogPhotoUrl: req.dogPhotoUrl,
-                dogMediaList: req.dogMediaList,
-                dogVideoUrl: req.dogVideoUrl,
-                dogGender: req.dogGender === 'female'
-                  ? (req.isNeutered ? 'female_spayed' : 'female_intact')
-                  : (req.isNeutered ? 'male_neutered' : 'male_intact'),
-                ownerName: req.ownerName,
-                ownerPhone: req.ownerPhone,
-                ownerEmail: req.ownerEmail,
-                serviceType: req.serviceType,
-                startDate: req.startDate,
-                endDate: req.endDate,
-                notes: [
-                  `🎟️ מימוש מתוך ${isBoardingBooking ? 'בנק 21 יממות VIP' : 'כרטיסיית ימי כיף'} (#${passCodeVal})`,
-                  req.specialNeeds,
-                  req.notes,
-                  req.internalNotes ? `הערות שמוליק: ${req.internalNotes}` : ''
-                ].filter(Boolean).join(' | '),
-                totalPrice: 0,
-                dailyRate: 0,
-                depositAmount: 0,
-                paymentStatus: 'fully_paid',
-                isFreeStay: true,
-                stayStatus: 'booked',
-                vaccinationValid: req.isVaccinated,
-                daycarePassCode: passCodeVal,
-                daycarePassId: activePass?.id,
-                additionalDogs: req.additionalDogs,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-              };
-
-              const createdBookings: Booking[] = [primaryBooking];
-
-              if (req.additionalDogs && req.additionalDogs.length > 0) {
-                req.additionalDogs.forEach((extraDog, idx) => {
-                  createdBookings.push({
-                    id: `b_${Date.now()}_${idx + 1}_${Math.random().toString(36).substr(2, 6)}`,
-                    intakeRequestId: req.id,
-                    dogName: extraDog.dogName,
-                    dogBreed: extraDog.dogBreed || '',
-                    dogPhotoUrl: extraDog.dogPhotoUrl,
-                    dogGender: extraDog.dogGender === 'female'
-                      ? (extraDog.isNeutered ? 'female_spayed' : 'female_intact')
-                      : (extraDog.isNeutered ? 'male_neutered' : 'male_intact'),
-                    ownerName: req.ownerName,
-                    ownerPhone: req.ownerPhone,
-                    ownerEmail: req.ownerEmail,
-                    serviceType: req.serviceType,
-                    startDate: req.startDate,
-                    endDate: req.endDate,
-                    notes: `🎟️ כלב נוסף מתוך כרטיסייה #${passCodeVal} (יחד עם ${req.dogName})`,
-                    totalPrice: 0,
-                    dailyRate: 0,
-                    depositAmount: 0,
-                    paymentStatus: 'fully_paid',
-                    isFreeStay: true,
-                    stayStatus: 'booked',
-                    vaccinationValid: true,
-                    daycarePassCode: passCodeVal,
-                    daycarePassId: activePass?.id,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                  });
-                });
-              }
-
-              // Save bookings to DB & state
-              for (const b of createdBookings) {
-                await saveBookingToDb(b);
-              }
-              setBookings(prev => [...prev, ...createdBookings]);
-
-              // Deduct day(s) from pass in DB
-              let updatedPass = activePass;
-              if (passCodeVal) {
-                const deductRes = await deductDayFromPassInDb(
-                  passCodeVal,
-                  req.startDate,
-                  primaryBooking.id,
-                  'customer',
-                  `קליטה ישירה ליומן משאלון: ${req.dogName} (${req.ownerName})`,
-                  daysToDeduct,
-                  req.endDate || req.startDate
-                );
-                if (deductRes.success && deductRes.pass) {
-                  updatedPass = deductRes.pass;
-                  setSettings(prev => {
-                    if (!prev) return prev;
-                    const updatedPasses = (prev.daycare_passes || []).map(p =>
-                      p.passCode === updatedPass!.passCode ? updatedPass! : p
-                    );
-                    return { ...prev, daycare_passes: updatedPasses };
-                  });
-                }
-              }
-
-              // Mark intake request approved in DB & state
-              await updateIntakeRequestStatusInDb(req.id, 'approved');
-              setIntakeRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'approved' } : r));
-
-              // Auto-redeem voucher if present in request notes
-              const voucherMatch = (req.notes || '').match(/שובר.*?:\s*([A-Z0-9\u0590-\u05FF-]+)/i);
-              if (voucherMatch && voucherMatch[1]) {
-                const code = voucherMatch[1].trim();
-                await updateVoucherStatusInDb(code, 'redeemed', {
-                  redeemedByOwner: req.ownerName,
-                  redeemedByDog: req.dogName
-                });
-                showToast(`🎁 שובר ${code} עודכן כנוצל במערכת`);
-              }
-
-              const remainingAfter = updatedPass ? Math.max(0, updatedPass.totalDays - updatedPass.usedDays) : 0;
-
-              // AUTOMATIC WhatsApp confirmation to client via Green-API right upon clicking "קלוט ליומן"
-              try {
-                const passConfirmMsg = `שלום ${getFirstName(req.ownerName)}! 🐾🐶
-שמחים לעדכן כי השריון עבור *${req.dogName}* אושר ונקלט בהצלחה ביומן הריזורט לכלב! ✨
-
-📋 *פרטי השריון המאושר:*
-🐕 *שם הכלב:* ${req.dogName}
-📅 *תאריכים:* ${formatStayDatesDisplay(req.startDate, req.endDate || req.startDate, req.serviceType)}
-🎟️ *סוג כרטיסייה:* ${isBoardingBooking ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית ימי כיף'} (#${passCodeVal})
-⏱️ *קיזוז:* נוצלו ${daysToDeduct} ${isBoardingBooking ? 'יממות' : 'ימים'}
-📊 *יתרה עדכנית למימוש:* *${remainingAfter} מתוך ${updatedPass?.totalDays || 0} ${isBoardingBooking ? 'יממות' : 'ימים'} נותרו!*
-✅ *סטטוס תשלום:* מומש ושולם מראש מתוך הכרטיסייה (יתרה לתשלום: ₪0)
-
-⏰ *שעות פעילות והגעה בריזורט:*
-• ימים א'-ה': 08:30 - 18:30 | שישי וערבי חג: עד 14:00
-📍 *מיקום (Waze):* https://maps.app.goo.gl/8bm2Rdt7DtHeUS5J9
-
-מחכים לראותכם! 🐕🤍
-*שמוליק וצוות הריזורט לכלב*`;
-
-                const waRes = await sendGreenApiDirectMessage(
-                  req.ownerPhone,
-                  passConfirmMsg,
-                  settings?.greenApiIdInstance,
-                  settings?.greenApiToken
-                );
-                if (waRes.success) {
-                  showToast(`📲 אישור שריון ויתרה (${remainingAfter} נותרו) נשלחו אוטומטית ל-${req.ownerName} בוואטסאפ! 🐾`);
-                }
-              } catch (waErr) {
-                console.warn('Auto send pass confirmation error:', waErr);
-              }
-
-              confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-              showToast(`🎟️ ${req.dogName} נקלט/ה ישירות ליומן ב-₪0! נותרו ${remainingAfter} ימים בכרטיסייה.`);
-              setIsIntakeModalOpen(false);
-              return;
-            }
-
-            const isFree = req.isFreeStay || isDaycarePassBooking ||
-              (req.notes && (req.notes.includes('חינם') || req.notes.includes('ללא תשלום') || req.notes.includes('כלב נוסף'))) ||
-              (req.internalNotes && (req.internalNotes.includes('חינם') || req.internalNotes.includes('ללא תשלום') || req.internalNotes.includes('כלב נוסף')));
-
-            const calculatedDefault = req.serviceType === 'training'
-              ? (Number(settings?.defaultDailyRateTraining) || 6500)
-              : req.serviceType === 'daycare'
-              ? (daysCount * (Number(settings?.defaultDailyRateDaycare) || 90))
-              : boardingRateInfo.totalPrice;
-            const finalPrice = isFree ? 0 : (req.depositRequested && req.depositRequested > 0 ? req.depositRequested : calculatedDefault);
-            const secondDogData = req.additionalDogs && req.additionalDogs.length > 0
-              ? {
-                  hasSecondDog: true,
-                  name: req.additionalDogs[0].dogName || '',
-                  breed: req.additionalDogs[0].dogBreed || '',
-                  gender: req.additionalDogs[0].dogGender === 'female'
-                    ? (req.additionalDogs[0].isNeutered ? 'female_spayed' : 'female_intact')
-                    : (req.additionalDogs[0].isNeutered ? 'male_neutered' : 'male_intact'),
-                  consolidatePayment: true
-                }
-              : undefined;
-            const dailyRateVal = isFree ? 0 : (boardingRateInfo.dailyRate || Number(settings?.defaultDailyRateBoarding) || 180);
-
-            setBookingWizardOpen({
-              isOpen: true,
-              initialData: {
-                intakeRequestId: req.id,
-                dogName: req.dogName,
-                dogBreed: req.dogBreed,
-                dogPhotoUrl: req.dogPhotoUrl,
-                dogMediaList: req.dogMediaList,
-                dogVideoUrl: req.dogVideoUrl,
-                dogGender: req.dogGender === 'female'
-                  ? (req.isNeutered ? 'female_spayed' : 'female_intact')
-                  : (req.isNeutered ? 'male_neutered' : 'male_intact'),
-                ownerName: req.ownerName,
-                ownerPhone: req.ownerPhone,
-                ownerEmail: req.ownerEmail,
-                serviceType: req.serviceType,
-                startDate: req.startDate,
-                endDate: req.endDate,
-                vaccinationValid: req.isVaccinated,
-                notes: [req.specialNeeds, req.notes, req.internalNotes ? `הערות שמוליק: ${req.internalNotes}` : ''].filter(Boolean).join(' | '),
-                totalPrice: finalPrice,
-                dailyRate: dailyRateVal,
-                depositAmount: 0,
-                paymentStatus: isFree ? 'fully_paid' : 'unpaid',
-                isFreeStay: isFree,
-                stayStatus: 'booked',
-                secondDog: secondDogData,
-                additionalDogs: req.additionalDogs,
-                isTrainingAgreementSigned: req.isTrainingAgreementSigned,
-                trainingAgreementSignedAt: req.trainingAgreementSignedAt,
-                trainingAgreement: req.trainingAgreement,
-                daycarePassCode: daycarePassCode || matchedPass?.passCode,
-                daycarePassId: matchedPass?.id
-              } as any
-            });
-
-            // Auto-redeem voucher if present in request notes
-            const voucherMatch = (req.notes || '').match(/שובר.*?:\s*([A-Z0-9\u0590-\u05FF-]+)/i);
-            if (voucherMatch && voucherMatch[1]) {
-              const code = voucherMatch[1].trim();
-              await updateVoucherStatusInDb(code, 'redeemed', {
-                redeemedByOwner: req.ownerName,
-                redeemedByDog: req.dogName
-              });
-              showToast(`🎁 שובר ${code} עודכן כנוצל במערכת`);
-            }
-
+          onApproveAndBook={handleApproveAndBookIntake}
+          onOpenInCalendar={(dateStr, reqId) => {
             setIsIntakeModalOpen(false);
+            const [y, m] = dateStr.split('-').map(Number);
+            if (y && m) {
+              setCurrentYear(y);
+              setCurrentMonth(m - 1);
+            }
+            setSelectedDateForDetails(dateStr);
+            setFocusedIntakeRequestId(reqId);
+            setActiveTab('calendar');
           }}
           onDeleteRequest={async (id) => {
             await deleteIntakeRequestFromDb(id);

@@ -71,6 +71,7 @@ interface IntakeRequestsModalProps {
   onApproveAndBook: (request: IntakeRequest) => void;
   onDeleteRequest: (id: string) => Promise<void>;
   onSaveRequest?: (request: IntakeRequest) => Promise<void>;
+  onOpenInCalendar?: (dateStr: string, reqId: string) => void;
 }
 
 export { calculateBoardingRate, type BoardingRateOptions } from '../utils/pricingUtils';
@@ -223,7 +224,8 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   onUpdateStatus,
   onApproveAndBook,
   onDeleteRequest,
-  onSaveRequest
+  onSaveRequest,
+  onOpenInCalendar
 }) => {
   const [filter, setFilter] = useState<'all' | 'pending' | 'new' | 'in_progress' | 'payment_requested' | 'approved' | 'rejected' | 'archived_48h' | 'abandoned'>(initialFilter || 'new');
 
@@ -2158,6 +2160,17 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       >
                         <CheckCircle className="w-3.5 h-3.5" />
                         <span>{req.additionalDogs && req.additionalDogs.length > 0 ? `קלוט ${1 + req.additionalDogs.length} כלבים ליומן 🟢` : 'קלוט ליומן הראשי 🟢'}</span>
+                      </button>
+
+                      {/* View in Main Calendar for these dates */}
+                      <button
+                        type="button"
+                        onClick={() => onOpenInCalendar && onOpenInCalendar(req.startDate, req.id)}
+                        className="bg-indigo-50 hover:bg-indigo-100 active:scale-98 text-indigo-950 border border-indigo-300 font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                        title="פתח את היומן הראשי על תאריכים אלו לבדיקת תפוסה ואישור/דחייה"
+                      >
+                        <Calendar className="w-3.5 h-3.5 text-indigo-700" />
+                        <span>צפה ביומן לתאריכים אלו 📅</span>
                       </button>
 
                       {/* Action buttons depending on status */}

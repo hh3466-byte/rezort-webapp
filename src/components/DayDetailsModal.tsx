@@ -22,9 +22,10 @@ import {
   MapPin
 } from 'lucide-react';
 import { getWazeNavigationUrl } from '../utils/geolocationUtils';
-import { Booking, ResortSettings } from '../types';
-import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, formatStayDatesDisplay, getTodayStr, isTrainingBooking, getBookingPairInfo } from '../utils/dateUtils';
+import { Booking, ResortSettings, IntakeRequest } from '../types';
+import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, formatStayDatesDisplay, getTodayStr, isTrainingBooking, getBookingPairInfo, calculateDaysCount } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage, cleanPhoneNumber } from '../utils/whatsappUtils';
+import { findDaycarePassByCode } from '../services/dbService';
 import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
 import { getPlacementDisplayName, normalizePlacementKey } from '../utils/kennelUtils';
@@ -46,6 +47,10 @@ interface DayDetailsModalProps {
   onInitiateRelease?: (booking: Booking) => void;
   onToggleReviewRequest?: (booking: Booking) => void;
   onOpenVoucher?: (data: { customerName: string; dogName: string; phone: string; staysCount?: number }) => void;
+  intakeRequests?: IntakeRequest[];
+  focusedIntakeRequestId?: string | null;
+  onApproveIntakeRequest?: (req: IntakeRequest) => void;
+  onRejectIntakeRequest?: (req: IntakeRequest) => void;
 }
 
 export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
@@ -64,6 +69,10 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   onInitiateRelease,
   onToggleReviewRequest,
   onOpenVoucher,
+  intakeRequests = [],
+  focusedIntakeRequestId,
+  onApproveIntakeRequest,
+  onRejectIntakeRequest,
 }) => {
   if (!dateStr) return null;
 
@@ -71,6 +80,16 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   const isOverbooked = breakdown.total > settings.maxCapacity;
   const holidayInfo = getDateShabbatOrHoliday(dateStr);
   const [isGreetingModalOpen, setIsGreetingModalOpen] = useState(false);
+
+  // Pending requests for this date (especially pass reservation requests)
+  const pendingRequestsForDate = React.useMemo(() => {
+    if (!intakeRequests || !dateStr) return [];
+    return intakeRequests.filter(r => {
+      if (r.status !== 'pending') return false;
+      const targetEnd = r.endDate || r.startDate;
+      return r.startDate <= dateStr && targetEnd >= dateStr;
+    });
+  }, [intakeRequests, dateStr]);
 
   const getStaysCount = (phone: string) => {
     const clean = cleanPhoneNumber(phone);
@@ -278,6 +297,112 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
 
         {/* Scrollable Body Content */}
         <div className="p-4 sm:p-5 pt-3 overflow-y-auto overflow-x-hidden flex-1 space-y-4">
+
+        {/* Pending Intake / Pass Reservation Requests for this Date */}
+        {pendingRequestsForDate.length > 0 && (
+          <div className="space-y-3">
+            {pendingRequestsForDate.map(req => {
+              const isPass = Boolean(req.daycarePassCode || (req.notes && (req.notes.includes('כרטיסיי') || req.notes.includes('בנק'))));
+              const matchedPass = req.daycarePassCode ? findDaycarePassByCode(req.daycarePassCode, settings.daycare_passes) : null;
+              const isBoarding = req.serviceType === 'boarding';
+              const daysCount = Math.max(1, calculateDaysCount(req.startDate, req.endDate));
+              const remainingDays = matchedPass ? Math.max(0, matchedPass.totalDays - matchedPass.usedDays) : null;
+              const isFocused = focusedIntakeRequestId === req.id;
+
+              return (
+                <div 
+                  key={req.id}
+                  className={`rounded-2xl p-4 border-2 shadow-lg transition-all animate-in fade-in-50 ${
+                    isPass 
+                      ? 'bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white border-emerald-400' 
+                      : 'bg-amber-50 text-amber-950 border-amber-300'
+                  } ${isFocused ? 'ring-4 ring-amber-400' : ''}`}
+                >
+                  <div className="flex items-start justify-between flex-wrap gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">{isPass ? '🎟️' : '📋'}</span>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                            isPass ? 'bg-amber-400 text-slate-950' : 'bg-amber-200 text-amber-900'
+                          }`}>
+                            {isPass ? 'בקשת שריון מכרטיסייה / בנק ימים' : 'בקשת קליטה חדשה'}
+                          </span>
+                          {req.daycarePassCode && (
+                            <span className="text-xs font-mono font-bold bg-white/20 px-2 py-0.5 rounded text-white border border-white/20">
+                              #{req.daycarePassCode}
+                            </span>
+                          )}
+                          {isFocused && (
+                            <span className="text-[10px] font-black bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full">
+                              מבוקש כעת 📌
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="text-lg font-black mt-1">
+                          {req.dogName} 🐾 ({req.dogBreed || 'מעורב'})
+                        </h3>
+                        <p className={`text-xs ${isPass ? 'text-slate-300' : 'text-slate-600'} flex items-center gap-1.5 mt-0.5`}>
+                          <span>{req.ownerName}</span>
+                          <span>•</span>
+                          <span className="font-mono font-bold">{req.ownerPhone}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-left bg-white/10 p-2 rounded-xl border border-white/15">
+                      <span className={`text-xs font-bold block ${isPass ? 'text-emerald-300' : 'text-amber-800'}`}>
+                        {formatDateIL(req.startDate)} עד {formatDateIL(req.endDate)} ({daysCount} {isBoarding ? 'יממות' : 'ימים'})
+                      </span>
+                      {remainingDays !== null && (
+                        <span className="text-[11px] text-amber-300 font-bold block mt-0.5">
+                          יתרה בכרטיסייה: {remainingDays} ימים
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {req.notes && (
+                    <p className={`text-xs p-2.5 rounded-xl mb-3 ${isPass ? 'bg-white/10 text-slate-200 border border-white/10' : 'bg-amber-100/70 text-amber-900'}`}>
+                      📝 {req.notes}
+                    </p>
+                  )}
+
+                  {/* Resort Occupancy context */}
+                  <div className={`text-xs mb-3 flex items-center justify-between px-2 py-1.5 rounded-xl ${isPass ? 'bg-white/5' : 'bg-amber-100/40'}`}>
+                    <span>
+                      תפוסת הריזורט ביום זה: <strong>{breakdown.total} מתוך {settings.maxCapacity} כלבים</strong>
+                    </span>
+                    <span className={breakdown.total >= settings.maxCapacity ? 'text-rose-400 font-bold' : 'text-emerald-300 font-bold'}>
+                      {breakdown.total >= settings.maxCapacity ? '⚠️ תפוסה מלאה' : `🟢 ${settings.maxCapacity - breakdown.total} מקומות פנויים`}
+                    </span>
+                  </div>
+
+                  {/* Actions: Approve & Book vs Reject */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-white/15">
+                    <button
+                      type="button"
+                      onClick={() => onApproveIntakeRequest && onApproveIntakeRequest(req)}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-black py-2.5 px-3 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition-all"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      <span>{isPass ? 'אשר וקלוט ליומן (קיזוז יום מהכרטיסייה) 🟢' : 'אשר וקלוט ליומן 🟢'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onRejectIntakeRequest && onRejectIntakeRequest(req)}
+                      className="bg-white/10 hover:bg-red-600/30 text-white hover:text-red-200 border border-white/20 hover:border-red-400 font-bold py-2.5 px-3 rounded-xl text-xs flex items-center gap-1 cursor-pointer transition-all"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>דחה 🔴</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Highlighted Search Target Banner */}
         {highlightedBookingId && (

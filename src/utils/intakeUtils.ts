@@ -175,6 +175,11 @@ export const hasManualStaffNotes = (internalNotes?: string): boolean => {
     .replace(/\[מזהה הודעה:[^\]]*\]/g, '')
     .replace(/\[נשלח שאלון[^\]]*\]/g, '')
     .replace(/\[נשלח קישור לתשלום Grow\]/g, '')
+    .replace(/תיאום הגעה מתוך כרטיסייה[^\n|]*/g, '')
+    .replace(/שריון מתוך כרטיסייה[^\n|]*/g, '')
+    .replace(/בקשת שריון[^\n|]*/g, '')
+    .replace(/\[🎟️[^\]]*\]/g, '')
+    .replace(/כרטיסייה[^\n|]*/g, '')
     .replace(/[|\s\-\:\.\,]+/g, '')
     .trim();
   return cleaned.length > 0;
@@ -199,6 +204,10 @@ export const isIntakeRequestNew = (r: IntakeRequest, bookings: Booking[] = []): 
   if (isIntakeMarkedIrrelevant(r)) return false;
   if (isIntakeRequestExpired(r, bookings)) return false;
   const effStatus = getEffectiveIntakeStatus(r, bookings);
+  // Pass bookings that are pending are always considered brand new for Shmulik to approve!
+  if (effStatus === 'pending' && (r.daycarePassCode || (r.notes && (r.notes.includes('כרטיסיי') || r.notes.includes('בנק'))))) {
+    return true;
+  }
   return effStatus === 'pending' && !hasManualStaffNotes(r.internalNotes);
 };
 
