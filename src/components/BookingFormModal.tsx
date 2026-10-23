@@ -157,6 +157,18 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   });
   const [isTrainingAgreementModalOpen, setIsTrainingAgreementModalOpen] = useState(false);
 
+  // Grandfathered dogs admitted or created before digital agreement feature (~20/10/2026)
+  const isLegacyPreAgreementBooking = Boolean(
+    (startDate && startDate < '2026-10-20') ||
+    (initialData?.startDate && initialData.startDate < '2026-10-20') ||
+    (initialData?.createdAt && initialData.createdAt < '2026-10-20T00:00:00')
+  );
+  const isAlreadyPaidLegacy = Boolean(
+    isEditing && 
+    initialData?.paymentStatus === 'fully_paid' && 
+    (Number(depositAmount) || 0) <= (initialData?.depositAmount || 0)
+  );
+
   // Free stay / Second dog payment consolidation state
   const [isFreeStay, setIsFreeStay] = useState<boolean>(() => {
     if (initialData?.isFreeStay) return true;
@@ -516,7 +528,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       finalDeposit <= (initialData?.depositAmount || 0)
     );
 
-    if (isTraining && !isAgreementSigned && !isAlreadyPaidLegacy && (finalDeposit > 0 || finalPaymentStatus === 'fully_paid' || finalPaymentStatus === 'deposit_paid')) {
+    if (isTraining && !isAgreementSigned && !isAlreadyPaidLegacy && !isLegacyPreAgreementBooking && (finalDeposit > 0 || finalPaymentStatus === 'fully_paid' || finalPaymentStatus === 'deposit_paid')) {
       alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.\n\nחובה להחתים תחילה את הלקוח על הסכם האילוף הרשמי לפני רישום תשלום או מקדמה.');
       return;
     }
@@ -1698,6 +1710,20 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                         className="text-emerald-800 font-bold hover:underline cursor-pointer"
                       >
                         הצג הסכם / הדפס 📜
+                      </button>
+                    </div>
+                  ) : (isLegacyPreAgreementBooking || isAlreadyPaidLegacy) ? (
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex items-center justify-between text-xs">
+                      <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>אירוח ותיק שנקלט לפני השקת הסכם האילוף הדיגיטלי (פטור מחסימה)</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsTrainingAgreementModalOpen(true)}
+                        className="text-amber-800 font-bold hover:underline cursor-pointer"
+                      >
+                        פתח הסכם בכל זאת 📜
                       </button>
                     </div>
                   ) : (

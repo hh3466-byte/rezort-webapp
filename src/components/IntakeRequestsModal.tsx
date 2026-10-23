@@ -251,6 +251,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [paymentPromptRequest, setPaymentPromptRequest] = useState<IntakeRequest | null>(null);
+  const [intakePaymentManagerOverride, setIntakePaymentManagerOverride] = useState(false);
   const [selectedTrainingAgreementReq, setSelectedTrainingAgreementReq] = useState<IntakeRequest | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [customPaymentLink, setCustomPaymentLink] = useState<string>('');
@@ -639,7 +640,11 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     // Training Agreement Blocking Rule: "אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם"
     const isTraining = req.serviceType === 'training' || req.serviceType === 'day_training';
     const isAgreementSigned = Boolean(req.isTrainingAgreementSigned || req.trainingAgreement?.ownerSignatureDataUrl);
-    if (isTraining && !isAgreementSigned) {
+    const isLegacyReq = Boolean(
+      (req.startDate && req.startDate < '2026-10-20') ||
+      (req.submittedAt && req.submittedAt < '2026-10-20')
+    );
+    if (isTraining && !isAgreementSigned && !isLegacyReq) {
       alert(`🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב:\n"אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם"\n\nעבור ${req.dogName} (${req.ownerName}), חובה להשלים חתימה על הסכם האילוף תחילה לפני הפקת קישור תשלום או גבייה.`);
       setSelectedTrainingAgreementReq(req);
       return;
@@ -3342,7 +3347,9 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
             <div className="p-3 sm:p-4 border-t border-slate-200 bg-white shrink-0 flex flex-col gap-2.5 z-10 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
               {(paymentPromptRequest.serviceType === 'training' || paymentPromptRequest.serviceType === 'day_training') && 
                !paymentPromptRequest.isTrainingAgreementSigned && 
-               !paymentPromptRequest.trainingAgreement?.ownerSignatureDataUrl ? (
+               !paymentPromptRequest.trainingAgreement?.ownerSignatureDataUrl &&
+               !((paymentPromptRequest.startDate && paymentPromptRequest.startDate < '2026-10-20') || (paymentPromptRequest.submittedAt && paymentPromptRequest.submittedAt < '2026-10-20')) &&
+               !intakePaymentManagerOverride ? (
                 /* Hard Blocking Banner for Unsigned Training Agreement */
                 <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 space-y-3 animate-in fade-in">
                   <div className="flex items-start gap-2.5">
@@ -3359,7 +3366,7 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 pt-1 border-t border-rose-200">
+                  <div className="flex items-center gap-2 pt-1 border-t border-rose-200 flex-wrap">
                     <button
                       type="button"
                       onClick={() => {
@@ -3384,6 +3391,13 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       className="bg-[#25D366] hover:bg-[#1EBE5D] active:scale-95 text-white font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
                     >
                       <span>📲 שלח הסכם לחתימה בוואטסאפ</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIntakePaymentManagerOverride(true)}
+                      className="bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    >
+                      <span>⚡ עקוף (אישור מנהל)</span>
                     </button>
                     <button
                       type="button"

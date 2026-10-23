@@ -110,6 +110,29 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
     );
   });
   const [isTrainingAgreementModalOpen, setIsTrainingAgreementModalOpen] = useState(false);
+  const [managerOverride, setManagerOverride] = useState<boolean>(false);
+
+  // Exemption 1: Grandfathered training dogs admitted or created before digital agreement feature (~20/10/2026)
+  // Until all pre-agreement dogs complete their stays, they are exempt from agreement blocking
+  const isLegacyPreAgreementBooking = Boolean(
+    (booking.startDate && booking.startDate < '2026-10-20') ||
+    (booking.createdAt && booking.createdAt < '2026-10-20T00:00:00')
+  );
+
+  // Exemption 2: If training fee was already paid in full, any new link is for extras/debts, not core training fee
+  const isTrainingFeeAlreadyPaid = booking.paymentStatus === 'fully_paid' || 
+    (Number(booking.depositAmount) >= Number(booking.totalPrice) && Number(booking.totalPrice) > 0);
+
+  // Exemption 3: Extra services / extra days are incidental charges during stay, not core training fee
+  const isExtraCharge = reasonType === 'extra_service' || reasonType === 'extra_day';
+
+  // Hard blocking is only for genuinely new unpaid training bookings where agreement is unsigned
+  const isHardBlocked = isTraining && 
+    !isAgreementSigned && 
+    !isLegacyPreAgreementBooking && 
+    !isTrainingFeeAlreadyPaid && 
+    !isExtraCharge && 
+    !managerOverride;
 
   const cleanPhone = cleanPhoneNumber(booking.ownerPhone);
   const intlPhone = cleanPhone.startsWith('0') 
@@ -218,7 +241,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
     extAmt = extraAmount,
     incStay = includeStayDebt
   ) => {
-    if (isTraining && !isAgreementSigned) {
+    if (isHardBlocked) {
       return; // "אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם"
     }
 
@@ -474,7 +497,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
         </div>
 
         {/* Scrollable Form Body or Hard Blocking Rule for Unsigned Training Agreement */}
-        {isTraining && !isAgreementSigned ? (
+        {isHardBlocked ? (
           <div className="flex-1 overflow-y-auto py-5 px-2 space-y-4 text-center">
             <div className="w-16 h-16 rounded-3xl bg-red-100 text-red-700 border-2 border-red-300 flex items-center justify-center text-3xl mx-auto shadow-sm">
               🛑
@@ -529,6 +552,17 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 
               <button
                 type="button"
+                onClick={() => {
+                  setManagerOverride(true);
+                  fetchDynamicLink(amount, reasonType, extraDescription, extraAmount, includeStayDebt);
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+              >
+                <span>⚡ עקוף חסימה (אישור מנהל / אקסטרה)</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={onClose}
                 className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
               >
@@ -553,6 +587,31 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
             {/* Scrollable Form Body */}
             <div className="flex-1 overflow-y-auto py-3 space-y-3.5">
               
+              {/* Grandfathered / Unsigned Agreement Notice for Allowed Links */}
+              {isTraining && !isAgreementSigned && (
+                <div className="bg-amber-50 border border-amber-300 rounded-2xl px-3.5 py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-amber-950 font-bold shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">ℹ️</span>
+                    <span>
+                      {isLegacyPreAgreementBooking
+                        ? 'כלב נקלט לפני השקת הסכם האילוף (אירוח ותיק) – שליחת קישור מאופשרת'
+                        : isTrainingFeeAlreadyPaid
+                        ? 'דמי האילוף שולמו במלואם – שליחת קישור עבור תוספות ואקסטרה מאופשרת'
+                        : isExtraCharge
+                        ? 'חיוב אקסטרה / שירות נוסף – פטור מחסימת הסכם אילוף'
+                        : 'מאושר לשליחה באישור מנהל'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsTrainingAgreementModalOpen(true)}
+                    className="text-amber-800 hover:text-amber-950 underline font-bold text-[11px] cursor-pointer"
+                  >
+                    פתח הסכם לחתימה בכל זאת 📜
+                  </button>
+                </div>
+              )}
+
               {/* Active Stay Banner (If dog is currently staying in resort) */}
               {isCurrentlyStaying && (
                 <div className="bg-emerald-50 border border-emerald-300 rounded-2xl px-3 py-2 flex items-center justify-between text-xs text-emerald-950 font-bold shadow-2xs">

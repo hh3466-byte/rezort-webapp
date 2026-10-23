@@ -218,6 +218,18 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
     return (initialData as any)?.trainingAgreement;
   });
   const [isTrainingAgreementModalOpen, setIsTrainingAgreementModalOpen] = useState(false);
+
+  // Grandfathered dogs admitted or created before digital agreement feature (~20/10/2026)
+  const isLegacyPreAgreementBooking = Boolean(
+    (startDate && startDate < '2026-10-20') ||
+    (initialData?.startDate && initialData.startDate < '2026-10-20') ||
+    (initialData?.createdAt && initialData.createdAt < '2026-10-20T00:00:00')
+  );
+  const isAlreadyPaidLegacy = Boolean(
+    initialData?.id && 
+    initialData?.paymentStatus === 'fully_paid' && 
+    depositAmount <= (initialData?.depositAmount || 0)
+  );
   const [savedBookingResult, setSavedBookingResult] = useState<Booking | null>(null);
   const [growVerification, setGrowVerification] = useState<GrowVerificationResult | null>(null);
   const [manualOverrideConfirmed, setManualOverrideConfirmed] = useState(false);
@@ -693,7 +705,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
           ? 'deposit_paid' 
           : 'unpaid');
 
-    if (isTraining && !isAgreementSigned && (depositAmount > 0 || finalPaymentStatus !== 'unpaid') && !isFreeStay) {
+    if (isTraining && !isAgreementSigned && !isLegacyPreAgreementBooking && !isAlreadyPaidLegacy && (depositAmount > 0 || finalPaymentStatus !== 'unpaid') && !isFreeStay) {
       alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.\n\nחובה להחתים תחילה את הלקוח על הסכם האילוף הרשמי לפני קבלת או רישום תשלום/מקדמה.');
       setIsTrainingAgreementModalOpen(true);
       return;
@@ -3364,7 +3376,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if ((serviceType === 'training' || serviceType === 'day_training') && !isTrainingAgreementSigned) {
+                      if ((serviceType === 'training' || serviceType === 'day_training') && !isTrainingAgreementSigned && !isLegacyPreAgreementBooking && !isAlreadyPaidLegacy) {
                         alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.\n\nחובה להחתים תחילה את הלקוח על הסכם האילוף.');
                         setIsTrainingAgreementModalOpen(true);
                         return;
@@ -3383,7 +3395,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if ((serviceType === 'training' || serviceType === 'day_training') && !isTrainingAgreementSigned) {
+                      if ((serviceType === 'training' || serviceType === 'day_training') && !isTrainingAgreementSigned && !isLegacyPreAgreementBooking && !isAlreadyPaidLegacy) {
                         alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.\n\nחובה להחתים תחילה את הלקוח על הסכם האילוף.');
                         setIsTrainingAgreementModalOpen(true);
                         return;
@@ -3427,6 +3439,20 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                           className="text-emerald-800 font-bold hover:underline cursor-pointer"
                         >
                           הצג הסכם / הדפס 📜
+                        </button>
+                      </div>
+                    ) : (isLegacyPreAgreementBooking || isAlreadyPaidLegacy) ? (
+                      <div className="bg-amber-50 border border-amber-300 rounded-xl p-3 flex items-center justify-between text-xs">
+                        <span className="font-bold text-amber-950 flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>אירוח ותיק שנקלט לפני השקת הסכם האילוף הדיגיטלי (פטור מחסימה)</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsTrainingAgreementModalOpen(true)}
+                          className="text-amber-800 font-bold hover:underline cursor-pointer"
+                        >
+                          פתח הסכם בכל זאת 📜
                         </button>
                       </div>
                     ) : (

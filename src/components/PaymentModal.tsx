@@ -42,6 +42,23 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     );
   });
   const [isTrainingAgreementModalOpen, setIsTrainingAgreementModalOpen] = useState(false);
+  const [managerOverride, setManagerOverride] = useState<boolean>(false);
+
+  // Grandfathered dogs admitted or created before digital agreement launch (~20/10/2026)
+  const isLegacyPreAgreementBooking = Boolean(
+    (booking.startDate && booking.startDate < '2026-10-20') ||
+    (booking.createdAt && booking.createdAt < '2026-10-20T00:00:00')
+  );
+
+  // If training fee was already paid in full, any new payment is for extras/debts
+  const isTrainingFeeAlreadyPaid = booking.paymentStatus === 'fully_paid' || 
+    (Number(booking.depositAmount) >= Number(booking.totalPrice) && Number(booking.totalPrice) > 0);
+
+  const isHardBlocked = isTraining && 
+    !isAgreementSigned && 
+    !isLegacyPreAgreementBooking && 
+    !isTrainingFeeAlreadyPaid && 
+    !managerOverride;
 
   const currentDebt = Math.max(0, booking.totalPrice - booking.depositAmount);
   const [payAmount, setPayAmount] = useState<number>(currentDebt);
@@ -55,7 +72,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (isTraining && !isAgreementSigned) {
+    if (isHardBlocked) {
       alert('🛑 חסימת תשלום – הסכם אילוף טרם נחתם!\n\nעל פי נהלי הריזורט לכלב: אין לאפשר תשלום של דמי האילוף למי שלא חתם על ההסכם.\n\nחובה להחתים תחילה את הלקוח על הסכם האילוף הרשמי לפני רישום תשלום.');
       return;
     }
@@ -179,7 +196,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           </div>
 
           <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 border-t border-slate-100">
-            {isTraining && !isAgreementSigned ? (
+            {isHardBlocked ? (
               <div className="w-full bg-rose-50 border-2 border-rose-300 rounded-2xl p-3.5 space-y-2.5 animate-in fade-in">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
@@ -192,7 +209,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 pt-1 border-t border-rose-200">
+                <div className="flex items-center gap-2 pt-1 border-t border-rose-200 flex-wrap">
                   <button
                     type="button"
                     onClick={() => setIsTrainingAgreementModalOpen(true)}
@@ -213,6 +230,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     className="bg-[#25D366] hover:bg-[#1EBE5D] text-white font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1 shadow-xs cursor-pointer"
                   >
                     <span>📲 שלח בוואטסאפ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setManagerOverride(true)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs px-3.5 py-2 rounded-xl flex items-center gap-1 shadow-xs cursor-pointer"
+                  >
+                    <span>⚡ עקוף (אישור מנהל / אקסטרה)</span>
                   </button>
                   <button
                     type="button"
