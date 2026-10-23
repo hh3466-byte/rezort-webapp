@@ -417,14 +417,14 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       setDailyRate(120);
       setPricePaid(targetDays * 120);
     } else if (type === 'day_training') {
-      const targetDays = numTotalDays === 21 ? 10 : numTotalDays;
-      if (numTotalDays === 21) setTotalDays(10);
+      const targetDays = numTotalDays && numTotalDays % 10 === 0 ? numTotalDays : 10;
+      setTotalDays(targetDays);
       const rate = settings.defaultDailyRateDayTraining || 250;
       setDailyRate(rate);
       setPricePaid(rate * targetDays);
     } else {
-      const targetDays = numTotalDays === 21 ? 10 : numTotalDays;
-      if (numTotalDays === 21) setTotalDays(10);
+      const targetDays = numTotalDays && numTotalDays % 10 === 0 ? numTotalDays : 10;
+      setTotalDays(targetDays);
       const calc = getDaycareProgressiveRate(targetDays, settings.defaultDailyRateDaycare || 90);
       setDailyRate(calc.dailyRate);
       setPricePaid(calc.totalPrice);
@@ -432,14 +432,18 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   };
 
   const handleTotalDaysChange = (days: number | string) => {
-    const d = typeof days === 'number' ? days : (days === '' ? '' : parseInt(days, 10) || 1);
-    setTotalDays(d);
-    const validD = typeof d === 'number' ? Math.max(1, d) : 1;
+    const raw = typeof days === 'number' ? days : parseInt(String(days), 10) || 10;
     if (serviceType === 'boarding') {
+      const mult = Math.max(1, Math.round(raw / 21));
+      const validD = mult * 21;
+      setTotalDays(validD);
       setDailyRate(120);
       setPricePaid(validD * 120);
       return;
     }
+    const mult = Math.max(1, Math.round(raw / 10));
+    const validD = mult * 10;
+    setTotalDays(validD);
     if (serviceType === 'daycare') {
       const calc = getDaycareProgressiveRate(validD, settings.defaultDailyRateDaycare || 90);
       setDailyRate(calc.dailyRate);
@@ -1437,11 +1441,11 @@ ${paymentLine}
                           {/* Boarding Multiplier Selector */}
                           <div className="mt-3 pt-3 border-t border-white/15 relative z-10">
                             <label className="text-xs font-bold text-amber-200 block mb-1.5">
-                              בורר כפולות חבילה (לכלב בודד או לזוג כלבים):
+                              בחירת כפולות חבילה (כפולות של 21 יממות בלבד):
                             </label>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                               {[
-                                { packs: 1, days: 21, label: '1 חבילה (21 יממות)', sub: '₪2,520' },
+                                { packs: 1, days: 21, label: '1 חבילה (21 יממות)', sub: '₪2,520 (כלב יחיד)' },
                                 { packs: 2, days: 42, label: '2 חבילות (42 יממות) ⭐', sub: '₪5,040 (לזוג כלבים)' },
                                 { packs: 3, days: 63, label: '3 חבילות (63 יממות)', sub: '₪7,560' },
                                 { packs: 4, days: 84, label: '4 חבילות (84 יממות)', sub: '₪10,080' }
@@ -1465,22 +1469,6 @@ ${paymentLine}
                                   </button>
                                 );
                               })}
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                              <input
-                                type="number"
-                                min="1"
-                                max="365"
-                                value={totalDays}
-                                placeholder="21"
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => handleTotalDaysChange(e.target.value)}
-                                className="w-24 bg-white/10 font-black text-center text-amber-300 text-base py-1.5 rounded-xl border border-white/20 focus:border-amber-400 focus:outline-none"
-                              />
-                              <span className="text-xs text-indigo-200">
-                                יממות פנסיון מותאמות אישית (תעריף ברירת מחדל: ₪120 ליממה)
-                              </span>
                             </div>
                           </div>
 
@@ -1561,32 +1549,37 @@ ${paymentLine}
                       <>
                         <div>
                           <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs font-bold text-slate-700">כמות ימים בכרטיסייה:</label>
+                            <label className="text-xs font-bold text-slate-700">בחירת כרטיסייה (כפולות של 10 ימים בלבד):</label>
                             <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
                               {effectiveDays} ימי פעילות
                             </span>
                           </div>
 
-                          {/* Quick chip buttons with progressive rates */}
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-                            {[5, 10, 20, 30].map(cnt => {
-                              const isSelected = numTotalDays === cnt;
+                          {/* Quick chip buttons - strictly multiples of 10 */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {[
+                              { days: 10, label: '1 כרטיסייה (10 ימים) ⭐' },
+                              { days: 20, label: '2 כרטיסיות (20 ימים)' },
+                              { days: 30, label: '3 כרטיסיות (30 ימים)' },
+                              { days: 40, label: '4 כרטיסיות (40 ימים)' }
+                            ].map(item => {
+                              const isSelected = numTotalDays === item.days;
                               const chipCalc = serviceType === 'daycare' 
-                                ? getDaycareProgressiveRate(cnt, settings.defaultDailyRateDaycare || 90)
+                                ? getDaycareProgressiveRate(item.days, settings.defaultDailyRateDaycare || 90)
                                 : null;
                               return (
                                 <button
-                                  key={cnt}
+                                  key={item.days}
                                   type="button"
-                                  onClick={() => handleTotalDaysChange(cnt)}
-                                  className={`p-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex flex-col items-center gap-0.5 text-center ${
+                                  onClick={() => handleTotalDaysChange(item.days)}
+                                  className={`p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex flex-col items-center gap-0.5 text-center active:scale-95 ${
                                     isSelected
-                                      ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400'
-                                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                      ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400 font-black'
+                                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
                                   }`}
                                 >
-                                  <span className="font-black text-sm">
-                                    {cnt} ימים {cnt === 10 ? '⭐ (חבילה)' : cnt === 20 ? '(2 כרטיסיות)' : cnt === 30 ? '(3 כרטיסיות)' : ''}
+                                  <span className="font-black text-xs leading-tight">
+                                    {item.label}
                                   </span>
                                   {chipCalc && (
                                     <span className={`text-[10px] ${isSelected ? 'text-emerald-100' : 'text-slate-500'}`}>
@@ -1596,25 +1589,6 @@ ${paymentLine}
                                 </button>
                               );
                             })}
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="number"
-                              min="1"
-                              max="100"
-                              value={totalDays}
-                              placeholder="10"
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => handleTotalDaysChange(e.target.value)}
-                              onBlur={() => {
-                                if (totalDays === '' || Number(totalDays) < 1) {
-                                  handleTotalDaysChange(1);
-                                }
-                              }}
-                              className="w-24 bg-slate-50 font-black text-center text-base py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                            />
-                            <span className="text-xs text-slate-500">ימים שנרכשים מראש</span>
                           </div>
                         </div>
 
