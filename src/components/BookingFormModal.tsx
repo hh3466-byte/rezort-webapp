@@ -110,6 +110,12 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   const [medicationSchedule, setMedicationSchedule] = useState(
     initialData?.medicationSchedule || initialData?.medications || ''
   );
+  const [complexityPricingMode, setComplexityPricingMode] = useState<'daily' | 'fixed'>(
+    initialData?.complexityPricingMode || (initialData?.complexityDailyRate && initialData.complexityDailyRate > 0 ? 'daily' : 'fixed')
+  );
+  const [complexityDailyRate, setComplexityDailyRate] = useState<number>(
+    initialData?.complexityDailyRate || 0
+  );
   const [complexitySurcharge, setComplexitySurcharge] = useState<number>(
     initialData?.complexitySurcharge || 0
   );
@@ -276,7 +282,16 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
     }
   }, [serviceType, startDate, endDate, dogGender, settings.defaultDailyRateBoarding, pricingMode, isFreeStay]);
 
-  // Recompute total price
+  // Sync daily complexity surcharge when dates or daily rate change
+  useEffect(() => {
+    if (complexityPricingMode === 'daily') {
+      const days = Math.max(1, calculateDaysCount(startDate, endDate));
+      const calc = days * (Number(complexityDailyRate) || 0);
+      setComplexitySurcharge(calc);
+    }
+  }, [complexityPricingMode, complexityDailyRate, startDate, endDate]);
+
+  // Recompute total price (base + extra surcharge)
   useEffect(() => {
     if (isFreeStay) {
       setTotalPrice(0);
@@ -284,15 +299,19 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       setDepositAmount(0);
       return;
     }
+    const days = Math.max(1, calculateDaysCount(startDate, endDate));
+    const extra = complexityPricingMode === 'daily'
+      ? days * (Number(complexityDailyRate) || 0)
+      : (Number(complexitySurcharge) || 0);
+
     if (serviceType === 'training') {
-      if (!totalPrice || totalPrice === 0) {
-        setTotalPrice(settings.defaultDailyRateTraining || 6500);
-      }
+      const base = settings.defaultDailyRateTraining || 6500;
+      setTotalPrice(base + extra);
     } else if (pricingMode === 'daily') {
-      const days = calculateDaysCount(startDate, endDate);
-      setTotalPrice(days * dailyRate);
+      const base = days * dailyRate;
+      setTotalPrice(base + extra);
     }
-  }, [isFreeStay, startDate, endDate, dailyRate, pricingMode, serviceType, settings.defaultDailyRateTraining]);
+  }, [isFreeStay, startDate, endDate, dailyRate, pricingMode, serviceType, settings.defaultDailyRateTraining, complexityPricingMode, complexityDailyRate, complexitySurcharge]);
 
   // If initialData had custom price not matching days * rate, default to matching or keep
   useEffect(() => {
@@ -501,9 +520,17 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       finalRefundReason = initialData.refundReason;
     }
 
+    const effectiveDaysForExtra = Math.max(1, calculateDaysCount(startDate, effectiveEndDate));
+    const finalComplexitySurcharge = complexityPricingMode === 'daily'
+      ? effectiveDaysForExtra * (Number(complexityDailyRate) || 0)
+      : (Number(complexitySurcharge) || 0);
+
     let formattedNotes = notes.trim();
-    if (Number(complexitySurcharge) > 0) {
-      const extraTag = `[תוספת אקסטרה שסוכמה בראיון: ${complexityReason.trim() || 'שירות מיוחד'} (+₪${complexitySurcharge})]`;
+    if (finalComplexitySurcharge > 0) {
+      const rateInfo = complexityPricingMode === 'daily'
+        ? ` (+₪${finalComplexitySurcharge} - ₪${complexityDailyRate}/יום)`
+        : ` (+₪${finalComplexitySurcharge})`;
+      const extraTag = `[תוספת אקסטרה: ${complexityReason.trim() || 'שירות נוסף'}${rateInfo}]`;
       if (!formattedNotes.includes(extraTag)) {
         formattedNotes = `${formattedNotes} ${extraTag}`.trim();
       }
@@ -568,8 +595,10 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       feedingSchedule: feedingSchedule.trim() || undefined,
       foodPortion: foodPortion.trim() || undefined,
       medicationSchedule: medicationSchedule.trim() || undefined,
-      complexitySurcharge: Number(complexitySurcharge) || 0,
+      complexitySurcharge: finalComplexitySurcharge,
       complexityReason: complexityReason.trim() || undefined,
+      complexityPricingMode,
+      complexityDailyRate: complexityPricingMode === 'daily' ? (Number(complexityDailyRate) || 0) : undefined,
       refundAmount: finalRefundAmount,
       refundDate: finalRefundDate,
       refundNotes: finalRefundNotes,
@@ -1772,7 +1801,10 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                     onChange={(e) => {
                       const r = e.target.value === '' ? 0 : Number(e.target.value) || 0;
                       setDailyRate(r);
-                      setTotalPrice(daysCount * r + (complexitySurcharge || 0));
+                      const extra = complexityPricingMode === 'daily'
+                        ? daysCount * (Number(complexityDailyRate) || 0)
+                        : (Number(complexitySurcharge) || 0);
+                      setTotalPrice(daysCount * r + extra);
                     }}
                     className="w-full bg-white text-slate-900 font-bold text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none"
                     placeholder="0"
@@ -1893,50 +1925,112 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               </div>
             )}
 
-            {/* Custom Extra / Interview Surcharge in Pricing Section */}
-            <div className="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-3.5 space-y-2.5 shadow-2xs mt-3">
-              <div className="flex items-center justify-between">
+            {/* Custom Extra Surcharge in Pricing Section */}
+            <div className="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-3.5 space-y-3 shadow-2xs mt-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                 <label className="text-xs font-black text-amber-950 flex items-center gap-1.5">
                   <Plus className="w-4 h-4 text-amber-700" />
-                  <span>תוספת אקסטרה / שירות מיוחד (שסוכם בשיחת הראיון):</span>
+                  <span>תוספת אקסטרה / שירות נוסף:</span>
                 </label>
-                <span className="text-[10px] font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-md">
-                  📄 ייכנס ישירות לחשבונית ולסכום הכללי
-                </span>
+                <div className="flex items-center gap-1 bg-amber-200/60 p-0.5 rounded-lg border border-amber-300/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setComplexityPricingMode('daily');
+                      const calc = daysCount * (Number(complexityDailyRate) || 0);
+                      setComplexitySurcharge(calc);
+                    }}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                      complexityPricingMode === 'daily'
+                        ? 'bg-amber-900 text-white shadow-xs'
+                        : 'text-amber-900 hover:bg-amber-300/60'
+                    }`}
+                  >
+                    📅 תוספת ליום
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setComplexityPricingMode('fixed')}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                      complexityPricingMode === 'fixed'
+                        ? 'bg-amber-900 text-white shadow-xs'
+                        : 'text-amber-900 hover:bg-amber-300/60'
+                    }`}
+                  >
+                    🏷️ סכום כולל קבוע
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <div className="sm:col-span-2">
-                  <input
-                    type="text"
-                    value={complexityReason}
-                    onChange={(e) => setComplexityReason(e.target.value)}
-                    placeholder="סיבת האקסטרה: למשל טיפול רפואי מורכב, השגחה מיוחדת, הסעה, מזון מבושל..."
-                    className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-amber-300 focus:outline-none font-medium"
-                  />
-                </div>
-                <div>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      min="0"
-                      value={complexitySurcharge === 0 ? '' : complexitySurcharge}
-                      onChange={(e) => {
-                        const val = e.target.value === '' ? 0 : Number(e.target.value) || 0;
-                        const prev = complexitySurcharge || 0;
-                        setComplexitySurcharge(val);
-                        setTotalPrice(prevTotal => Math.max(0, prevTotal - prev + val));
-                      }}
-                      placeholder="סכום (₪)"
-                      className="w-full bg-white text-amber-950 font-black font-mono text-xs px-3 py-2 rounded-xl border border-amber-300 focus:outline-none pl-8"
-                    />
-                    <span className="absolute left-3 top-2 text-xs font-bold text-amber-700">₪</span>
-                  </div>
-                </div>
+              {/* Clean free-text description only - No assumptions */}
+              <div>
+                <input
+                  type="text"
+                  value={complexityReason}
+                  onChange={(e) => setComplexityReason(e.target.value)}
+                  placeholder="הקלד כאן פירוט חופשי לסיבת התוספת (ייכנס ישירות לחשבונית)..."
+                  className="w-full bg-white text-slate-900 text-xs px-3.5 py-2.5 rounded-xl border border-amber-300 focus:border-amber-500 focus:outline-none font-medium placeholder:text-slate-400"
+                />
               </div>
+
+              {/* Amount input: Daily rate vs Fixed total */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                {complexityPricingMode === 'daily' ? (
+                  <>
+                    <div>
+                      <label className="text-[11px] font-bold text-amber-950 block mb-1">
+                        תוספת לכל יום שהייה (₪):
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          value={complexityDailyRate === 0 ? '' : complexityDailyRate}
+                          onChange={(e) => {
+                            const daily = e.target.value === '' ? 0 : Number(e.target.value) || 0;
+                            setComplexityDailyRate(daily);
+                            setComplexitySurcharge(daysCount * daily);
+                          }}
+                          placeholder="0"
+                          className="w-full bg-white text-amber-950 font-black font-mono text-xs px-3 py-2 rounded-xl border border-amber-300 focus:outline-none pl-8"
+                        />
+                        <span className="absolute left-3 top-2 text-xs font-bold text-amber-700">₪</span>
+                      </div>
+                    </div>
+                    <div className="bg-amber-100/70 border border-amber-300 rounded-xl p-2.5 text-xs text-amber-950">
+                      <div className="text-[11px] text-amber-900 font-semibold">חישוב אוטומטי לשהייה:</div>
+                      <div className="font-black text-sm text-amber-950">
+                        {daysCount} ימים × ₪{complexityDailyRate || 0} = <span className="text-emerald-700 font-black">₪{complexitySurcharge}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <label className="text-[11px] font-bold text-amber-950 block mb-1">
+                      סכום כולל קבוע (₪):
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        value={complexitySurcharge === 0 ? '' : complexitySurcharge}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? 0 : Number(e.target.value) || 0;
+                          setComplexitySurcharge(val);
+                        }}
+                        placeholder="0"
+                        className="w-full bg-white text-amber-950 font-black font-mono text-xs px-3 py-2 rounded-xl border border-amber-300 focus:outline-none pl-8"
+                      />
+                      <span className="absolute left-3 top-2 text-xs font-bold text-amber-700">₪</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {Number(complexitySurcharge) > 0 && (
-                <div className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
-                  <span>✓ תוספת של ₪{complexitySurcharge} מתווספת אוטומטית לסכום ההזמנה הכללי ({complexityReason || 'ללא פירוט'})</span>
+                <div className="text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 flex items-center justify-between">
+                  <span>✓ ₪{complexitySurcharge} מתווספים אוטומטית לסכום הכולל ({complexityReason || 'ללא פירוט'})</span>
+                  <span className="text-[10px] text-emerald-700 font-black">מעודכן ב-totalPrice</span>
                 </div>
               )}
             </div>

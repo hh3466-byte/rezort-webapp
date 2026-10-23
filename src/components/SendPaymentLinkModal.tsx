@@ -70,8 +70,18 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
   });
 
   // Extras configuration state (free-text description that appears directly on invoice)
+  // Field starts open/empty so Shmulik is not locked into interview notes
+  const [extraDescription, setExtraDescription] = useState<string>('');
+  const stayDays = (booking.startDate && booking.endDate) 
+    ? Math.max(1, calculateDaysCount(booking.startDate, booking.endDate)) 
+    : 1;
+  const [extraPricingMode, setExtraPricingMode] = useState<'fixed' | 'daily'>(
+    booking.complexityPricingMode || (booking.complexityDailyRate && booking.complexityDailyRate > 0 ? 'daily' : 'fixed')
+  );
+  const [extraDailyRate, setExtraDailyRate] = useState<number>(
+    booking.complexityDailyRate || 0
+  );
   const defaultExtraAmt = (booking.complexitySurcharge && booking.complexitySurcharge > 0) ? booking.complexitySurcharge : 60;
-  const [extraDescription, setExtraDescription] = useState<string>(() => booking.complexityReason || '');
   const [extraAmount, setExtraAmount] = useState<number>(defaultExtraAmt);
   const [includeStayDebt, setIncludeStayDebt] = useState<boolean>(false);
   const [saveToBookingRecord, setSaveToBookingRecord] = useState<boolean>(true);
@@ -345,6 +355,22 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
       setMessageText(buildDefaultMessage(newAmt, customLink, isLockedLink, 'extra_service', extraDescription, newPrice, includeStayDebt));
     }
     fetchDynamicLink(newAmt, 'extra_service', extraDescription, newPrice, includeStayDebt);
+  };
+
+  const handleExtraDailyRateChange = (newRate: number) => {
+    setExtraDailyRate(newRate);
+    const calc = stayDays * newRate;
+    handleExtraAmountChange(calc);
+  };
+
+  const handleSwitchPricingMode = (mode: 'fixed' | 'daily') => {
+    setExtraPricingMode(mode);
+    if (mode === 'daily') {
+      const rate = extraDailyRate > 0 ? extraDailyRate : (extraAmount > 0 ? Math.round(extraAmount / stayDays) : 30);
+      setExtraDailyRate(rate);
+      const calc = stayDays * rate;
+      handleExtraAmountChange(calc);
+    }
   };
 
   const handleIncludeStayDebtChange = (incStay: boolean) => {
@@ -685,52 +711,110 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
               {/* DEDICATED EXTRAS CONFIGURATION CARD (When reasonType === 'extra_service') */}
               {reasonType === 'extra_service' && (
                 <div className="bg-gradient-to-br from-emerald-50/70 via-white to-amber-50/40 border-2 border-emerald-300 rounded-2xl p-3.5 space-y-3 shadow-xs">
-                  <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-emerald-100 pb-2">
                     <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm text-emerald-950">
                       <Sparkles className="w-4 h-4 text-emerald-600" />
-                      <span>הגדרת חיוב אקסטרה (קולר, וטרינר, תרופות, שירות נוסף)</span>
+                      <span>הגדרת חיוב אקסטרה / שירות נוסף</span>
                     </div>
-                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
-                      תשלום מאובטח
-                    </span>
+                    {/* Calculation Mode Toggle: Daily vs Fixed */}
+                    <div className="flex items-center gap-1 bg-emerald-100/70 p-0.5 rounded-lg border border-emerald-200">
+                      <button
+                        type="button"
+                        onClick={() => handleSwitchPricingMode('daily')}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                          extraPricingMode === 'daily'
+                            ? 'bg-emerald-800 text-white shadow-xs'
+                            : 'text-emerald-900 hover:bg-emerald-200/60'
+                        }`}
+                      >
+                        📅 תוספת ליום ({stayDays} ימים)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSwitchPricingMode('fixed')}
+                        className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                          extraPricingMode === 'fixed'
+                            ? 'bg-emerald-800 text-white shadow-xs'
+                            : 'text-emerald-900 hover:bg-emerald-200/60'
+                        }`}
+                      >
+                        🏷️ סכום קבוע
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Free-Text Description Input - Enters directly into the customer's invoice */}
+                  {/* Free-Text Description Input - Completely Open Field */}
                   <div>
-                    <label className="text-xs font-black text-slate-800 flex items-center justify-between mb-1.5">
-                      <span>עבור מה בוצעה התוספת? *</span>
-                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-black text-slate-800">
+                        פירוט סיבת התוספת (שדה חופשי): *
+                      </label>
+                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200">
                         📄 ייכנס ישירות לחשבונית של הלקוח
                       </span>
-                    </label>
+                    </div>
                     <input
                       type="text"
                       value={extraDescription}
                       onChange={(e) => handleExtraDescriptionChange(e.target.value)}
-                      placeholder="הקלד כאן פירוט חופשי (לדוגמה: קולר סרסטו, ביקור וטרינר, תרופות...)"
+                      placeholder="הקלד כאן פירוט חופשי עבור מה בוצעה התוספת..."
                       className="w-full bg-white text-slate-900 font-bold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none shadow-2xs transition-all placeholder:text-slate-400 placeholder:font-normal"
                       autoFocus
                     />
+                    {booking.complexityReason && !extraDescription && (
+                      <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
+                        <span className="text-slate-500">בראיון נרשם:</span>
+                        <button
+                          type="button"
+                          onClick={() => handleExtraDescriptionChange(booking.complexityReason || '')}
+                          className="text-emerald-700 hover:text-emerald-900 underline font-bold cursor-pointer"
+                        >
+                          "{booking.complexityReason}" (לחץ להעתקה)
+                        </button>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Extra Amount & Staying Debt Mode */}
+                  {/* Amount Configuration */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                    <div>
-                      <label className="text-xs font-extrabold text-slate-800 block mb-1">
-                        סכום האקסטרה לתשלום (₪) *
-                      </label>
-                      <div className="relative">
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 font-black text-slate-400">₪</span>
-                        <input
-                          type="number"
-                          min="1"
-                          value={extraAmount === 0 ? '' : extraAmount}
-                          onChange={(e) => handleExtraAmountChange(Number(e.target.value) || 0)}
-                          placeholder="0"
-                          className="w-full bg-white text-slate-900 font-black text-base pr-8 pl-3 py-2 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
-                        />
+                    {extraPricingMode === 'daily' ? (
+                      <div>
+                        <label className="text-xs font-extrabold text-slate-800 block mb-1">
+                          תוספת לכל יום שהייה (₪) *
+                        </label>
+                        <div className="relative">
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 font-black text-slate-400">₪</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={extraDailyRate === 0 ? '' : extraDailyRate}
+                            onChange={(e) => handleExtraDailyRateChange(Number(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-full bg-white text-slate-900 font-black text-base pr-8 pl-3 py-2 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                          />
+                        </div>
+                        <div className="mt-1 text-[11px] font-bold text-emerald-800 bg-emerald-100/70 rounded-lg px-2 py-1">
+                          🧮 {stayDays} ימי שהייה × ₪{extraDailyRate || 0} = <span className="font-black text-emerald-950">₪{extraAmount}</span>
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div>
+                        <label className="text-xs font-extrabold text-slate-800 block mb-1">
+                          סכום האקסטרה לתשלום (₪) *
+                        </label>
+                        <div className="relative">
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 font-black text-slate-400">₪</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={extraAmount === 0 ? '' : extraAmount}
+                            onChange={(e) => handleExtraAmountChange(Number(e.target.value) || 0)}
+                            placeholder="0"
+                            className="w-full bg-white text-slate-900 font-black text-base pr-8 pl-3 py-2 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
 
                     {currentDebt > 0 ? (
                       <div className="bg-white/80 border border-slate-200 rounded-xl p-2 text-xs space-y-1">

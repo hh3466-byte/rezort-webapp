@@ -42,8 +42,10 @@ export interface Booking {
   feedingSchedule?: string; // שעות האכלה (למשל: "08:00, 18:00")
   foodPortion?: string; // כמות מנה והנחיית הגשה (למשל: "1 כוס בוקר וערב, להרטיב במים")
   medicationSchedule?: string; // הנחיות תרופות ומינון (למשל: "אפוקוול חצי כדור בבוקר")
-  complexitySurcharge?: number; // תוספת מחיר בשקלים עקב טיפול/האכלה מורכבת
-  complexityReason?: string; // הסבר לתוספת המחיר
+  complexitySurcharge?: number; // תוספת מחיר בשקלים עקב טיפול/האכלה מורכבת או שירות נוסף
+  complexityReason?: string; // הסבר לתוספת המחיר (שדה לכתיבה חופשית)
+  complexityPricingMode?: 'daily' | 'fixed'; // אופן חישוב התוספת: לפי יום או סכום קבוע
+  complexityDailyRate?: number; // תעריף תוספת יומי (אם מחושב לפי יום)
   dailyFeedingsCompleted?: { [dateStr: string]: { morning?: boolean; evening?: boolean; meds?: boolean } }; // מעקב ביצוע יומי
   emergencyContact?: string;
   ownerAddress?: string; // כתובת מגורים של הבעלים (חיוני לאיתור במקרה בריחה וחירום)
@@ -201,6 +203,8 @@ export interface IntakeRequest {
   kennelNumber?: number | string;
   complexitySurcharge?: number;
   complexityReason?: string;
+  complexityPricingMode?: 'daily' | 'fixed';
+  complexityDailyRate?: number;
   notes?: string;
   calculatedPrice?: number;
   depositRequested?: number;
