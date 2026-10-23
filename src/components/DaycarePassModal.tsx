@@ -181,7 +181,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   const numTotalDays = typeof totalDays === 'number' 
     ? totalDays 
     : (totalDays === '' ? 1 : parseInt(totalDays, 10) || 1);
-  const effectiveDays = serviceType === 'boarding' ? 21 : numTotalDays;
+  const effectiveDays = numTotalDays;
   const effectiveDailyRate = effectiveDays > 0 ? Math.round((numericPricePaid / effectiveDays) * 10) / 10 : 0;
   const baseStandardRate = serviceType === 'boarding' 
     ? 180 
@@ -411,10 +411,11 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   const handleServiceTypeChange = (type: 'daycare' | 'day_training' | 'boarding') => {
     setServiceType(type);
     if (type === 'boarding') {
-      // Boarding pass is strictly locked to 21 days at 100 NIS/day = 2,100 NIS
-      setTotalDays(21);
-      setDailyRate(100);
-      setPricePaid(2100);
+      // Boarding pass default rate is 120 NIS/day (21 days = 2,520 NIS, 42 days = 5,040 NIS for couple)
+      const targetDays = numTotalDays && numTotalDays % 21 === 0 ? numTotalDays : 21;
+      setTotalDays(targetDays);
+      setDailyRate(120);
+      setPricePaid(targetDays * 120);
     } else if (type === 'day_training') {
       const targetDays = numTotalDays === 21 ? 10 : numTotalDays;
       if (numTotalDays === 21) setTotalDays(10);
@@ -431,16 +432,14 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   };
 
   const handleTotalDaysChange = (days: number | string) => {
-    if (serviceType === 'boarding') {
-      // Locked to 21 days
-      setTotalDays(21);
-      setDailyRate(100);
-      setPricePaid(2100);
-      return;
-    }
     const d = typeof days === 'number' ? days : (days === '' ? '' : parseInt(days, 10) || 1);
     setTotalDays(d);
     const validD = typeof d === 'number' ? Math.max(1, d) : 1;
+    if (serviceType === 'boarding') {
+      setDailyRate(120);
+      setPricePaid(validD * 120);
+      return;
+    }
     if (serviceType === 'daycare') {
       const calc = getDaycareProgressiveRate(validD, settings.defaultDailyRateDaycare || 90);
       setDailyRate(calc.dailyRate);
@@ -519,7 +518,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       const link = getPassBookingLink(newPass);
       const isBoarding = serviceType === 'boarding';
       const serviceName = isBoarding 
-        ? 'בנק 21 יממות פנסיון מלא (VIP)'
+        ? `בנק ${effectiveDays} יממות פנסיון מלא (VIP)`
         : serviceType === 'day_training' 
         ? 'אילוף ביומיות (ללא לינה)' 
         : 'שהייה יומית בריזורט לכלב (מעון יום)';
@@ -530,10 +529,10 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
         : `💰 *סכום לתשלום שסוכם:* ₪${numericPricePaid.toLocaleString()} (ניתן להסדיר ישירות ובמהירות ב-Bit / אשראי בקישור למטה)`;
 
       const msg = isBoarding ? `שלום ${ownerName.trim()}! 🐾🐶
-הונפקה עבורכם בהצלחה *כרטיסיית בנק 21 יממות פנסיון VIP* עבור *${dogName.trim()}* בריזורט לכלב! 🌟
+הונפקה עבורכם בהצלחה *כרטיסיית בנק ${effectiveDays} יממות פנסיון VIP* עבור *${dogName.trim()}* בריזורט לכלב! 🌟
 
 🎟️ *מספר הכרטיסייה שלכם:* *#${passCode}*
-📅 *כמות ימים בחבילה:* *21 יממות פנסיון מלא* (יתרה נוכחית: *21 יממות*)
+📅 *כמות ימים בחבילה:* *${effectiveDays} יממות פנסיון מלא* (יתרה נוכחית: *${effectiveDays} יממות*)
 ⏳ *תוקף הכרטיסייה:* עד לתאריך *${formatDateIL(expiry)}* (שנה מלאה)
 ${paymentLine}
 
@@ -642,9 +641,9 @@ ${paymentLine}
 
       const msg = isBoarding ? `שלום ${ownerName.trim()}! 🐾🐶
 שמחים לצרף אתכם למועדון ה-VIP של הריזורט לכלב! 🌟
-לבקשתך, מצורף קישור לרכישה מאובטחת של *חבילת 21 יממות פנסיון מלא (VIP)* עבור *${dogName.trim()}*:
+לבקשתך, מצורף קישור לרכישה מאובטחת של *חבילת ${finalDays} יממות פנסיון מלא (VIP)* עבור *${dogName.trim()}*:
 
-🌙 *חבילה:* 21 יממות פנסיון ואירוח מלא (לינה, חצרות, השגחה ואהבה ❤️)
+🌙 *חבילה:* ${finalDays} יממות פנסיון ואירוח מלא (לינה, חצרות, השגחה ואהבה ❤️)
 💰 *סכום לתשלום:* ₪${finalPrice.toLocaleString()}${totalSavings > 0 ? ` (₪${finalDailyRate} ליממה במקום ₪180 – חיסכון ענק של ₪${totalSavings.toLocaleString()}! 🎉)` : ` (₪${finalDailyRate} ליממה)`}
 ⏳ *תוקף החבילה:* שנה מלאה (עד ${formatDateIL(expiry)})
 🎟️ *מספר כרטיסייה שמור עבורכם:* *${passCode}*
@@ -654,7 +653,7 @@ ${paymentLine}
 👉 \u200E${paymentUrl}
 
 לאחר ביצוע התשלום המערכת מפעילה את הכרטיסייה אוטומטית ותוכלו להתחיל לשריין מועדים לכל השנה! מחכים לראותכם 🐶✨
-שמוליק וכל צוות הריזורט לכלב 🐾` : `שלום ${ownerName.trim()}! 🐾
+שמוליק וצוות הריזורט לכלב 🐾` : `שלום ${ownerName.trim()}! 🐾
 לבקשתך, מצורף קישור לרכישה מאובטחת של *כרטיסיית ${finalDays} יומיות* עבור *${dogName.trim()}* בריזורט לכלב:
 
 🎟️ *חבילה:* ${finalDays} ימי שהייה ביומיות (${serviceType === 'day_training' ? 'אילוף ביומיות' : 'מעון יום'})
@@ -666,7 +665,7 @@ ${paymentLine}
 👉 \u200E${paymentUrl}
 
 לאחר ביצוע התשלום המערכת מאשרת את הכרטיסייה אוטומטית וניתן לתאם ימי הגעה לריזורט! מחכים לראותכם 🐶✨
-שמוליק וכל צוות הריזורט לכלב 🐾`;
+שמוליק וצוות הריזורט לכלב 🐾`;
 
       let sentAuto = false;
       try {
@@ -1417,10 +1416,15 @@ ${paymentLine}
                                 <span className="text-xs text-indigo-200">בתוקף ל-12 חודשים מלאים</span>
                               </div>
                               <h3 className="text-xl font-black text-white flex items-center gap-2">
-                                <span>🌙 בנק 21 יממות פנסיון מלא</span>
+                                <span>🌙 בנק {effectiveDays} יממות פנסיון מלא</span>
+                                {effectiveDays > 21 && (
+                                  <span className="bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
+                                    חבילה מוכפלת ({Math.round(effectiveDays / 21)} כרטיסיות)
+                                  </span>
+                                )}
                               </h3>
                               <p className="text-xs text-indigo-200/90 mt-1 max-w-md">
-                                התחייבות מראש על 21 יממות פנסיון בריזורט לכלב. הלקוח בוחר ומושך ימי שהייה באופן גמיש לאורך שנה שלמה.
+                                התחייבות מראש על {effectiveDays} יממות פנסיון בריזורט לכלב. הלקוח בוחר ומושך ימי שהייה באופן גמיש לאורך שנה שלמה.
                               </p>
                             </div>
                             <div className="text-left shrink-0 bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/15">
@@ -1430,10 +1434,60 @@ ${paymentLine}
                             </div>
                           </div>
 
-                          <div className="mt-4 pt-3 border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs relative z-10">
+                          {/* Boarding Multiplier Selector */}
+                          <div className="mt-3 pt-3 border-t border-white/15 relative z-10">
+                            <label className="text-xs font-bold text-amber-200 block mb-1.5">
+                              בורר כפולות חבילה (לכלב בודד או לזוג כלבים):
+                            </label>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                              {[
+                                { packs: 1, days: 21, label: '1 חבילה (21 יממות)', sub: '₪2,520' },
+                                { packs: 2, days: 42, label: '2 חבילות (42 יממות) ⭐', sub: '₪5,040 (לזוג כלבים)' },
+                                { packs: 3, days: 63, label: '3 חבילות (63 יממות)', sub: '₪7,560' },
+                                { packs: 4, days: 84, label: '4 חבילות (84 יממות)', sub: '₪10,080' }
+                              ].map(pack => {
+                                const isSelected = numTotalDays === pack.days;
+                                return (
+                                  <button
+                                    key={pack.days}
+                                    type="button"
+                                    onClick={() => handleTotalDaysChange(pack.days)}
+                                    className={`p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex flex-col items-center gap-0.5 text-center active:scale-95 ${
+                                      isSelected
+                                        ? 'bg-amber-400 text-slate-950 shadow-lg ring-2 ring-white font-black'
+                                        : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
+                                    }`}
+                                  >
+                                    <span className="text-xs font-black leading-tight">{pack.label}</span>
+                                    <span className={`text-[10px] ${isSelected ? 'text-slate-800 font-bold' : 'text-amber-200'}`}>
+                                      {pack.sub}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="number"
+                                min="1"
+                                max="365"
+                                value={totalDays}
+                                placeholder="21"
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => handleTotalDaysChange(e.target.value)}
+                                className="w-24 bg-white/10 font-black text-center text-amber-300 text-base py-1.5 rounded-xl border border-white/20 focus:border-amber-400 focus:outline-none"
+                              />
+                              <span className="text-xs text-indigo-200">
+                                יממות פנסיון מותאמות אישית (תעריף ברירת מחדל: ₪120 ליממה)
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="mt-3 pt-3 border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs relative z-10">
                             <div className="bg-white/5 p-2 rounded-lg">
-                              <span className="text-indigo-300 block text-[10px]">כמות יממות (נעול):</span>
-                              <span className="font-bold text-white">🔒 21 יממות</span>
+                              <span className="text-indigo-300 block text-[10px]">כמות יממות בחבילה:</span>
+                              <span className="font-bold text-white">🌙 {effectiveDays} יממות</span>
                             </div>
                             <div className="bg-white/5 p-2 rounded-lg">
                               <span className="text-indigo-300 block text-[10px]">תעריף ליממה:</span>
@@ -1461,7 +1515,7 @@ ${paymentLine}
                                 const val = e.target.value;
                                 setPricePaid(val);
                                 const num = val === '' ? 0 : parseFloat(val) || 0;
-                                setDailyRate(Math.round((num / 21) * 10) / 10);
+                                setDailyRate(Math.round((num / (effectiveDays || 21)) * 10) / 10);
                               }}
                               onBlur={() => {
                                 if (pricePaid === '' || Number(pricePaid) < 0) {
@@ -1471,7 +1525,7 @@ ${paymentLine}
                               className="w-full bg-slate-50 font-black text-lg text-indigo-900 px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none"
                             />
                             <span className="text-[11px] text-slate-400 mt-1 block">
-                              21 יממות @ ₪{effectiveDailyRate} ליממה
+                              {effectiveDays} יממות @ ₪{effectiveDailyRate} ליממה
                             </span>
                           </div>
 
@@ -1515,7 +1569,7 @@ ${paymentLine}
 
                           {/* Quick chip buttons with progressive rates */}
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-                            {[5, 10, 15, 20].map(cnt => {
+                            {[5, 10, 20, 30].map(cnt => {
                               const isSelected = numTotalDays === cnt;
                               const chipCalc = serviceType === 'daycare' 
                                 ? getDaycareProgressiveRate(cnt, settings.defaultDailyRateDaycare || 90)
@@ -1532,7 +1586,7 @@ ${paymentLine}
                                   }`}
                                 >
                                   <span className="font-black text-sm">
-                                    {cnt} ימים {cnt === 10 ? '⭐' : ''}
+                                    {cnt} ימים {cnt === 10 ? '⭐ (חבילה)' : cnt === 20 ? '(2 כרטיסיות)' : cnt === 30 ? '(3 כרטיסיות)' : ''}
                                   </span>
                                   {chipCalc && (
                                     <span className={`text-[10px] ${isSelected ? 'text-emerald-100' : 'text-slate-500'}`}>
