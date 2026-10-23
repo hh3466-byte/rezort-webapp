@@ -271,6 +271,8 @@ export async function sendGreenApiChatMessage(
   return await response.json();
 }
 
+export const sendMessage = sendGreenApiChatMessage;
+
 /**
  * Formats a timestamp into Hebrew Day name, DD/MM and HH:MM
  * Format: "יום שני | 14/09 | 22:46"

@@ -51,6 +51,7 @@ import {
   subscribeToDaycarePasses 
 } from '../services/dbService';
 import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
+import { sendMessage } from '../services/whatsappCrmService';
 import { openWhatsAppMessage, cleanPhoneNumber, getFirstName } from '../utils/whatsappUtils';
 import { formatDateIL, getTodayStr, addDays, calculateDaysCount } from '../utils/dateUtils';
 
@@ -139,6 +140,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [isGeneratingGrowLink, setIsGeneratingGrowLink] = useState(false);
+  const [autoSentDirectly, setAutoSentDirectly] = useState(false);
 
   // Editing / Calibrating an existing pass
   const [editingPass, setEditingPass] = useState<DaycarePass | null>(null);
@@ -504,8 +506,60 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       updatedAt: new Date().toISOString()
     };
 
+    // Auto-send voucher directly to customer WhatsApp if owner phone exists
+    let sentAuto = false;
+    try {
+      const cleanP = cleanPhoneNumber(ownerPhone);
+      const chatId = cleanP.startsWith('0') ? `972${cleanP.slice(1)}@c.us` : `${cleanP}@c.us`;
+      const link = getPassBookingLink(newPass);
+      const isBoarding = serviceType === 'boarding';
+      const serviceName = isBoarding 
+        ? 'בנק 21 יממות פנסיון מלא (VIP)'
+        : serviceType === 'day_training' 
+        ? 'אילוף ביומיות (ללא לינה)' 
+        : 'שהייה יומית בריזורט לכלב (מעון יום)';
+
+      const isPaid = paymentStatus === 'fully_paid';
+      const paymentLine = isPaid 
+        ? `💰 *סטטוס תשלום:* שולם במלואו (₪${numericPricePaid.toLocaleString()})` 
+        : `💰 *סכום לתשלום שסוכם:* ₪${numericPricePaid.toLocaleString()} (ניתן להסדיר ישירות ובמהירות ב-Bit / אשראי בקישור למטה)`;
+
+      const msg = isBoarding ? `שלום ${ownerName.trim()}! 🐾🐶
+הונפקה עבורכם בהצלחה *כרטיסיית בנק 21 יממות פנסיון VIP* עבור *${dogName.trim()}* בריזורט לכלב! 🌟
+
+🎟️ *מספר הכרטיסייה שלכם:* *#${passCode}*
+📅 *כמות ימים בחבילה:* *21 יממות פנסיון מלא* (יתרה נוכחית: *21 יממות*)
+⏳ *תוקף הכרטיסייה:* עד לתאריך *${formatDateIL(expiry)}* (שנה מלאה)
+${paymentLine}
+
+🏷️ *לצפייה בכרטיסייה הדיגיטלית, ביצוע תשלום וניקוב/שריון שהיות בלחיצה:*
+👉 \u200E${link}
+
+(הכלב כבר מאושר במערכת – אין צורך למלא שום שאלון מחדש!)
+שמוליק וצוות הריזורט לכלב 🐾` : `שלום ${ownerName.trim()}! 🐾🐶
+הונפקה עבורכם בהצלחה *כרטיסיית ${serviceName}* עבור *${dogName.trim()}* בריזורט לכלב!
+
+🎟️ *מספר הכרטיסייה שלכם:* *#${passCode}*
+📅 *כמות ימים:* *${effectiveDays} ימים* (יתרה נוכחית: *${effectiveDays} ימים*)
+⏳ *תוקף הכרטיסייה:* עד לתאריך *${formatDateIL(expiry)}* (חצי שנה)
+${paymentLine}
+
+🏷️ *לצפייה בכרטיסיית הניקוב הדיגיטלית, תשלום ושריון הגעה הבאה בלחיצה:*
+👉 \u200E${link}
+
+(הכלב כבר מאושר במערכת – אין צורך למלא שום שאלון מחדש!)
+שמוליק וצוות הריזורט לכלב 🐾`;
+
+      await sendMessage(chatId, msg, settings);
+      sentAuto = true;
+      newPass.status = 'sent';
+    } catch (err) {
+      console.warn('Auto send WhatsApp upon pass creation failed:', err);
+    }
+
     await saveDaycarePassToDb(newPass);
     setCreatedPassResult(newPass);
+    setAutoSentDirectly(sentAuto);
 
     confetti({
       particleCount: 90,
@@ -609,7 +663,21 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
 לאחר ביצוע התשלום המערכת מאשרת את הכרטיסייה אוטומטית וניתן לתאם ימי הגעה לריזורט! מחכים לראותכם 🐶✨
 שמוליק וכל צוות הריזורט לכלב 🐾`;
 
-      openWhatsAppMessage(ownerPhone, msg);
+      let sentAuto = false;
+      try {
+        const cleanP = cleanPhoneNumber(ownerPhone);
+        const chatId = cleanP.startsWith('0') ? `972${cleanP.slice(1)}@c.us` : `${cleanP}@c.us`;
+        await sendMessage(chatId, msg, settings);
+        sentAuto = true;
+        newPass.status = 'sent';
+      } catch (err) {
+        console.warn('Auto send Grow link via Green-API failed, opening web whatsapp fallback:', err);
+        openWhatsAppMessage(ownerPhone, msg);
+      }
+
+      await saveDaycarePassToDb(newPass);
+      setCreatedPassResult(newPass);
+      setAutoSentDirectly(sentAuto);
     } catch (err: any) {
       alert(`שגיאה בהפקת קישור תשלום: ${err?.message || 'נסה שוב'}`);
     } finally {
@@ -617,8 +685,8 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
     }
   };
 
-  // Send WhatsApp to Customer with instructions and direct digital questionnaire link
-  const handleSendWhatsAppToCustomer = (pass: DaycarePass) => {
+  // Send WhatsApp to Customer with instructions and direct digital voucher link
+  const handleSendWhatsAppToCustomer = async (pass: DaycarePass) => {
     const remainingDays = pass.totalDays - pass.usedDays;
     const isBoarding = pass.serviceType === 'boarding';
     const serviceName = isBoarding 
@@ -646,7 +714,7 @@ ${paymentLine}
 👉 \u200E${link}
 
 (הכלב כבר מאושר במערכת – אין צורך למלא שום שאלון מחדש!)
-שמוליק וכל צוות הריזורט לכלב 🐾` : `שלום ${pass.ownerName}! 🐾🐶
+שמוליק וצוות הריזורט לכלב 🐾` : `שלום ${pass.ownerName}! 🐾🐶
 הונפקה עבורכם בהצלחה *כרטיסיית ${serviceName}* עבור *${pass.dogName}* בריזורט לכלב!
 
 🎟️ *מספר הכרטיסייה שלכם:* *#${pass.passCode}*
@@ -658,9 +726,18 @@ ${paymentLine}
 👉 \u200E${link}
 
 (הכלב כבר מאושר במערכת – אין צורך למלא שום שאלון מחדש!)
-שמוליק וכל צוות הריזורט לכלב 🐾`;
+שמוליק וצוות הריזורט לכלב 🐾`;
 
-    openWhatsAppMessage(pass.ownerPhone, msg);
+    try {
+      const cleanP = cleanPhoneNumber(pass.ownerPhone);
+      const chatId = cleanP.startsWith('0') ? `972${cleanP.slice(1)}@c.us` : `${cleanP}@c.us`;
+      await sendMessage(chatId, msg, settings);
+      alert(`הודעת השובר נשלחה ישירות לוואטסאפ של ${pass.ownerName} בהצלחה! 📲`);
+      handleMarkPassAsSent(pass);
+    } catch (e) {
+      console.warn('Direct sendMessage failed, opening WhatsApp Web:', e);
+      openWhatsAppMessage(pass.ownerPhone, msg);
+    }
   };
 
   // Copy booking link to clipboard
@@ -957,9 +1034,16 @@ ${paymentLine}
                     🎟️
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full uppercase tracking-wider">
-                      הכרטיסייה הונפקה ונשמרה בהצלחה!
-                    </span>
+                    {autoSentDirectly ? (
+                      <span className="text-xs font-bold text-emerald-800 bg-emerald-200/80 border border-emerald-300 px-3.5 py-1 rounded-full uppercase tracking-wider inline-flex items-center gap-1.5 shadow-2xs">
+                        <span>✓</span>
+                        <span>הכרטיסייה הונפקה ונשלחה אוטומטית לוואטסאפ של {createdPassResult.ownerName}! 📲</span>
+                      </span>
+                    ) : (
+                      <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full uppercase tracking-wider">
+                        הכרטיסייה הונפקה ונשמרה בהצלחה!
+                      </span>
+                    )}
                     <h3 className="text-2xl font-black text-slate-900 mt-2">
                       {createdPassResult.dogName} ({createdPassResult.ownerName})
                     </h3>
@@ -1031,7 +1115,7 @@ ${paymentLine}
                       className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Share2 className="w-4 h-4" />
-                      <span>שלח שובר והסבר בוואטסאפ ללקוח 📲</span>
+                      <span>{autoSentDirectly ? 'שלח שוב שובר בוואטסאפ ללקוח 📲' : 'שלח שובר והסבר בוואטסאפ ללקוח 📲'}</span>
                     </button>
 
                     <button
