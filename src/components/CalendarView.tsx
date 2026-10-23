@@ -31,6 +31,7 @@ import {
   formatStayDatesDisplay,
   formatFullHebrewDate,
   addDays,
+  calculateDaysCount,
   getDailyBreakdown,
   isTrainingBooking,
   getBookingPairInfo
@@ -226,44 +227,29 @@ export function getPassInfoForBooking(
     };
   }
 
-  // Dynamic chronological calculation for targetDateStr
+  // Dynamic chronological calculation for targetDateStr (Option A: continuous countdown from check-in to checkout)
   const passCodeClean = String(matchedPass.passCode).trim().toUpperCase();
   const phoneDigits = String(matchedPass.ownerPhone || '').replace(/\D/g, '').slice(-7);
 
-  // 1. Gather all active bookings for this pass
-  const passBookings = (allBookings || [booking]).filter(b => {
-    if (b.stayStatus === 'cancelled' || (b as any).stay_status === 'cancelled') return false;
-    const bPassCode = b.daycarePassCode || (b as any).daycare_pass_code || (b as any).data?.daycarePassCode ||
-                      (b.notes || '').match(/#?([A-Za-z0-9\u0590-\u05FF-]+)/i)?.[1];
-    if (bPassCode && String(bPassCode).trim().toUpperCase() === passCodeClean) return true;
-    const bPhoneDigits = String(b.ownerPhone || (b as any).owner_phone || '').replace(/\D/g, '').slice(-7);
-    return Boolean(bPhoneDigits && phoneDigits && bPhoneDigits === phoneDigits);
-  });
+  // 1. Gather all active bookings for this pass, sorted chronologically
+  const passBookings = (allBookings || [booking])
+    .filter(b => {
+      if (b.stayStatus === 'cancelled' || (b as any).stay_status === 'cancelled') return false;
+      const bPassCode = b.daycarePassCode || (b as any).daycare_pass_code || (b as any).data?.daycarePassCode ||
+                        (b.notes || '').match(/#?([A-Za-z0-9\u0590-\u05FF-]+)/i)?.[1];
+      if (bPassCode && String(bPassCode).trim().toUpperCase() === passCodeClean) return true;
+      const bPhoneDigits = String(b.ownerPhone || (b as any).owner_phone || '').replace(/\D/g, '').slice(-7);
+      return Boolean(bPhoneDigits && phoneDigits && bPhoneDigits === phoneDigits);
+    })
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   if (!passBookings.some(b => b.id === booking.id)) {
     passBookings.push(booking);
+    passBookings.sort((a, b) => a.startDate.localeCompare(b.startDate));
   }
 
-  // 2. Expand all stay nights/dates across all pass bookings
-  const stayDateSet = new Set<string>();
-  passBookings.forEach(pb => {
-    const s = pb.startDate;
-    const e = pb.endDate;
-    if (!s) return;
-    const isPbBoarding = pb.serviceType === 'boarding' || isBoarding;
-    
-    let curr = s;
-    const endLimit = (isPbBoarding && e && e > s) ? e : addDays(s, 1);
-    while (curr < endLimit) {
-      stayDateSet.add(curr);
-      curr = addDays(curr, 1);
-    }
-  });
-
-  const allStayDates = Array.from(stayDateSet).sort();
-
-  // 3. Find unbooked prior usage (e.g. past trial stays or manual entries in usageHistory)
-  const earliestBookingDate = allStayDates[0] || booking.startDate;
+  // 2. Find unbooked prior usage (e.g. past trial stays or manual entries in usageHistory)
+  const earliestBookingDate = passBookings[0]?.startDate || booking.startDate;
   let priorUnbookedDays = 0;
   (matchedPass.usageHistory || []).forEach(entry => {
     const hasBooking = entry.bookingId && passBookings.some(pb => pb.id === entry.bookingId);
@@ -272,9 +258,33 @@ export function getPassInfoForBooking(
     }
   });
 
-  // 4. Count days consumed up to targetDateStr
-  const bookedDatesUsedUpToTarget = allStayDates.filter(d => d <= targetDateStr).length;
-  const totalConsumedOnThisDate = priorUnbookedDays + bookedDatesUsedUpToTarget;
+  // 3. Calculate total nights consumed by prior bookings that occurred before this booking
+  let nightsConsumedBeforeThisBooking = 0;
+  for (const pb of passBookings) {
+    if (pb.id === booking.id) break;
+    const isPbBoarding = pb.serviceType === 'boarding' || isBoarding;
+    const pbNights = isPbBoarding 
+      ? Math.max(1, calculateDaysCount(pb.startDate, pb.endDate))
+      : 1;
+    nightsConsumedBeforeThisBooking += pbNights;
+  }
+
+  // 4. Calculate nights passed within this booking up to targetDateStr
+  const isThisBoarding = booking.serviceType === 'boarding' || isBoarding;
+  const totalNightsInThisBooking = isThisBoarding 
+    ? Math.max(1, calculateDaysCount(booking.startDate, booking.endDate))
+    : 1;
+
+  let nightsPassedInThisBooking = 0;
+  if (isThisBoarding) {
+    const daysSinceStart = calculateDaysCount(booking.startDate, targetDateStr);
+    nightsPassedInThisBooking = Math.min(totalNightsInThisBooking, Math.max(0, daysSinceStart));
+  } else {
+    // For single-day daycare
+    nightsPassedInThisBooking = 0;
+  }
+
+  const totalConsumedOnThisDate = priorUnbookedDays + nightsConsumedBeforeThisBooking + nightsPassedInThisBooking;
   const remainingOnThisDate = Math.max(0, totalDays - totalConsumedOnThisDate);
 
   return {
@@ -284,7 +294,7 @@ export function getPassInfoForBooking(
     usedDays: totalConsumedOnThisDate,
     remainingDays: remainingOnThisDate,
     dayIndex: totalConsumedOnThisDate,
-    isBoarding,
+    isBoarding: isThisBoarding,
     label: `🎟️ ${remainingOnThisDate} נותרו`
   };
 }
