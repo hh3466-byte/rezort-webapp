@@ -142,9 +142,9 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
 
   // Editing / Calibrating an existing pass
   const [editingPass, setEditingPass] = useState<DaycarePass | null>(null);
-  const [editTotalDays, setEditTotalDays] = useState<number>(10);
-  const [editUsedDays, setEditUsedDays] = useState<number>(0);
-  const [editPricePaid, setEditPricePaid] = useState<number>(750);
+  const [editTotalDays, setEditTotalDays] = useState<number | string>(10);
+  const [editUsedDays, setEditUsedDays] = useState<number | string>(0);
+  const [editPricePaid, setEditPricePaid] = useState<number | string>(750);
   const [editPaymentStatus, setEditPaymentStatus] = useState<PaymentStatus>('fully_paid');
   const [editNotes, setEditNotes] = useState<string>('');
   const [editValidUntil, setEditValidUntil] = useState<string>('');
@@ -164,12 +164,29 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   // Initialize with 10 days progressive rate
   const initialDays = 10;
   const initialRates = getDaycareProgressiveRate(initialDays, settings.defaultDailyRateDaycare || 90);
-  const [totalDays, setTotalDays] = useState<number>(initialDays);
+  const [totalDays, setTotalDays] = useState<number | string>(initialDays);
   const [dailyRate, setDailyRate] = useState<number>(initialRates.dailyRate);
-  const [pricePaid, setPricePaid] = useState<number>(initialRates.totalPrice);
+  const [pricePaid, setPricePaid] = useState<number | string>(initialRates.totalPrice);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('fully_paid');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bit');
   const [customNotes, setCustomNotes] = useState<string>('');
+
+  // Live reactive pricing and rate derivations
+  const numericPricePaid = typeof pricePaid === 'number' 
+    ? pricePaid 
+    : (pricePaid === '' ? 0 : parseFloat(pricePaid) || 0);
+  const numTotalDays = typeof totalDays === 'number' 
+    ? totalDays 
+    : (totalDays === '' ? 1 : parseInt(totalDays, 10) || 1);
+  const effectiveDays = serviceType === 'boarding' ? 21 : numTotalDays;
+  const effectiveDailyRate = effectiveDays > 0 ? Math.round((numericPricePaid / effectiveDays) * 10) / 10 : 0;
+  const baseStandardRate = serviceType === 'boarding' 
+    ? 180 
+    : serviceType === 'day_training' 
+    ? (settings.defaultDailyRateDayTraining || 250) 
+    : (settings.defaultDailyRateDaycare || 90);
+  const standardTotalPrice = baseStandardRate * effectiveDays;
+  const effectiveSavings = Math.max(0, standardTotalPrice - numericPricePaid);
 
   // Subscribe to real-time daycare passes updates
   useEffect(() => {
@@ -392,21 +409,21 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       setDailyRate(100);
       setPricePaid(2100);
     } else if (type === 'day_training') {
-      const targetDays = totalDays === 21 ? 10 : totalDays;
-      if (totalDays === 21) setTotalDays(10);
+      const targetDays = numTotalDays === 21 ? 10 : numTotalDays;
+      if (numTotalDays === 21) setTotalDays(10);
       const rate = settings.defaultDailyRateDayTraining || 250;
       setDailyRate(rate);
       setPricePaid(rate * targetDays);
     } else {
-      const targetDays = totalDays === 21 ? 10 : totalDays;
-      if (totalDays === 21) setTotalDays(10);
+      const targetDays = numTotalDays === 21 ? 10 : numTotalDays;
+      if (numTotalDays === 21) setTotalDays(10);
       const calc = getDaycareProgressiveRate(targetDays, settings.defaultDailyRateDaycare || 90);
       setDailyRate(calc.dailyRate);
       setPricePaid(calc.totalPrice);
     }
   };
 
-  const handleTotalDaysChange = (days: number) => {
+  const handleTotalDaysChange = (days: number | string) => {
     if (serviceType === 'boarding') {
       // Locked to 21 days
       setTotalDays(21);
@@ -414,16 +431,17 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       setPricePaid(2100);
       return;
     }
-    const d = Math.max(1, days);
+    const d = typeof days === 'number' ? days : (days === '' ? '' : parseInt(days, 10) || 1);
     setTotalDays(d);
+    const validD = typeof d === 'number' ? Math.max(1, d) : 1;
     if (serviceType === 'daycare') {
-      const calc = getDaycareProgressiveRate(d, settings.defaultDailyRateDaycare || 90);
+      const calc = getDaycareProgressiveRate(validD, settings.defaultDailyRateDaycare || 90);
       setDailyRate(calc.dailyRate);
       setPricePaid(calc.totalPrice);
     } else {
       const rate = settings.defaultDailyRateDayTraining || 250;
       setDailyRate(rate);
-      setPricePaid(rate * d);
+      setPricePaid(rate * validD);
     }
   };
 
@@ -471,12 +489,10 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       ownerPhone: ownerPhone.trim(),
       ownerEmail: ownerEmail.trim() || undefined,
       serviceType,
-      totalDays: serviceType === 'boarding' ? 21 : totalDays,
+      totalDays: effectiveDays,
       usedDays: 0,
-      pricePaid: Number(pricePaid) > 0 ? Number(pricePaid) : (serviceType === 'boarding' ? 2100 : pricePaid),
-      dailyRate: serviceType === 'boarding' 
-        ? (Number(pricePaid) > 0 ? Math.round(Number(pricePaid) / 21) : 100) 
-        : dailyRate,
+      pricePaid: numericPricePaid,
+      dailyRate: effectiveDailyRate,
       paymentStatus,
       paymentMethod,
       notes: customNotes.trim() || undefined,
@@ -508,14 +524,16 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
     setIsGeneratingGrowLink(true);
     try {
       const isBoarding = serviceType === 'boarding';
+      const finalDays = effectiveDays;
       const desc = isBoarding
         ? `חבילת 21 יממות פנסיון VIP - ${dogName.trim()}`
         : serviceType === 'day_training'
-        ? `כרטיסיית ${totalDays} אילוף ביומיות - ${dogName.trim()}`
-        : `כרטיסיית ${totalDays} יומיות (מעון יום) - ${dogName.trim()}`;
+        ? `כרטיסיית ${finalDays} אילוף ביומיות - ${dogName.trim()}`
+        : `כרטיסיית ${finalDays} יומיות (מעון יום) - ${dogName.trim()}`;
 
-      const finalPrice = Number(pricePaid) > 0 ? Number(pricePaid) : (isBoarding ? 2100 : pricePaid);
-      const finalDays = isBoarding ? 21 : totalDays;
+      const finalPrice = numericPricePaid;
+      const finalDailyRate = effectiveDailyRate;
+      const totalSavings = effectiveSavings;
 
       const growRes = await createGrowDynamicPaymentLink({
         amount: finalPrice,
@@ -544,7 +562,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
         totalDays: finalDays,
         usedDays: 0,
         pricePaid: finalPrice,
-        dailyRate: isBoarding ? (finalDays > 0 ? Math.round(finalPrice / finalDays) : 100) : dailyRate,
+        dailyRate: finalDailyRate,
         paymentStatus: 'unpaid',
         paymentMethod: 'credit',
         notes: customNotes.trim() ? `${customNotes.trim()} | [נשלח קישור לתשלום Grow]` : '[נשלח קישור לתשלום Grow]',
@@ -559,8 +577,8 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
       await saveDaycarePassToDb(newPass);
       setCreatedPassResult(newPass);
 
-      const progressiveNote = serviceType === 'daycare' && totalDays >= 5
-        ? ` (מחיר מוזל בטור יורד: ₪${dailyRate} ליום במקום ₪90! חיסכון של ₪${((settings.defaultDailyRateDaycare || 90) * totalDays - pricePaid).toFixed(0)} 🎉)`
+      const progressiveNote = totalSavings > 0
+        ? ` (תעריף מוזל: ₪${finalDailyRate} ליום במקום ₪${baseStandardRate}! חיסכון של ₪${totalSavings.toLocaleString()} 🎉)`
         : '';
 
       const msg = isBoarding ? `שלום ${ownerName.trim()}! 🐾🐶
@@ -568,7 +586,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
 לבקשתך, מצורף קישור לרכישה מאובטחת של *חבילת 21 יממות פנסיון מלא (VIP)* עבור *${dogName.trim()}*:
 
 🌙 *חבילה:* 21 יממות פנסיון ואירוח מלא (לינה, חצרות, השגחה ואהבה ❤️)
-💰 *סכום לתשלום:* ₪2,100 בלבד (₪100 ליממה במקום ₪180 – חיסכון ענק של ₪1,680! 🎉)
+💰 *סכום לתשלום:* ₪${finalPrice.toLocaleString()}${totalSavings > 0 ? ` (₪${finalDailyRate} ליממה במקום ₪180 – חיסכון ענק של ₪${totalSavings.toLocaleString()}! 🎉)` : ` (₪${finalDailyRate} ליממה)`}
 ⏳ *תוקף החבילה:* שנה מלאה (עד ${formatDateIL(expiry)})
 🎟️ *מספר כרטיסייה שמור עבורכם:* *${passCode}*
 💡 *אופן הניצול:* גמיש וחופשי לחלוטין – משריינים ימים מתי שרוצים לאורך השנה עד לגמר היתרה!
@@ -578,10 +596,10 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
 
 לאחר ביצוע התשלום המערכת מפעילה את הכרטיסייה אוטומטית ותוכלו להתחיל לשריין מועדים לכל השנה! מחכים לראותכם 🐶✨
 שמוליק וכל צוות הריזורט לכלב 🐾` : `שלום ${ownerName.trim()}! 🐾
-לבקשתך, מצורף קישור לרכישה מאובטחת של *כרטיסיית ${totalDays} יומיות* עבור *${dogName.trim()}* בריזורט לכלב:
+לבקשתך, מצורף קישור לרכישה מאובטחת של *כרטיסיית ${finalDays} יומיות* עבור *${dogName.trim()}* בריזורט לכלב:
 
-🎟️ *חבילה:* ${totalDays} ימי שהייה ביומיות (${serviceType === 'day_training' ? 'אילוף ביומיות' : 'מעון יום'})
-💰 *סכום לתשלום:* ₪${pricePaid}${progressiveNote}
+🎟️ *חבילה:* ${finalDays} ימי שהייה ביומיות (${serviceType === 'day_training' ? 'אילוף ביומיות' : 'מעון יום'})
+💰 *סכום לתשלום:* ₪${finalPrice.toLocaleString()}${progressiveNote}
 ⏳ *תוקף הכרטיסייה:* חצי שנה (עד ${formatDateIL(expiry)})
 🎟️ *מספר כרטיסייה שמור עבורכם:* *${passCode}*
 
@@ -824,13 +842,17 @@ ${paymentLine}
     if (!editingPass) return;
     setIsSavingEdit(true);
     try {
-      const remaining = Math.max(0, Number(editTotalDays) - Number(editUsedDays));
+      const numEditTotal = typeof editTotalDays === 'number' ? editTotalDays : (parseInt(editTotalDays, 10) || 1);
+      const numEditUsed = typeof editUsedDays === 'number' ? editUsedDays : (parseInt(editUsedDays, 10) || 0);
+      const numEditPrice = typeof editPricePaid === 'number' ? editPricePaid : (parseFloat(editPricePaid) || 0);
+      const remaining = Math.max(0, numEditTotal - numEditUsed);
       const isCompleted = remaining === 0;
       const updatedPass: DaycarePass = {
         ...editingPass,
-        totalDays: Number(editTotalDays) || 1,
-        usedDays: Number(editUsedDays) || 0,
-        pricePaid: Number(editPricePaid) || 0,
+        totalDays: numEditTotal,
+        usedDays: numEditUsed,
+        pricePaid: numEditPrice,
+        dailyRate: numEditTotal > 0 ? Math.round(numEditPrice / numEditTotal) : editingPass.dailyRate,
         paymentStatus: editPaymentStatus,
         notes: editNotes,
         status: isCompleted ? 'completed' : (editingPass.status === 'completed' ? 'active' : editingPass.status),
@@ -1311,23 +1333,23 @@ ${paymentLine}
                               </p>
                             </div>
                             <div className="text-left shrink-0 bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/15">
-                              <span className="text-[11px] text-indigo-200 block">מחיר חבילה סגור:</span>
-                              <span className="text-2xl font-black text-amber-300">₪2,100</span>
-                              <span className="text-[10px] text-indigo-200 block">(₪100 בלבד ליממה!)</span>
+                              <span className="text-[11px] text-indigo-200 block">מחיר חבילה:</span>
+                              <span className="text-2xl font-black text-amber-300">₪{numericPricePaid.toLocaleString()}</span>
+                              <span className="text-[10px] text-indigo-200 block">(₪{effectiveDailyRate.toLocaleString()} ליממה)</span>
                             </div>
                           </div>
 
                           <div className="mt-4 pt-3 border-t border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs relative z-10">
                             <div className="bg-white/5 p-2 rounded-lg">
                               <span className="text-indigo-300 block text-[10px]">כמות יממות (נעול):</span>
-                              <span className="font-bold text-white">🔒 21 יממות (ללא שינוי)</span>
+                              <span className="font-bold text-white">🔒 21 יממות</span>
                             </div>
                             <div className="bg-white/5 p-2 rounded-lg">
                               <span className="text-indigo-300 block text-[10px]">תעריף ליממה:</span>
-                              <span className="font-bold text-amber-300">₪100 (במקום ₪180)</span>
+                              <span className="font-bold text-amber-300">₪{effectiveDailyRate} (במקום ₪180)</span>
                             </div>
                             <div className="bg-emerald-500/20 border border-emerald-400/30 p-2 rounded-lg text-emerald-200 font-bold">
-                              <span>חיסכון כולל של ₪1,680! 🎉</span>
+                              <span>חיסכון כולל של ₪{effectiveSavings.toLocaleString()}! 🎉</span>
                             </div>
                           </div>
                         </div>
@@ -1342,11 +1364,23 @@ ${paymentLine}
                               type="number"
                               min="0"
                               value={pricePaid}
-                              onChange={(e) => setPricePaid(Number(e.target.value) || 0)}
+                              placeholder="0"
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setPricePaid(val);
+                                const num = val === '' ? 0 : parseFloat(val) || 0;
+                                setDailyRate(Math.round((num / 21) * 10) / 10);
+                              }}
+                              onBlur={() => {
+                                if (pricePaid === '' || Number(pricePaid) < 0) {
+                                  setPricePaid(0);
+                                }
+                              }}
                               className="w-full bg-slate-50 font-black text-lg text-indigo-900 px-3 py-2 rounded-xl border border-slate-200 focus:border-indigo-500 focus:outline-none"
                             />
                             <span className="text-[11px] text-slate-400 mt-1 block">
-                              21 יממות @ ₪{(pricePaid / 21).toFixed(1)} ליממה
+                              21 יממות @ ₪{effectiveDailyRate} ליממה
                             </span>
                           </div>
 
@@ -1384,14 +1418,14 @@ ${paymentLine}
                           <div className="flex items-center justify-between mb-2">
                             <label className="text-xs font-bold text-slate-700">כמות ימים בכרטיסייה:</label>
                             <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                              {totalDays} ימי פעילות
+                              {effectiveDays} ימי פעילות
                             </span>
                           </div>
 
                           {/* Quick chip buttons with progressive rates */}
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
                             {[5, 10, 15, 20].map(cnt => {
-                              const isSelected = totalDays === cnt;
+                              const isSelected = numTotalDays === cnt;
                               const chipCalc = serviceType === 'daycare' 
                                 ? getDaycareProgressiveRate(cnt, settings.defaultDailyRateDaycare || 90)
                                 : null;
@@ -1411,7 +1445,7 @@ ${paymentLine}
                                   </span>
                                   {chipCalc && (
                                     <span className={`text-[10px] ${isSelected ? 'text-emerald-100' : 'text-slate-500'}`}>
-                                      ₪{chipCalc.dailyRate}/יום (₪{chipCalc.totalPrice})
+                                      ₪{isSelected ? effectiveDailyRate : chipCalc.dailyRate}/יום (₪{isSelected ? numericPricePaid : chipCalc.totalPrice})
                                     </span>
                                   )}
                                 </button>
@@ -1425,30 +1459,37 @@ ${paymentLine}
                               min="1"
                               max="100"
                               value={totalDays}
-                              onChange={(e) => handleTotalDaysChange(Number(e.target.value) || 1)}
+                              placeholder="10"
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => handleTotalDaysChange(e.target.value)}
+                              onBlur={() => {
+                                if (totalDays === '' || Number(totalDays) < 1) {
+                                  handleTotalDaysChange(1);
+                                }
+                              }}
                               className="w-24 bg-slate-50 font-black text-center text-base py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
                             />
                             <span className="text-xs text-slate-500">ימים שנרכשים מראש</span>
                           </div>
                         </div>
 
-                        {/* Progressive Rate Banner */}
-                        {serviceType === 'daycare' && (
-                          <div className="p-3 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-300 rounded-xl text-xs text-emerald-950 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-base">🏷️</span>
-                              <div>
-                                <span className="font-extrabold">תמחור מוזל בטור יורד: </span>
-                                <span>₪{dailyRate} ליום (במקום ₪{settings.defaultDailyRateDaycare || 90})</span>
-                              </div>
-                            </div>
-                            {pricePaid < (settings.defaultDailyRateDaycare || 90) * totalDays && (
-                              <span className="bg-emerald-600 text-white font-black px-2.5 py-0.5 rounded-full text-[11px] shadow-xs">
-                                חיסכון של ₪{((settings.defaultDailyRateDaycare || 90) * totalDays - pricePaid).toFixed(0)} 🎉
+                        {/* Rate & Pricing Live Summary Banner */}
+                        <div className="p-3 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-300 rounded-xl text-xs text-emerald-950 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">🏷️</span>
+                            <div>
+                              <span className="font-extrabold">תמחור מחושב לעסקה: </span>
+                              <span>
+                                ₪{effectiveDailyRate} ליום {serviceType === 'daycare' ? `(במקום ₪${settings.defaultDailyRateDaycare || 90})` : `(במקום ₪${settings.defaultDailyRateDayTraining || 250})`}
                               </span>
-                            )}
+                            </div>
                           </div>
-                        )}
+                          {effectiveSavings > 0 && (
+                            <span className="bg-emerald-600 text-white font-black px-2.5 py-0.5 rounded-full text-[11px] shadow-xs">
+                              חיסכון של ₪{effectiveSavings.toLocaleString()} 🎉
+                            </span>
+                          )}
+                        </div>
 
                         <div className="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
@@ -1459,11 +1500,26 @@ ${paymentLine}
                               type="number"
                               min="0"
                               value={pricePaid}
-                              onChange={(e) => setPricePaid(Number(e.target.value) || 0)}
+                              placeholder="0"
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setPricePaid(val);
+                                const num = val === '' ? 0 : parseFloat(val) || 0;
+                                const d = typeof totalDays === 'number' ? totalDays : (parseInt(totalDays, 10) || 1);
+                                if (d > 0) {
+                                  setDailyRate(Math.round((num / d) * 10) / 10);
+                                }
+                              }}
+                              onBlur={() => {
+                                if (pricePaid === '' || Number(pricePaid) < 0) {
+                                  setPricePaid(0);
+                                }
+                              }}
                               className="w-full bg-slate-50 font-black text-lg text-emerald-700 px-3 py-2 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
                             />
                             <span className="text-[11px] text-slate-400 mt-1 block">
-                              מחושב: ₪{(pricePaid / (totalDays || 1)).toFixed(1)} ליום
+                              מחושב: ₪{effectiveDailyRate} ליום
                             </span>
                           </div>
 
@@ -1529,7 +1585,7 @@ ${paymentLine}
                       ) : (
                         <>
                           <CreditCard className="w-5 h-5 text-yellow-300" />
-                          <span>שלח קישור לתשלום ב-Grow (₪{pricePaid} / Bit / אשראי) בוואטסאפ 📲</span>
+                          <span>שלח קישור לתשלום ב-Grow (₪{numericPricePaid.toLocaleString()} / Bit / אשראי) בוואטסאפ 📲</span>
                         </>
                       )}
                     </button>
@@ -1539,7 +1595,7 @@ ${paymentLine}
                       className="w-full py-3 bg-white hover:bg-slate-50 text-slate-800 font-bold text-sm rounded-2xl border-2 border-slate-200 hover:border-emerald-500 transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Sparkles className="w-4 h-4 text-emerald-600" />
-                      <span>הנפק כרטיסייה מיידית (שולם במזומן / ביט ישיר) ✨</span>
+                      <span>הנפק כרטיסייה מיידית (₪{numericPricePaid.toLocaleString()} - שולם במזומן / ביט ישיר) ✨</span>
                     </button>
                   </div>
                 </form>
@@ -2001,7 +2057,14 @@ ${paymentLine}
                     min="1"
                     max="100"
                     value={editTotalDays}
-                    onChange={(e) => setEditTotalDays(Math.max(1, parseInt(e.target.value) || 1))}
+                    placeholder="1"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setEditTotalDays(e.target.value)}
+                    onBlur={() => {
+                      if (editTotalDays === '' || Number(editTotalDays) < 1) {
+                        setEditTotalDays(1);
+                      }
+                    }}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
@@ -2011,9 +2074,16 @@ ${paymentLine}
                   <input
                     type="number"
                     min="0"
-                    max={editTotalDays}
+                    max={Number(editTotalDays) || 100}
                     value={editUsedDays}
-                    onChange={(e) => setEditUsedDays(Math.max(0, parseInt(e.target.value) || 0))}
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setEditUsedDays(e.target.value)}
+                    onBlur={() => {
+                      if (editUsedDays === '' || Number(editUsedDays) < 0) {
+                        setEditUsedDays(0);
+                      }
+                    }}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
@@ -2023,7 +2093,7 @@ ${paymentLine}
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
                 <span className="text-xs font-bold text-emerald-900">יתרה עדכנית למימוש:</span>
                 <span className="text-sm font-black text-emerald-800 bg-white px-3 py-1 rounded-lg border border-emerald-300 shadow-xs">
-                  🎟️ {Math.max(0, editTotalDays - editUsedDays)} מתוך {editTotalDays} ימים נותרו
+                  🎟️ {Math.max(0, (Number(editTotalDays) || 0) - (Number(editUsedDays) || 0))} מתוך {Number(editTotalDays) || 0} ימים נותרו
                 </span>
               </div>
 
@@ -2035,7 +2105,14 @@ ${paymentLine}
                     type="number"
                     min="0"
                     value={editPricePaid}
-                    onChange={(e) => setEditPricePaid(Math.max(0, parseFloat(e.target.value) || 0))}
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setEditPricePaid(e.target.value)}
+                    onBlur={() => {
+                      if (editPricePaid === '' || Number(editPricePaid) < 0) {
+                        setEditPricePaid(0);
+                      }
+                    }}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>

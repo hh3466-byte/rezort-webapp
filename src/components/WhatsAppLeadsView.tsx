@@ -1183,9 +1183,12 @@ export const WhatsAppLeadsView: React.FC<WhatsAppLeadsViewProps> = ({
                                 ? `שלום ${getFirstName(selectedChat.name)}! 🐾\nמצורף קישור ישיר לבנק 21 יממות הפנסיון VIP של ${activePass.dogName} (נותרו עוד ${remainingDays} מתוך ${activePass.totalDays} יממות פנסיון מלא):\n👉 ${passLink}\n\nתוכלו לצפות ביתרה ולשלוח בקשת שריון מועדי שהייה בלחיצה אחת! 🐶\nשמוליק וצוות הריזורט לכלב 🐾`
                                 : `שלום ${getFirstName(selectedChat.name)}! 🐾\nמצורף קישור ישיר לכרטיסיית הפעילות של ${activePass.dogName} (נותרו עוד ${remainingDays} מתוך ${activePass.totalDays} ימים):\n👉 ${passLink}\n\nתוכלו לצפות בניקובים ולשלוח בקשת שריון יום בלחיצה אחת! 🐶\nשמוליק וצוות הריזורט לכלב 🐾`;
                             } else {
+                              const passDailyRate = activePass.dailyRate || (activePass.totalDays > 0 ? Math.round(activePass.pricePaid / activePass.totalDays) : 0);
+                              const baseRate = isBoarding ? 180 : (settings.defaultDailyRateDaycare || 90);
+                              const savings = Math.max(0, (baseRate * activePass.totalDays) - activePass.pricePaid);
                               shareText = isBoarding
-                                ? `שלום ${getFirstName(selectedChat.name)}! 🐾\nהופק עבורך בנק 21 יממות פנסיון מלא (VIP) ל${activePass.dogName} בריזורט לכלב בעלות מוזלת של ₪2,100 (₪100 ליממה בלבד במקום ₪180, חיסכון של ₪1,680!).\nלצפייה בכרטיסייה ולהסדרת התשלום המאובטח:\n👉 ${passLink}\n\nשמוליק וצוות הריזורט לכלב 🐾`
-                                : `שלום ${getFirstName(selectedChat.name)}! 🐾\nהופקה עבורך כרטיסיית 10 יומיות ל${activePass.dogName} בריזורט לכלב בעלות מוזלת של ₪750 (במקום ₪900).\nלצפייה בכרטיסייה ולהסדרת התשלום המאובטח:\n👉 ${passLink}\n\nשמוליק וצוות הריזורט לכלב 🐾`;
+                                ? `שלום ${getFirstName(selectedChat.name)}! 🐾\nהופק עבורך בנק 21 יממות פנסיון מלא (VIP) ל${activePass.dogName} בריזורט לכלב בעלות מוזלת של ₪${activePass.pricePaid.toLocaleString()}${savings > 0 ? ` (₪${passDailyRate} ליממה בלבד במקום ₪180, חיסכון של ₪${savings.toLocaleString()}!)` : ` (₪${passDailyRate} ליממה)`}.\nלצפייה בכרטיסייה ולהסדרת התשלום המאובטח:\n👉 ${passLink}\n\nשמוליק וצוות הריזורט לכלב 🐾`
+                                : `שלום ${getFirstName(selectedChat.name)}! 🐾\nהופקה עבורך כרטיסיית ${activePass.totalDays} יומיות ל${activePass.dogName} בריזורט לכלב בעלות של ₪${activePass.pricePaid.toLocaleString()}${savings > 0 ? ` (במקום ₪${(activePass.totalDays * baseRate).toLocaleString()})` : ''}.\nלצפייה בכרטיסייה ולהסדרת התשלום המאובטח:\n👉 ${passLink}\n\nשמוליק וצוות הריזורט לכלב 🐾`;
                             }
                             setComposerText(shareText);
                           }}
