@@ -619,13 +619,23 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 
     // Asynchronously fetch dynamic locked Grow link
     if (effectiveAmount > 0) {
+      const days = Math.max(1, calculateDaysCount(request.startDate, request.endDate));
+      const sHeb = request.serviceType === 'training' ? 'אילוף' : request.serviceType === 'daycare' ? 'שהות יומית' : 'פנסיון לינה';
+      const datesText = request.startDate === request.endDate || !request.endDate 
+        ? `${formatDateIL(request.startDate)} (יום אחד)`
+        : `${formatDateIL(request.startDate)} עד ${formatDateIL(request.endDate)} (${days} ימים)`;
+      const reqDesc = `מקדמת שריון ${sHeb} עבור ${request.dogName} | תאריכים: ${datesText}`;
+
       createGrowDynamicPaymentLink({
         amount: effectiveAmount,
         bookingId: request.id,
         dogName: request.dogName,
         ownerName: request.ownerName,
         ownerPhone: request.ownerPhone,
-        description: `שריון אירוח בריזורט לכלב - ${request.dogName}`
+        description: reqDesc,
+        startDate: request.startDate,
+        endDate: request.endDate,
+        serviceType: request.serviceType
       }).then(res => {
         if (res && res.paymentUrl) {
           setCustomPaymentLink(res.paymentUrl);
@@ -677,13 +687,22 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
       // Auto-generate dynamic locked Grow link for quick send
       if (numAmount > 0) {
         try {
+          const sHeb = req.serviceType === 'training' ? 'אילוף' : req.serviceType === 'daycare' ? 'שהות יומית' : 'פנסיון לינה';
+          const datesText = req.startDate === req.endDate || !req.endDate 
+            ? `${formatDateIL(req.startDate)} (יום אחד)`
+            : `${formatDateIL(req.startDate)} עד ${formatDateIL(req.endDate)} (${daysCount} ימים)`;
+          const reqDesc = `מקדמת שריון ${sHeb} עבור ${req.dogName} | תאריכים: ${datesText}`;
+
           const dynRes = await createGrowDynamicPaymentLink({
             amount: numAmount,
             bookingId: req.id,
             dogName: req.dogName,
             ownerName: req.ownerName,
             ownerPhone: req.ownerPhone,
-            description: `שריון אירוח בריזורט לכלב - ${req.dogName}`
+            description: reqDesc,
+            startDate: req.startDate,
+            endDate: req.endDate,
+            serviceType: req.serviceType
           });
           if (dynRes && dynRes.paymentUrl) {
             linkToUse = dynRes.paymentUrl;

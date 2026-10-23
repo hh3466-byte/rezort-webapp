@@ -65,7 +65,8 @@ export async function syncMorningCustomer({
   transactionId = '',
   businessType = 'resort',
   serviceName = '',
-  dogName = ''
+  dogName = '',
+  datesText = ''
 }) {
   try {
     if (!fullName || !fullName.trim()) return null;
@@ -75,10 +76,10 @@ export async function syncMorningCustomer({
     const cleanEmail = String(email || '').trim().toLowerCase();
     const cleanName = fullName.trim();
 
-    // Custom remarks per business
+    // Custom remarks per business - include dog name, service and exact stay dates
     const remarks = businessType === 'teacher_rights'
       ? (serviceName ? `זכויות המורה - ${serviceName}` : 'זכויות המורה')
-      : `הריזורט לכלב - כלב: ${dogName || 'כלב'}${serviceName ? ` (${serviceName})` : ''}`;
+      : `הריזורט לכלב - כלב: ${dogName || 'כלב'}${serviceName ? ` | ${serviceName}` : ''}${datesText && !serviceName.includes(datesText) ? ` | תאריכים: ${datesText}` : ''}`;
 
     console.log(`[Morning] Syncing customer: ${cleanName} (${remarks})...`);
 

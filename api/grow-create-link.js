@@ -41,6 +41,9 @@ export default async function handler(req, res) {
       ownerPhone = '',
       ownerEmail = '',
       description = '',
+      startDate = '',
+      endDate = '',
+      serviceType = '',
       successUrl = 'https://rezort-webapp.vercel.app/payment-success',
       notifyUrl = 'https://rezort-webapp.vercel.app/api/grow-webhook'
     } = req.body || {};
@@ -50,9 +53,24 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Valid amount greater than 0 is required' });
     }
 
+    function formatDateDisplay(iso) {
+      if (!iso) return '';
+      if (iso.includes('.')) return iso;
+      const parts = iso.split('-');
+      if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
+      return iso;
+    }
+
     const formattedPhone = cleanPhone(ownerPhone);
     const validFullName = (ownerName.trim().includes(' ') ? ownerName.trim() : `${ownerName.trim()} לקוח`).slice(0, 50);
-    const itemTitle = description || `אירוח ופנסיון - ${dogName} (${validFullName})`;
+
+    let itemTitle = description || `אירוח ופנסיון - ${dogName}`;
+    if (startDate && !itemTitle.includes('תאריכ') && !itemTitle.includes('עד') && !itemTitle.includes(formatDateDisplay(startDate))) {
+      const datesFormatted = endDate && endDate !== startDate 
+        ? `${formatDateDisplay(startDate)} עד ${formatDateDisplay(endDate)}` 
+        : formatDateDisplay(startDate);
+      itemTitle = `${itemTitle} | תאריכים: ${datesFormatted}`;
+    }
 
     // Payload for Grow CreatePaymentLink (Locked Amount, only digital instant payments: Credit Card, Bit, Apple Pay, Google Pay, PayBox)
     const payload = {
@@ -60,12 +78,12 @@ export default async function handler(req, res) {
       pageCode: GROW_PAGE_CODE,
       paymentLinkType: 2, // Closed for one single payment with locked amount
       isActive: 1,
-      title: description ? description.slice(0, 50) : `הריזורט לכלב - שריון עבור ${dogName}`,
+      title: itemTitle.slice(0, 100),
       chargeType: 1,
       products: {
         data: [
           {
-            name: itemTitle.slice(0, 70),
+            name: itemTitle.slice(0, 120), // Appears directly as description line on tax invoice / receipt
             price: Math.round(numAmount),
             quantity: 1,
             vatType: 1
@@ -91,11 +109,11 @@ export default async function handler(req, res) {
       notifyUrl,
       cField1: bookingId || `b-${Date.now()}`,
       cField2: formattedPhone,
-      cField3: (description || '').slice(0, 100),
+      cField3: itemTitle.slice(0, 120),
       customFields: {
         cField1: bookingId || `b-${Date.now()}`,
         cField2: formattedPhone,
-        cField3: (description || '').slice(0, 100)
+        cField3: itemTitle.slice(0, 120)
       }
     };
 

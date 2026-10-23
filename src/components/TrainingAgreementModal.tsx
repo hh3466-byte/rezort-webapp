@@ -445,13 +445,22 @@ export const TrainingAgreementModal: React.FC<TrainingAgreementModalProps> = ({
       const amt = Number(totalPrice) || 6500;
       let payUrl = settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
       try {
+        const startStr = booking?.startDate || intakeRequest?.startDate;
+        const endStr = booking?.endDate || intakeRequest?.endDate;
+        const datesPart = startStr 
+          ? ` | תאריכים: ${formatDateIL(startStr)}${endStr ? ` עד ${formatDateIL(endStr)}` : ''}` 
+          : ` | החל מ-${formatDateIL(getTodayStr())}`;
+
         const dynRes = await createGrowDynamicPaymentLink({
           amount: amt,
           bookingId: booking?.id || intakeRequest?.id || `train-${Date.now()}`,
           dogName: dogName,
           ownerName: ownerFullName,
           ownerPhone: ownerPhone,
-          description: `דמי תהליך אילוף בריזורט לכלב - ${dogName}`
+          description: `תהליך אילוף בתנאי פנסיון (70 יום) עבור ${dogName}${datesPart}`,
+          startDate: startStr,
+          endDate: endStr,
+          serviceType: 'training'
         });
         if (dynRes && dynRes.paymentUrl) {
           payUrl = dynRes.paymentUrl;

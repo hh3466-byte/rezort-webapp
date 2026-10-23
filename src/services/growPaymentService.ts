@@ -13,6 +13,9 @@ export interface CreateGrowLinkParams {
   ownerPhone?: string;
   ownerEmail?: string;
   description?: string;
+  startDate?: string;
+  endDate?: string;
+  serviceType?: string;
 }
 
 export interface GrowLinkResponse {
@@ -90,19 +93,26 @@ export async function createGrowDynamicPaymentLink(
     const validFullName = ((params.ownerName || 'לקוח').trim().includes(' ') 
       ? (params.ownerName || 'לקוח').trim() 
       : `${(params.ownerName || 'לקוח').trim()} לקוח`).slice(0, 50);
-    const itemTitle = params.description || `שריון אירוח בריזורט לכלב - ${params.dogName || 'כלב'}`;
+
+    let itemTitle = params.description || `אירוח ופנסיון - ${params.dogName || 'כלב'}`;
+    if (params.startDate && !itemTitle.includes('תאריכ') && !itemTitle.includes('עד') && !itemTitle.includes(params.startDate)) {
+      const datesFormatted = params.endDate && params.endDate !== params.startDate 
+        ? `${params.startDate} עד ${params.endDate}` 
+        : params.startDate;
+      itemTitle = `${itemTitle} | תאריכים: ${datesFormatted}`;
+    }
 
     const payload = {
       userId: GROW_USER_ID,
       pageCode: GROW_PAGE_CODE,
       paymentLinkType: 2, // Locked amount
       isActive: 1,
-      title: params.description ? params.description.slice(0, 50) : `הריזורט לכלב - ${params.dogName || 'שריון אירוח'}`,
+      title: itemTitle.slice(0, 100),
       chargeType: 1,
       products: {
         data: [
           {
-            name: itemTitle.slice(0, 70),
+            name: itemTitle.slice(0, 120),
             price: numAmount,
             quantity: 1,
             vatType: 1
@@ -127,11 +137,11 @@ export async function createGrowDynamicPaymentLink(
       notifyUrl: 'https://rezort-webapp.vercel.app/api/grow-webhook',
       cField1: params.bookingId || `b-${Date.now()}`,
       cField2: cleanPhone(params.ownerPhone),
-      cField3: (params.description || '').slice(0, 100),
+      cField3: itemTitle.slice(0, 120),
       customFields: {
         cField1: params.bookingId || `b-${Date.now()}`,
         cField2: cleanPhone(params.ownerPhone),
-        cField3: (params.description || '').slice(0, 100)
+        cField3: itemTitle.slice(0, 120)
       }
     };
 

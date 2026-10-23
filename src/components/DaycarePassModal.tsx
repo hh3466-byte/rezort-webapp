@@ -587,11 +587,14 @@ ${paymentLine}
     try {
       const isBoarding = serviceType === 'boarding';
       const finalDays = effectiveDays;
+      const today = getTodayStr();
+      const expiry = calculatePassExpiry(serviceType);
+      const expiryText = expiry ? ` | תוקף למימוש: עד ${formatDateIL(expiry)}` : '';
       const desc = isBoarding
-        ? `חבילת 21 יממות פנסיון VIP - ${dogName.trim()}`
+        ? `בנק 21 יממות פנסיון VIP עבור ${dogName.trim()}${expiryText}`
         : serviceType === 'day_training'
-        ? `כרטיסיית ${finalDays} אילוף ביומיות - ${dogName.trim()}`
-        : `כרטיסיית ${finalDays} יומיות (מעון יום) - ${dogName.trim()}`;
+        ? `כרטיסיית ${finalDays} ימי אילוף יומי עבור ${dogName.trim()}${expiryText}`
+        : `כרטיסיית ${finalDays} ימי כיף (שהות יומית) עבור ${dogName.trim()}${expiryText}`;
 
       const finalPrice = numericPricePaid;
       const finalDailyRate = effectiveDailyRate;
@@ -603,12 +606,13 @@ ${paymentLine}
         ownerName: ownerName.trim(),
         ownerPhone: ownerPhone.trim(),
         ownerEmail: ownerEmail.trim() || undefined,
-        description: desc
+        description: desc,
+        startDate: today,
+        endDate: expiry,
+        serviceType: serviceType
       });
 
       const paymentUrl = growRes.paymentUrl;
-      const today = getTodayStr();
-      const expiry = calculatePassExpiry(serviceType);
       const passCode = generatePassCode();
       const passId = `pass-${Date.now()}`;
 

@@ -460,7 +460,27 @@ export default async function handler(req, res) {
       } else {
         paymentClassification = 'מקדמה';
       }
-      detailsText = `${serviceName} (${paymentClassification})`;
+
+      function formatDateDisplay(iso) {
+        if (!iso) return '';
+        if (iso.includes('.')) return iso;
+        const parts = iso.split('-');
+        if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        return iso;
+      }
+
+      let datesInfoStr = '';
+      const bStart = matchedBooking.start_date || (matchedBooking.data && matchedBooking.data.startDate) || '';
+      const bEnd = matchedBooking.end_date || (matchedBooking.data && matchedBooking.data.endDate) || '';
+      if (bStart && bEnd) {
+        datesInfoStr = bStart === bEnd 
+          ? ` | תאריך: ${formatDateDisplay(bStart)}` 
+          : ` | תאריכים: ${formatDateDisplay(bStart)} עד ${formatDateDisplay(bEnd)}`;
+      } else if (bStart) {
+        datesInfoStr = ` | תאריך: ${formatDateDisplay(bStart)}`;
+      }
+
+      detailsText = `${serviceName} (${paymentClassification})${datesInfoStr}`;
       statusText = 'ההזמנה ביומן עודכנה כמשולמת/מקדמה הוסדרה! ✅';
     } else if (matchingIntake) {
       dogName = matchingIntake.dog_name || matchingIntake.dogName || '';
@@ -478,7 +498,19 @@ export default async function handler(req, res) {
       } else {
         paymentClassification = 'מקדמה';
       }
-      detailsText = `שאלון קליטה: ${serviceName} (${paymentClassification})`;
+
+      let intakeDatesStr = '';
+      const iStart = matchingIntake.start_date || matchingIntake.startDate || '';
+      const iEnd = matchingIntake.end_date || matchingIntake.endDate || '';
+      if (iStart && iEnd) {
+        intakeDatesStr = iStart === iEnd 
+          ? ` | תאריך: ${formatDateDisplay(iStart)}` 
+          : ` | תאריכים: ${formatDateDisplay(iStart)} עד ${formatDateDisplay(iEnd)}`;
+      } else if (iStart) {
+        intakeDatesStr = ` | תאריך: ${formatDateDisplay(iStart)}`;
+      }
+
+      detailsText = `שאלון קליטה: ${serviceName} (${paymentClassification})${intakeDatesStr}`;
       statusText = 'שאלון הקליטה עודכן עם המקדמה! ✅';
     } else if (matchedPass) {
       dogName = matchedPass.dogName || '';
@@ -611,7 +643,7 @@ export default async function handler(req, res) {
       amount: amount,
       transactionId: transactionId,
       businessType: 'resort',
-      serviceName: serviceName,
+      serviceName: displayService,
       dogName: dogName
     }).catch(mErr => console.warn('[Morning] Non-blocking resort customer sync warning:', mErr));
 

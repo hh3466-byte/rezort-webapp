@@ -247,17 +247,25 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 
     setIsGeneratingLink(true);
     try {
+      const days = (booking.startDate && booking.endDate) ? Math.max(1, calculateDaysCount(booking.startDate, booking.endDate)) : 1;
+      const isDepositOnly = targetAmt < (Number(booking.totalPrice) || 0) && currentDebt >= (Number(booking.totalPrice) || 0);
+      const stayDatesDetailed = booking.startDate && booking.endDate
+        ? (booking.startDate === booking.endDate 
+            ? `${formatDateIL(booking.startDate)} (שהות יומית)`
+            : `${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)} (${days} ימים)`)
+        : stayDates;
+
       const reasonLabel = currentReason === 'extra_service'
         ? (extDesc && extDesc.trim()
             ? (incStay && currentDebt > 0
-                ? `${extDesc.trim()} + יתרת שהייה (${booking.dogName})`
-                : `${extDesc.trim()} (${booking.dogName})`)
+                ? `תוספת: ${extDesc.trim()} + יתרת שהייה עבור ${booking.dogName} | תאריכים: ${stayDatesDetailed}`
+                : `תוספת: ${extDesc.trim()} עבור ${booking.dogName} | תאריכי שהייה: ${stayDatesDetailed}`)
             : (incStay && currentDebt > 0
-                ? `תשלום שהייה ואקסטרה (${booking.dogName})`
-                : `חיוב אקסטרה / שירות נוסף (${booking.dogName})`))
+                ? `תשלום שהייה ואקסטרה עבור ${booking.dogName} | תאריכים: ${stayDatesDetailed}`
+                : `חיוב אקסטרה עבור ${booking.dogName} | תאריכי שהייה: ${stayDatesDetailed}`))
         : currentReason === 'extra_day'
-        ? `תשלום יום נוסף - ${booking.dogName}`
-        : `שריון אירוח בריזורט לכלב - ${booking.dogName} (${stayDates})`;
+        ? `הארכת שהייה / יום נוסף עבור ${booking.dogName} | תאריך: ${formatDateIL(booking.endDate || booking.startDate)}`
+        : `${isDepositOnly ? 'מקדמת שריון' : 'אירוח ופנסיון'} (${serviceHebrew}) עבור ${booking.dogName} | תאריכים: ${stayDatesDetailed}`;
 
       const res = await createGrowDynamicPaymentLink({
         amount: targetAmt,
@@ -265,7 +273,10 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
         dogName: booking.dogName,
         ownerName: booking.ownerName,
         ownerPhone: booking.ownerPhone,
-        description: reasonLabel
+        description: reasonLabel,
+        startDate: booking.startDate,
+        endDate: booking.endDate,
+        serviceType: booking.serviceType
       });
 
       if (res && res.paymentUrl) {
