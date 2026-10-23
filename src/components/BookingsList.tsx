@@ -547,11 +547,11 @@ export const BookingsList: React.FC<BookingsListProps> = ({
                               handleSendWhatsAppReminder(b, e);
                             }
                           }}
-                          title="שלח או שלח שוב קישור לתשלום ב-Grow / Bit ישירות לוואטסאפ של הלקוח"
+                          title="שלח קישור לתשלום ב-Grow / Bit ישירות לוואטסאפ של הלקוח (יתרה או אקסטרה)"
                           className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-800 border border-emerald-300 text-xs font-bold px-3 py-2 rounded-xl flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
                         >
                           <CreditCard className="w-4 h-4 text-emerald-600" />
-                          <span>קישור לתשלום 💳</span>
+                          <span>קישור לתשלום / אקסטרה 💳</span>
                         </button>
                       )}
 

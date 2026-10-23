@@ -3038,6 +3038,7 @@ ${reason ? `💬 *סיבה:* ${reason}\n` : ''}
           settings={settings}
           onClose={() => setPaymentLinkBooking(null)}
           onSentSuccess={(msg) => showToast(msg)}
+          onUpdateBooking={handleSaveBookingForm}
         />
       )}
 

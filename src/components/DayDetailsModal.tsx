@@ -883,11 +883,11 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
               e.stopPropagation();
               onOpenSendPaymentLink();
             }}
-            title="שלח קישור Grow / Bit לתשלום בוואטסאפ (סכום רגיל או תוספת/יום נוסף)"
+            title="שלח קישור Grow / Bit לתשלום בוואטסאפ (יתרה, יום נוסף, או חיוב אקסטרה/קולר/וטרינר)"
             className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-950 border border-emerald-300 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
           >
             <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
-            <span>קישור לתשלום 💳</span>
+            <span>קישור לתשלום / אקסטרה 💳</span>
           </button>
         )}
 

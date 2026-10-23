@@ -251,7 +251,16 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        const targetBooking: Booking = customerBookings[0] || {
+                        const sortedCustomerBookings = [...customerBookings].sort((a, b) => {
+                          const aStaying = a.stayStatus === 'checked_in' ? 1 : 0;
+                          const bStaying = b.stayStatus === 'checked_in' ? 1 : 0;
+                          if (aStaying !== bStaying) return bStaying - aStaying;
+                          const aBooked = a.stayStatus === 'booked' ? 1 : 0;
+                          const bBooked = b.stayStatus === 'booked' ? 1 : 0;
+                          if (aBooked !== bBooked) return bBooked - aBooked;
+                          return new Date(b.startDate || b.createdAt).getTime() - new Date(a.startDate || a.createdAt).getTime();
+                        });
+                        const targetBooking: Booking = sortedCustomerBookings[0] || {
                           id: 'cust-' + customer.id,
                           dogName: customer.dogs[0]?.name || 'כלב',
                           dogBreed: customer.dogs[0]?.breed || 'מעורב',
@@ -271,10 +280,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                         onOpenSendPaymentLink(targetBooking);
                       }}
                       className="py-2 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-95 shrink-0"
-                      title="שלח קישור לתשלום ב-Grow / Bit ישירות לוואטסאפ של הלקוח"
+                      title="שלח קישור לתשלום ב-Grow / Bit ישירות לוואטסאפ של הלקוח (יתרה או תוספת אקסטרה/קולר/וטרינר)"
                     >
                       <CreditCard className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                      <span>קישור לתשלום 💳</span>
+                      <span>קישור לתשלום / אקסטרה 💳</span>
                     </button>
                   )}
 
