@@ -170,7 +170,7 @@ export interface GrowIncomingPayment {
   updated_at?: string;
 }
 
-export type IntakeRequestStatus = 'pending' | 'payment_requested' | 'approved' | 'rejected' | 'abandoned' | 'archived';
+export type IntakeRequestStatus = 'pending' | 'in_progress' | 'payment_requested' | 'approved' | 'rejected' | 'abandoned' | 'archived';
 
 export interface IntakeRequest {
   id: string;

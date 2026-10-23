@@ -19,7 +19,8 @@ import {
   Trash2,
   Gift,
   CreditCard,
-  MapPin
+  MapPin,
+  FileText
 } from 'lucide-react';
 import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import { Booking, ResortSettings, IntakeRequest } from '../types';
@@ -30,6 +31,9 @@ import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
 import { getPlacementDisplayName, normalizePlacementKey } from '../utils/kennelUtils';
 import { getStayStatusColors } from './CalendarView';
+import { isIntakeRequestNew } from '../utils/intakeUtils';
+import { WhatsAppChatHistoryModal } from './WhatsAppChatHistoryModal';
+import { CustomerDocumentsModal } from './CustomerDocumentsModal';
 
 interface DayDetailsModalProps {
   dateStr: string | null;
@@ -80,16 +84,19 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   const isOverbooked = breakdown.total > settings.maxCapacity;
   const holidayInfo = getDateShabbatOrHoliday(dateStr);
   const [isGreetingModalOpen, setIsGreetingModalOpen] = useState(false);
+  const [selectedChatHistory, setSelectedChatHistory] = useState<{ phone: string; customerName: string; dogName?: string } | null>(null);
+  const [selectedDocumentsBooking, setSelectedDocumentsBooking] = useState<Booking | null>(null);
 
-  // Pending requests for this date (especially pass reservation requests)
+  // Pending requests for this date: ONLY first-time inquiries where contact has NOT been made yet (or pass reservation requests)
   const pendingRequestsForDate = React.useMemo(() => {
     if (!intakeRequests || !dateStr) return [];
     return intakeRequests.filter(r => {
-      if (r.status !== 'pending') return false;
+      // Must be a brand new inquiry where contact has NOT been made yet, or pass reservations
+      if (!isIntakeRequestNew(r, bookings)) return false;
       const targetEnd = r.endDate || r.startDate;
       return r.startDate <= dateStr && targetEnd >= dateStr;
     });
-  }, [intakeRequests, dateStr]);
+  }, [intakeRequests, dateStr, bookings]);
 
   const getStaysCount = (phone: string) => {
     const clean = cleanPhoneNumber(phone);
@@ -152,6 +159,8 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
               onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
               onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
               onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
+              onOpenChatHistory={(p, c, d) => setSelectedChatHistory({ phone: p, customerName: c, dogName: d })}
+              onOpenDocuments={(bk) => setSelectedDocumentsBooking(bk)}
               actionType="arrival"
             />
           ))}
@@ -191,6 +200,8 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
               onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
               onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
               onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
+              onOpenChatHistory={(p, c, d) => setSelectedChatHistory({ phone: p, customerName: c, dogName: d })}
+              onOpenDocuments={(bk) => setSelectedDocumentsBooking(bk)}
               actionType="staying"
             />
           ))}
@@ -230,6 +241,8 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
               onInitiateRelease={() => onInitiateRelease && onInitiateRelease(b)}
               onToggleReviewRequest={() => onToggleReviewRequest && onToggleReviewRequest(b)}
               onOpenVoucher={() => onOpenVoucher && onOpenVoucher({ customerName: b.ownerName, dogName: b.dogName, phone: b.ownerPhone, staysCount: getStaysCount(b.ownerPhone) })}
+              onOpenChatHistory={(p, c, d) => setSelectedChatHistory({ phone: p, customerName: c, dogName: d })}
+              onOpenDocuments={(bk) => setSelectedDocumentsBooking(bk)}
               actionType="departure"
             />
           ))}
@@ -473,6 +486,37 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
         />
       )}
 
+      {/* WhatsApp Chat History Modal with Voice Note Transcription */}
+      {selectedChatHistory && (
+        <WhatsAppChatHistoryModal
+          isOpen={true}
+          onClose={() => setSelectedChatHistory(null)}
+          phone={selectedChatHistory.phone}
+          customerName={selectedChatHistory.customerName}
+          dogName={selectedChatHistory.dogName}
+          settings={settings}
+        />
+      )}
+
+      {/* Customer & Booking Related Documents Modal (מסמכים קשורים) */}
+      {selectedDocumentsBooking && (
+        <CustomerDocumentsModal
+          isOpen={true}
+          onClose={() => setSelectedDocumentsBooking(null)}
+          booking={selectedDocumentsBooking}
+          allBookings={bookings}
+          intakeRequests={intakeRequests}
+          settings={settings}
+          onOpenSendPaymentLink={() => onOpenSendPaymentLink && onOpenSendPaymentLink(selectedDocumentsBooking)}
+          onOpenVoucher={() => onOpenVoucher && onOpenVoucher({
+            customerName: selectedDocumentsBooking.ownerName,
+            dogName: selectedDocumentsBooking.dogName,
+            phone: selectedDocumentsBooking.ownerPhone,
+            staysCount: getStaysCount(selectedDocumentsBooking.ownerPhone)
+          })}
+        />
+      )}
+
       </div>
     </div>
   );
@@ -492,6 +536,8 @@ interface DogBookingCardProps {
   onInitiateRelease?: () => void;
   onToggleReviewRequest?: () => void;
   onOpenVoucher?: () => void;
+  onOpenChatHistory?: (phone: string, customerName: string, dogName?: string) => void;
+  onOpenDocuments?: (booking: Booking) => void;
   actionType: 'arrival' | 'staying' | 'departure';
 }
 
@@ -509,6 +555,8 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   onInitiateRelease,
   onToggleReviewRequest,
   onOpenVoucher,
+  onOpenChatHistory,
+  onOpenDocuments,
   actionType,
 }) => {
   const todayStr = getTodayStr();
@@ -844,6 +892,38 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
           >
             <Gift className="w-3.5 h-3.5 text-amber-600" />
             <span>שובר</span>
+          </button>
+        )}
+
+        {/* Related Documents Button (מסמכים קשורים) */}
+        {onOpenDocuments && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenDocuments(booking);
+            }}
+            title="צפה בהסכמי שהייה/אילוף חתומים דיגיטלית, שאלון קליטה, קבלות ומסמכים קשורים בתיק הלקוח"
+            className="bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 border border-slate-300 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs shrink-0"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            <span>מסמכים קשורים 📄</span>
+          </button>
+        )}
+
+        {/* WhatsApp Chat History & Voice Transcription Button (הצג היסטוריית הודעות) */}
+        {onOpenChatHistory && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenChatHistory(booking.ownerPhone, booking.ownerName, booking.dogName);
+            }}
+            title="הצג היסטוריית הודעות והקלטות וואטסאפ עם הלקוח ותמלול קולי מלא"
+            className="bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-950 border border-emerald-300 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs shrink-0"
+          >
+            <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+            <span>הצג היסטוריית הודעות 💬</span>
           </button>
         )}
 

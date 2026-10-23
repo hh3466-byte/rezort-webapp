@@ -76,6 +76,17 @@ app.all('/api/whatsapp-webhook', async (req, res) => {
   }
 });
 
+// Audio Transcription API Handler (WhatsApp voice notes)
+app.all('/api/transcribe-audio', async (req, res) => {
+  try {
+    const handler = (await import('./api/transcribe-audio.js')).default;
+    return handler(req, res);
+  } catch (err: any) {
+    console.error('Error handling /api/transcribe-audio:', err);
+    res.status(500).json({ error: err?.message || 'Internal Server Error' });
+  }
+});
+
 // Gemini Agent Speech & WhatsApp Parser API with Resilient Multi-Model Fallback
 app.post('/api/agent/parse', async (req, res) => {
   const { text, referenceDate, existingBookingsSummary } = req.body;
