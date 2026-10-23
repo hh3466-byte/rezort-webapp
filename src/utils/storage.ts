@@ -1,6 +1,7 @@
 import { Booking, Customer, ResortSettings } from '../types';
 import { defaultSettings, initialBookings } from '../data/initialData';
 import { getAllExistingLocalBookings, getLocalSettings } from '../services/dbService';
+import { cleanPhoneNumber } from './whatsappUtils';
 
 const STORAGE_KEYS = {
   BOOKINGS: 'dog_resort_bookings',
@@ -60,7 +61,8 @@ export function extractCustomers(bookings: Booking[]): Customer[] {
   const sorted = [...bookings].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 
   for (const b of sorted) {
-    const key = (b.ownerPhone || b.ownerName).trim();
+    const cleanP = cleanPhoneNumber(b.ownerPhone);
+    const key = cleanP || (b.ownerName || '').trim();
     if (!key) continue;
 
     const existing = customerMap.get(key);

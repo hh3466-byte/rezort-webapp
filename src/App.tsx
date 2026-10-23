@@ -1671,9 +1671,12 @@ ${reason ? `💬 *סיבה:* ${reason}\n` : ''}
     showToast('🧹 כל הנתונים נמחקו - היומן נקי לחלוטין!');
   };
 
-  // 0. If client opened direct Training Agreement link (?agreement=training)
+  // 0. If client opened direct Agreement link (?agreement=training or ?agreement=boarding or ?agreement=true)
   if (showTrainingAgreement) {
     const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const paramAgreementType = (urlParams?.get('agreement') || '').toLowerCase();
+    const isExplicitBoarding = paramAgreementType === 'boarding';
+    const isExplicitTraining = paramAgreementType === 'training';
     const paramBookingId = urlParams?.get('bookingId');
     const paramIntakeId = urlParams?.get('intakeId');
     const paramPhone = urlParams?.get('phone') || '';
@@ -1682,11 +1685,15 @@ ${reason ? `💬 *סיבה:* ${reason}\n` : ''}
 
     const matchedAgreementBooking = paramBookingId 
       ? bookings.find(b => b.id === paramBookingId) 
-      : (paramPhone ? (bookings.find(b => cleanPhoneNumber(b.ownerPhone) === cleanPhoneNumber(paramPhone) && b.serviceType === 'training') || bookings.find(b => cleanPhoneNumber(b.ownerPhone) === cleanPhoneNumber(paramPhone))) : null);
+      : (paramPhone ? (bookings.find(b => cleanPhoneNumber(b.ownerPhone) === cleanPhoneNumber(paramPhone) && (isExplicitTraining ? b.serviceType === 'training' : true)) || bookings.find(b => cleanPhoneNumber(b.ownerPhone) === cleanPhoneNumber(paramPhone))) : null);
 
     const matchedAgreementIntake = paramIntakeId 
       ? intakeRequests.find(r => r.id === paramIntakeId) 
       : (paramPhone ? intakeRequests.find(r => cleanPhoneNumber(r.ownerPhone) === cleanPhoneNumber(paramPhone)) : null);
+
+    const determinedServiceType: ServiceType = isExplicitBoarding 
+      ? 'boarding' 
+      : (isExplicitTraining ? 'training' : (matchedAgreementBooking?.serviceType || matchedAgreementIntake?.serviceType || 'boarding'));
 
     return (
       <TrainingAgreementModal
@@ -1695,16 +1702,17 @@ ${reason ? `💬 *סיבה:* ${reason}\n` : ''}
           setShowTrainingAgreement(false);
           window.location.href = window.location.pathname;
         }}
+        agreementType={isExplicitBoarding ? 'boarding' : (isExplicitTraining ? 'training' : 'auto')}
         booking={matchedAgreementBooking || (!matchedAgreementIntake ? {
-          id: paramBookingId || `b-training-${cleanPhoneNumber(paramPhone) || Date.now()}`,
+          id: paramBookingId || `b-${determinedServiceType}-${cleanPhoneNumber(paramPhone) || Date.now()}`,
           dogName: paramDog || 'רוקי',
           dogBreed: 'מעורב',
           ownerName: paramName || 'חגי',
           ownerPhone: paramPhone || '054-3200007',
-          serviceType: 'training',
+          serviceType: determinedServiceType,
           startDate: getTodayStr(),
-          endDate: addDays(getTodayStr(), 30),
-          totalPrice: Number(settings?.defaultDailyRateTraining) || 6500,
+          endDate: determinedServiceType === 'training' ? addDays(getTodayStr(), 30) : addDays(getTodayStr(), 3),
+          totalPrice: determinedServiceType === 'training' ? (Number(settings?.defaultDailyRateTraining) || 6500) : 360,
           depositAmount: 0,
           paymentStatus: 'unpaid',
           paymentMethod: 'credit',
@@ -1717,7 +1725,7 @@ ${reason ? `💬 *סיבה:* ${reason}\n` : ''}
         settings={settings}
         isPublicClientView={true}
         onAgreementSigned={() => {
-          showToast('✅ הסכם האילוף נחתם בהצלחה!');
+          showToast('✅ ההסכם נחתם בהצלחה!');
         }}
       />
     );

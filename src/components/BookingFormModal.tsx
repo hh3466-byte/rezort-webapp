@@ -162,6 +162,17 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
   const [trainingAgreementData, setTrainingAgreementData] = useState<TrainingAgreementData | undefined>(() => {
     return initialData?.trainingAgreement;
   });
+  // Boarding Agreement state
+  const [isBoardingAgreementSigned, setIsBoardingAgreementSigned] = useState<boolean>(() => {
+    return Boolean(
+      initialData?.isBoardingAgreementSigned || 
+      (initialData as any)?.boardingAgreement?.ownerSignatureDataUrl ||
+      initialData?.signatureDataUrl
+    );
+  });
+  const [boardingAgreementData, setBoardingAgreementData] = useState<any>(() => {
+    return (initialData as any)?.boardingAgreement;
+  });
   const [isTrainingAgreementModalOpen, setIsTrainingAgreementModalOpen] = useState(false);
 
   // Grandfathered dogs admitted or created before digital agreement feature (~20/10/2026)
@@ -616,6 +627,9 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
       isTrainingAgreementSigned: isAgreementSigned,
       trainingAgreementSignedAt: initialData?.trainingAgreementSignedAt || (isAgreementSigned ? new Date().toISOString() : undefined),
       trainingAgreement: trainingAgreementData || initialData?.trainingAgreement,
+      isBoardingAgreementSigned,
+      boardingAgreementSignedAt: initialData?.boardingAgreementSignedAt || (isBoardingAgreementSigned ? new Date().toISOString() : undefined),
+      boardingAgreement: boardingAgreementData || (initialData as any)?.boardingAgreement,
       createdAt: initialData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -2168,6 +2182,33 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Boarding Agreement / Bylaws Card */}
+            {serviceType !== 'training' && serviceType !== 'day_training' && (
+              <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2 font-bold text-slate-800">
+                  <FileText className="w-4 h-4 text-emerald-700 shrink-0" />
+                  <span>הסכם אירוח ותקנון הריזורט:</span>
+                  {isBoardingAgreementSigned ? (
+                    <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      <span>נחתם ומאושר ✓</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      (פתוח לחתימה ישירה במסך)
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTrainingAgreementModalOpen(true)}
+                  className="text-emerald-700 hover:text-emerald-900 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <span>{isBoardingAgreementSigned ? 'הצג הסכם / הדפס 📜' : '✍️ פתח הסכם לחתימה'}</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Section: Placement (חדרים 1-7, סוויטות 1-4, שבילים, הלנה ביתית) & Feeding */}
@@ -2764,9 +2805,15 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               updatedAt: new Date().toISOString()
             }}
             settings={settings}
+            agreementType={serviceType === 'training' || serviceType === 'day_training' ? 'training' : 'boarding'}
             onAgreementSigned={(agrData) => {
-              setIsTrainingAgreementSigned(true);
-              setTrainingAgreementData(agrData);
+              if (serviceType === 'training' || serviceType === 'day_training') {
+                setIsTrainingAgreementSigned(true);
+                setTrainingAgreementData(agrData);
+              } else {
+                setIsBoardingAgreementSigned(true);
+                setBoardingAgreementData(agrData);
+              }
               setIsTrainingAgreementModalOpen(false);
             }}
           />

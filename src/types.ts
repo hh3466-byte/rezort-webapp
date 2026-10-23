@@ -83,6 +83,9 @@ export interface Booking {
   isTrainingAgreementSigned?: boolean;
   trainingAgreementSignedAt?: string;
   trainingAgreement?: TrainingAgreementData;
+  isBoardingAgreementSigned?: boolean;
+  boardingAgreementSignedAt?: string;
+  boardingAgreement?: any;
   isArchived?: boolean;
   additionalDogs?: AdditionalDogIntake[];
   createdAt: string;
@@ -215,6 +218,9 @@ export interface IntakeRequest {
   isTrainingAgreementSigned?: boolean;
   trainingAgreementSignedAt?: string;
   trainingAgreement?: TrainingAgreementData;
+  isBoardingAgreementSigned?: boolean;
+  boardingAgreementSignedAt?: string;
+  boardingAgreement?: any;
   clientOrigin?: 'new' | 'returning' | 'referral';
   selectedBenefitId?: string;
   voucherCode?: string;

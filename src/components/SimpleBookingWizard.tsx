@@ -223,6 +223,17 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
   const [trainingAgreementData, setTrainingAgreementData] = useState<TrainingAgreementData | undefined>(() => {
     return (initialData as any)?.trainingAgreement;
   });
+  // Boarding Agreement state
+  const [isBoardingAgreementSigned, setIsBoardingAgreementSigned] = useState<boolean>(() => {
+    return Boolean(
+      (initialData as any)?.isBoardingAgreementSigned || 
+      (initialData as any)?.boardingAgreement?.ownerSignatureDataUrl ||
+      initialData?.signatureDataUrl
+    );
+  });
+  const [boardingAgreementData, setBoardingAgreementData] = useState<any>(() => {
+    return (initialData as any)?.boardingAgreement;
+  });
   const [isTrainingAgreementModalOpen, setIsTrainingAgreementModalOpen] = useState(false);
 
   // Grandfathered dogs admitted or created before digital agreement feature (~20/10/2026)
@@ -820,6 +831,9 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       isTrainingAgreementSigned: isTraining ? isAgreementSigned : initialData?.isTrainingAgreementSigned,
       trainingAgreementSignedAt: isAgreementSigned ? (initialData?.trainingAgreementSignedAt || new Date().toISOString()) : undefined,
       trainingAgreement: trainingAgreementData || (initialData as any)?.trainingAgreement,
+      isBoardingAgreementSigned: !isTraining ? isBoardingAgreementSigned : (initialData as any)?.isBoardingAgreementSigned,
+      boardingAgreementSignedAt: isBoardingAgreementSigned ? ((initialData as any)?.boardingAgreementSignedAt || new Date().toISOString()) : undefined,
+      boardingAgreement: boardingAgreementData || (initialData as any)?.boardingAgreement,
       pricingMode,
       dailyRate: isFreeStay ? 0 : dailyRate,
       daycarePassCode: selectedDaycarePassCode || initialData?.daycarePassCode,
@@ -3639,6 +3653,33 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Boarding Agreement / Bylaws Card */}
+                {serviceType !== 'training' && serviceType !== 'day_training' && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                      <FileText className="w-4 h-4 text-emerald-700" />
+                      <span>הסכם אירוח ותקנון הריזורט:</span>
+                      {isBoardingAgreementSigned ? (
+                        <span className="bg-emerald-100 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>נחתם ומאושר ✓</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          (פתוח לחתימה ישירה במסך)
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsTrainingAgreementModalOpen(true)}
+                      className="text-emerald-700 hover:text-emerald-900 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{isBoardingAgreementSigned ? 'הצג הסכם / הדפס 📜' : '✍️ פתח הסכם לחתימה'}</span>
+                    </button>
                   </div>
                 )}
 
