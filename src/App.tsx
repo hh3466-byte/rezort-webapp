@@ -1399,11 +1399,12 @@ export default function App() {
     if (isDaycarePassBooking && (matchedPass || daycarePassCode)) {
       const activePass = matchedPass || (daycarePassCode ? findDaycarePassByCode(daycarePassCode, settings?.daycare_passes) : null);
       const isBoardingBooking = req.serviceType === 'boarding' || activePass?.serviceType === 'boarding';
-      const daysToDeduct = isBoardingBooking ? daysCount : 1;
+      const dogCount = 1 + (req.additionalDogs ? req.additionalDogs.length : 0);
+      const daysToDeduct = (isBoardingBooking ? daysCount : 1) * dogCount;
       const remainingBefore = activePass ? Math.max(0, activePass.totalDays - activePass.usedDays) : 99;
 
       if (activePass && remainingBefore < daysToDeduct) {
-        const proceed = window.confirm(`⚠️ שימו לב: בכרטיסייה #${activePass.passCode} נותרו רק ${remainingBefore} ימים, אך הבקשה היא ל-${daysToDeduct} ימים.\nהאם לקלוט בכל זאת?`);
+        const proceed = window.confirm(`⚠️ שימו לב: בכרטיסייה #${activePass.passCode} נותרו רק ${remainingBefore} ימים, אך הבקשה היא ל-${daysToDeduct} ימים (עבור ${dogCount} כלבים).\nהאם לקלוט בכל זאת?`);
         if (!proceed) return;
       }
 
@@ -1495,7 +1496,7 @@ export default function App() {
           req.startDate,
           primaryBooking.id,
           'customer',
-          `קליטה ישירה ליומן משאלון: ${req.dogName} (${req.ownerName})`,
+          `קליטה ישירה ליומן משאלון: ${req.dogName}${req.additionalDogs && req.additionalDogs.length > 0 ? ` + ${req.additionalDogs.map(d => d.dogName).join(', ')}` : ''} (${req.ownerName})`,
           daysToDeduct,
           req.endDate || req.startDate
         );

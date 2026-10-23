@@ -99,16 +99,75 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
     return Math.max(1, calculateDaysCount(bookingDate, bookingEndDate));
   }, [isBoarding, bookingDate, bookingEndDate]);
 
+  // Parse available dogs from pass.dogName and notes
+  const availableDogs = useMemo(() => {
+    if (!pass) return [];
+    const raw = pass.dogName || '';
+    const regex = /(?:\s+ו-|\s+ו(?=[\u0590-\u05fe\w])|\s*\+\s*|\s*,\s*|\s*\/\s*|\s*&\s*)/;
+    const parts = raw
+      .split(regex)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (pass.notes) {
+      const match = pass.notes.match(/אורחים בטופס:\s*([^\]|]+)/);
+      if (match) {
+        const extra = match[1]
+          .replace(/\(.*?\)/g, '')
+          .split(regex)
+          .map(s => s.trim())
+          .filter(Boolean);
+        for (const d of extra) {
+          if (!parts.some(p => p.toLowerCase() === d.toLowerCase())) {
+            parts.push(d);
+          }
+        }
+      }
+    }
+    return Array.from(new Set(parts));
+  }, [pass]);
+
+  // Specific dog chosen for this reservation
+  const [selectedDogName, setSelectedDogName] = useState('');
+
+  // Sync initial selected dog when pass loads
+  useEffect(() => {
+    if (pass && !selectedDogName) {
+      setSelectedDogName(pass.dogName || '');
+    }
+  }, [pass]);
+
+  // Check if multiple / both dogs are selected for this reservation
+  const isBothDogs = useMemo(() => {
+    if (!selectedDogName) return false;
+    const lower = selectedDogName.toLowerCase();
+    if (lower.includes('שניהם') || lower.includes('2 כלבים') || lower.includes('זוג')) return true;
+    if (availableDogs.length >= 2) {
+      const matchesAll = availableDogs.every(d => lower.includes(d.toLowerCase()));
+      if (matchesAll) return true;
+    }
+    return /(?:\s+ו(?=[\u0590-\u05fe\w])|\s*\+\s*|\s*,\s*)/.test(selectedDogName);
+  }, [selectedDogName, availableDogs]);
+
+  const dogCount = isBothDogs ? Math.max(2, availableDogs.length) : 1;
+  const singleStayUnits = isBoarding ? nightsCount : 1;
+  const totalDaysToDeduct = singleStayUnits * dogCount;
+
   // Official Grow Production Payment URL
   const paymentUrl = pass?.paymentUrl || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
 
   // Handle single-click reservation
   const handleReserveStay = async () => {
     if (!pass) return;
+    const targetDogName = selectedDogName.trim() || pass.dogName;
+    if (!targetDogName) {
+      alert('נא לציין את שם הכלב עבורו משריינים');
+      return;
+    }
     setIsSubmittingBooking(true);
 
     try {
-      const daysToDeduct = isBoarding ? nightsCount : 1;
+      const daysToDeduct = totalDaysToDeduct;
       const targetEndDate = isBoarding ? bookingEndDate : bookingDate;
       const reqId = `req-pass-${Date.now()}`;
 
@@ -120,10 +179,24 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
         .replace(/\s+/g, ' ')
         .trim() || pass.ownerName;
 
+      // Handle primary vs additional dogs if multiple dogs are booked together
+      const primaryDog = isBothDogs && availableDogs.length >= 2 ? availableDogs[0] : targetDogName;
+      const additionalDogsList = isBothDogs && availableDogs.length >= 2
+        ? availableDogs.slice(1).map(d => ({
+            dogName: d,
+            dogBreed: '',
+            serviceType: pass.serviceType,
+            startDate: bookingDate,
+            endDate: targetEndDate,
+            sameDatesAsPrimary: true
+          }))
+        : undefined;
+
       const intakeReq: IntakeRequest = {
         id: reqId,
-        dogName: pass.dogName,
+        dogName: primaryDog,
         dogBreed: pass.dogBreed || '',
+        additionalDogs: additionalDogsList,
         ownerName: cleanOwner,
         ownerPhone: pass.ownerPhone,
         ownerAddress: '',
@@ -139,7 +212,7 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
         isVaccinated: true,
         isHouseTrained: true,
         isTreatedParasites: true,
-        notes: `[🎟️ תיאום הגעה מכרטיסייה #${pass.passCode} (שולם מראש / בנק ימים)] שעות: ${arrivalTime} עד ${pickupTime}${bookingNotes ? ` | הערות: ${bookingNotes}` : ''}`,
+        notes: `[🎟️ תיאום הגעה מכרטיסייה #${pass.passCode} (שולם מראש / בנק ימים)] שעות: ${arrivalTime} עד ${pickupTime} | עבור: ${targetDogName}${isBothDogs ? ` (${dogCount} כלבים, ${daysToDeduct} ${isBoarding ? 'יממות' : 'ימים'} לקיזוז)` : ` (כלב יחיד, ${daysToDeduct} ${isBoarding ? 'יממות' : 'ימים'} לקיזוז)`}${bookingNotes ? ` | הערות: ${bookingNotes}` : ''}`,
         internalNotes: '',
         createdAt: new Date().toISOString(),
         termsAccepted: true
@@ -153,11 +226,12 @@ export const DigitalPassCustomerView: React.FC<DigitalPassCustomerViewProps> = (
 --------------------------------
 👤 *בעלים:* ${pass.ownerName}
 📞 *טלפון:* ${pass.ownerPhone}
-🐶 *כלב:* ${pass.dogName} (${pass.dogBreed || 'מעורב'})
+🐶 *כלב/ים לשריון:* ${targetDogName}${isBothDogs ? ` (${dogCount} כלבים)` : ''}
 🏷️ *סוג:* ${isBoarding ? 'בנק 21 יממות פנסיון VIP' : `כרטיסיית ${pass.totalDays} יומיות`} (#${pass.passCode})
-📅 *תאריכים:* ${formatDateIL(bookingDate)}${isBoarding ? ` עד ${formatDateIL(targetEndDate)}` : ''} (${daysToDeduct} ${isBoarding ? 'יממות' : 'ימים'})
+📅 *תאריכים:* ${formatDateIL(bookingDate)}${isBoarding ? ` עד ${formatDateIL(targetEndDate)}` : ''} (${singleStayUnits} ${isBoarding ? 'יממות' : 'ימים'})
 ⏰ *שעות:* הגעה ב-${arrivalTime} | איסוף ב-${pickupTime}
-📊 *יתרה בכרטיסייה:* נותרו ${remainingDays} ${isBoarding ? 'יממות' : 'ימים'} לניצול
+📊 *קיזוז מהכרטיסייה:* ${daysToDeduct} ${isBoarding ? 'יממות' : 'ימים'} ${isBothDogs ? `(${singleStayUnits} יממות × ${dogCount} כלבים)` : ''}
+📊 *יתרה בכרטיסייה:* נותרו ${remainingDays} ${isBoarding ? 'יממות' : 'ימים'} לניצול (לאחר שריון זה: ${Math.max(0, remainingDays - daysToDeduct)})
 ${bookingNotes ? `💬 *הערות לקוח:* ${bookingNotes}\n` : ''}ℹ️ *מדיניות ביטולים:* ביטול או עדכון שריון יום מתאפשר עד 24 שעות מראש (נשמר מקום ייעודי).
 --------------------------------
 🗓️ *לבדיקה ביומן על התאריכים המבוקשים, אישור או דחייה בלחיצה:*
@@ -191,18 +265,19 @@ ${directCalendarLink}
       const cancellationClauseNotice = `ℹ️ *מדיניות ביטולים וזיכויים:* ביטול מתאפשר עד 24 שעות מראש. בביטול בפחות מ-24 שעות יחויב יום אחד והיתרה תישמר כזיכוי לפעמים הבאות.`;
       const shmulikMsg = isBoarding 
         ? `היי שמוליק! 🐾🐶
-מבקש לשריין פנסיון מלא עבור *${pass.dogName}* מתוך *בנק 21 יממות VIP (כרטיסייה #${pass.passCode})*:
+מבקש לשריין פנסיון מלא עבור *${targetDogName}* מתוך *בנק 21 יממות VIP (כרטיסייה #${pass.passCode})*:
 📅 *תאריך כניסה:* ${formatDateIL(bookingDate)} (יום ${getDayNameHebrew(bookingDate)}) - ${arrivalTime}
 🌙 *תאריך יציאה:* ${formatDateIL(bookingEndDate)} (יום ${getDayNameHebrew(bookingEndDate)}) - ${pickupTime}
-⏱️ *משך שהייה:* ${nightsCount} יממות (לקיזוז מהבנק, נותרו ${remainingDays} יממות)
+⏱️ *משך שהייה:* ${singleStayUnits} יממות ${isBothDogs ? `עבור ${dogCount} כלבים (${daysToDeduct} יממות סה"כ לקיזוז מהבנק)` : `(${daysToDeduct} יממות לקיזוז מהבנק)`}
+📊 *יתרה בבנק:* נותרו ${remainingDays} יממות (לאחר השריון: ${Math.max(0, remainingDays - daysToDeduct)} יממות)
 ${bookingNotes ? `💬 *הערות:* ${bookingNotes}\n` : ''}${cancellationClauseNotice}
 תודה רבה!
 ${pass.ownerName} (${pass.ownerPhone})`
         : `היי שמוליק! 🐾🐶
-מבקש לשריין יום כיף עבור *${pass.dogName}* מתוך *כרטיסיית ${pass.totalDays} יומיות (כרטיסייה #${pass.passCode})*:
+מבקש לשריין יום כיף עבור *${targetDogName}* מתוך *כרטיסיית ${pass.totalDays} יומיות (כרטיסייה #${pass.passCode})*:
 📅 *תאריך הגעה:* ${formatDateIL(bookingDate)} (יום ${getDayNameHebrew(bookingDate)})
 ⏰ *שעות:* הגעה ב-${arrivalTime}, איסוף ב-${pickupTime}
-🎟️ *קיזוז:* יום 1 מתוך היתרה (נותרו ${remainingDays} ימים)
+🎟️ *קיזוז:* ${daysToDeduct} ימים מתוך היתרה ${isBothDogs ? `(עבור ${dogCount} כלבים)` : ''} (לאחר השריון: ${Math.max(0, remainingDays - daysToDeduct)} ימים)
 ${bookingNotes ? `💬 *הערות:* ${bookingNotes}\n` : ''}${cancellationClauseNotice}
 תודה רבה!
 ${pass.ownerName} (${pass.ownerPhone})`;
@@ -434,7 +509,7 @@ ${pass.ownerName} (${pass.ownerPhone})`;
             <div>
               <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-emerald-400" />
-                <span>רוצים לתאם את ההגעה הבאה של {pass.dogName}?</span>
+                <span>רוצים לתאם את ההגעה הבאה בריזורט?</span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
                 הכלב כבר מאושר במערכת! פשוט בוחרים מועד ולוחצים לשריון מהיר
@@ -466,6 +541,92 @@ ${pass.ownerName} (${pass.ownerPhone})`;
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Dog Selection Section - Specific Dog for this Booking */}
+              <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-3.5 sm:p-4 space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="text-xs font-black text-slate-200 flex items-center gap-1.5">
+                    <Dog className="w-4 h-4 text-emerald-400" />
+                    <span>עבור איזה כלב משריינים שהייה זו? *</span>
+                  </label>
+                  {isBothDogs ? (
+                    <span className="text-[11px] font-black bg-indigo-500/20 text-indigo-300 border border-indigo-400/40 px-2.5 py-0.5 rounded-full">
+                      🐾 שריון זוגי ({dogCount} כלבים)
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                      🐶 שריון לכלב בודד
+                    </span>
+                  )}
+                </div>
+
+                {/* Quick Selection Buttons if Multiple Dogs on Pass */}
+                {availableDogs.length > 1 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableDogs.map(dName => {
+                      const isSel = selectedDogName.trim().toLowerCase() === dName.trim().toLowerCase();
+                      return (
+                        <button
+                          key={dName}
+                          type="button"
+                          onClick={() => setSelectedDogName(dName)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isSel
+                              ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400'
+                              : 'bg-slate-700/80 hover:bg-slate-700 text-slate-200 border border-slate-600'
+                          }`}
+                        >
+                          <span>🐶</span>
+                          <span>{dName}</span>
+                        </button>
+                      );
+                    })}
+
+                    {/* Both dogs button */}
+                    {availableDogs.length >= 2 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDogName(availableDogs.join(' ו'))}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          isBothDogs
+                            ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-400'
+                            : 'bg-slate-700/80 hover:bg-slate-700 text-slate-200 border border-slate-600'
+                        }`}
+                      >
+                        <span>🐾</span>
+                        <span>שניהם ({availableDogs.join(' ו')})</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Input for custom / specific dog name */}
+                <div>
+                  <input
+                    type="text"
+                    value={selectedDogName}
+                    onChange={(e) => setSelectedDogName(e.target.value)}
+                    placeholder="שם הכלב עבורו משריינים (למשל: ירדנה, קצח או שניהם)"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-bold text-white focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Live deduction explanation */}
+                <div className="text-[11px] text-slate-300 flex items-center justify-between pt-0.5 flex-wrap gap-1">
+                  <span className="flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
+                    <span>
+                      {isBothDogs
+                        ? `שריון עבור 2 כלבים: יקוזזו ${totalDaysToDeduct} ${isBoarding ? 'יממות' : 'ימים'} מהבנק (${singleStayUnits} לכל כלב)`
+                        : `שריון עבור ${selectedDogName || 'הכלב'}: יקוזזו ${totalDaysToDeduct} ${isBoarding ? 'יממות' : 'ימים'} מהבנק`}
+                    </span>
+                  </span>
+                  <span className={totalDaysToDeduct > remainingDays ? 'text-red-400 font-bold' : 'text-emerald-300 font-bold'}>
+                    {totalDaysToDeduct > remainingDays
+                      ? `⚠️ חריגה: נותרו ${remainingDays} בלבד`
+                      : `יתרה לאחר שריון: ${remainingDays - totalDaysToDeduct}`}
+                  </span>
+                </div>
+              </div>
               {/* Date Selection Mode */}
               {isBoarding ? (
                 /* Boarding Check-in and Checkout Dates */
@@ -635,8 +796,12 @@ ${pass.ownerName} (${pass.ownerPhone})`;
                   {isSubmittingBooking 
                     ? 'מעביר בקשה לשמוליק...' 
                     : isBoarding
-                    ? `שמוליק, שריין לי ${nightsCount} יממות מהבנק 🌙`
-                    : `שמוליק, שריין לי את יום ${getDayNameHebrew(bookingDate)} מהכרטיסייה 🐾`}
+                    ? isBothDogs
+                      ? `שמוליק, שריין עבור ${selectedDogName || pass.dogName} (${totalDaysToDeduct} יממות מהבנק ל-${dogCount} כלבים) 🌙`
+                      : `שמוליק, שריין עבור ${selectedDogName || pass.dogName} (${totalDaysToDeduct} יממות מהבנק) 🌙`
+                    : isBothDogs
+                    ? `שמוליק, שריין עבור ${selectedDogName || pass.dogName} (${totalDaysToDeduct} ימים מהכרטיסייה) 🐾`
+                    : `שמוליק, שריין עבור ${selectedDogName || pass.dogName} (יום 1 מהכרטיסייה) 🐾`}
                 </span>
               </button>
             </div>

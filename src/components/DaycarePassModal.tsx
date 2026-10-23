@@ -144,6 +144,7 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
 
   // Editing / Calibrating an existing pass
   const [editingPass, setEditingPass] = useState<DaycarePass | null>(null);
+  const [editDogName, setEditDogName] = useState<string>('');
   const [editTotalDays, setEditTotalDays] = useState<number | string>(10);
   const [editUsedDays, setEditUsedDays] = useState<number | string>(0);
   const [editPricePaid, setEditPricePaid] = useState<number | string>(750);
@@ -275,8 +276,12 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
             ownerPhone: req.ownerPhone || '',
             ownerEmail: req.ownerEmail || enriched.email || '',
             ownerAddress: req.ownerAddress || enriched.address || '',
-            dogName: req.dogName || '',
-            dogBreed: req.dogBreed || enriched.breed || '',
+            dogName: req.additionalDogs && req.additionalDogs.length > 0
+              ? [req.dogName, ...req.additionalDogs.map(d => d.dogName)].filter(Boolean).join(' ו')
+              : (req.dogName || ''),
+            dogBreed: req.additionalDogs && req.additionalDogs.length > 0
+              ? [req.dogBreed, ...req.additionalDogs.map(d => d.dogBreed)].filter(Boolean).join(' + ')
+              : (req.dogBreed || enriched.breed || ''),
             specialDiet: req.specialNeeds || req.specialDiet || enriched.diet || '',
             notes: req.notes || req.internalNotes || enriched.notes || '',
             source: 'intake',
@@ -907,6 +912,7 @@ ${paymentLine}
 
   const handleOpenEditPass = (pass: DaycarePass) => {
     setEditingPass(pass);
+    setEditDogName(pass.dogName || '');
     setEditTotalDays(pass.totalDays);
     setEditUsedDays(pass.usedDays);
     setEditPricePaid(pass.pricePaid || 0);
@@ -926,6 +932,7 @@ ${paymentLine}
       const isCompleted = remaining === 0;
       const updatedPass: DaycarePass = {
         ...editingPass,
+        dogName: editDogName.trim() || editingPass.dogName,
         totalDays: numEditTotal,
         usedDays: numEditUsed,
         pricePaid: numEditPrice,
@@ -2130,6 +2137,21 @@ ${paymentLine}
                 >
                   <X className="w-5 h-5" />
                 </button>
+              </div>
+
+              {/* Dog Name Input */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700">🐶 שם הכלב / הכלבים המשויכים לכרטיסייה</label>
+                <input
+                  type="text"
+                  value={editDogName}
+                  onChange={(e) => setEditDogName(e.target.value)}
+                  placeholder="למשל: ירדנה וקצח"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <span className="text-[10px] text-slate-400 block">
+                  במידה והכרטיסייה משמשת עבור מספר כלבים של אותו לקוח, רשמו את שמותיהם (למשל: ירדנה וקצח)
+                </span>
               </div>
 
               {/* Days Calibration Inputs */}
