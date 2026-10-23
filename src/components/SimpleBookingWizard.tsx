@@ -512,7 +512,8 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
 
   // Re-calculate Total Price
   const daysCount = Math.max(1, calculateDaysCount(startDate, endDate));
-  const extrasTotal = extraServices.filter(s => s.selected).reduce((sum, s) => sum + s.price, 0);
+  const customSurcharge = Number(complexitySurcharge) || 0;
+  const extrasTotal = extraServices.filter(s => s.selected).reduce((sum, s) => sum + s.price, 0) + customSurcharge;
 
   // Auto-update daily rate for boarding when duration or dog gender changes
   useEffect(() => {
@@ -540,7 +541,7 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       const base = daysCount * dailyRate;
       setTotalPrice(base + extrasTotal);
     }
-  }, [startDate, endDate, dailyRate, pricingMode, extraServices, daysCount, extrasTotal, serviceType, settings.defaultDailyRateTraining, isFreeStay]);
+  }, [startDate, endDate, dailyRate, pricingMode, extraServices, daysCount, extrasTotal, serviceType, settings.defaultDailyRateTraining, isFreeStay, complexitySurcharge]);
 
   // If initialData exists and has a total price, initialize accordingly
   useEffect(() => {
@@ -723,7 +724,22 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
       .filter(s => s.selected)
       .map(s => ({ id: s.id, name: s.name, price: s.price }));
 
+    if (Number(complexitySurcharge) > 0) {
+      selectedExtras.push({
+        id: 'interview_extra',
+        name: complexityReason.trim() || 'תוספת מיוחדת שסוכמה בראיון',
+        price: Number(complexitySurcharge)
+      });
+    }
+
     let formattedNotes = notes.trim();
+    if (Number(complexitySurcharge) > 0) {
+      const extraTag = `[תוספת אקסטרה שסוכמה בראיון: ${complexityReason.trim() || 'שירות מיוחד'} (+₪${complexitySurcharge})]`;
+      if (!formattedNotes.includes(extraTag)) {
+        formattedNotes = `${formattedNotes} ${extraTag}`.trim();
+      }
+    }
+
     if (isFreeStay) {
       const freeTag = freeStayReason === 'second_dog'
         ? (linkedMainDogName.trim() ? `[כלב נוסף - התשלום נרשם על הכלב ${linkedMainDogName.trim()}]` : '[כלב נוסף - התשלום נרשם על הכלב הראשי]')
@@ -3176,6 +3192,49 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                     </div>
                   ))}
                 </div>
+
+                {/* Custom Extra / Interview Surcharge */}
+                <div className="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-3.5 space-y-2.5 shadow-2xs mt-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                      <Plus className="w-4 h-4 text-amber-700" />
+                      <span>תוספת אקסטרה / שירות מיוחד (שסוכם בשיחת הראיון):</span>
+                    </label>
+                    <span className="text-[10px] font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-md">
+                      📄 ייכנס ישירות לחשבונית
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-2">
+                      <input
+                        type="text"
+                        value={complexityReason}
+                        onChange={(e) => setComplexityReason(e.target.value)}
+                        placeholder="סיבת האקסטרה: למשל טיפול רפואי מורכב, השגחה מיוחדת, הסעה, מזון מבושל..."
+                        className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-amber-300 focus:border-amber-500 focus:outline-none font-medium"
+                      />
+                    </div>
+                    <div>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          min="0"
+                          value={complexitySurcharge === 0 ? '' : complexitySurcharge}
+                          onChange={(e) => setComplexitySurcharge(e.target.value === '' ? 0 : Number(e.target.value) || 0)}
+                          placeholder="סכום (₪)"
+                          className="w-full bg-white text-amber-950 font-black font-mono text-xs px-3 py-2 rounded-xl border border-amber-300 focus:border-amber-500 focus:outline-none pl-8"
+                        />
+                        <span className="absolute left-3 top-2 text-xs font-bold text-amber-700">₪</span>
+                      </div>
+                    </div>
+                  </div>
+                  {Number(complexitySurcharge) > 0 && (
+                    <div className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
+                      <span>✓ תוספת של ₪{complexitySurcharge} מתווספת אוטומטית לסכום ההזמנה הכללי ({complexityReason || 'ללא פירוט'})</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Step 3 Action Buttons */}
@@ -3250,10 +3309,19 @@ export const SimpleBookingWizard: React.FC<SimpleBookingWizardProps> = ({
                       <span className="font-semibold text-slate-800">₪{dailyRate}</span>
                     </div>
                   )}
-                  {extrasTotal > 0 && (
+                  {customSurcharge > 0 && (
+                    <div className="flex justify-between text-amber-900 bg-amber-50/90 p-2 rounded-xl border border-amber-200 font-bold">
+                      <span className="flex items-center gap-1">
+                        <span>💰 תוספת אקסטרה שסוכמה בראיון:</span>
+                        {complexityReason && <span className="text-slate-700 font-medium">({complexityReason})</span>}
+                      </span>
+                      <span className="font-black font-mono text-amber-950">+₪{customSurcharge}</span>
+                    </div>
+                  )}
+                  {extraServices.filter(s => s.selected).length > 0 && (
                     <div className="flex justify-between text-indigo-700">
-                      <span>תוספות שנבחרו:</span>
-                      <span className="font-bold">+₪{extrasTotal}</span>
+                      <span>תוספות שנבחרו ({extraServices.filter(s => s.selected).map(s => s.name).join(', ')}):</span>
+                      <span className="font-bold">+₪{extraServices.filter(s => s.selected).reduce((sum, s) => sum + s.price, 0)}</span>
                     </div>
                   )}
                 </div>

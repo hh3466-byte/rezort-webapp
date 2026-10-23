@@ -70,15 +70,16 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
   });
 
   // Extras configuration state (free-text description that appears directly on invoice)
-  const [extraDescription, setExtraDescription] = useState<string>('');
-  const [extraAmount, setExtraAmount] = useState<number>(60);
+  const defaultExtraAmt = (booking.complexitySurcharge && booking.complexitySurcharge > 0) ? booking.complexitySurcharge : 60;
+  const [extraDescription, setExtraDescription] = useState<string>(() => booking.complexityReason || '');
+  const [extraAmount, setExtraAmount] = useState<number>(defaultExtraAmt);
   const [includeStayDebt, setIncludeStayDebt] = useState<boolean>(false);
   const [saveToBookingRecord, setSaveToBookingRecord] = useState<boolean>(true);
   const [addExtraToTotalBookingPrice, setAddExtraToTotalBookingPrice] = useState<boolean>(true);
 
   // Compute effective initial target amount
   const initialTargetAmt = reasonType === 'extra_service'
-    ? (includeStayDebt && currentDebt > 0 ? 60 + currentDebt : 60)
+    ? (includeStayDebt && currentDebt > 0 ? defaultExtraAmt + currentDebt : defaultExtraAmt)
     : initialAmount;
 
   const [amount, setAmount] = useState<number>(initialTargetAmt);

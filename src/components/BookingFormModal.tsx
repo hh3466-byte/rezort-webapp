@@ -17,7 +17,8 @@ import {
   AlertTriangle,
   FileText,
   HeartPulse,
-  Trash2
+  Trash2,
+  Plus
 } from 'lucide-react';
 import { Booking, ResortSettings, ServiceType, PaymentStatus, StayStatus, PaymentMethod, TrainingAgreementData } from '../types';
 import { TrainingAgreementModal } from './TrainingAgreementModal';
@@ -501,6 +502,12 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
     }
 
     let formattedNotes = notes.trim();
+    if (Number(complexitySurcharge) > 0) {
+      const extraTag = `[תוספת אקסטרה שסוכמה בראיון: ${complexityReason.trim() || 'שירות מיוחד'} (+₪${complexitySurcharge})]`;
+      if (!formattedNotes.includes(extraTag)) {
+        formattedNotes = `${formattedNotes} ${extraTag}`.trim();
+      }
+    }
     if (isFreeStay) {
       const freeTag = freeStayReason === 'second_dog'
         ? (linkedMainDogName.trim() ? `[כלב נוסף - התשלום נרשם על הכלב ${linkedMainDogName.trim()}]` : '[כלב נוסף - התשלום נרשם על הכלב הראשי]')
@@ -1765,7 +1772,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                     onChange={(e) => {
                       const r = e.target.value === '' ? 0 : Number(e.target.value) || 0;
                       setDailyRate(r);
-                      setTotalPrice(daysCount * r);
+                      setTotalPrice(daysCount * r + (complexitySurcharge || 0));
                     }}
                     className="w-full bg-white text-slate-900 font-bold text-sm px-3 py-2 rounded-xl border border-slate-200 focus:border-green-500 focus:outline-none"
                     placeholder="0"
@@ -1885,6 +1892,54 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Custom Extra / Interview Surcharge in Pricing Section */}
+            <div className="bg-amber-50/90 border-2 border-amber-300 rounded-2xl p-3.5 space-y-2.5 shadow-2xs mt-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                  <Plus className="w-4 h-4 text-amber-700" />
+                  <span>תוספת אקסטרה / שירות מיוחד (שסוכם בשיחת הראיון):</span>
+                </label>
+                <span className="text-[10px] font-bold bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-md">
+                  📄 ייכנס ישירות לחשבונית ולסכום הכללי
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="sm:col-span-2">
+                  <input
+                    type="text"
+                    value={complexityReason}
+                    onChange={(e) => setComplexityReason(e.target.value)}
+                    placeholder="סיבת האקסטרה: למשל טיפול רפואי מורכב, השגחה מיוחדת, הסעה, מזון מבושל..."
+                    className="w-full bg-white text-slate-900 text-xs px-3 py-2 rounded-xl border border-amber-300 focus:outline-none font-medium"
+                  />
+                </div>
+                <div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      value={complexitySurcharge === 0 ? '' : complexitySurcharge}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? 0 : Number(e.target.value) || 0;
+                        const prev = complexitySurcharge || 0;
+                        setComplexitySurcharge(val);
+                        setTotalPrice(prevTotal => Math.max(0, prevTotal - prev + val));
+                      }}
+                      placeholder="סכום (₪)"
+                      className="w-full bg-white text-amber-950 font-black font-mono text-xs px-3 py-2 rounded-xl border border-amber-300 focus:outline-none pl-8"
+                    />
+                    <span className="absolute left-3 top-2 text-xs font-bold text-amber-700">₪</span>
+                  </div>
+                </div>
+              </div>
+              {Number(complexitySurcharge) > 0 && (
+                <div className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
+                  <span>✓ תוספת של ₪{complexitySurcharge} מתווספת אוטומטית לסכום ההזמנה הכללי ({complexityReason || 'ללא פירוט'})</span>
+                </div>
+              )}
+            </div>
 
             {/* Real-time Grow Payment Verification Banner (Anti-Fake Payment Guard) */}
             {depositAmount > 0 && !isFreeStay && paymentMethod !== 'cash' && (
