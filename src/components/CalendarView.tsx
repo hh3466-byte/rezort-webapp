@@ -149,11 +149,17 @@ export interface PassInfo {
   totalDays: number;
   usedDays: number;
   remainingDays: number;
+  dayIndex?: number;
   isBoarding: boolean;
   label: string;
 }
 
-export function getPassInfoForBooking(booking: Booking, settings?: ResortSettings): PassInfo | null {
+export function getPassInfoForBooking(
+  booking: Booking,
+  settings?: ResortSettings,
+  targetDateStr?: string,
+  allBookings?: Booking[]
+): PassInfo | null {
   const passesList = ((settings?.daycare_passes || settings?.daycarePasses || []) as DaycarePass[]);
   const bData = (booking as any).data || {};
   const passCode = booking.daycarePassCode || (booking as any).daycare_pass_code || bData.daycarePassCode ||
@@ -163,48 +169,124 @@ export function getPassInfoForBooking(booking: Booking, settings?: ResortSetting
 
   let matchedPass: DaycarePass | undefined = undefined;
   if (passCode) {
-    const clean = passCode.trim().toUpperCase();
-    matchedPass = passesList.find(p => p.passCode.toUpperCase() === clean || p.id === clean);
+    const clean = String(passCode).trim().toUpperCase();
+    matchedPass = passesList.find(p => String(p.passCode || '').toUpperCase() === clean || p.id === clean);
   }
   if (!matchedPass && (booking.ownerPhone || bData.ownerPhone)) {
     const phone = booking.ownerPhone || bData.ownerPhone;
-    const cleanPhone = phone.replace(/\D/g, '').slice(-7);
+    const cleanPhone = String(phone).replace(/\D/g, '').slice(-7);
     if (cleanPhone.length >= 7) {
       matchedPass = passesList.find(p => {
-        const pDigits = (p.ownerPhone || '').replace(/\D/g, '').slice(-7);
+        const pDigits = String(p.ownerPhone || '').replace(/\D/g, '').slice(-7);
         return pDigits === cleanPhone && p.status === 'active';
       });
     }
   }
 
-  if (matchedPass) {
-    const remainingDays = Math.max(0, matchedPass.totalDays - matchedPass.usedDays);
-    const isBoarding = matchedPass.serviceType === 'boarding';
+  if (!matchedPass && (booking.notes?.includes('בנק 21 יממות') || booking.notes?.includes('כרטיסייה') || bData.daycarePassRemaining !== undefined)) {
+    const rem = bData.daycarePassRemaining !== undefined ? Number(bData.daycarePassRemaining) : 13;
+    matchedPass = {
+      id: 'fallback_pass',
+      passCode: passCode || '8935',
+      dogName: booking.dogName,
+      ownerName: booking.ownerName,
+      ownerPhone: booking.ownerPhone,
+      serviceType: 'boarding',
+      totalDays: 21,
+      usedDays: 21 - rem,
+      pricePaid: 2100,
+      dailyRate: 100,
+      paymentStatus: 'fully_paid',
+      validFrom: booking.startDate,
+      validUntil: '2027-10-14',
+      status: 'active',
+      usageHistory: [],
+      createdAt: '',
+      updatedAt: ''
+    };
+  }
+
+  if (!matchedPass) return null;
+
+  const totalDays = matchedPass.totalDays || 21;
+  const isBoarding = matchedPass.serviceType === 'boarding';
+
+  // If no targetDateStr, return static snapshot
+  if (!targetDateStr) {
+    const remainingDays = Math.max(0, totalDays - matchedPass.usedDays);
     return {
       isPass: true,
       passCode: matchedPass.passCode,
-      totalDays: matchedPass.totalDays,
+      totalDays,
       usedDays: matchedPass.usedDays,
       remainingDays,
+      dayIndex: matchedPass.usedDays,
       isBoarding,
-      label: `🎟️ ${remainingDays}/${matchedPass.totalDays}`
+      label: `🎟️ ${remainingDays} נותרו`
     };
   }
 
-  if (booking.notes?.includes('בנק 21 יממות') || booking.notes?.includes('כרטיסייה') || bData.daycarePassRemaining !== undefined) {
-    const rem = bData.daycarePassRemaining !== undefined ? Number(bData.daycarePassRemaining) : 13;
-    return {
-      isPass: true,
-      passCode: passCode || '8935',
-      totalDays: 21,
-      usedDays: 21 - rem,
-      remainingDays: rem,
-      isBoarding: true,
-      label: `🎟️ נותרו ${rem}`
-    };
+  // Dynamic chronological calculation for targetDateStr
+  const passCodeClean = String(matchedPass.passCode).trim().toUpperCase();
+  const phoneDigits = String(matchedPass.ownerPhone || '').replace(/\D/g, '').slice(-7);
+
+  // 1. Gather all active bookings for this pass
+  const passBookings = (allBookings || [booking]).filter(b => {
+    if (b.stayStatus === 'cancelled' || (b as any).stay_status === 'cancelled') return false;
+    const bPassCode = b.daycarePassCode || (b as any).daycare_pass_code || (b as any).data?.daycarePassCode ||
+                      (b.notes || '').match(/#?([A-Za-z0-9\u0590-\u05FF-]+)/i)?.[1];
+    if (bPassCode && String(bPassCode).trim().toUpperCase() === passCodeClean) return true;
+    const bPhoneDigits = String(b.ownerPhone || (b as any).owner_phone || '').replace(/\D/g, '').slice(-7);
+    return Boolean(bPhoneDigits && phoneDigits && bPhoneDigits === phoneDigits);
+  });
+
+  if (!passBookings.some(b => b.id === booking.id)) {
+    passBookings.push(booking);
   }
 
-  return null;
+  // 2. Expand all stay nights/dates across all pass bookings
+  const stayDateSet = new Set<string>();
+  passBookings.forEach(pb => {
+    const s = pb.startDate;
+    const e = pb.endDate;
+    if (!s) return;
+    const isPbBoarding = pb.serviceType === 'boarding' || isBoarding;
+    
+    let curr = s;
+    const endLimit = (isPbBoarding && e && e > s) ? e : addDays(s, 1);
+    while (curr < endLimit) {
+      stayDateSet.add(curr);
+      curr = addDays(curr, 1);
+    }
+  });
+
+  const allStayDates = Array.from(stayDateSet).sort();
+
+  // 3. Find unbooked prior usage (e.g. past trial stays or manual entries in usageHistory)
+  const earliestBookingDate = allStayDates[0] || booking.startDate;
+  let priorUnbookedDays = 0;
+  (matchedPass.usageHistory || []).forEach(entry => {
+    const hasBooking = entry.bookingId && passBookings.some(pb => pb.id === entry.bookingId);
+    if (!hasBooking && (!entry.date || entry.date < earliestBookingDate)) {
+      priorUnbookedDays += ((entry as any).daysDeducted || entry.daysCount || 0);
+    }
+  });
+
+  // 4. Count days consumed up to targetDateStr
+  const bookedDatesUsedUpToTarget = allStayDates.filter(d => d <= targetDateStr).length;
+  const totalConsumedOnThisDate = priorUnbookedDays + bookedDatesUsedUpToTarget;
+  const remainingOnThisDate = Math.max(0, totalDays - totalConsumedOnThisDate);
+
+  return {
+    isPass: true,
+    passCode: matchedPass.passCode,
+    totalDays,
+    usedDays: totalConsumedOnThisDate,
+    remainingDays: remainingOnThisDate,
+    dayIndex: totalConsumedOnThisDate,
+    isBoarding,
+    label: `🎟️ ${remainingOnThisDate} נותרו`
+  };
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -931,7 +1013,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       dayBookings.map((b, bIdx) => {
                         const isEnded = b.stayStatus === 'checked_out' || (b.endDate < todayStr);
                         const remainingDebt = Math.max(0, Math.round((Number(b.totalPrice) || 0) - (Number(b.depositAmount) || 0)));
-                        const passInfo = getPassInfoForBooking(b, settings);
+                        const passInfo = getPassInfoForBooking(b, settings, day.dateStr, activeBookings);
                         const isPassBooking = Boolean(passInfo || (b as any).data?.daycarePassId || b.daycarePassId || b.notes?.includes('כרטיסייה') || b.notes?.includes('מימוש מתוך כרטיסייה'));
                         const isPassUnpaid = isPassBooking && ((b as any).data?.daycarePassPaid === false || b.daycarePassPaid === false || b.paymentStatus === 'unpaid');
                         const isPaid = (b.paymentStatus === 'fully_paid' && !isPassUnpaid) || (remainingDebt === 0 && (Number(b.totalPrice) || 0) > 0);
@@ -1173,7 +1255,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       const isDimmed = Boolean(searchQuery.trim() && !isMatch);
                       const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, dayObj.dateStr);
                       const pairInfo = getBookingPairInfo(b, dateBookings);
-                      const passInfo = getPassInfoForBooking(b, settings);
+                      const passInfo = getPassInfoForBooking(b, settings, dayObj.dateStr, activeBookings);
                       const currentDogKey = `${(b.dogName || '').trim().toLowerCase()}_${(b.ownerPhone || b.ownerName || '').trim().toLowerCase()}`;
                       const isHovered = Boolean(
                         (hoveredBookingId && hoveredBookingId === b.id) ||
@@ -1426,7 +1508,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           cardClasses += stayColors.cardBorderBg;
                         }
 
-                        const passInfo = getPassInfoForBooking(b, settings);
+                        const passInfo = getPassInfoForBooking(b, settings, day.dateStr, activeBookings);
 
                         return (
                           <div
@@ -1644,7 +1726,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     cardClasses += stayColors.cardBorderBg;
                   }
 
-                  const passInfo = getPassInfoForBooking(booking, settings);
+                  const passInfo = getPassInfoForBooking(booking, settings, focusedDate, activeBookings);
 
                   return (
                     <div
