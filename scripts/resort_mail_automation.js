@@ -224,23 +224,185 @@ function processResortEmails() {
                                 cleanBody.match(/([\d,]+(?:\.\d{2})?)\s*(?:₪|ש"ח|שח)/i);
               var extractedAmount = amountMatch ? amountMatch[1] : "";
 
-              var payerMatch = cleanBody.match(/(?:שם הלקוח|שם המשלם|שם מלא|לקוח)[:\s]+([א-תA-Za-z\s]+?)(?:טלפון|נייד|סכום|דוא"ל|תאריך|\n|$)/i);
+              var payerMatch = cleanBody.match(/(?:ממי\s+התשלום\s+שם|שם(?:\s+הלקוח|\s+המשלם|\s+מלא)?|לקוח)[:\s]+([א-תA-Za-z\s]+?)(?:טלפון|נייד|סכום|דוא"?ל|מייל|תאריך|\n|$)/i);
               var extractedPayer = payerMatch ? payerMatch[1].trim() : "";
 
               var phoneMatch = cleanBody.match(/(?:טלפון|נייד)[:\s]+([\d\-]{9,13})/i) || cleanBody.match(/(05\d[\-\d]{7,8})/);
               var extractedPhone = phoneMatch ? phoneMatch[1].trim() : "";
+              var cleanDigits = extractedPhone.replace(/\D/g, '').slice(-9);
 
+              var matchedOwnerName = extractedPayer;
+              var matchedDogName = "";
+              var matchedServiceDetails = "";
+              var isPassUpdated = false;
+              var isBookingUpdated = false;
+
+              // 1. Cross-reference with Daycare Passes in Supabase
+              if (cleanDigits && cleanDigits.length >= 7) {
+                try {
+                  var sRes = UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/settings?select=data&id=eq.default", {
+                    method: "get",
+                    headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+                    muteHttpExceptions: true
+                  });
+                  if (sRes.getResponseCode() === 200) {
+                    var sJson = JSON.parse(sRes.getContentText());
+                    var sData = (sJson && sJson[0] && sJson[0].data) || {};
+                    var passes = sData.daycare_passes || sData.daycarePasses || [];
+                    var passUpdatedList = null;
+                    for (var pIdx = 0; pIdx < passes.length; pIdx++) {
+                      var p = passes[pIdx];
+                      var pDigits = (p.ownerPhone || '').replace(/\D/g, '').slice(-9);
+                      if (pDigits && (pDigits === cleanDigits || pDigits.endsWith(cleanDigits) || cleanDigits.endsWith(pDigits))) {
+                        if (!matchedOwnerName) matchedOwnerName = p.ownerName;
+                        if (!matchedDogName) matchedDogName = p.dogName;
+                        var sTypeLabel = p.serviceType === 'boarding' ? 'חבילת ' + p.totalDays + ' יממות פנסיון VIP' : 'כרטיסיית ' + p.totalDays + ' ימים';
+                        matchedServiceDetails = sTypeLabel + ' (כרטיסייה #' + p.passCode + ')';
+
+                        if (p.paymentStatus !== 'fully_paid') {
+                          passes[pIdx].paymentStatus = 'fully_paid';
+                          passes[pIdx].status = 'active';
+                          passes[pIdx].updatedAt = new Date().toISOString();
+                          passUpdatedList = passes;
+                          isPassUpdated = true;
+                        }
+                        break;
+                      }
+                    }
+                    if (passUpdatedList) {
+                      sData.daycare_passes = passUpdatedList;
+                      UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/settings?id=eq.default", {
+                        method: "patch",
+                        headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+                        payload: JSON.stringify({ data: sData }),
+                        muteHttpExceptions: true
+                      });
+                    }
+                  }
+                } catch (ePass) {
+                  Logger.log("שגיאה בסנכרון כרטיסייה: " + ePass.toString());
+                }
+              }
+
+              // 2. Cross-reference with Bookings in Supabase
+              if (cleanDigits && cleanDigits.length >= 7 && (!matchedDogName || !matchedOwnerName)) {
+                try {
+                  var bUrl = SUPABASE_URL + "/rest/v1/bookings?owner_phone=ilike.*" + cleanDigits.slice(-7) + "*&stay_status=neq.cancelled&order=created_at.desc&limit=1";
+                  var bRes = UrlFetchApp.fetch(bUrl, {
+                    method: "get",
+                    headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+                    muteHttpExceptions: true
+                  });
+                  if (bRes.getResponseCode() === 200) {
+                    var foundBookings = JSON.parse(bRes.getContentText());
+                    if (foundBookings && foundBookings.length > 0) {
+                      var targetB = foundBookings[0];
+                      if (!matchedDogName) matchedDogName = targetB.dog_name || targetB.dogName || "";
+                      if (!matchedOwnerName) matchedOwnerName = targetB.owner_name || targetB.ownerName || "";
+                      if (!matchedServiceDetails) {
+                        matchedServiceDetails = "הזמנה ביומן (" + (targetB.service_type || "אירוח") + ")";
+                      }
+                    }
+                  }
+                } catch (eBk) {
+                  Logger.log("שגיאה בסנכרון הזמנה: " + eBk.toString());
+                }
+              }
+
+              // 2.5 Cross-reference with Intake Requests in Supabase if not matched yet
+              if (cleanDigits && cleanDigits.length >= 7 && (!matchedDogName || !matchedServiceDetails)) {
+                try {
+                  var inUrl = SUPABASE_URL + "/rest/v1/intake_requests?owner_phone=ilike.*" + cleanDigits.slice(-7) + "*&order=created_at.desc&limit=1";
+                  var inRes = UrlFetchApp.fetch(inUrl, {
+                    method: "get",
+                    headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+                    muteHttpExceptions: true
+                  });
+                  if (inRes.getResponseCode() === 200) {
+                    var foundIntakes = JSON.parse(inRes.getContentText());
+                    if (foundIntakes && foundIntakes.length > 0) {
+                      var targetIn = foundIntakes[0];
+                      if (!matchedDogName) matchedDogName = targetIn.dog_name || targetIn.dogName || "";
+                      if (!matchedOwnerName) matchedOwnerName = targetIn.owner_name || targetIn.ownerName || "";
+                      if (!matchedServiceDetails) {
+                        var stIn = targetIn.service_type || targetIn.serviceType || "פנסיון";
+                        matchedServiceDetails = "שאלון קליטה (" + stIn + ")";
+                      }
+                    }
+                  }
+                } catch (eIn) {}
+              }
+
+              // 2.6 Extract service name from email body if present
+              if (!matchedServiceDetails) {
+                var bodySrvMatch = cleanBody.match(/(?:עבור שירות|עבור המוצר|שם השירות|עבור|שירות)[:\s]+([^,\n\r]+?)(?:סכום|מחיר|טלפון|מייל|תאריך|\n|$)/i);
+                if (bodySrvMatch && bodySrvMatch[1].trim() && bodySrvMatch[1].trim() !== 'הריזורט לכלב') {
+                  matchedServiceDetails = bodySrvMatch[1].trim();
+                }
+              }
+
+              // 3. Fallback: Query Green-API contact info (which stores names like "סער (ירדנה)")
+              if ((!matchedDogName || !matchedOwnerName) && cleanDigits && cleanDigits.length >= 7) {
+                try {
+                  var intlPhone = cleanDigits.length === 9 ? '972' + cleanDigits : extractedPhone;
+                  var gRes = UrlFetchApp.fetch("https://api.green-api.com/waInstance" + GREEN_API_ID + "/getContactInfo/" + GREEN_API_TOKEN, {
+                    method: "post",
+                    headers: { "Content-Type": "application/json" },
+                    payload: JSON.stringify({ chatId: intlPhone + "@c.us" }),
+                    muteHttpExceptions: true
+                  });
+                  if (gRes.getResponseCode() === 200) {
+                    var gJson = JSON.parse(gRes.getContentText());
+                    var contactName = gJson.contactName || gJson.name || "";
+                    if (contactName) {
+                      var matchParens = contactName.match(/^\[?(?:חדש)?\]?\s*([^(]+?)\s*\(([^)]+)\)/);
+                      if (matchParens) {
+                        if (!matchedOwnerName) matchedOwnerName = matchParens[1].trim();
+                        if (!matchedDogName) matchedDogName = matchParens[2].trim();
+                      } else if (!matchedOwnerName) {
+                        matchedOwnerName = contactName.replace(/^\[?(?:חדש)?\]?\s*/, '').trim();
+                      }
+                    }
+                  }
+                } catch (eG) {}
+              }
+
+              // 4. Record into grow_incoming_payments in Supabase
+              try {
+                var numAmt = parseFloat(extractedAmount.replace(/,/g, '')) || 0;
+                UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/grow_incoming_payments", {
+                  method: "post",
+                  headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates" },
+                  payload: JSON.stringify({
+                    id: "grow_mail_" + msgId,
+                    reference_id: String(msgId),
+                    customer_name: (matchedOwnerName || "לקוח") + (matchedDogName ? " (" + matchedDogName + ")" : ""),
+                    customer_phone: extractedPhone,
+                    amount: numAmt,
+                    payment_method: "Grow / Bit",
+                    raw_email_snippet: subject + " - " + cleanBody.substring(0, 300),
+                    status: "completed",
+                    created_at: new Date().toISOString()
+                  }),
+                  muteHttpExceptions: true
+                });
+              } catch (ePayDb) {}
+
+              var servicePurchased = matchedServiceDetails || "שירותי הריזורט לכלב";
+
+              // Build full WhatsApp message - ALWAYS with Client Name, Dog Name and Purchased Service
               var waMsg = "🟢 *התקבל תשלום Grow חדש לריזורט לכלב!*\n\n" +
-                          (extractedPayer ? "👤 *משלם:* " + extractedPayer + "\n" : "") +
-                          (extractedAmount ? "💰 *סכום:* ₪" + extractedAmount + "\n" : "") +
+                          "👤 *שם הלקוח:* " + (matchedOwnerName || "לא צוין") + "\n" +
+                          "🐶 *שם הכלב:* " + (matchedDogName || "לא צוין") + "\n" +
+                          (extractedAmount ? "💰 *סכום:* ₪" + extractedAmount + " (Grow / Bit)\n" : "") +
                           (extractedPhone ? "📞 *טלפון:* " + extractedPhone + "\n" : "") +
-                          "📄 *נושא המייל:* " + subject + "\n" +
-                          "✅ *סטטוס:* התשלום זוהה במייל ועודכן במערכת.";
+                          "📄 *נושא המייל (שירות שנרכש):* " + servicePurchased + "\n" +
+                          "✅ *סטטוס:* " + (isPassUpdated ? "הכרטיסייה הופעלה ועודכנה כמשולמת! ✅" : isBookingUpdated ? "ההזמנה עודכנה כמשולמת ביומן! ✅" : "התשלום זוהה במייל ועודכן במערכת.");
 
               sendWhatsAppFromAppsScript("972506336896@c.us", waMsg); // שמוליק
               sendWhatsAppFromAppsScript("972543200007@c.us", waMsg); // חגי
               scriptProperties.setProperty("grow_notified_" + msgId, "true");
-              Logger.log("✓ נשלחה התראת וואטסאפ על תשלום Grow לשמוליק ולחגי");
+              Logger.log("✓ נשלחה התראת וואטסאפ על תשלום Grow לשמוליק ולחגי (עם שם לקוח, כלב ושירות שנרכש)");
             }
           } catch (eNotify) {
             Logger.log("הערה בהתראת וואטסאפ לתשלום Grow: " + eNotify.toString());

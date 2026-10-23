@@ -115,7 +115,7 @@ export default async function handler(req, res) {
 
     const rawSum = data.sum ?? data.amount ?? data.total ?? data.payment_sum ?? data.price ?? data.transactionAmount ?? payload.sum ?? payload.amount ?? payload.total ?? payload.payment_sum ?? payload.price ?? 0;
     const amount = Number(rawSum) || 0;
-    const fullName = (data.fullName || data.payerName || data.payer_name || data.customer_name || data.customerName || data.name || payload.fullName || payload.payerName || payload.customer_name || '').trim();
+    let fullName = (data.fullName || data.payerName || data.payer_name || data.customer_name || data.customerName || data.name || payload.fullName || payload.payerName || payload.customer_name || '').trim();
     const rawPhone = data.phone || data.payerPhone || data.payer_phone || data.customer_phone || data.customerPhone || data.mobile || payload.phone || payload.payerPhone || payload.customer_phone || '';
     const cleanPhone = cleanPhoneNumber(rawPhone);
     const transactionId = String(data.transactionId || data.asmachta || data.transaction_id || data.id || payload.transactionId || payload.asmachta || Date.now());
@@ -437,14 +437,17 @@ export default async function handler(req, res) {
     }).catch(capiErr => console.warn('Non-blocking Meta CAPI purchase event warning:', capiErr));
 
     // Send real-time WhatsApp alert to BOTH Manager (054-3200007) and Shmulik (050-6336896) ONLY for verified Resort transactions
-    let dogName = 'הכלב';
+    let dogName = '';
     let serviceName = 'פנסיון';
     let paymentClassification = 'מקדמה';
-
-    let alertMsg = '';
+    let detailsText = '';
+    let statusText = '';
 
     if (matchedBooking) {
-      dogName = matchedBooking.dog_name || (matchedBooking.data && matchedBooking.data.dogName) || 'הכלב';
+      dogName = matchedBooking.dog_name || (matchedBooking.data && matchedBooking.data.dogName) || '';
+      if (!fullName || fullName === 'לקוח') {
+        fullName = matchedBooking.owner_name || (matchedBooking.data && matchedBooking.data.ownerName) || fullName;
+      }
       const st = (matchedBooking.service_type || (matchedBooking.data && matchedBooking.data.serviceType) || '').toLowerCase();
       if (st.includes('train') || st.includes('אילוף')) serviceName = 'אילוף';
       else if (st.includes('daycare') || st.includes('מעון') || st.includes('יום')) serviceName = 'מעון יום';
@@ -457,9 +460,13 @@ export default async function handler(req, res) {
       } else {
         paymentClassification = 'מקדמה';
       }
-      alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על שירות ${serviceName} (${paymentClassification}).`;
+      detailsText = `${serviceName} (${paymentClassification})`;
+      statusText = 'ההזמנה ביומן עודכנה כמשולמת/מקדמה הוסדרה! ✅';
     } else if (matchingIntake) {
-      dogName = matchingIntake.dog_name || matchingIntake.dogName || 'הכלב';
+      dogName = matchingIntake.dog_name || matchingIntake.dogName || '';
+      if (!fullName || fullName === 'לקוח') {
+        fullName = matchingIntake.owner_name || matchingIntake.ownerName || fullName;
+      }
       const st = (matchingIntake.service_type || matchingIntake.serviceType || '').toLowerCase();
       if (st.includes('train') || st.includes('אילוף')) serviceName = 'אילוף';
       else if (st.includes('daycare') || st.includes('מעון')) serviceName = 'מעון יום';
@@ -471,12 +478,17 @@ export default async function handler(req, res) {
       } else {
         paymentClassification = 'מקדמה';
       }
-      alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על שירות ${serviceName} (${paymentClassification}).`;
+      detailsText = `שאלון קליטה: ${serviceName} (${paymentClassification})`;
+      statusText = 'שאלון הקליטה עודכן עם המקדמה! ✅';
     } else if (matchedPass) {
-      dogName = matchedPass.dogName || 'הכלב';
+      dogName = matchedPass.dogName || '';
+      if (!fullName || fullName === 'לקוח') {
+        fullName = matchedPass.ownerName || fullName;
+      }
       serviceName = matchedPass.serviceType === 'boarding' ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית פעילות יומית';
       paymentClassification = 'תשלום מלא';
-      alertMsg = `שלום, התקבל תשלום ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} בעבור ${dogName} על ${serviceName} (${paymentClassification} ✅ כרטיסייה ${matchedPass.passCode}). השהייה ביומן עודכנה לירוקה ומאושרת 🟢!`;
+      detailsText = `${serviceName} (כרטיסייה ${matchedPass.passCode})`;
+      statusText = `הכרטיסייה ${matchedPass.passCode} הופעלה והשהייה ביומן עודכנה כירוקה ומאושרת! 🟢`;
       
       // 1. Update pass in daycare_passes table
       try {
@@ -546,8 +558,50 @@ export default async function handler(req, res) {
         console.warn('Error auto-reconciling pass bookings:', bkErr);
       }
     } else {
-      alertMsg = `שלום, התקבל תשלום חדש ב-Grow ע״ס ${amount.toLocaleString()} ₪ מ${fullName || 'לקוח'} (📞 ${cleanPhone || 'ללא נייד'}). ⚠️ לא אותר שיוך אוטומטי להזמנה ביומן - נדרש שיוך ידני!`;
+      detailsText = 'תשלום כללי ב-Grow';
+      statusText = 'התשלום זוהה ועודכן במערכת. ⚠️ נדרש אימות שיוך להזמנה ביומן.';
     }
+
+    // Try fallback lookup from Green-API WhatsApp contact book if dogName or fullName are missing
+    if ((!dogName || !fullName || fullName === 'לקוח') && cleanPhone) {
+      try {
+        const contactChatId = `${cleanPhone.startsWith('0') ? '972' + cleanPhone.slice(1) : cleanPhone}@c.us`;
+        const contactUrl = getGreenApiUrl(GREEN_API_ID, 'getContactInfo', GREEN_API_TOKEN);
+        const contactRes = await fetch(contactUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId: contactChatId })
+        });
+        if (contactRes.ok) {
+          const cInfo = await contactRes.json();
+          const cName = cInfo.name || cInfo.contactName || '';
+          const m = cName.match(/^\[?(?:חדש)?\]?\s*([^(]+?)\s*\(([^)]+)\)/);
+          if (m) {
+            if (!fullName || fullName === 'לקוח') fullName = m[1].trim();
+            if (!dogName) dogName = m[2].trim();
+          } else if (cName && (!fullName || fullName === 'לקוח')) {
+            fullName = cName.replace(/^\[?(?:חדש)?\]?\s*/, '').trim();
+          }
+        }
+      } catch (eContact) {
+        console.warn('Green-API contact lookup fallback warning:', eContact);
+      }
+    }
+
+    // Build standard alert WhatsApp message - GUARANTEE customer name and dog name are ALWAYS present
+    const displayOwner = fullName && fullName !== 'לקוח' ? fullName : (cleanPhone ? `לקוח (${cleanPhone})` : 'לא צוין');
+    const displayDog = dogName || 'בבירור';
+
+    const displayService = detailsText || 'שירותי הריזורט לכלב';
+
+    const alertMsg = "🟢 *התקבל תשלום Grow חדש לריזורט לכלב!*\n\n" +
+                     "👤 *שם הלקוח:* " + displayOwner + "\n" +
+                     "🐶 *שם הכלב:* " + displayDog + "\n" +
+                     "💰 *סכום:* ₪" + amount.toLocaleString() + " (Grow / Bit)\n" +
+                     (cleanPhone ? "📞 *טלפון:* " + cleanPhone + "\n" : "") +
+                     "📄 *נושא (שירות שנרכש):* " + displayService + "\n" +
+                     (transactionId ? "🧾 *אסמכתא:* " + transactionId + "\n" : "") +
+                     "✅ *סטטוס:* " + statusText;
 
     // Automatically ensure customer is created in Morning and associate Grow document
     syncMorningCustomer({
