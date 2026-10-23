@@ -2407,7 +2407,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         title="ערוך פרטי הזמנה"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
-                        <span>ערוך</span>
+                        <span>ערוך מחדש הזמנה</span>
                       </button>
                     </div>
 
