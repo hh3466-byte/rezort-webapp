@@ -97,7 +97,7 @@ export async function createGrowDynamicPaymentLink(
       pageCode: GROW_PAGE_CODE,
       paymentLinkType: 2, // Locked amount
       isActive: 1,
-      title: `הריזורט לכלב - ${params.dogName || 'שריון אירוח'}`,
+      title: params.description ? params.description.slice(0, 50) : `הריזורט לכלב - ${params.dogName || 'שריון אירוח'}`,
       chargeType: 1,
       products: {
         data: [
@@ -126,7 +126,13 @@ export async function createGrowDynamicPaymentLink(
       successUrl: typeof window !== 'undefined' ? `${window.location.origin}/payment-success` : 'https://rezort-webapp.vercel.app/payment-success',
       notifyUrl: 'https://rezort-webapp.vercel.app/api/grow-webhook',
       cField1: params.bookingId || `b-${Date.now()}`,
-      cField2: cleanPhone(params.ownerPhone)
+      cField2: cleanPhone(params.ownerPhone),
+      cField3: (params.description || '').slice(0, 100),
+      customFields: {
+        cField1: params.bookingId || `b-${Date.now()}`,
+        cField2: cleanPhone(params.ownerPhone),
+        cField3: (params.description || '').slice(0, 100)
+      }
     };
 
     const directController = new AbortController();

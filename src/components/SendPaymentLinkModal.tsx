@@ -21,16 +21,7 @@ import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
 import { isRealTrainingBooking } from '../utils/trainerPaymentUtils';
 import { TrainingAgreementModal } from './TrainingAgreementModal';
 
-export const EXTRA_PRESETS = [
-  { label: '🦮 קולר / רצועה', defaultDesc: 'קולר / רצועה', defaultPrice: 60 },
-  { label: '🩺 ביקור וטרינר', defaultDesc: 'ביקור במרפאה וטרינרית ובדיקה', defaultPrice: 200 },
-  { label: '💊 תרופות וטיפול', defaultDesc: 'רכישת תרופות וטיפול רפואי', defaultPrice: 120 },
-  { label: '✂️ רחצה / מקלחת', defaultDesc: 'רחצה וטיפוח לקראת שחרור', defaultPrice: 90 },
-  { label: '🥣 מזון מיוחד', defaultDesc: 'מזון רפואי / מיוחד מותאם', defaultPrice: 50 },
-  { label: '🦴 חטיפים / צעצוע', defaultDesc: 'מארז חטיפים וצעצוע העשרה', defaultPrice: 40 },
-  { label: '🚗 הסעה / מונית', defaultDesc: 'הסעה מיוחדת / מונית דוג', defaultPrice: 150 },
-  { label: '✏️ מותאם אישית', defaultDesc: '', defaultPrice: 0 }
-];
+
 
 interface SendPaymentLinkModalProps {
   isOpen: boolean;
@@ -78,9 +69,8 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
     return 'general_booking';
   });
 
-  // Extras configuration state
-  const [extraCategory, setExtraCategory] = useState<string>('🦮 קולר / רצועה');
-  const [extraDescription, setExtraDescription] = useState<string>('קולר / רצועה');
+  // Extras configuration state (free-text description that appears directly on invoice)
+  const [extraDescription, setExtraDescription] = useState<string>('');
   const [extraAmount, setExtraAmount] = useState<number>(60);
   const [includeStayDebt, setIncludeStayDebt] = useState<boolean>(false);
   const [saveToBookingRecord, setSaveToBookingRecord] = useState<boolean>(true);
@@ -257,9 +247,13 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
     setIsGeneratingLink(true);
     try {
       const reasonLabel = currentReason === 'extra_service'
-        ? (incStay && currentDebt > 0
-            ? `תשלום שהייה ואקסטרה (${extDesc || 'שירות נוסף'}) - ${booking.dogName}`
-            : `תוספת תשלום עבור ${extDesc || 'אקסטרה'} - ${booking.dogName}`)
+        ? (extDesc && extDesc.trim()
+            ? (incStay && currentDebt > 0
+                ? `${extDesc.trim()} + יתרת שהייה (${booking.dogName})`
+                : `${extDesc.trim()} (${booking.dogName})`)
+            : (incStay && currentDebt > 0
+                ? `תשלום שהייה ואקסטרה (${booking.dogName})`
+                : `חיוב אקסטרה / שירות נוסף (${booking.dogName})`))
         : currentReason === 'extra_day'
         ? `תשלום יום נוסף - ${booking.dogName}`
         : `שריון אירוח בריזורט לכלב - ${booking.dogName} (${stayDates})`;
@@ -322,22 +316,6 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
     fetchDynamicLink(newAmt, newReason, extraDescription, extraAmount, includeStayDebt);
   };
 
-  const handlePresetClick = (preset: typeof EXTRA_PRESETS[0]) => {
-    setExtraCategory(preset.label);
-    const newDesc = preset.defaultDesc;
-    setExtraDescription(newDesc);
-    let newPrice = extraAmount;
-    if (preset.defaultPrice > 0) {
-      newPrice = preset.defaultPrice;
-      setExtraAmount(newPrice);
-    }
-    const newAmt = includeStayDebt && currentDebt > 0 ? (newPrice + currentDebt) : newPrice;
-    setAmount(newAmt);
-    if (!isManuallyEdited) {
-      setMessageText(buildDefaultMessage(newAmt, customLink, isLockedLink, 'extra_service', newDesc, newPrice, includeStayDebt));
-    }
-    fetchDynamicLink(newAmt, 'extra_service', newDesc, newPrice, includeStayDebt);
-  };
 
   const handleExtraDescriptionChange = (newDesc: string) => {
     setExtraDescription(newDesc);
@@ -705,40 +683,21 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
                     </span>
                   </div>
 
-                  {/* Quick Preset Chips */}
+                  {/* Free-Text Description Input - Enters directly into the customer's invoice */}
                   <div>
-                    <label className="text-[11px] font-extrabold text-slate-700 mb-1.5 block">
-                      בחירה מהירה:
-                    </label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {EXTRA_PRESETS.map((preset) => (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          onClick={() => handlePresetClick(preset)}
-                          className={`text-xs px-2.5 py-1 rounded-xl border transition-all cursor-pointer active:scale-95 font-bold ${
-                            extraCategory === preset.label
-                              ? 'bg-emerald-700 text-white border-emerald-800 shadow-xs'
-                              : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50'
-                          }`}
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Description Input */}
-                  <div>
-                    <label className="text-xs font-extrabold text-slate-800 block mb-1">
-                      עבור מה בוצעה התוספת? *
+                    <label className="text-xs font-black text-slate-800 flex items-center justify-between mb-1.5">
+                      <span>עבור מה בוצעה התוספת? *</span>
+                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                        📄 ייכנס ישירות לחשבונית של הלקוח
+                      </span>
                     </label>
                     <input
                       type="text"
                       value={extraDescription}
                       onChange={(e) => handleExtraDescriptionChange(e.target.value)}
-                      placeholder="לדוגמה: קולר סרסטו נגד קרציות, ביקור במרפאה וטרינרית, תרופות..."
-                      className="w-full bg-white text-slate-900 font-bold text-xs sm:text-sm px-3 py-2 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none shadow-2xs"
+                      placeholder="הקלד כאן פירוט חופשי (לדוגמה: קולר סרסטו, ביקור וטרינר, תרופות...)"
+                      className="w-full bg-white text-slate-900 font-bold text-xs sm:text-sm px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none shadow-2xs transition-all placeholder:text-slate-400 placeholder:font-normal"
+                      autoFocus
                     />
                   </div>
 

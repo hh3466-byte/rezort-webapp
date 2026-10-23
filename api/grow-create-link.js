@@ -60,7 +60,7 @@ export default async function handler(req, res) {
       pageCode: GROW_PAGE_CODE,
       paymentLinkType: 2, // Closed for one single payment with locked amount
       isActive: 1,
-      title: `הריזורט לכלב - שריון עבור ${dogName}`,
+      title: description ? description.slice(0, 50) : `הריזורט לכלב - שריון עבור ${dogName}`,
       chargeType: 1,
       products: {
         data: [
@@ -90,7 +90,13 @@ export default async function handler(req, res) {
       successUrl,
       notifyUrl,
       cField1: bookingId || `b-${Date.now()}`,
-      cField2: formattedPhone
+      cField2: formattedPhone,
+      cField3: (description || '').slice(0, 100),
+      customFields: {
+        cField1: bookingId || `b-${Date.now()}`,
+        cField2: formattedPhone,
+        cField3: (description || '').slice(0, 100)
+      }
     };
 
     const endpointUrl = `${GROW_BASE_URL}/api/light/server/1.0/CreatePaymentLink`;
