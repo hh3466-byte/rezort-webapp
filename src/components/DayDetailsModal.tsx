@@ -814,8 +814,8 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
 
       {/* Action Buttons Section */}
       <div className="pt-3 mt-3 border-t border-slate-200/80 flex flex-col gap-2.5">
-        {/* Tier 1: Primary Operation (Check-in / Check-out - 70% width, large, prominent) */}
-        <div className="w-full flex items-center justify-start">
+        {/* Tier 1: Primary Operation (Check-in / Check-out - 70% width, centered in window) */}
+        <div className="w-full flex items-center justify-center">
           {/* Check-in Button for Booked/Arriving Dogs */}
           {(booking.stayStatus === 'booked' || (booking.stayStatus as any) === 'confirmed') && onToggleStayStatus && (
             <button
@@ -825,7 +825,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 onToggleStayStatus(booking.id, 'checked_in');
               }}
               title="סמן שהכלב נכנס ונקלט כעת בפועל בריזורט (צ'ק-אין מהיר)"
-              className="w-[70%] min-w-[220px] max-w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-sm sm:text-base py-3 px-4 rounded-xl font-black flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-md hover:shadow-lg"
+              className="w-[70%] min-w-[220px] max-w-full mx-auto bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-sm sm:text-base py-3 px-4 rounded-xl font-black flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-md hover:shadow-lg"
             >
               <CheckCircle className="w-5 h-5 text-white shrink-0" />
               <span className="truncate">קלוט לריזורט (צ'ק-אין) 🐾</span>
@@ -850,7 +850,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 }
               }}
               title="שחרר כלב הביתה (צ'ק-אאוט מהיר)"
-              className="w-[70%] min-w-[220px] max-w-full bg-sky-600 hover:bg-sky-700 active:scale-[0.98] text-white text-sm sm:text-base py-3 px-4 rounded-xl font-black flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-md hover:shadow-lg"
+              className="w-[70%] min-w-[220px] max-w-full mx-auto bg-sky-600 hover:bg-sky-700 active:scale-[0.98] text-white text-sm sm:text-base py-3 px-4 rounded-xl font-black flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-md hover:shadow-lg"
             >
               <Home className="w-5 h-5 text-white shrink-0" />
               <span className="truncate">שחרר הביתה (צ'ק-אאוט) 🏁</span>
@@ -866,7 +866,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 onToggleStayStatus(booking.id, 'checked_in');
               }}
               title="החזר כלב למצב שוהה בריזורט"
-              className="w-[70%] min-w-[220px] max-w-full bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-800 text-xs sm:text-sm py-3 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border border-slate-300 shadow-2xs"
+              className="w-[70%] min-w-[220px] max-w-full mx-auto bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-800 text-xs sm:text-sm py-3 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border border-slate-300 shadow-2xs"
             >
               <span className="truncate">↩️ החזר לשהייה בריזורט</span>
             </button>
