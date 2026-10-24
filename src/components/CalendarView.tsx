@@ -269,33 +269,38 @@ export function getPassInfoForBooking(
     nightsConsumedBeforeThisBooking += pbNights;
   }
 
-  // 4. Calculate nights passed within this booking up to targetDateStr
+  // 4. Calculate total nights and current day in pass for targetDateStr
   const isThisBoarding = booking.serviceType === 'boarding' || isBoarding;
   const totalNightsInThisBooking = isThisBoarding 
     ? Math.max(1, calculateDaysCount(booking.startDate, booking.endDate))
     : 1;
 
-  let nightsPassedInThisBooking = 0;
+  let currentDayInStay = 1;
   if (isThisBoarding) {
-    const daysSinceStart = calculateDaysCount(booking.startDate, targetDateStr);
-    nightsPassedInThisBooking = Math.min(totalNightsInThisBooking, Math.max(0, daysSinceStart));
-  } else {
-    // For single-day daycare
-    nightsPassedInThisBooking = 0;
+    if (targetDateStr <= booking.startDate) {
+      currentDayInStay = 1;
+    } else if (targetDateStr >= booking.endDate) {
+      currentDayInStay = totalNightsInThisBooking;
+    } else {
+      currentDayInStay = Math.min(totalNightsInThisBooking, Math.max(1, calculateDaysCount(booking.startDate, targetDateStr) + 1));
+    }
   }
 
-  const totalConsumedOnThisDate = priorUnbookedDays + nightsConsumedBeforeThisBooking + nightsPassedInThisBooking;
-  const remainingOnThisDate = Math.max(0, totalDays - totalConsumedOnThisDate);
+  const currentDayInPass = Math.min(totalDays, priorUnbookedDays + nightsConsumedBeforeThisBooking + currentDayInStay);
+  // Total nights consumed through this entire booking:
+  const totalConsumedThroughThisBooking = priorUnbookedDays + nightsConsumedBeforeThisBooking + totalNightsInThisBooking;
+  // Balance remaining after this booking completes (21 - 6 = 15):
+  const remainingAfterThisBooking = Math.max(0, totalDays - totalConsumedThroughThisBooking);
 
   return {
     isPass: true,
     passCode: matchedPass.passCode,
     totalDays,
-    usedDays: totalConsumedOnThisDate,
-    remainingDays: remainingOnThisDate,
-    dayIndex: totalConsumedOnThisDate,
+    usedDays: totalConsumedThroughThisBooking,
+    remainingDays: remainingAfterThisBooking,
+    dayIndex: currentDayInPass,
     isBoarding: isThisBoarding,
-    label: `🎟️ ${remainingOnThisDate} נותרו`
+    label: `🎟️ ${remainingAfterThisBooking} נותרו`
   };
 }
 
