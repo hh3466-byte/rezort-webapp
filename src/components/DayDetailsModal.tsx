@@ -23,10 +23,10 @@ import {
   FileText
 } from 'lucide-react';
 import { getWazeNavigationUrl } from '../utils/geolocationUtils';
-import { Booking, ResortSettings, IntakeRequest } from '../types';
+import { Booking, ResortSettings, IntakeRequest, DaycarePass } from '../types';
 import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, formatStayDatesDisplay, getTodayStr, isTrainingBooking, getBookingPairInfo, calculateDaysCount } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage, cleanPhoneNumber } from '../utils/whatsappUtils';
-import { findDaycarePassByCode } from '../services/dbService';
+import { findDaycarePassByCode, findActiveDaycarePassByPhone, loadStoredDaycarePasses } from '../services/dbService';
 import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
 import { getPlacementDisplayName, normalizePlacementKey } from '../utils/kennelUtils';
@@ -149,6 +149,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
               booking={b}
               allBookings={bookings}
               settings={settings}
+              dateStr={dateStr || undefined}
               isHighlighted={b.id === highlightedBookingId}
               onSelect={() => onSelectBooking(b)}
               onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
@@ -190,6 +191,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
               booking={b}
               allBookings={bookings}
               settings={settings}
+              dateStr={dateStr || undefined}
               isHighlighted={b.id === highlightedBookingId}
               onSelect={() => onSelectBooking(b)}
               onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
@@ -231,6 +233,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
               booking={b}
               allBookings={bookings}
               settings={settings}
+              dateStr={dateStr || undefined}
               isHighlighted={b.id === highlightedBookingId}
               onSelect={() => onSelectBooking(b)}
               onDelete={() => onDeleteBooking && onDeleteBooking(b.id)}
@@ -522,10 +525,121 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   );
 };
 
+export interface PassStayInfo {
+  isPass: boolean;
+  pass?: DaycarePass;
+  passCode?: string;
+  totalDays: number;
+  currentDayInPass: number;
+  currentDayInStay: number;
+  totalDaysInStay: number;
+  remainingDays: number;
+  displayText: string;
+  tooltipText: string;
+}
+
+export function getBookingPassStayInfo(
+  booking: Booking,
+  settings?: ResortSettings,
+  currentDateStr?: string
+): PassStayInfo | null {
+  const notes = booking.notes || '';
+  const isExplicitPass = Boolean(
+    booking.daycarePassId ||
+    booking.daycarePassCode ||
+    booking.daycarePassPaid ||
+    notes.includes('כרטיסיי') ||
+    notes.includes('כרטיסיה') ||
+    notes.includes('בנק יממות') ||
+    notes.includes('בנק 21') ||
+    notes.includes('בנק 10')
+  );
+
+  const passes: DaycarePass[] = (settings?.daycare_passes && settings.daycare_passes.length > 0)
+    ? settings.daycare_passes
+    : (settings?.daycarePasses && settings.daycarePasses.length > 0)
+    ? settings.daycarePasses
+    : loadStoredDaycarePasses();
+
+  let matchedPass: DaycarePass | null = null;
+  if (booking.daycarePassId) {
+    matchedPass = passes.find(p => p.id === booking.daycarePassId) || null;
+  }
+  if (!matchedPass && booking.daycarePassCode && booking.daycarePassCode !== 'קוד') {
+    matchedPass = findDaycarePassByCode(booking.daycarePassCode, passes);
+  }
+  if (!matchedPass) {
+    const codeMatch = notes.match(/#(\d+)/) || notes.match(/קוד\s*#?([A-Za-z0-9-]+)/i);
+    if (codeMatch && codeMatch[1]) {
+      matchedPass = findDaycarePassByCode(codeMatch[1], passes);
+    }
+  }
+  if (!matchedPass && booking.ownerPhone) {
+    matchedPass = findActiveDaycarePassByPhone(booking.ownerPhone, passes);
+  }
+
+  if (!isExplicitPass && !matchedPass) {
+    return null;
+  }
+
+  const totalDays = matchedPass?.totalDays || (() => {
+    const m = notes.match(/בנק\s*(\d+)/i) || notes.match(/(\d+)\s*יממות/i) || notes.match(/כרטיסיי?ת\s*(\d+)/i);
+    return m ? parseInt(m[1], 10) : 21;
+  })();
+
+  const effectiveDate = currentDateStr || getTodayStr();
+  const totalDaysInStay = Math.max(1, calculateDaysCount(booking.startDate, booking.endDate));
+
+  let currentDayInStay = 1;
+  if (effectiveDate <= booking.startDate) {
+    currentDayInStay = 1;
+  } else if (effectiveDate >= booking.endDate) {
+    currentDayInStay = totalDaysInStay;
+  } else {
+    currentDayInStay = Math.min(totalDaysInStay, Math.max(1, calculateDaysCount(booking.startDate, effectiveDate) + 1));
+  }
+
+  let priorDays = 0;
+  if (matchedPass?.usageHistory && matchedPass.usageHistory.length > 0) {
+    for (const u of matchedPass.usageHistory) {
+      if (u.bookingId === booking.id) break;
+      priorDays += (u.daysDeducted || u.daysCount || 0);
+    }
+  } else {
+    const priorMatch = notes.match(/נוצלו\s*כבר\s*(\d+)/);
+    if (priorMatch && priorMatch[1]) {
+      priorDays = parseInt(priorMatch[1], 10);
+    }
+  }
+
+  const currentDayInPass = Math.min(totalDays, priorDays + currentDayInStay);
+  const remainingDays = matchedPass 
+    ? Math.max(0, matchedPass.totalDays - matchedPass.usedDays) 
+    : Math.max(0, totalDays - currentDayInPass);
+  const passCode = matchedPass?.passCode || (booking.daycarePassCode && booking.daycarePassCode !== 'קוד' ? booking.daycarePassCode : '') || (notes.match(/#(\d+)/)?.[1]) || '';
+
+  const displayText = `🎟️ כרטיסייה: יום ${currentDayInPass} מתוך ${totalDays}`;
+  const tooltipText = `כרטיסייה${passCode ? ` #${passCode}` : ''} | יום ${currentDayInStay} מתוך ${totalDaysInStay} בשהייה זו | נותרו ${remainingDays} ימים בכרטיסייה`;
+
+  return {
+    isPass: true,
+    pass: matchedPass || undefined,
+    passCode: passCode || undefined,
+    totalDays,
+    currentDayInPass,
+    currentDayInStay,
+    totalDaysInStay,
+    remainingDays,
+    displayText,
+    tooltipText
+  };
+}
+
 interface DogBookingCardProps {
   booking: Booking;
   allBookings?: Booking[];
   settings: ResortSettings;
+  dateStr?: string;
   isHighlighted?: boolean;
   onSelect: () => void;
   onDelete?: () => void;
@@ -545,6 +659,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   booking,
   allBookings,
   settings,
+  dateStr,
   isHighlighted,
   onSelect,
   onDelete,
@@ -560,6 +675,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   actionType,
 }) => {
   const todayStr = getTodayStr();
+  const effectiveDate = dateStr || todayStr;
   const isEnded = booking.stayStatus === 'checked_out' || (booking.endDate < todayStr);
   const isEndingToday = booking.endDate === todayStr;
   const remainingDebt = Math.max(0, Math.round(booking.totalPrice - booking.depositAmount));
@@ -573,7 +689,9 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
     actionType === 'departure' ? booking.endDate : todayStr
   );
 
-  const isFree = Boolean(booking.isFreeStay || (booking as any).is_free_stay);
+  const passInfo = getBookingPassStayInfo(booking, settings, effectiveDate);
+  const isPassStay = Boolean(passInfo?.isPass);
+  const isFree = !isPassStay && Boolean(booking.isFreeStay || (booking as any).is_free_stay);
 
   // Accurate Pair Detection
   const pairInfo = allBookings && allBookings.length > 0 ? getBookingPairInfo(booking, allBookings) : null;
@@ -592,6 +710,8 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   // Status color styles matching design
   let paymentBorder = isEnded 
     ? 'border-slate-200 bg-slate-50/70 text-slate-600 opacity-80' 
+    : isPassStay
+    ? 'border-teal-400 bg-teal-50/30'
     : isFree
     ? 'border-emerald-300 bg-emerald-50/40'
     : 'border-red-300 bg-red-50/40';
@@ -599,6 +719,16 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   let paymentTag = isEnded ? (
     <span className="text-[11px] bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
       <span>🏁 הסתיים ושוחרר</span>
+    </span>
+  ) : isPassStay && passInfo ? (
+    <span 
+      title={passInfo.tooltipText}
+      className="text-xs bg-gradient-to-r from-teal-700 via-teal-800 to-emerald-800 text-white px-3 py-1 rounded-xl font-black flex items-center gap-1.5 shadow-xs whitespace-nowrap border border-teal-600/40"
+    >
+      <span>{passInfo.displayText}</span>
+      <span className="text-[10px] text-teal-200 font-bold bg-white/15 px-1.5 py-0.5 rounded-md">
+        (נותרו {passInfo.remainingDays})
+      </span>
     </span>
   ) : isFree ? (
     isSecondaryDog ? (
@@ -616,7 +746,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
     </span>
   );
 
-  if (!isEnded && !isFree) {
+  if (!isEnded && !isFree && !isPassStay) {
     if (booking.paymentStatus === 'fully_paid' || (remainingDebt === 0 && roundedTotal > 0)) {
       paymentBorder = 'border-green-300 bg-green-50/40';
       paymentTag = (
@@ -695,6 +825,14 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium border border-slate-200">
               {getServiceTypeHebrew(booking.serviceType)}
             </span>
+            {isPassStay && passInfo && (
+              <span 
+                title={passInfo.tooltipText}
+                className="text-xs bg-teal-100 text-teal-950 border border-teal-300 px-2.5 py-0.5 rounded-full font-black shadow-2xs flex items-center gap-1 shrink-0"
+              >
+                <span>🎟️ בנק {passInfo.totalDays} יממות</span>
+              </span>
+            )}
             {/* Placement / Room / Suite Location Badge (Visible for ALL dogs) */}
             {(() => {
               const norm = normalizePlacementKey(booking.kennelNumber);
@@ -795,15 +933,21 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
           )}
 
           {/* Prominent Notes Box: Eye-catching styling with strict overflow containment */}
-          {booking.notes && (
-            <div 
-              title={booking.notes}
-              className="bg-amber-100/90 border border-amber-300/90 text-amber-950 text-xs sm:text-[13px] font-medium px-3 py-1.5 rounded-xl shadow-2xs mt-1.5 flex items-start gap-1.5 max-w-full overflow-hidden"
-            >
-              <span className="shrink-0 font-black text-amber-900">📝 הערות:</span>
-              <span className="line-clamp-2 break-words leading-relaxed text-slate-900 font-semibold">{booking.notes}</span>
-            </div>
-          )}
+          {booking.notes && (() => {
+            let displayNotes = booking.notes;
+            if (isPassStay && passInfo) {
+              displayNotes = displayNotes.replace(/\[אירוח ללא תשלום \(חינם\)\]/g, `[שריון מכרטיסייה${passInfo.passCode ? ` #${passInfo.passCode}` : ''}]`).trim();
+            }
+            return (
+              <div 
+                title={displayNotes}
+                className="bg-amber-100/90 border border-amber-300/90 text-amber-950 text-xs sm:text-[13px] font-medium px-3 py-1.5 rounded-xl shadow-2xs mt-1.5 flex items-start gap-1.5 max-w-full overflow-hidden"
+              >
+                <span className="shrink-0 font-black text-amber-900">📝 הערות:</span>
+                <span className="line-clamp-2 break-words leading-relaxed text-slate-900 font-semibold">{displayNotes}</span>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Payment Tag (Top Corner) */}
