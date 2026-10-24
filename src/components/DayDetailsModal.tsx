@@ -695,16 +695,37 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-medium border border-slate-200">
               {getServiceTypeHebrew(booking.serviceType)}
             </span>
-            {booking.kennelNumber && (() => {
+            {/* Placement / Room / Suite Location Badge (Visible for ALL dogs) */}
+            {(() => {
               const norm = normalizePlacementKey(booking.kennelNumber);
-              let badgeColor = 'bg-slate-100 text-slate-800 border-slate-200';
-              if (norm === 'home') badgeColor = 'bg-amber-100 text-amber-950 border-amber-300';
-              else if (norm && norm.startsWith('room_')) badgeColor = 'bg-sky-100 text-sky-950 border-sky-300';
-              else if (norm && norm.startsWith('suite_')) badgeColor = 'bg-purple-100 text-purple-950 border-purple-300';
-              else if (norm) badgeColor = 'bg-emerald-100 text-emerald-950 border-emerald-300';
+              let badgeColor = 'bg-amber-50/80 text-amber-800 border-amber-300 border-dashed';
+              let badgeText = '📍 טרם שובץ חדר';
+              let titleText = 'הכלב טרם שובץ לחדר/סוויטה בריזורט';
+
+              if (norm === 'home') {
+                badgeColor = 'bg-amber-100 text-amber-950 border-amber-300';
+                badgeText = '📍 הלנה ביתית (בבית של שמוליק)';
+                titleText = 'מיקום: הלנה ביתית (בבית של שמוליק)';
+              } else if (norm && norm.startsWith('room_')) {
+                badgeColor = 'bg-sky-100 text-sky-950 border-sky-300';
+                badgeText = `📍 ${getPlacementDisplayName(booking.kennelNumber)}`;
+                titleText = `מיקום בריזורט: ${getPlacementDisplayName(booking.kennelNumber)}`;
+              } else if (norm && norm.startsWith('suite_')) {
+                badgeColor = 'bg-purple-100 text-purple-950 border-purple-300';
+                badgeText = `📍 ${getPlacementDisplayName(booking.kennelNumber)}`;
+                titleText = `מיקום בריזורט: ${getPlacementDisplayName(booking.kennelNumber)}`;
+              } else if (norm) {
+                badgeColor = 'bg-emerald-100 text-emerald-950 border-emerald-300';
+                badgeText = `📍 ${getPlacementDisplayName(booking.kennelNumber)}`;
+                titleText = `מיקום בריזורט: ${getPlacementDisplayName(booking.kennelNumber)}`;
+              }
+
               return (
-                <span className={`text-xs px-2.5 py-0.5 rounded-full font-black border shadow-2xs ${badgeColor}`}>
-                  📍 {getPlacementDisplayName(booking.kennelNumber)}
+                <span 
+                  title={titleText}
+                  className={`text-xs px-2.5 py-0.5 rounded-full font-black border shadow-2xs ${badgeColor} inline-flex items-center gap-1 shrink-0`}
+                >
+                  {badgeText}
                 </span>
               );
             })()}
@@ -773,10 +794,15 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
             </div>
           )}
 
+          {/* Prominent Notes Box: Eye-catching styling with strict overflow containment */}
           {booking.notes && (
-            <p className="text-[11px] text-amber-800/90 italic mt-0.5 line-clamp-2">
-              הערות: {booking.notes}
-            </p>
+            <div 
+              title={booking.notes}
+              className="bg-amber-100/90 border border-amber-300/90 text-amber-950 text-xs sm:text-[13px] font-medium px-3 py-1.5 rounded-xl shadow-2xs mt-1.5 flex items-start gap-1.5 max-w-full overflow-hidden"
+            >
+              <span className="shrink-0 font-black text-amber-900">📝 הערות:</span>
+              <span className="line-clamp-2 break-words leading-relaxed text-slate-900 font-semibold">{booking.notes}</span>
+            </div>
           )}
         </div>
 
@@ -788,9 +814,9 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
 
       {/* Action Buttons Section */}
       <div className="pt-3 mt-3 border-t border-slate-200/80 flex flex-col gap-2.5">
-        {/* Tier 1: Primary Operations (Right-aligned in RTL, Check-in / Check-out are LARGE) */}
-        <div className="flex flex-wrap items-center justify-start gap-2.5">
-          {/* Check-in Button for Booked/Arriving Dogs (LARGE, RIGHT SIDE) */}
+        {/* Tier 1: Primary Operation (Check-in / Check-out - 70% width, large, prominent) */}
+        <div className="w-full flex items-center justify-start">
+          {/* Check-in Button for Booked/Arriving Dogs */}
           {(booking.stayStatus === 'booked' || (booking.stayStatus as any) === 'confirmed') && onToggleStayStatus && (
             <button
               type="button"
@@ -799,14 +825,14 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 onToggleStayStatus(booking.id, 'checked_in');
               }}
               title="סמן שהכלב נכנס ונקלט כעת בפועל בריזורט (צ'ק-אין מהיר)"
-              className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-sm sm:text-base px-5 py-2.5 rounded-xl font-black flex items-center gap-2 transition-all cursor-pointer shadow-md hover:shadow-lg"
+              className="w-[70%] min-w-[220px] max-w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-sm sm:text-base py-3 px-4 rounded-xl font-black flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-md hover:shadow-lg"
             >
-              <CheckCircle className="w-5 h-5 text-white" />
-              <span>קלוט לריזורט (צ'ק-אין) 🐾</span>
+              <CheckCircle className="w-5 h-5 text-white shrink-0" />
+              <span className="truncate">קלוט לריזורט (צ'ק-אין) 🐾</span>
             </button>
           )}
 
-          {/* Quick Check-Out / Release Dog Button (LARGE, RIGHT SIDE) */}
+          {/* Quick Check-Out / Release Dog Button */}
           {booking.stayStatus === 'checked_in' && (
             <button
               type="button"
@@ -824,10 +850,10 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 }
               }}
               title="שחרר כלב הביתה (צ'ק-אאוט מהיר)"
-              className="bg-sky-600 hover:bg-sky-700 active:scale-95 text-white text-sm sm:text-base px-5 py-2.5 rounded-xl font-black flex items-center gap-2 transition-all cursor-pointer shadow-md hover:shadow-lg"
+              className="w-[70%] min-w-[220px] max-w-full bg-sky-600 hover:bg-sky-700 active:scale-[0.98] text-white text-sm sm:text-base py-3 px-4 rounded-xl font-black flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-md hover:shadow-lg"
             >
-              <Home className="w-5 h-5 text-white" />
-              <span>שחרר הביתה (צ'ק-אאוט) 🏁</span>
+              <Home className="w-5 h-5 text-white shrink-0" />
+              <span className="truncate">שחרר הביתה (צ'ק-אאוט) 🏁</span>
             </button>
           )}
 
@@ -840,13 +866,16 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 onToggleStayStatus(booking.id, 'checked_in');
               }}
               title="החזר כלב למצב שוהה בריזורט"
-              className="bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 text-xs sm:text-sm px-4 py-2.5 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-slate-300 shadow-2xs"
+              className="w-[70%] min-w-[220px] max-w-full bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-800 text-xs sm:text-sm py-3 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border border-slate-300 shadow-2xs"
             >
-              <span>↩️ החזר לשהייה בריזורט</span>
+              <span className="truncate">↩️ החזר לשהייה בריזורט</span>
             </button>
           )}
+        </div>
 
-          {/* Primary Edit Button: Renamed to "ערוך מחדש הזמנה" */}
+        {/* Tier 2: Secondary Tools & CRM Actions (Equal width and height in balanced grid) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 w-full pt-1">
+          {/* Primary Edit Button: Moved down to bottom row */}
           <button
             type="button"
             onClick={(e) => {
@@ -854,15 +883,12 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
               onSelect();
             }}
             title="ערוך פרטי הזמנה, תאריכים, מחיר או דרישות מיוחדות"
-            className="bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-700 text-xs sm:text-sm px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all cursor-pointer border border-indigo-200 shadow-2xs hover:shadow-xs"
+            className="w-full h-10 px-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-700 border border-indigo-200 shadow-2xs text-center"
           >
-            <Edit2 className="w-4 h-4 text-indigo-600" />
-            <span>ערוך מחדש הזמנה</span>
+            <Edit2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+            <span className="truncate">ערוך הזמנה ✏️</span>
           </button>
-        </div>
 
-        {/* Tier 2: Secondary Tools & CRM Actions (Symmetrical, uniform, neat) */}
-        <div className="flex flex-wrap items-center justify-start gap-2 pt-0.5">
           {/* Customer Documents Button (מסמכים קשורים) */}
           {onOpenDocuments && (
             <button
@@ -872,10 +898,10 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 onOpenDocuments(booking);
               }}
               title="צפה בהסכמי שהייה/אילוף חתומים דיגיטלית, שאלון קליטה, קבלות ומסמכים קשורים בתיק הלקוח"
-              className="bg-white hover:bg-indigo-50/60 active:scale-95 text-slate-700 hover:text-indigo-900 border border-slate-200 hover:border-indigo-300 text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              className="w-full h-10 px-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-indigo-50/60 active:scale-95 text-slate-700 hover:text-indigo-900 border border-slate-200 hover:border-indigo-300 shadow-2xs text-center"
             >
-              <FileText className="w-3.5 h-3.5 text-indigo-600" />
-              <span>מסמכים קשורים 📄</span>
+              <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span className="truncate">מסמכים קשורים 📄</span>
             </button>
           )}
 
@@ -888,10 +914,10 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 onOpenChatHistory(booking.ownerPhone, booking.ownerName, booking.dogName);
               }}
               title="הצג היסטוריית הודעות והקלטות וואטסאפ עם הלקוח ותמלול קולי מלא"
-              className="bg-white hover:bg-emerald-50/60 active:scale-95 text-slate-700 hover:text-emerald-950 border border-slate-200 hover:border-emerald-300 text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              className="w-full h-10 px-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-emerald-50/60 active:scale-95 text-slate-700 hover:text-emerald-950 border border-slate-200 hover:border-emerald-300 shadow-2xs text-center"
             >
-              <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-              <span>הצג היסטוריית הודעות 💬</span>
+              <MessageSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span className="truncate">היסטוריית הודעות 💬</span>
             </button>
           )}
 
@@ -904,10 +930,10 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 onOpenSendPaymentLink();
               }}
               title="שלח קישור Grow / Bit לתשלום בוואטסאפ (יתרה, יום נוסף, או חיוב אקסטרה/קולר/וטרינר)"
-              className="bg-white hover:bg-emerald-50/60 active:scale-95 text-slate-700 hover:text-emerald-950 border border-slate-200 hover:border-emerald-300 text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              className="w-full h-10 px-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-emerald-50/60 active:scale-95 text-slate-700 hover:text-emerald-950 border border-slate-200 hover:border-emerald-300 shadow-2xs text-center"
             >
-              <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
-              <span>קישור לתשלום / אקסטרה 💳</span>
+              <CreditCard className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span className="truncate">קישור לתשלום 💳</span>
             </button>
           )}
 
@@ -920,10 +946,10 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 onOpenVoucher();
               }}
               title="הפק ושלח שובר הטבה לפעם הבאה או חבר מביא חבר"
-              className="bg-white hover:bg-amber-50/60 active:scale-95 text-slate-700 hover:text-amber-900 border border-slate-200 hover:border-amber-300 text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              className="w-full h-10 px-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-amber-50/60 active:scale-95 text-slate-700 hover:text-amber-900 border border-slate-200 hover:border-amber-300 shadow-2xs text-center"
             >
-              <Gift className="w-3.5 h-3.5 text-amber-600" />
-              <span>שובר 🎁</span>
+              <Gift className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="truncate">שובר הטבה 🎁</span>
             </button>
           )}
 
@@ -938,13 +964,13 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
               title={booking.skipReviewRequest 
                 ? "שליחת שובר VIP וסקר מבוטלת ללקוח זה. לחץ להפעלה מחדש" 
                 : "שובר VIP וסקר יישלחו אוטומטית מחר. לחץ לביטול (אם לא הלך טוב עם הלקוח)"}
-              className={`text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer border shadow-2xs active:scale-95 ${
+              className={`w-full h-10 px-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer border shadow-2xs active:scale-95 text-center ${
                 booking.skipReviewRequest
                   ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
                   : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
               }`}
             >
-              <span>{booking.skipReviewRequest ? '🚫 שובר בוטל' : '⭐ שובר מתוזמן למחר'}</span>
+              <span className="truncate">{booking.skipReviewRequest ? '🚫 שובר בוטל' : '⭐ שובר למחר'}</span>
             </button>
           )}
 
@@ -958,20 +984,20 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                   onMarkPaid();
                 }}
                 title="סמן כעת כשולם הכל במלואו"
-                className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                className="w-full h-10 px-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white border border-emerald-600 shadow-xs text-center"
               >
-                <CheckCircle className="w-3.5 h-3.5" />
-                <span>סמן כשולם</span>
+                <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">סמן כשולם ✅</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleSendWhatsApp}
                 title="שלח תזכורת תשלום בוואטסאפ ללקוח"
-                className="bg-white hover:bg-emerald-50 active:scale-95 text-emerald-700 border border-emerald-300 text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                className="w-full h-10 px-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-emerald-50 active:scale-95 text-emerald-700 border border-emerald-300 shadow-2xs text-center"
               >
-                <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                <span>תזכורת תשלום</span>
+                <MessageSquare className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="truncate">תזכורת תשלום 📲</span>
               </button>
             </>
           )}
@@ -985,10 +1011,10 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 onDelete();
               }}
               title="מחק הזמנה זו מהיומן ומהענן"
-              className="bg-white hover:bg-rose-50 active:scale-95 text-slate-500 hover:text-rose-600 text-xs px-3 py-2 rounded-xl font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-slate-200 hover:border-rose-200 shadow-2xs sm:ms-auto"
+              className="w-full h-10 px-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-white hover:bg-rose-50 active:scale-95 text-rose-600 hover:text-rose-700 border border-slate-200 hover:border-rose-200 shadow-2xs text-center"
             >
-              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
-              <span>מחק 🗑️</span>
+              <Trash2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+              <span className="truncate">מחק 🗑️</span>
             </button>
           )}
         </div>
