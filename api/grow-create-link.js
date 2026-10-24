@@ -5,6 +5,8 @@
  * =========================================================================
  */
 
+import { buildMorningServiceDescription } from './_morning-service.js';
+
 const GROW_API_KEY = process.env.GROW_API_KEY || 'hfBND9mlC28BGvUkwQBls9hypPUIoJIj4Sy6LyUH';
 const GROW_USER_ID = process.env.GROW_USER_ID || 'e1ceee55b717e60b';
 const GROW_PAGE_CODE = process.env.GROW_PAGE_CODE || '538cbf6f8827';
@@ -64,14 +66,15 @@ export default async function handler(req, res) {
     const formattedPhone = cleanPhone(ownerPhone);
     const validFullName = (ownerName.trim().includes(' ') ? ownerName.trim() : `${ownerName.trim()} לקוח`).slice(0, 50);
 
-    let baseDesc = description || (serviceType ? serviceType : `פנסיון ואירוח עבור ${dogName}`);
-    let itemTitle = baseDesc.startsWith('הריזורט לכלב עבור שירות') ? baseDesc : `הריזורט לכלב עבור שירות ${baseDesc}`;
-    if ((itemTitle.includes('פנסיון') || itemTitle.includes('אירוח')) && startDate && !itemTitle.includes('תאריכ') && !itemTitle.includes('עד') && !itemTitle.includes(formatDateDisplay(startDate))) {
-      const datesFormatted = endDate && endDate !== startDate 
-        ? `${formatDateDisplay(startDate)} עד ${formatDateDisplay(endDate)}` 
-        : formatDateDisplay(startDate);
-      itemTitle = `${itemTitle} בתאריכים ${datesFormatted}`;
-    }
+    const { serviceDescription } = buildMorningServiceDescription({
+      serviceType,
+      dogName,
+      startDate,
+      endDate,
+      extraDescription: description && !description.includes('פנסיון') && !description.includes('אירוח') && !description.includes('אילוף') && !description.includes('יומיות') ? description : '',
+      passCount: 10
+    });
+    const itemTitle = serviceDescription;
 
     // Payload for Grow CreatePaymentLink (Locked Amount, only digital instant payments: Credit Card, Bit, Apple Pay, Google Pay, PayBox)
     const payload = {

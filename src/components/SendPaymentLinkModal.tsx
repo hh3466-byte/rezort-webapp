@@ -20,6 +20,7 @@ import { sendGreenApiDirectMessage } from '../services/notificationService';
 import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
 import { isRealTrainingBooking } from '../utils/trainerPaymentUtils';
 import { TrainingAgreementModal } from './TrainingAgreementModal';
+import { buildMorningServiceDescription, formatDateYY } from '../utils/morningInvoiceUtils';
 
 
 
@@ -170,11 +171,18 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
       ? ` (סכום ₪${amt} מעודכן ונעול לתשלום)` 
       : (amt > 0 ? ` (יש להזין ₪${amt} בעמוד התשלום)` : '');
 
+    const invoiceService = buildMorningServiceDescription({
+      serviceType: booking.serviceType,
+      dogName: booking.dogName,
+      startDate: booking.startDate,
+      endDate: reason === 'extra_day' ? (booking.endDate || booking.startDate) : booking.endDate,
+      extraDescription: reason === 'extra_service' ? (extDesc.trim() || 'שירות נוסף / אקסטרה') : (reason === 'extra_day' ? `הארכת שהייה / יום נוסף בתאריך ${formatDateYY(booking.endDate || booking.startDate)}` : '')
+    }).serviceDescription;
+
     if (reason === 'extra_day') {
-      const extraDateStr = formatDateIL(booking.endDate || booking.startDate);
       return `היי ${firstName}! 🐾
 בהמשך לשהייה של *${booking.dogName}* בריזורט לכלב, מצורף קישור מאובטח להסדרת התשלום:
-✨ *עבור:* הריזורט לכלב עבור שירות הארכת שהייה / יום נוסף בתאריך ${extraDateStr}${amountSection}
+✨ *עבור:* ${invoiceService}${amountSection}
 👉 ${formattedLink}${amountHint}
 
 💡 *לתשלום ב-Bit, Apple Pay, Google Pay, PayBox, אשראי או העברה בנקאית:* פשוט לוחצים על הקישור למעלה ובוחרים באמצעי התשלום הרצוי (התשלום נקלט ומעדכן את המערכת אוטומטית עם קבלה וחשבונית מס מיידית!).
@@ -188,7 +196,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
       if (incStay && currentDebt > 0) {
         return `היי ${firstName}! 🐾
 בהמשך לשהייה של *${booking.dogName}* בריזורט לכלב, מצורף קישור מאובטח להסדרת התשלום הכולל (שהייה + תוספת אקסטרה):
-✨ *תוספת:* הריזורט לכלב עבור שירות ${descText} (₪${extAmt})
+✨ *תוספת:* בעבור ${descText} (₪${extAmt})
 🏠 *יתרת שהייה:* ₪${currentDebt}
 💰 *סה״כ לתשלום:* ₪${amt}
 
@@ -202,7 +210,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 
       return `היי ${firstName}! 🐾
 בהמשך לשהייה של *${booking.dogName}* בריזורט לכלב, מצורף קישור מאובטח להסדרת תשלום עבור:
-✨ *עבור:* הריזורט לכלב עבור שירות ${descText}
+✨ *עבור:* ${invoiceService}
 💰 *סכום לתשלום:* ₪${amt}
 
 👉 ${formattedLink}${amountHint}
@@ -215,14 +223,11 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 
     const isDaily = booking.serviceType === 'daycare' || booking.startDate === booking.endDate;
     const datesIntro = isDaily ? 'לשהות יומית:' : 'לתאריכים:';
-    const boardingServiceTitle = isDaily 
-      ? `הריזורט לכלב עבור שירות שהות יומית (${serviceHebrew}) בתאריך ${stayDates}`
-      : `הריזורט לכלב עבור שירות פנסיון ואירוח (${serviceHebrew}) בתאריכים ${stayDates}`;
 
     return `היי ${firstName}! 🐾
 שמחים לעדכן שהמקום עבור *${booking.dogName}* (${serviceHebrew}) שוריין בריזורט לכלב ${datesIntro}
 📅 ${stayDates}.${amountSection}
-✨ *עבור:* ${boardingServiceTitle}
+✨ *עבור:* ${invoiceService}
 
 להשלמת השריון / הסדרת התשלום, יש ללחוץ על הקישור המאובטח${amountHint}:
 👉 ${formattedLink}
@@ -272,17 +277,15 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
             : `${formatDateIL(booking.startDate)} עד ${formatDateIL(booking.endDate)} (${days} ימים)`)
         : stayDates;
 
-      const reasonLabel = currentReason === 'extra_service'
-        ? (extDesc && extDesc.trim()
-            ? (incStay && currentDebt > 0
-                ? `הריזורט לכלב עבור שירות ${extDesc.trim()} + יתרת שהייה עבור ${booking.dogName} בתאריכים ${stayDatesDetailed}`
-                : `הריזורט לכלב עבור שירות ${extDesc.trim()} עבור ${booking.dogName} בתאריכים ${stayDatesDetailed}`)
-            : (incStay && currentDebt > 0
-                ? `הריזורט לכלב עבור שירות שהייה ואקסטרה עבור ${booking.dogName} בתאריכים ${stayDatesDetailed}`
-                : `הריזורט לכלב עבור שירות אקסטרה עבור ${booking.dogName} בתאריכים ${stayDatesDetailed}`))
-        : currentReason === 'extra_day'
-        ? `הריזורט לכלב עבור שירות הארכת שהייה / יום נוסף עבור ${booking.dogName} בתאריך ${formatDateIL(booking.endDate || booking.startDate)}`
-        : `הריזורט לכלב עבור שירות ${isDepositOnly ? 'מקדמת פנסיון ואירוח' : 'פנסיון ואירוח'} (${serviceHebrew}) עבור ${booking.dogName} בתאריכים ${stayDatesDetailed}`;
+      const reasonLabel = buildMorningServiceDescription({
+        serviceType: booking.serviceType,
+        dogName: booking.dogName,
+        startDate: booking.startDate,
+        endDate: currentReason === 'extra_day' ? (booking.endDate || booking.startDate) : booking.endDate,
+        extraDescription: currentReason === 'extra_service' 
+          ? (extDesc.trim() || 'שירות נוסף / אקסטרה') 
+          : (currentReason === 'extra_day' ? `הארכת שהייה / יום נוסף בתאריך ${formatDateYY(booking.endDate || booking.startDate)}` : '')
+      }).serviceDescription;
 
       const res = await createGrowDynamicPaymentLink({
         amount: targetAmt,
@@ -911,6 +914,41 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Morning Tax Invoice Receipt Layout Preview (חוק ברזל 36) */}
+              {(() => {
+                const previewDesc = buildMorningServiceDescription({
+                  serviceType: booking.serviceType,
+                  dogName: booking.dogName,
+                  startDate: booking.startDate,
+                  endDate: reasonType === 'extra_day' ? (booking.endDate || booking.startDate) : booking.endDate,
+                  extraDescription: reasonType === 'extra_service' 
+                    ? (extraDescription.trim() || 'שירות נוסף / אקסטרה') 
+                    : (reasonType === 'extra_day' ? `הארכת שהייה / יום נוסף בתאריך ${formatDateYY(booking.endDate || booking.startDate)}` : '')
+                }).serviceDescription;
+
+                return (
+                  <div className="bg-sky-50/80 border border-sky-200 rounded-2xl p-3 text-xs space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between text-sky-950 font-black">
+                      <div className="flex items-center gap-1.5">
+                        <span>🧾</span>
+                        <span>שורות החיוב שיופיעו בחשבונית מס / קבלה (Morning):</span>
+                      </div>
+                      <span className="text-[10px] bg-sky-200/70 text-sky-900 px-2 py-0.5 rounded-full font-bold">חוק ברזל</span>
+                    </div>
+                    <div className="bg-white rounded-xl border border-sky-200/80 divide-y divide-slate-100 overflow-hidden text-[11px]">
+                      <div className="flex items-center justify-between px-3 py-1.5 text-slate-700">
+                        <span className="font-bold">1. הריזורט לכלב</span>
+                        <span className="font-black text-slate-500">₪0.00</span>
+                      </div>
+                      <div className="flex items-center justify-between px-3 py-1.5 text-slate-900 bg-sky-50/40">
+                        <span className="font-extrabold text-sky-950">2. {previewDesc}</span>
+                        <span className="font-black text-emerald-700">₪{amount}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Payment Link URL */}
               <div>

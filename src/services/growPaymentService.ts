@@ -5,6 +5,8 @@
  * =========================================================================
  */
 
+import { buildMorningServiceDescription } from '../utils/morningInvoiceUtils';
+
 export interface CreateGrowLinkParams {
   amount: number;
   bookingId?: string;
@@ -94,14 +96,15 @@ export async function createGrowDynamicPaymentLink(
       ? (params.ownerName || 'לקוח').trim() 
       : `${(params.ownerName || 'לקוח').trim()} לקוח`).slice(0, 50);
 
-    let baseDesc = params.description || (params.serviceType ? params.serviceType : `פנסיון ואירוח עבור ${params.dogName || 'כלב'}`);
-    let itemTitle = baseDesc.startsWith('הריזורט לכלב עבור שירות') ? baseDesc : `הריזורט לכלב עבור שירות ${baseDesc}`;
-    if ((itemTitle.includes('פנסיון') || itemTitle.includes('אירוח')) && params.startDate && !itemTitle.includes('תאריכ') && !itemTitle.includes('עד') && !itemTitle.includes(params.startDate)) {
-      const datesFormatted = params.endDate && params.endDate !== params.startDate 
-        ? `${params.startDate} עד ${params.endDate}` 
-        : params.startDate;
-      itemTitle = `${itemTitle} בתאריכים ${datesFormatted}`;
-    }
+    const { serviceDescription } = buildMorningServiceDescription({
+      serviceType: params.serviceType,
+      dogName: params.dogName,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      extraDescription: params.description && !params.description.includes('פנסיון') && !params.description.includes('אירוח') && !params.description.includes('אילוף') && !params.description.includes('יומיות') ? params.description : '',
+      passCount: 10
+    });
+    const itemTitle = serviceDescription;
 
     const payload = {
       userId: GROW_USER_ID,

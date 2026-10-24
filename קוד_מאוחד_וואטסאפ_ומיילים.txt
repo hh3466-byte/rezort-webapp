@@ -344,17 +344,23 @@ function processResortEmails() {
                     }
                   }
 
+                  var morningSecondLine = "";
                   if (foundExtra) {
                     matchedServiceDetails = "הריזורט לכלב עבור שירות " + foundExtra.name + " (עבור הכלב " + matchedDogName + ")";
+                    var cleanEx = foundExtra.name.replace(/^בעבור\s+/, "").replace(/^עבור\s+/, "");
+                    morningSecondLine = "בעבור " + cleanEx;
                   } else {
                     var stB = (targetB.service_type || targetB.serviceType || bData.serviceType || "פנסיון").toLowerCase();
                     if (stB.includes("train") || stB.includes("אילוף")) {
                       matchedServiceDetails = "הריזורט לכלב עבור שירות אילוף ופנסיון" + (matchedDates ? " בתאריכים " + matchedDates : "");
+                      morningSecondLine = matchedDogName ? 'בעבור אילוף ל "' + matchedDogName + '"' : 'בעבור אילוף';
                     } else if (stB.includes("daycare") || stB.includes("יום")) {
                       matchedServiceDetails = "הריזורט לכלב עבור שירות שהות יומית (דוגי דייקר)" + (matchedDates ? " בתאריך " + matchedDates : "");
+                      morningSecondLine = matchedDogName ? 'בעבור יומיות ל "' + matchedDogName + '"' + (matchedDates ? " לתאריך " + matchedDates : "") : 'בעבור יומיות';
                     } else {
                       // שירות פנסיון - חובת תאריכים מוחלטת לפי חוק ברזל 36!
                       matchedServiceDetails = "הריזורט לכלב עבור שירות פנסיון ואירוח" + (matchedDates ? " בתאריכים " + matchedDates : "");
+                      morningSecondLine = matchedDogName ? 'עבור שירותי פנסיון ל "' + matchedDogName + '"' + (matchedDates ? " לתאריכים " + matchedDates : "") : 'עבור שירותי פנסיון';
                     }
                   }
 
@@ -491,6 +497,8 @@ function processResortEmails() {
                 finalServiceTitle = "הריזורט לכלב עבור שירות " + finalServiceTitle;
               }
 
+              var secondInvoiceLine = morningSecondLine || (matchedDogName ? "עבור שירותי פנסיון ל \"" + matchedDogName + "\"" + (matchedDates ? " לתאריכים " + matchedDates : "") : finalServiceTitle);
+
               var waMsg = "🟢 *התקבל תשלום Grow חדש לריזורט לכלב!*\n\n" +
                           "👤 *שם הלקוח:* " + (matchedOwnerName || "לא צוין") + "\n" +
                           "🐶 *שם הכלב:* " + (matchedDogName || "לא צוין") + "\n" +
@@ -498,6 +506,9 @@ function processResortEmails() {
                           (extractedPhone ? "📞 *טלפון:* " + extractedPhone + "\n" : "") +
                           "📄 *פירוט (שירות שנרכש):* " + finalServiceTitle + "\n" +
                           (matchedDates && !finalServiceTitle.includes(matchedDates) ? "📅 *תאריכים משוריינים:* " + matchedDates + "\n" : "") +
+                          "🧾 *שורות בחשבונית (Morning):*\n" +
+                          "  1. הריזורט לכלב (₪0.00)\n" +
+                          "  2. " + secondInvoiceLine + " (₪" + extractedAmount + ")\n" +
                           "✨ *סטטוס:* " + (isBookingUpdated ? "ההזמנה עודכנה כמשולמת ביומן והוסדרה יתרת החוב! ✅" : isPassUpdated ? "הכרטיסייה הופעלה ועודכנה כמשולמת! ✅" : "התשלום זוהה במייל ועודכן במערכת. ✅");
 
               sendWhatsAppFromAppsScript("972506336896@c.us", waMsg); // שמוליק
