@@ -167,16 +167,7 @@ function processResortEmails() {
         "כרטיסייה",
         "יומיות",
         "לי דלויה",
-        "ליאו",
-        "ניבה פורן",
-        "ניבה",
-        "פורן",
-        "שטוץ",
-        "דודו",
-        "אורלי וינר",
-        "אורלי",
-        "וינר",
-        "שילגי"
+        "ליאו"
       ];
       var isResort = false;
       for (var rk = 0; rk < resortKeywords.length; rk++) {
@@ -214,20 +205,17 @@ function processResortEmails() {
       }
 
       // 3. טיפול בתשלום Grow / קבלה של הריזורט לכלב
-      // כל תשלום Grow שאינו שייך במפורש לעסק אחר (כמו זכויות המורה) שייך במאה אחוז לריזורט!
-      if (isGrow && !isOtherBusiness) {
-        var isAuthCode = subject.indexOf("קוד אימות") !== -1 || fullLower.indexOf("קוד אימות") !== -1;
-        if (isAuthCode) {
-          continue;
-        }
+      if (isGrow) {
+        if (!isOtherBusiness || isResort) {
+          threadHandled = true;
+          growCount++;
+          Logger.log("🗑️ מייל קבלת Grow של הריזורט זוהה ומועבר לאשפה: " + subject);
 
-        growCount++;
-        Logger.log("💳 זוהה תשלום Grow לריזורט: " + subject);
-
-        // שליחת התראת וואטסאפ מיידית לשמוליק ולחגי וסנכרון תשלום
-        try {
-          var msgId = msg.getId();
-          var alreadyNotified = scriptProperties.getProperty("grow_notified_" + msgId);
+          // שליחת התראת וואטסאפ מיידית לשמוליק ולחגי על תשלום Grow חדש שנקלט במייל
+          try {
+            var isAuthCode = subject.indexOf("קוד אימות") !== -1 || fullLower.indexOf("קוד אימות") !== -1;
+            var msgId = msg.getId();
+            var alreadyNotified = scriptProperties.getProperty("grow_notified_" + msgId);
 
             if (!isAuthCode && !alreadyNotified) {
               var cleanBody = (body + " " + subject).replace(/\s+/g, ' ');
@@ -236,22 +224,18 @@ function processResortEmails() {
                                 cleanBody.match(/([\d,]+(?:\.\d{2})?)\s*(?:₪|ש"ח|שח)/i);
               var extractedAmount = amountMatch ? amountMatch[1] : "";
 
-              var payerMatch = cleanBody.match(/(?:שם(?:\s+הלקוח|\s+המשלם|\s+מלא)?|ממי\s+התשלום\s+שם)[:\s]+([א-תA-Za-z\s]+?)(?:טלפון|נייד|סכום|דוא"?ל|מייל|תאריך|\n|$)/i);
+              var payerMatch = cleanBody.match(/(?:ממי\s+התשלום\s+שם|שם(?:\s+הלקוח|\s+המשלם|\s+מלא)?|לקוח)[:\s]+([א-תA-Za-z\s]+?)(?:טלפון|נייד|סכום|דוא"?ל|מייל|תאריך|\n|$)/i);
               var extractedPayer = payerMatch ? payerMatch[1].trim() : "";
 
               var phoneMatch = cleanBody.match(/(?:טלפון|נייד)[:\s]+([\d\-]{9,13})/i) || cleanBody.match(/(05\d[\-\d]{7,8})/);
               var extractedPhone = phoneMatch ? phoneMatch[1].trim() : "";
+              var cleanDigits = extractedPhone.replace(/\D/g, '').slice(-9);
 
-              var phoneSuffix = extractedPhone ? extractedPhone.replace(/\D/g, '').slice(-7) : "";
-              var cleanDigits = extractedPhone ? extractedPhone.replace(/\D/g, '').slice(-9) : "";
-
-              // Cross-reference with Supabase to get Dog Name and update booking
-              var matchedDogName = "";
               var matchedOwnerName = extractedPayer;
-              var matchedDates = "";
+              var matchedDogName = "";
               var matchedServiceDetails = "";
-              var isBookingUpdated = false;
               var isPassUpdated = false;
+              var isBookingUpdated = false;
 
               // 1. Cross-reference with Daycare Passes in Supabase
               if (cleanDigits && cleanDigits.length >= 7) {
@@ -301,10 +285,11 @@ function processResortEmails() {
               }
 
               // 2. Cross-reference with Bookings in Supabase
-              if (phoneSuffix && phoneSuffix.length >= 6) {
+              var matchedDates = "";
+              if (cleanDigits && cleanDigits.length >= 7) {
                 var targetB = null;
                 try {
-                  var bUrl = SUPABASE_URL + "/rest/v1/bookings?owner_phone=ilike.*" + phoneSuffix + "*&stay_status=neq.cancelled&order=created_at.desc&limit=1";
+                  var bUrl = SUPABASE_URL + "/rest/v1/bookings?owner_phone=ilike.*" + cleanDigits.slice(-7) + "*&stay_status=neq.cancelled&order=created_at.desc&limit=1";
                   var bRes = UrlFetchApp.fetch(bUrl, {
                     method: "get",
                     headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
@@ -316,15 +301,14 @@ function processResortEmails() {
                       targetB = foundBookings[0];
                     }
                   }
-                } catch(eDbMatch) {
-                  Logger.log("שגיאה בסנכרון לפי טלפון: " + eDbMatch.toString());
+                } catch (eBk) {
+                  Logger.log("שגיאה בסנכרון הזמנה: " + eBk.toString());
                 }
 
-                // Fallback by owner name if phone lookup didn't match
-                if (!targetB && extractedPayer && extractedPayer.length >= 3) {
+                if (!targetB && matchedOwnerName) {
                   try {
-                    var nameUrl = SUPABASE_URL + "/rest/v1/bookings?owner_name=ilike.*" + encodeURIComponent(extractedPayer) + "*&stay_status=neq.cancelled&order=created_at.desc&limit=1";
-                    var nRes = UrlFetchApp.fetch(nameUrl, {
+                    var nUrl = SUPABASE_URL + "/rest/v1/bookings?owner_name=ilike.*" + encodeURIComponent(matchedOwnerName.slice(0, 4)) + "*&stay_status=neq.cancelled&order=created_at.desc&limit=1";
+                    var nRes = UrlFetchApp.fetch(nUrl, {
                       method: "get",
                       headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
                       muteHttpExceptions: true
@@ -349,14 +333,42 @@ function processResortEmails() {
                     matchedDates = sParts[2] + "." + sParts[1] + " עד " + eParts[2] + "." + eParts[1];
                   }
 
-                  var numAmt = parseFloat(extractedAmount.replace(/,/g, '')) || targetB.deposit_amount || targetB.total_price;
-                  var bTotal = targetB.total_price || 0;
-                  var isFull = bTotal > 0 && numAmt >= bTotal;
-                  var newStatus = isFull ? 'fully_paid' : 'deposit_paid';
-                  var noteDesc = isFull ? '[💰 שולם במלואו ₪' + numAmt + ' ב-Bit דרך Grow]' : '[💰 שולמה מקדמה ₪' + numAmt + ' ב-Bit דרך Grow]';
-
                   var bData = targetB.data || {};
-                  bData.depositAmount = numAmt;
+                  var extraList = (targetB.extraServices && Array.isArray(targetB.extraServices)) ? targetB.extraServices : (bData.extraServices && Array.isArray(bData.extraServices) ? bData.extraServices : []);
+                  var parsedNumAmt = parseFloat(extractedAmount.replace(/,/g, '')) || 0;
+                  var foundExtra = null;
+                  for (var xi = 0; xi < extraList.length; xi++) {
+                    if (Math.abs(Number(extraList[xi].price) - parsedNumAmt) < 1) {
+                      foundExtra = extraList[xi];
+                      break;
+                    }
+                  }
+
+                  if (foundExtra) {
+                    matchedServiceDetails = "הריזורט לכלב עבור שירות " + foundExtra.name + " (עבור הכלב " + matchedDogName + ")";
+                  } else {
+                    var stB = (targetB.service_type || targetB.serviceType || bData.serviceType || "פנסיון").toLowerCase();
+                    if (stB.includes("train") || stB.includes("אילוף")) {
+                      matchedServiceDetails = "הריזורט לכלב עבור שירות אילוף ופנסיון" + (matchedDates ? " בתאריכים " + matchedDates : "");
+                    } else if (stB.includes("daycare") || stB.includes("יום")) {
+                      matchedServiceDetails = "הריזורט לכלב עבור שירות שהות יומית (דוגי דייקר)" + (matchedDates ? " בתאריך " + matchedDates : "");
+                    } else {
+                      // שירות פנסיון - חובת תאריכים מוחלטת לפי חוק ברזל 36!
+                      matchedServiceDetails = "הריזורט לכלב עבור שירות פנסיון ואירוח" + (matchedDates ? " בתאריכים " + matchedDates : "");
+                    }
+                  }
+
+                  var numAmt = parsedNumAmt || targetB.deposit_amount || targetB.total_price;
+                  var bTotal = targetB.total_price || 0;
+                  var existingDeposit = targetB.deposit_amount || bData.depositAmount || 0;
+                  var newTotalDeposit = Math.min(bTotal, existingDeposit + numAmt);
+                  var isFull = bTotal > 0 && newTotalDeposit >= (bTotal - 1);
+                  var newStatus = isFull ? 'fully_paid' : 'deposit_paid';
+                  var noteDesc = foundExtra 
+                    ? '[💰 שולם ₪' + numAmt + ' עבור אקסטרה: ' + foundExtra.name + ' דרך Grow]' 
+                    : (isFull ? '[💰 שולם במלואו ₪' + numAmt + ' ב-Bit דרך Grow]' : '[💰 שולמה מקדמה ₪' + numAmt + ' ב-Bit דרך Grow]');
+
+                  bData.depositAmount = newTotalDeposit;
                   bData.paymentStatus = newStatus;
                   bData.paymentMethod = 'bit';
                   bData.growPaymentVerified = true;
@@ -370,7 +382,7 @@ function processResortEmails() {
                       method: "patch",
                       headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
                       payload: JSON.stringify({
-                        deposit_amount: numAmt,
+                        deposit_amount: newTotalDeposit,
                         payment_status: newStatus,
                         payment_method: "bit",
                         notes: (targetB.notes ? targetB.notes + " | " : "") + noteDesc,
@@ -404,7 +416,15 @@ function processResortEmails() {
                       if (!matchedOwnerName) matchedOwnerName = targetIn.owner_name || targetIn.ownerName || "";
                       if (!matchedServiceDetails) {
                         var stIn = targetIn.service_type || targetIn.serviceType || "פנסיון";
-                        matchedServiceDetails = "שאלון קליטה (" + stIn + ")";
+                        var inDatesStr = "";
+                        var ins = targetIn.start_date || targetIn.startDate;
+                        var ine = targetIn.end_date || targetIn.endDate;
+                        if (ins && ine) {
+                          var insParts = ins.split("-");
+                          var ineParts = ine.split("-");
+                          inDatesStr = " בתאריכים " + insParts[2] + "." + insParts[1] + " עד " + ineParts[2] + "." + ineParts[1];
+                        }
+                        matchedServiceDetails = "הריזורט לכלב עבור שירות " + stIn + " (שאלון קליטה)" + inDatesStr;
                       }
                     }
                   }
@@ -415,7 +435,7 @@ function processResortEmails() {
               if (!matchedServiceDetails) {
                 var bodySrvMatch = cleanBody.match(/(?:עבור שירות|עבור המוצר|שם השירות|עבור|שירות)[:\s]+([^,\n\r]+?)(?:סכום|מחיר|טלפון|מייל|תאריך|\n|$)/i);
                 if (bodySrvMatch && bodySrvMatch[1].trim() && bodySrvMatch[1].trim() !== 'הריזורט לכלב') {
-                  matchedServiceDetails = bodySrvMatch[1].trim();
+                  matchedServiceDetails = "הריזורט לכלב עבור שירות " + bodySrvMatch[1].trim();
                 }
               }
 
@@ -445,7 +465,7 @@ function processResortEmails() {
                 } catch (eG) {}
               }
 
-              // Record in grow_incoming_payments
+              // 4. Record into grow_incoming_payments in Supabase
               try {
                 var numAmt = parseFloat(extractedAmount.replace(/,/g, '')) || 0;
                 UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/grow_incoming_payments", {
@@ -458,6 +478,7 @@ function processResortEmails() {
                     customer_phone: extractedPhone,
                     amount: numAmt,
                     payment_method: "Grow / Bit",
+                    raw_email_snippet: subject + " - " + cleanBody.substring(0, 300),
                     status: "completed",
                     created_at: new Date().toISOString()
                   }),
@@ -465,22 +486,24 @@ function processResortEmails() {
                 });
               } catch (ePayDb) {}
 
-              var servicePurchased = matchedServiceDetails || (matchedDates ? "שהייה בתאריכים " + matchedDates : "שירותי הריזורט לכלב");
+              var finalServiceTitle = matchedServiceDetails || (matchedDates ? "הריזורט לכלב עבור שירות פנסיון ואירוח בתאריכים " + matchedDates : "הריזורט לכלב עבור שירותי הריזורט לכלב");
+              if (!finalServiceTitle.startsWith("הריזורט לכלב עבור שירות")) {
+                finalServiceTitle = "הריזורט לכלב עבור שירות " + finalServiceTitle;
+              }
 
               var waMsg = "🟢 *התקבל תשלום Grow חדש לריזורט לכלב!*\n\n" +
                           "👤 *שם הלקוח:* " + (matchedOwnerName || "לא צוין") + "\n" +
                           "🐶 *שם הכלב:* " + (matchedDogName || "לא צוין") + "\n" +
                           "💰 *סכום:* ₪" + extractedAmount + " (Grow / Bit)\n" +
                           (extractedPhone ? "📞 *טלפון:* " + extractedPhone + "\n" : "") +
-                          "📄 *נושא המייל (שירות שנרכש):* " + servicePurchased + "\n" +
-                          (matchedDates ? "📅 *תאריכים משוריינים:* " + matchedDates + "\n" : "") +
+                          "📄 *פירוט (שירות שנרכש):* " + finalServiceTitle + "\n" +
+                          (matchedDates && !finalServiceTitle.includes(matchedDates) ? "📅 *תאריכים משוריינים:* " + matchedDates + "\n" : "") +
                           "✨ *סטטוס:* " + (isBookingUpdated ? "ההזמנה עודכנה כמשולמת ביומן והוסדרה יתרת החוב! ✅" : isPassUpdated ? "הכרטיסייה הופעלה ועודכנה כמשולמת! ✅" : "התשלום זוהה במייל ועודכן במערכת. ✅");
 
               sendWhatsAppFromAppsScript("972506336896@c.us", waMsg); // שמוליק
               sendWhatsAppFromAppsScript("972543200007@c.us", waMsg); // חגי
               scriptProperties.setProperty("grow_notified_" + msgId, "true");
-              threadHandled = true;
-              Logger.log("✓ נשלחה התראת וואטסאפ משודרגת על תשלום Grow לשמוליק ולחגי (עם שם לקוח, כלב ושירות שנרכש)");
+              Logger.log("✓ נשלחה התראת וואטסאפ על תשלום Grow לשמוליק ולחגי (עם שם לקוח, כלב ושירות שנרכש)");
             }
           } catch (eNotify) {
             Logger.log("הערה בהתראת וואטסאפ לתשלום Grow: " + eNotify.toString());
@@ -489,6 +512,7 @@ function processResortEmails() {
           break;
         }
       }
+    }
 
     // מחיקת המייל המקורי (העברה לאשפה) כדי להשאיר את התיבה נקייה לחלוטין!
     if (threadHandled) {

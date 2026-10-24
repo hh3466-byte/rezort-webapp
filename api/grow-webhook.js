@@ -448,13 +448,25 @@ export default async function handler(req, res) {
       if (!fullName || fullName === 'לקוח') {
         fullName = matchedBooking.owner_name || (matchedBooking.data && matchedBooking.data.ownerName) || fullName;
       }
-      const st = (matchedBooking.service_type || (matchedBooking.data && matchedBooking.data.serviceType) || '').toLowerCase();
-      if (st.includes('train') || st.includes('אילוף')) serviceName = 'אילוף';
-      else if (st.includes('daycare') || st.includes('מעון') || st.includes('יום')) serviceName = 'מעון יום';
-      else serviceName = 'פנסיון';
+      const bData = matchedBooking.data || {};
+      const extraList = Array.isArray(matchedBooking.extraServices) 
+        ? matchedBooking.extraServices 
+        : (Array.isArray(bData.extraServices) ? bData.extraServices : []);
+      const matchedExtra = extraList.find(ex => Math.abs(Number(ex.price) - amount) < 1);
 
-      const curDeposit = Number(matchedBooking.deposit_amount || (matchedBooking.data && matchedBooking.data.depositAmount) || 0);
-      const totalPrice = Number(matchedBooking.total_price || (matchedBooking.data && matchedBooking.data.totalPrice) || 0);
+      const st = (matchedBooking.service_type || bData.serviceType || '').toLowerCase();
+      if (matchedExtra) {
+        serviceName = matchedExtra.name;
+      } else if (st.includes('train') || st.includes('אילוף')) {
+        serviceName = 'אילוף ופנסיון';
+      } else if (st.includes('daycare') || st.includes('מעון') || st.includes('יום')) {
+        serviceName = 'שהות יומית (דוגי דייקר)';
+      } else {
+        serviceName = 'פנסיון ואירוח';
+      }
+
+      const curDeposit = Number(matchedBooking.deposit_amount || bData.depositAmount || 0);
+      const totalPrice = Number(matchedBooking.total_price || bData.totalPrice || 0);
       if (totalPrice > 0 && curDeposit >= (totalPrice - 1)) {
         paymentClassification = 'תשלום מלא';
       } else {
@@ -469,18 +481,23 @@ export default async function handler(req, res) {
         return iso;
       }
 
-      let datesInfoStr = '';
-      const bStart = matchedBooking.start_date || (matchedBooking.data && matchedBooking.data.startDate) || '';
-      const bEnd = matchedBooking.end_date || (matchedBooking.data && matchedBooking.data.endDate) || '';
-      if (bStart && bEnd) {
-        datesInfoStr = bStart === bEnd 
-          ? ` | תאריך: ${formatDateDisplay(bStart)}` 
-          : ` | תאריכים: ${formatDateDisplay(bStart)} עד ${formatDateDisplay(bEnd)}`;
-      } else if (bStart) {
-        datesInfoStr = ` | תאריך: ${formatDateDisplay(bStart)}`;
-      }
+      const bStart = matchedBooking.start_date || bData.startDate || '';
+      const bEnd = matchedBooking.end_date || bData.endDate || '';
+      const isDailyStay = bStart && bEnd && bStart === bEnd;
+      const formattedDates = bStart && bEnd 
+        ? (isDailyStay ? `בתאריך ${formatDateDisplay(bStart)}` : `בתאריכים ${formatDateDisplay(bStart)} עד ${formatDateDisplay(bEnd)}`)
+        : (bStart ? `בתאריך ${formatDateDisplay(bStart)}` : '');
 
-      detailsText = `${serviceName} (${paymentClassification})${datesInfoStr}`;
+      if (matchedExtra) {
+        detailsText = `הריזורט לכלב עבור שירות ${matchedExtra.name} (עבור הכלב ${dogName})`;
+      } else if (st.includes('train') || st.includes('אילוף')) {
+        detailsText = `הריזורט לכלב עבור שירות אילוף ופנסיון (${paymentClassification})${formattedDates ? ' ' + formattedDates : ''}`;
+      } else if (isDailyStay || st.includes('daycare') || st.includes('יום')) {
+        detailsText = `הריזורט לכלב עבור שירות שהות יומית (${paymentClassification})${formattedDates ? ' ' + formattedDates : ''}`;
+      } else {
+        // שירות פנסיון - חובת תאריכים מוחלטת לפי חוק ברזל 36!
+        detailsText = `הריזורט לכלב עבור שירות פנסיון ואירוח (${paymentClassification})${formattedDates ? ' ' + formattedDates : ''}`;
+      }
       statusText = 'ההזמנה ביומן עודכנה כמשולמת/מקדמה הוסדרה! ✅';
     } else if (matchingIntake) {
       dogName = matchingIntake.dog_name || matchingIntake.dogName || '';
@@ -488,9 +505,9 @@ export default async function handler(req, res) {
         fullName = matchingIntake.owner_name || matchingIntake.ownerName || fullName;
       }
       const st = (matchingIntake.service_type || matchingIntake.serviceType || '').toLowerCase();
-      if (st.includes('train') || st.includes('אילוף')) serviceName = 'אילוף';
-      else if (st.includes('daycare') || st.includes('מעון')) serviceName = 'מעון יום';
-      else serviceName = 'פנסיון';
+      if (st.includes('train') || st.includes('אילוף')) serviceName = 'אילוף ופנסיון';
+      else if (st.includes('daycare') || st.includes('מעון')) serviceName = 'שהות יומית';
+      else serviceName = 'פנסיון ואירוח';
       
       const intakeFullPrice = Number(matchingIntake.calculated_price || matchingIntake.calculatedPrice || matchingIntake.total_price || (matchingIntake.data && matchingIntake.data.calculatedPrice) || 0);
       if (intakeFullPrice > 0 && amount >= (intakeFullPrice - 1)) {
@@ -499,18 +516,22 @@ export default async function handler(req, res) {
         paymentClassification = 'מקדמה';
       }
 
-      let intakeDatesStr = '';
-      const iStart = matchingIntake.start_date || matchingIntake.startDate || '';
-      const iEnd = matchingIntake.end_date || matchingIntake.endDate || '';
-      if (iStart && iEnd) {
-        intakeDatesStr = iStart === iEnd 
-          ? ` | תאריך: ${formatDateDisplay(iStart)}` 
-          : ` | תאריכים: ${formatDateDisplay(iStart)} עד ${formatDateDisplay(iEnd)}`;
-      } else if (iStart) {
-        intakeDatesStr = ` | תאריך: ${formatDateDisplay(iStart)}`;
+      function formatDateDisplay(iso) {
+        if (!iso) return '';
+        if (iso.includes('.')) return iso;
+        const parts = iso.split('-');
+        if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        return iso;
       }
 
-      detailsText = `שאלון קליטה: ${serviceName} (${paymentClassification})${intakeDatesStr}`;
+      const iStart = matchingIntake.start_date || matchingIntake.startDate || '';
+      const iEnd = matchingIntake.end_date || matchingIntake.endDate || '';
+      const isDailyIntake = iStart && iEnd && iStart === iEnd;
+      const formattedIntakeDates = iStart && iEnd 
+        ? (isDailyIntake ? `בתאריך ${formatDateDisplay(iStart)}` : `בתאריכים ${formatDateDisplay(iStart)} עד ${formatDateDisplay(iEnd)}`)
+        : (iStart ? `בתאריך ${formatDateDisplay(iStart)}` : '');
+
+      detailsText = `הריזורט לכלב עבור שירות ${serviceName} (${paymentClassification})${formattedIntakeDates ? ' ' + formattedIntakeDates : ''}`;
       statusText = 'שאלון הקליטה עודכן עם המקדמה! ✅';
     } else if (matchedPass) {
       dogName = matchedPass.dogName || '';
@@ -519,7 +540,7 @@ export default async function handler(req, res) {
       }
       serviceName = matchedPass.serviceType === 'boarding' ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית פעילות יומית';
       paymentClassification = 'תשלום מלא';
-      detailsText = `${serviceName} (כרטיסייה ${matchedPass.passCode})`;
+      detailsText = `הריזורט לכלב עבור שירות ${serviceName} (כרטיסייה ${matchedPass.passCode})`;
       statusText = `הכרטיסייה ${matchedPass.passCode} הופעלה והשהייה ביומן עודכנה כירוקה ומאושרת! 🟢`;
       
       // 1. Update pass in daycare_passes table
@@ -624,14 +645,17 @@ export default async function handler(req, res) {
     const displayOwner = fullName && fullName !== 'לקוח' ? fullName : (cleanPhone ? `לקוח (${cleanPhone})` : 'לא צוין');
     const displayDog = dogName || 'בבירור';
 
-    const displayService = detailsText || 'שירותי הריזורט לכלב';
+    let finalServiceDisplay = detailsText || 'הריזורט לכלב עבור שירותי הריזורט לכלב';
+    if (!finalServiceDisplay.startsWith('הריזורט לכלב עבור שירות')) {
+      finalServiceDisplay = 'הריזורט לכלב עבור שירות ' + finalServiceDisplay;
+    }
 
     const alertMsg = "🟢 *התקבל תשלום Grow חדש לריזורט לכלב!*\n\n" +
                      "👤 *שם הלקוח:* " + displayOwner + "\n" +
                      "🐶 *שם הכלב:* " + displayDog + "\n" +
                      "💰 *סכום:* ₪" + amount.toLocaleString() + " (Grow / Bit)\n" +
                      (cleanPhone ? "📞 *טלפון:* " + cleanPhone + "\n" : "") +
-                     "📄 *נושא (שירות שנרכש):* " + displayService + "\n" +
+                     "📄 *פירוט (שירות שנרכש):* " + finalServiceDisplay + "\n" +
                      (transactionId ? "🧾 *אסמכתא:* " + transactionId + "\n" : "") +
                      "✅ *סטטוס:* " + statusText;
 

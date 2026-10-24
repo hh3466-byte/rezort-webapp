@@ -14,7 +14,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { Booking, ResortSettings } from '../types';
-import { formatDateIL, formatStayDatesDisplay } from '../utils/dateUtils';
+import { formatDateIL, formatStayDatesDisplay, calculateDaysCount } from '../utils/dateUtils';
 import { cleanPhoneNumber, getFirstName, getServiceTypeHebrew } from '../utils/whatsappUtils';
 import { sendGreenApiDirectMessage } from '../services/notificationService';
 import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
@@ -171,8 +171,10 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
       : (amt > 0 ? ` (יש להזין ₪${amt} בעמוד התשלום)` : '');
 
     if (reason === 'extra_day') {
+      const extraDateStr = formatDateIL(booking.endDate || booking.startDate);
       return `היי ${firstName}! 🐾
-בהמשך לשהייה של *${booking.dogName}* בריזורט לכלב, מצורף קישור מאובטח להסדרת התשלום עבור היום הנוסף / סיום השהייה:${amountSection}
+בהמשך לשהייה של *${booking.dogName}* בריזורט לכלב, מצורף קישור מאובטח להסדרת התשלום:
+✨ *עבור:* הריזורט לכלב עבור שירות הארכת שהייה / יום נוסף בתאריך ${extraDateStr}${amountSection}
 👉 ${formattedLink}${amountHint}
 
 💡 *לתשלום ב-Bit, Apple Pay, Google Pay, PayBox, אשראי או העברה בנקאית:* פשוט לוחצים על הקישור למעלה ובוחרים באמצעי התשלום הרצוי (התשלום נקלט ומעדכן את המערכת אוטומטית עם קבלה וחשבונית מס מיידית!).
@@ -186,7 +188,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
       if (incStay && currentDebt > 0) {
         return `היי ${firstName}! 🐾
 בהמשך לשהייה של *${booking.dogName}* בריזורט לכלב, מצורף קישור מאובטח להסדרת התשלום הכולל (שהייה + תוספת אקסטרה):
-✨ *תוספת:* ${descText} (₪${extAmt})
+✨ *תוספת:* הריזורט לכלב עבור שירות ${descText} (₪${extAmt})
 🏠 *יתרת שהייה:* ₪${currentDebt}
 💰 *סה״כ לתשלום:* ₪${amt}
 
@@ -200,7 +202,7 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 
       return `היי ${firstName}! 🐾
 בהמשך לשהייה של *${booking.dogName}* בריזורט לכלב, מצורף קישור מאובטח להסדרת תשלום עבור:
-✨ *עבור:* ${descText}
+✨ *עבור:* הריזורט לכלב עבור שירות ${descText}
 💰 *סכום לתשלום:* ₪${amt}
 
 👉 ${formattedLink}${amountHint}
@@ -213,10 +215,15 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
 
     const isDaily = booking.serviceType === 'daycare' || booking.startDate === booking.endDate;
     const datesIntro = isDaily ? 'לשהות יומית:' : 'לתאריכים:';
+    const boardingServiceTitle = isDaily 
+      ? `הריזורט לכלב עבור שירות שהות יומית (${serviceHebrew}) בתאריך ${stayDates}`
+      : `הריזורט לכלב עבור שירות פנסיון ואירוח (${serviceHebrew}) בתאריכים ${stayDates}`;
 
     return `היי ${firstName}! 🐾
 שמחים לעדכן שהמקום עבור *${booking.dogName}* (${serviceHebrew}) שוריין בריזורט לכלב ${datesIntro}
 📅 ${stayDates}.${amountSection}
+✨ *עבור:* ${boardingServiceTitle}
+
 להשלמת השריון / הסדרת התשלום, יש ללחוץ על הקישור המאובטח${amountHint}:
 👉 ${formattedLink}
 
@@ -268,14 +275,14 @@ export const SendPaymentLinkModal: React.FC<SendPaymentLinkModalProps> = ({
       const reasonLabel = currentReason === 'extra_service'
         ? (extDesc && extDesc.trim()
             ? (incStay && currentDebt > 0
-                ? `תוספת: ${extDesc.trim()} + יתרת שהייה עבור ${booking.dogName} | תאריכים: ${stayDatesDetailed}`
-                : `תוספת: ${extDesc.trim()} עבור ${booking.dogName} | תאריכי שהייה: ${stayDatesDetailed}`)
+                ? `הריזורט לכלב עבור שירות ${extDesc.trim()} + יתרת שהייה עבור ${booking.dogName} בתאריכים ${stayDatesDetailed}`
+                : `הריזורט לכלב עבור שירות ${extDesc.trim()} עבור ${booking.dogName} בתאריכים ${stayDatesDetailed}`)
             : (incStay && currentDebt > 0
-                ? `תשלום שהייה ואקסטרה עבור ${booking.dogName} | תאריכים: ${stayDatesDetailed}`
-                : `חיוב אקסטרה עבור ${booking.dogName} | תאריכי שהייה: ${stayDatesDetailed}`))
+                ? `הריזורט לכלב עבור שירות שהייה ואקסטרה עבור ${booking.dogName} בתאריכים ${stayDatesDetailed}`
+                : `הריזורט לכלב עבור שירות אקסטרה עבור ${booking.dogName} בתאריכים ${stayDatesDetailed}`))
         : currentReason === 'extra_day'
-        ? `הארכת שהייה / יום נוסף עבור ${booking.dogName} | תאריך: ${formatDateIL(booking.endDate || booking.startDate)}`
-        : `${isDepositOnly ? 'מקדמת שריון' : 'אירוח ופנסיון'} (${serviceHebrew}) עבור ${booking.dogName} | תאריכים: ${stayDatesDetailed}`;
+        ? `הריזורט לכלב עבור שירות הארכת שהייה / יום נוסף עבור ${booking.dogName} בתאריך ${formatDateIL(booking.endDate || booking.startDate)}`
+        : `הריזורט לכלב עבור שירות ${isDepositOnly ? 'מקדמת פנסיון ואירוח' : 'פנסיון ואירוח'} (${serviceHebrew}) עבור ${booking.dogName} בתאריכים ${stayDatesDetailed}`;
 
       const res = await createGrowDynamicPaymentLink({
         amount: targetAmt,

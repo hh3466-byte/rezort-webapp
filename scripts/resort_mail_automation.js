@@ -285,7 +285,9 @@ function processResortEmails() {
               }
 
               // 2. Cross-reference with Bookings in Supabase
-              if (cleanDigits && cleanDigits.length >= 7 && (!matchedDogName || !matchedOwnerName)) {
+              var matchedDates = "";
+              if (cleanDigits && cleanDigits.length >= 7) {
+                var targetB = null;
                 try {
                   var bUrl = SUPABASE_URL + "/rest/v1/bookings?owner_phone=ilike.*" + cleanDigits.slice(-7) + "*&stay_status=neq.cancelled&order=created_at.desc&limit=1";
                   var bRes = UrlFetchApp.fetch(bUrl, {
@@ -296,16 +298,104 @@ function processResortEmails() {
                   if (bRes.getResponseCode() === 200) {
                     var foundBookings = JSON.parse(bRes.getContentText());
                     if (foundBookings && foundBookings.length > 0) {
-                      var targetB = foundBookings[0];
-                      if (!matchedDogName) matchedDogName = targetB.dog_name || targetB.dogName || "";
-                      if (!matchedOwnerName) matchedOwnerName = targetB.owner_name || targetB.ownerName || "";
-                      if (!matchedServiceDetails) {
-                        matchedServiceDetails = "הזמנה ביומן (" + (targetB.service_type || "אירוח") + ")";
-                      }
+                      targetB = foundBookings[0];
                     }
                   }
                 } catch (eBk) {
                   Logger.log("שגיאה בסנכרון הזמנה: " + eBk.toString());
+                }
+
+                if (!targetB && matchedOwnerName) {
+                  try {
+                    var nUrl = SUPABASE_URL + "/rest/v1/bookings?owner_name=ilike.*" + encodeURIComponent(matchedOwnerName.slice(0, 4)) + "*&stay_status=neq.cancelled&order=created_at.desc&limit=1";
+                    var nRes = UrlFetchApp.fetch(nUrl, {
+                      method: "get",
+                      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY },
+                      muteHttpExceptions: true
+                    });
+                    if (nRes.getResponseCode() === 200) {
+                      var foundByName = JSON.parse(nRes.getContentText());
+                      if (foundByName && foundByName.length > 0) {
+                        targetB = foundByName[0];
+                      }
+                    }
+                  } catch(eNameDb) {}
+                }
+
+                if (targetB) {
+                  matchedDogName = targetB.dog_name || targetB.dogName || matchedDogName;
+                  matchedOwnerName = targetB.owner_name || targetB.ownerName || matchedOwnerName;
+                  var s = targetB.start_date || targetB.startDate;
+                  var e = targetB.end_date || targetB.endDate;
+                  if (s && e) {
+                    var sParts = s.split("-");
+                    var eParts = e.split("-");
+                    matchedDates = sParts[2] + "." + sParts[1] + " עד " + eParts[2] + "." + eParts[1];
+                  }
+
+                  var bData = targetB.data || {};
+                  var extraList = (targetB.extraServices && Array.isArray(targetB.extraServices)) ? targetB.extraServices : (bData.extraServices && Array.isArray(bData.extraServices) ? bData.extraServices : []);
+                  var parsedNumAmt = parseFloat(extractedAmount.replace(/,/g, '')) || 0;
+                  var foundExtra = null;
+                  for (var xi = 0; xi < extraList.length; xi++) {
+                    if (Math.abs(Number(extraList[xi].price) - parsedNumAmt) < 1) {
+                      foundExtra = extraList[xi];
+                      break;
+                    }
+                  }
+
+                  if (foundExtra) {
+                    matchedServiceDetails = "הריזורט לכלב עבור שירות " + foundExtra.name + " (עבור הכלב " + matchedDogName + ")";
+                  } else {
+                    var stB = (targetB.service_type || targetB.serviceType || bData.serviceType || "פנסיון").toLowerCase();
+                    if (stB.includes("train") || stB.includes("אילוף")) {
+                      matchedServiceDetails = "הריזורט לכלב עבור שירות אילוף ופנסיון" + (matchedDates ? " בתאריכים " + matchedDates : "");
+                    } else if (stB.includes("daycare") || stB.includes("יום")) {
+                      matchedServiceDetails = "הריזורט לכלב עבור שירות שהות יומית (דוגי דייקר)" + (matchedDates ? " בתאריך " + matchedDates : "");
+                    } else {
+                      // שירות פנסיון - חובת תאריכים מוחלטת לפי חוק ברזל 36!
+                      matchedServiceDetails = "הריזורט לכלב עבור שירות פנסיון ואירוח" + (matchedDates ? " בתאריכים " + matchedDates : "");
+                    }
+                  }
+
+                  var numAmt = parsedNumAmt || targetB.deposit_amount || targetB.total_price;
+                  var bTotal = targetB.total_price || 0;
+                  var existingDeposit = targetB.deposit_amount || bData.depositAmount || 0;
+                  var newTotalDeposit = Math.min(bTotal, existingDeposit + numAmt);
+                  var isFull = bTotal > 0 && newTotalDeposit >= (bTotal - 1);
+                  var newStatus = isFull ? 'fully_paid' : 'deposit_paid';
+                  var noteDesc = foundExtra 
+                    ? '[💰 שולם ₪' + numAmt + ' עבור אקסטרה: ' + foundExtra.name + ' דרך Grow]' 
+                    : (isFull ? '[💰 שולם במלואו ₪' + numAmt + ' ב-Bit דרך Grow]' : '[💰 שולמה מקדמה ₪' + numAmt + ' ב-Bit דרך Grow]');
+
+                  bData.depositAmount = newTotalDeposit;
+                  bData.paymentStatus = newStatus;
+                  bData.paymentMethod = 'bit';
+                  bData.growPaymentVerified = true;
+                  bData.lastPaymentReceivedAt = new Date().toISOString();
+                  delete bData.refundDate;
+                  delete bData.refundNotes;
+                  delete bData.refundReason;
+
+                  try {
+                    UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/bookings?id=eq." + encodeURIComponent(targetB.id), {
+                      method: "patch",
+                      headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" },
+                      payload: JSON.stringify({
+                        deposit_amount: newTotalDeposit,
+                        payment_status: newStatus,
+                        payment_method: "bit",
+                        notes: (targetB.notes ? targetB.notes + " | " : "") + noteDesc,
+                        data: bData,
+                        updated_at: new Date().toISOString()
+                      }),
+                      muteHttpExceptions: true
+                    });
+                    isBookingUpdated = true;
+                    Logger.log("✓ עודכן תשלום בהצלחה ב-Supabase עבור " + matchedDogName + " (" + matchedOwnerName + ") - סטטוס: " + newStatus);
+                  } catch(eUpd) {
+                    Logger.log("שגיאה בעדכון הזמנה: " + eUpd.toString());
+                  }
                 }
               }
 
@@ -326,7 +416,15 @@ function processResortEmails() {
                       if (!matchedOwnerName) matchedOwnerName = targetIn.owner_name || targetIn.ownerName || "";
                       if (!matchedServiceDetails) {
                         var stIn = targetIn.service_type || targetIn.serviceType || "פנסיון";
-                        matchedServiceDetails = "שאלון קליטה (" + stIn + ")";
+                        var inDatesStr = "";
+                        var ins = targetIn.start_date || targetIn.startDate;
+                        var ine = targetIn.end_date || targetIn.endDate;
+                        if (ins && ine) {
+                          var insParts = ins.split("-");
+                          var ineParts = ine.split("-");
+                          inDatesStr = " בתאריכים " + insParts[2] + "." + insParts[1] + " עד " + ineParts[2] + "." + ineParts[1];
+                        }
+                        matchedServiceDetails = "הריזורט לכלב עבור שירות " + stIn + " (שאלון קליטה)" + inDatesStr;
                       }
                     }
                   }
@@ -337,7 +435,7 @@ function processResortEmails() {
               if (!matchedServiceDetails) {
                 var bodySrvMatch = cleanBody.match(/(?:עבור שירות|עבור המוצר|שם השירות|עבור|שירות)[:\s]+([^,\n\r]+?)(?:סכום|מחיר|טלפון|מייל|תאריך|\n|$)/i);
                 if (bodySrvMatch && bodySrvMatch[1].trim() && bodySrvMatch[1].trim() !== 'הריזורט לכלב') {
-                  matchedServiceDetails = bodySrvMatch[1].trim();
+                  matchedServiceDetails = "הריזורט לכלב עבור שירות " + bodySrvMatch[1].trim();
                 }
               }
 
@@ -388,16 +486,19 @@ function processResortEmails() {
                 });
               } catch (ePayDb) {}
 
-              var servicePurchased = matchedServiceDetails || "שירותי הריזורט לכלב";
+              var finalServiceTitle = matchedServiceDetails || (matchedDates ? "הריזורט לכלב עבור שירות פנסיון ואירוח בתאריכים " + matchedDates : "הריזורט לכלב עבור שירותי הריזורט לכלב");
+              if (!finalServiceTitle.startsWith("הריזורט לכלב עבור שירות")) {
+                finalServiceTitle = "הריזורט לכלב עבור שירות " + finalServiceTitle;
+              }
 
-              // Build full WhatsApp message - ALWAYS with Client Name, Dog Name and Purchased Service
               var waMsg = "🟢 *התקבל תשלום Grow חדש לריזורט לכלב!*\n\n" +
                           "👤 *שם הלקוח:* " + (matchedOwnerName || "לא צוין") + "\n" +
                           "🐶 *שם הכלב:* " + (matchedDogName || "לא צוין") + "\n" +
-                          (extractedAmount ? "💰 *סכום:* ₪" + extractedAmount + " (Grow / Bit)\n" : "") +
+                          "💰 *סכום:* ₪" + extractedAmount + " (Grow / Bit)\n" +
                           (extractedPhone ? "📞 *טלפון:* " + extractedPhone + "\n" : "") +
-                          "📄 *נושא המייל (שירות שנרכש):* " + servicePurchased + "\n" +
-                          "✅ *סטטוס:* " + (isPassUpdated ? "הכרטיסייה הופעלה ועודכנה כמשולמת! ✅" : isBookingUpdated ? "ההזמנה עודכנה כמשולמת ביומן! ✅" : "התשלום זוהה במייל ועודכן במערכת.");
+                          "📄 *פירוט (שירות שנרכש):* " + finalServiceTitle + "\n" +
+                          (matchedDates && !finalServiceTitle.includes(matchedDates) ? "📅 *תאריכים משוריינים:* " + matchedDates + "\n" : "") +
+                          "✨ *סטטוס:* " + (isBookingUpdated ? "ההזמנה עודכנה כמשולמת ביומן והוסדרה יתרת החוב! ✅" : isPassUpdated ? "הכרטיסייה הופעלה ועודכנה כמשולמת! ✅" : "התשלום זוהה במייל ועודכן במערכת. ✅");
 
               sendWhatsAppFromAppsScript("972506336896@c.us", waMsg); // שמוליק
               sendWhatsAppFromAppsScript("972543200007@c.us", waMsg); // חגי

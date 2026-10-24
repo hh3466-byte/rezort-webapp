@@ -76,10 +76,12 @@ export async function syncMorningCustomer({
     const cleanEmail = String(email || '').trim().toLowerCase();
     const cleanName = fullName.trim();
 
+    let srvStr = serviceName ? (serviceName.startsWith('הריזורט לכלב עבור שירות') ? serviceName : ('הריזורט לכלב עבור שירות ' + serviceName)) : 'הריזורט לכלב עבור שירותי הריזורט לכלב';
+
     // Custom remarks per business - include dog name, service and exact stay dates
     const remarks = businessType === 'teacher_rights'
       ? (serviceName ? `זכויות המורה - ${serviceName}` : 'זכויות המורה')
-      : `הריזורט לכלב - כלב: ${dogName || 'כלב'}${serviceName ? ` | ${serviceName}` : ''}${datesText && !serviceName.includes(datesText) ? ` | תאריכים: ${datesText}` : ''}`;
+      : `${srvStr}${dogName && !srvStr.includes(dogName) ? ` (עבור הכלב ${dogName})` : ''}${datesText && !srvStr.includes(datesText) ? ` | תאריכים: ${datesText}` : ''}`;
 
     console.log(`[Morning] Syncing customer: ${cleanName} (${remarks})...`);
 
