@@ -137,6 +137,28 @@ export async function syncMorningCustomer({
       }
     }
 
+    // 2.5 If client exists, update client's remarks with exact Rule 36 service description
+    if (client && client.id && remarks) {
+      try {
+        console.log(`[Morning] Updating existing client ${client.name} (${client.id}) remarks to: "${remarks}"...`);
+        const updateRes = await fetch(`https://api.greeninvoice.co.il/api/v1/clients/${client.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ remarks })
+        });
+        if (updateRes.ok) {
+          console.log(`[Morning] ✓ Successfully updated client remarks in Morning for ${client.name}`);
+        } else {
+          console.warn(`[Morning] Update client remarks returned status ${updateRes.status}`);
+        }
+      } catch (errUpdateClient) {
+        console.warn('[Morning] Error updating client remarks:', errUpdateClient.message);
+      }
+    }
+
     // 3. Create new client if not found
     if (!client) {
       console.log(`[Morning] Client "${cleanName}" not found in Morning. Creating new client...`);

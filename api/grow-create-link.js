@@ -64,12 +64,13 @@ export default async function handler(req, res) {
     const formattedPhone = cleanPhone(ownerPhone);
     const validFullName = (ownerName.trim().includes(' ') ? ownerName.trim() : `${ownerName.trim()} לקוח`).slice(0, 50);
 
-    let itemTitle = description || `אירוח ופנסיון - ${dogName}`;
-    if (startDate && !itemTitle.includes('תאריכ') && !itemTitle.includes('עד') && !itemTitle.includes(formatDateDisplay(startDate))) {
+    let baseDesc = description || (serviceType ? serviceType : `פנסיון ואירוח עבור ${dogName}`);
+    let itemTitle = baseDesc.startsWith('הריזורט לכלב עבור שירות') ? baseDesc : `הריזורט לכלב עבור שירות ${baseDesc}`;
+    if ((itemTitle.includes('פנסיון') || itemTitle.includes('אירוח')) && startDate && !itemTitle.includes('תאריכ') && !itemTitle.includes('עד') && !itemTitle.includes(formatDateDisplay(startDate))) {
       const datesFormatted = endDate && endDate !== startDate 
         ? `${formatDateDisplay(startDate)} עד ${formatDateDisplay(endDate)}` 
         : formatDateDisplay(startDate);
-      itemTitle = `${itemTitle} | תאריכים: ${datesFormatted}`;
+      itemTitle = `${itemTitle} בתאריכים ${datesFormatted}`;
     }
 
     // Payload for Grow CreatePaymentLink (Locked Amount, only digital instant payments: Credit Card, Bit, Apple Pay, Google Pay, PayBox)

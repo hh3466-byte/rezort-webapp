@@ -94,12 +94,13 @@ export async function createGrowDynamicPaymentLink(
       ? (params.ownerName || 'לקוח').trim() 
       : `${(params.ownerName || 'לקוח').trim()} לקוח`).slice(0, 50);
 
-    let itemTitle = params.description || `אירוח ופנסיון - ${params.dogName || 'כלב'}`;
-    if (params.startDate && !itemTitle.includes('תאריכ') && !itemTitle.includes('עד') && !itemTitle.includes(params.startDate)) {
+    let baseDesc = params.description || (params.serviceType ? params.serviceType : `פנסיון ואירוח עבור ${params.dogName || 'כלב'}`);
+    let itemTitle = baseDesc.startsWith('הריזורט לכלב עבור שירות') ? baseDesc : `הריזורט לכלב עבור שירות ${baseDesc}`;
+    if ((itemTitle.includes('פנסיון') || itemTitle.includes('אירוח')) && params.startDate && !itemTitle.includes('תאריכ') && !itemTitle.includes('עד') && !itemTitle.includes(params.startDate)) {
       const datesFormatted = params.endDate && params.endDate !== params.startDate 
         ? `${params.startDate} עד ${params.endDate}` 
         : params.startDate;
-      itemTitle = `${itemTitle} | תאריכים: ${datesFormatted}`;
+      itemTitle = `${itemTitle} בתאריכים ${datesFormatted}`;
     }
 
     const payload = {
