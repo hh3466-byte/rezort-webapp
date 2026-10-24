@@ -613,13 +613,18 @@ export function getBookingPassStayInfo(
   }
 
   const currentDayInPass = Math.min(totalDays, priorDays + currentDayInStay);
-  const remainingDays = matchedPass 
-    ? Math.max(0, matchedPass.totalDays - matchedPass.usedDays) 
-    : Math.max(0, totalDays - currentDayInPass);
+  // Days used up to and including the end of this current stay (3 prior + 3 this stay = 6):
+  const daysUsedThroughThisStay = priorDays + totalDaysInStay;
+  // Balance remaining after this stay finishes (21 - 6 = 15):
+  const remainingDays = Math.max(0, totalDays - daysUsedThroughThisStay);
+  // Any future booked stays already registered in pass (e.g. next week 29.10):
+  const futureDaysBooked = matchedPass ? Math.max(0, matchedPass.usedDays - daysUsedThroughThisStay) : 0;
+  const netAvailableAfterFuture = Math.max(0, remainingDays - futureDaysBooked);
+
   const passCode = matchedPass?.passCode || (booking.daycarePassCode && booking.daycarePassCode !== 'קוד' ? booking.daycarePassCode : '') || (notes.match(/#(\d+)/)?.[1]) || '';
 
   const displayText = `🎟️ כרטיסייה: יום ${currentDayInPass} מתוך ${totalDays}`;
-  const tooltipText = `כרטיסייה${passCode ? ` #${passCode}` : ''} | יום ${currentDayInStay} מתוך ${totalDaysInStay} בשהייה זו | נותרו ${remainingDays} ימים בכרטיסייה`;
+  const tooltipText = `כרטיסייה${passCode ? ` #${passCode}` : ''} | שהייה נוכחית: יום ${currentDayInStay} מתוך ${totalDaysInStay} | נותרו ${remainingDays} ימים בסיום שהייה זו${futureDaysBooked > 0 ? ` (${netAvailableAfterFuture} פנויים לאחר שריון עתידי נוסף)` : ''}`;
 
   return {
     isPass: true,
@@ -630,6 +635,8 @@ export function getBookingPassStayInfo(
     currentDayInStay,
     totalDaysInStay,
     remainingDays,
+    futureDaysBooked,
+    netAvailableAfterFuture,
     displayText,
     tooltipText
   };
