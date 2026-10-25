@@ -704,12 +704,16 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
             endDate: req.endDate,
             serviceType: req.serviceType
           });
-          if (dynRes && dynRes.paymentUrl) {
+          if (dynRes && dynRes.paymentUrl && !dynRes.paymentUrl.includes('sandbox')) {
             linkToUse = dynRes.paymentUrl;
           }
         } catch (dynErr) {
           console.warn('Could not generate dynamic link for quick send:', dynErr);
         }
+      }
+
+      if (linkToUse.includes('sandbox')) {
+        linkToUse = 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
       }
 
       if (linkToUse.startsWith('//')) linkToUse = 'https:' + linkToUse;
@@ -987,8 +991,11 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     
     const numAmount = Number(paymentAmount) || 0;
     let linkToUse = (customPaymentLink || '').trim();
-    if (!linkToUse) {
+    if (!linkToUse || linkToUse.includes('sandbox')) {
       linkToUse = settings.growPaymentLink || 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
+    }
+    if (linkToUse.includes('sandbox')) {
+      linkToUse = 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
     }
     if (linkToUse.startsWith('//')) {
       linkToUse = 'https:' + linkToUse;

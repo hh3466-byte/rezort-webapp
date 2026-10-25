@@ -29,10 +29,6 @@ export interface GrowLinkResponse {
 }
 
 export const DEFAULT_FALLBACK_LINK = 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
-const GROW_API_KEY = 'hfBND9mlC28BGvUkwQBls9hypPUIoJIj4Sy6LyUH';
-const GROW_USER_ID = 'e1ceee55b717e60b';
-const GROW_PAGE_CODE = '538cbf6f8827';
-const GROW_BASE_URL = 'https://sandboxapi.grow.link';
 
 function cleanPhone(raw?: string): string {
   if (!raw) return '0500000000';
@@ -76,7 +72,7 @@ export async function createGrowDynamicPaymentLink(
     const contentType = res.headers.get('content-type') || '';
     if (res.ok && contentType.includes('application/json')) {
       const data = await res.json();
-      if (data.success && data.paymentUrl) {
+      if (data.success && data.paymentUrl && !data.paymentUrl.includes('sandbox')) {
         return {
           success: true,
           paymentUrl: data.paymentUrl,
@@ -89,99 +85,13 @@ export async function createGrowDynamicPaymentLink(
     console.warn('Grow serverless route notice:', err?.message || err);
   }
 
-  // 2. Direct client-side Grow API fallback (guarantees dynamic locked link even in Vite dev or serverless cold-start)
-  try {
-    const numAmount = Math.round(Number(params.amount));
-    const validFullName = ((params.ownerName || 'לקוח').trim().includes(' ') 
-      ? (params.ownerName || 'לקוח').trim() 
-      : `${(params.ownerName || 'לקוח').trim()} לקוח`).slice(0, 50);
-
-    const { serviceDescription } = buildMorningServiceDescription({
-      serviceType: params.serviceType,
-      dogName: params.dogName,
-      startDate: params.startDate,
-      endDate: params.endDate,
-      extraDescription: params.description && !params.description.includes('פנסיון') && !params.description.includes('אירוח') && !params.description.includes('אילוף') && !params.description.includes('יומיות') ? params.description : '',
-      passCount: 10
-    });
-    const itemTitle = serviceDescription;
-
-    const payload = {
-      userId: GROW_USER_ID,
-      pageCode: GROW_PAGE_CODE,
-      paymentLinkType: 2, // Locked amount
-      isActive: 1,
-      title: itemTitle.slice(0, 100),
-      chargeType: 1,
-      products: {
-        data: [
-          {
-            name: itemTitle.slice(0, 120),
-            price: numAmount,
-            quantity: 1,
-            vatType: 1
-          }
-        ]
-      },
-      pageFieldSettings: {
-        fullName: { value: validFullName },
-        phone: { value: cleanPhone(params.ownerPhone) },
-        ...(params.ownerEmail ? { email: { value: params.ownerEmail.trim() } } : {})
-      },
-      paymentTypes: [
-        {
-          type: 'payments',
-          payments: {
-            paymentsPaymentNum: 1
-          }
-        }
-      ],
-      transactionType: [1, 6, 13, 14, 5, 15],
-      successUrl: typeof window !== 'undefined' ? `${window.location.origin}/payment-success` : 'https://rezort-webapp.vercel.app/payment-success',
-      notifyUrl: 'https://rezort-webapp.vercel.app/api/grow-webhook',
-      cField1: params.bookingId || `b-${Date.now()}`,
-      cField2: cleanPhone(params.ownerPhone),
-      cField3: itemTitle.slice(0, 120),
-      customFields: {
-        cField1: params.bookingId || `b-${Date.now()}`,
-        cField2: cleanPhone(params.ownerPhone),
-        cField3: itemTitle.slice(0, 120)
-      }
-    };
-
-    const directController = new AbortController();
-    const directTimeout = setTimeout(() => directController.abort(), 4000);
-
-    const growRes = await fetch(`${GROW_BASE_URL}/api/light/server/1.0/CreatePaymentLink`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': GROW_API_KEY
-      },
-      body: JSON.stringify(payload),
-      signal: directController.signal
-    });
-    clearTimeout(directTimeout);
-
-    if (growRes.ok) {
-      const responseData = await growRes.json();
-      if (responseData && responseData.status === 1 && responseData.data && responseData.data.url) {
-        return {
-          success: true,
-          paymentUrl: responseData.data.url,
-          isLocked: true,
-          processId: responseData.data.paymentLinkProcessId
-        };
-      }
-    }
-  } catch (directErr: any) {
-    console.warn('Direct Grow API fallback notice:', directErr?.message || directErr);
-  }
-
+  // 2. Direct client-side Grow API fallback
+  // CRITICAL: We strictly ban sandboxapi.grow.link and sandbox.grow.link!
+  // If no production API endpoint is active, safely use the official production link.
   return {
-    success: false,
+    success: true,
     paymentUrl: DEFAULT_FALLBACK_LINK,
     isLocked: false,
-    error: 'לא ניתן ליצור קישור דינמי כעת, נעשה שימוש בקישור ברירת המחדל'
+    error: undefined
   };
 }

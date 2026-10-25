@@ -261,7 +261,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
   // Unreconciled incoming Grow payments (past 7 days)
   const past7DaysMs = nowMs - 7 * 24 * 60 * 60 * 1000;
   const recentGrowPayments = (growPayments || []).filter(p => {
-    if (p.status === 'sandbox_test' || p.status === 'failed' || p.status === 'cancelled' || p.status === 'duplicate') return false;
+    if (p.status === 'sandbox_test' || p.status === 'dismissed' || p.status === 'failed' || p.status === 'cancelled' || p.status === 'duplicate') return false;
     const pTime = p.created_at || p.createdAt ? new Date(p.created_at || p.createdAt).getTime() : 0;
     return pTime >= past7DaysMs;
   });
@@ -280,7 +280,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
       continue;
     }
 
-    const isMatched = activeBookings.some(b => {
+    const isMatched = (bookings || []).some(b => {
       const notes = (b.notes || '') + ((b.data && b.data.notes) || '');
       if (pRef && notes.includes(pRef)) return true;
       const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');

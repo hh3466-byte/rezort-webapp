@@ -137,6 +137,16 @@ export default async function handler(req, res) {
     console.log('Grow response status:', growRes.status, 'Body:', JSON.stringify(responseData));
 
     if (responseData && responseData.status === 1 && responseData.data && responseData.data.url) {
+      if (responseData.data.url.includes('sandbox')) {
+        console.warn('Rejecting sandbox URL from CreatePaymentLink, falling back to official production link');
+        return res.status(200).json({
+          success: true,
+          paymentUrl: 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg',
+          isLocked: false,
+          fallbackUrl: 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg',
+          amount: numAmount
+        });
+      }
       return res.status(200).json({
         success: true,
         paymentUrl: responseData.data.url,

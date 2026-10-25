@@ -111,18 +111,29 @@ export function formatClientPaymentLinkMessage(
 צוות הריזורט לכלב`;
   }
 
-  const isLocked = paymentLink.includes('sandbox.grow.link') || (paymentLink.includes('pay.grow.link') && !paymentLink.includes('MjcyNjk')) || paymentLink.includes('grow.link/c');
+  if (paymentLink.includes('sandbox')) {
+    paymentLink = 'https://pay.grow.link/MjcyNjk~3d59a40e0ae26ce0d41b50b4eebdff04-MzczNjYzMg';
+  }
+
+  const isLocked = (paymentLink.includes('pay.grow.link') && !paymentLink.includes('MjcyNjk')) || paymentLink.includes('grow.link/c');
   const amountInstruction = isLocked 
     ? ` (הסכום ₪${agreedAmount.toLocaleString('he-IL')} מעודכן ונעול לתשלום)` 
-    : (agreedAmount > 0 ? ` (סכום מוסכם: ₪${agreedAmount.toLocaleString('he-IL')})` : '');
+    : (agreedAmount > 0 ? ` (סכום מוסכם: ₪${agreedAmount.toLocaleString('he-IL')} - יש להזין בעמוד התשלום)` : '');
 
   const addressPrompt = (!request.ownerAddress || request.ownerAddress.trim().length < 5)
     ? `\n🏠 *להשלמת התיק הרפואי ובטיחות הכלב:* נשמח לעדכון כתובת המגורים שלכם (עיר, רחוב ומספר בית).\n`
     : '';
 
+  const sHeb = request.serviceType === 'training' ? 'אילוף ואימון' : request.serviceType === 'daycare' ? 'שהות יומית' : 'פנסיון ואירוח';
+  const serviceLine = `הריזורט לכלב עבור שירות ${sHeb} בתאריכים ${formatDateIL(request.startDate)} עד ${formatDateIL(request.endDate || request.startDate)} עבור ${request.dogName}`;
+
   return `היי ${firstName}, שמחנו לשוחח! 🐾🐶
-שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר ${stayText}.${agreedAmount > 0 ? ` (סכום מוסכם: ₪${agreedAmount.toLocaleString('he-IL')})` : ''}
-להשלמת השריון, יש ללחוץ על הקישור המאובטח${amountInstruction}:
+שמחים לעדכן שהמקום עבור *${request.dogName}* נשמר ${stayText}.${agreedAmount > 0 ? ` (סכום לתשלום: ₪${agreedAmount.toLocaleString('he-IL')})` : ''}
+
+📄 *עבור שירות:* ${serviceLine}
+💰 *סכום לתשלום:* ₪${agreedAmount.toLocaleString('he-IL')}${!isLocked ? ` (יש להזין ₪${agreedAmount.toLocaleString('he-IL')} בעמוד התשלום)` : ''}
+
+להשלמת השריון, יש ללחוץ על הקישור המאובטח:
 👉 \u200E${paymentLink}
 
 💡 *לתשלום ב-Bit, Apple Pay, Google Pay, PayBox, אשראי או העברה בנקאית:* פשוט לוחצים על הקישור למעלה ובוחרים באמצעי התשלום הרצוי (התשלום נקלט ומעדכן את המערכת אוטומטית עם קבלה וחשבונית מס מיידית למייל ולטלפון!).
