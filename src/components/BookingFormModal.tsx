@@ -699,24 +699,47 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               });
 
           if (!matchedPass) return null;
-          const remaining = Math.max(0, matchedPass.totalDays - matchedPass.usedDays);
           const isBoarding = matchedPass.serviceType === 'boarding';
+          const requestedNights = isBoarding 
+            ? Math.max(1, calculateDaysCount(startDate, endDate)) 
+            : 1;
+          const remaining = Math.max(0, matchedPass.totalDays - matchedPass.usedDays);
+          const isOverdraft = requestedNights > remaining;
+          const overdraftDays = isOverdraft ? requestedNights - remaining : 0;
 
           return (
-            <div className="my-3 p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-2 border-emerald-400 text-right animate-fadeIn" dir="rtl">
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-emerald-300">
-                <div className="flex items-center gap-2 font-black text-emerald-950 text-xs sm:text-sm">
-                  <span className="text-lg">🎟️</span>
+            <div className={`my-3 p-3.5 rounded-2xl text-right animate-fadeIn border-2 ${
+              isOverdraft 
+                ? 'bg-gradient-to-r from-rose-50 via-red-50 to-rose-50 border-rose-500 shadow-sm'
+                : 'bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border-emerald-400'
+            }`} dir="rtl">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 border-b border-slate-200">
+                <div className={`flex items-center gap-2 font-black text-xs sm:text-sm ${isOverdraft ? 'text-rose-950' : 'text-emerald-950'}`}>
+                  <span className="text-lg">{isOverdraft ? '🚨' : '🎟️'}</span>
                   <span>{isBoarding ? 'בנק 21 יממות פנסיון VIP' : 'כרטיסיית ימי כיף'} – קוד <strong className="font-mono text-emerald-800">#{matchedPass.passCode}</strong></span>
                 </div>
-                <span className="text-xs bg-emerald-200 text-emerald-950 font-black px-2.5 py-0.5 rounded-lg border border-emerald-300">
-                  ✅ שולם מראש (₪0 לתשלום)
-                </span>
+                {isOverdraft ? (
+                  <span className="text-xs bg-rose-200 text-rose-950 font-black px-2.5 py-0.5 rounded-lg border border-rose-400 animate-pulse">
+                    ⚠️ חריגה של {overdraftDays} יממות (נדרש תשלום)
+                  </span>
+                ) : (
+                  <span className="text-xs bg-emerald-200 text-emerald-950 font-black px-2.5 py-0.5 rounded-lg border border-emerald-300">
+                    ✅ שולם מראש (₪0 לתשלום)
+                  </span>
+                )}
               </div>
-              <div className="text-xs text-emerald-800 pt-2 flex items-center justify-between flex-wrap gap-2">
-                <span>יתרת ימים בכרטיסייה: <strong className="text-emerald-950 text-sm font-black">{remaining} מתוך {matchedPass.totalDays} {isBoarding ? 'יממות' : 'ימים'}</strong> ({matchedPass.usedDays} נוצלו)</span>
-                <span className="text-[11px] text-emerald-700 bg-white/80 px-2 py-0.5 rounded-md border border-emerald-200 font-bold">
-                  חופשה זו מקוזזת מתוך הכרטיסייה
+              <div className="text-xs pt-2 flex items-center justify-between flex-wrap gap-2">
+                <span className={isOverdraft ? 'text-rose-900' : 'text-emerald-800'}>
+                  יתרת ימים בכרטיסייה: <strong className="text-slate-950 text-sm font-black">{remaining} מתוך {matchedPass.totalDays} {isBoarding ? 'יממות' : 'ימים'}</strong> ({matchedPass.usedDays} נוצלו)
+                </span>
+                <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold border ${
+                  isOverdraft 
+                    ? 'text-rose-900 bg-white/90 border-rose-300 font-black' 
+                    : 'text-emerald-700 bg-white/80 border-emerald-200'
+                }`}>
+                  {isOverdraft 
+                    ? `שהייה זו (${requestedNights} ימים) חורגת מהיתרה (${remaining} נותרו)`
+                    : 'חופשה זו מקוזזת מתוך הכרטיסייה'}
                 </span>
               </div>
             </div>

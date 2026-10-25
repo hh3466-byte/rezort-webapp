@@ -153,6 +153,13 @@ export interface PassInfo {
   dayIndex?: number;
   isBoarding: boolean;
   label: string;
+  statusType: 'normal' | 'low' | 'exhausted' | 'exceeded';
+  badgeColor: string;
+  tooltipText: string;
+  isExceeded: boolean;
+  exceededDays: number;
+  bookingHasOverdraft: boolean;
+  remainingAfterStay: number;
 }
 
 export function getPassInfoForBooking(
@@ -214,7 +221,31 @@ export function getPassInfoForBooking(
 
   // If no targetDateStr, return static snapshot
   if (!targetDateStr) {
-    const remainingDays = Math.max(0, totalDays - matchedPass.usedDays);
+    const remainingDays = totalDays - matchedPass.usedDays;
+    const isExceeded = remainingDays < 0;
+    const exceededDays = isExceeded ? Math.abs(remainingDays) : 0;
+    const statusType: 'normal' | 'low' | 'exhausted' | 'exceeded' = isExceeded
+      ? 'exceeded'
+      : remainingDays === 0
+      ? 'exhausted'
+      : remainingDays <= 2
+      ? 'low'
+      : 'normal';
+    const label = isExceeded
+      ? `🚨 חריגה (+${exceededDays})`
+      : remainingDays === 0
+      ? '🏁 0 נותרו'
+      : remainingDays <= 2
+      ? `⏳ ${remainingDays} ${remainingDays === 1 ? 'נותר' : 'נותרו'}`
+      : `🎟️ ${remainingDays} נותרו`;
+    const badgeColor = isExceeded
+      ? 'bg-rose-100 text-rose-950 border-2 border-rose-500 font-black animate-pulse'
+      : remainingDays === 0
+      ? 'bg-orange-100 text-orange-950 border border-orange-500 font-extrabold'
+      : remainingDays <= 2
+      ? 'bg-amber-100 text-amber-950 border border-amber-400 font-black'
+      : 'bg-emerald-100 text-emerald-950 font-black border border-emerald-400 shadow-2xs';
+
     return {
       isPass: true,
       passCode: matchedPass.passCode,
@@ -223,11 +254,18 @@ export function getPassInfoForBooking(
       remainingDays,
       dayIndex: matchedPass.usedDays,
       isBoarding,
-      label: `🎟️ ${remainingDays} נותרו`
+      label,
+      statusType,
+      badgeColor,
+      tooltipText: `🎟️ כרטיסייה #${matchedPass.passCode}: ${remainingDays} נותרו מתוך ${totalDays}`,
+      isExceeded,
+      exceededDays,
+      bookingHasOverdraft: isExceeded,
+      remainingAfterStay: remainingDays
     };
   }
 
-  // Dynamic chronological calculation for targetDateStr (Option A: continuous countdown from check-in to checkout)
+  // Dynamic chronological countdown for targetDateStr
   const passCodeClean = String(matchedPass.passCode).trim().toUpperCase();
   const phoneDigits = String(matchedPass.ownerPhone || '').replace(/\D/g, '').slice(-7);
 
@@ -269,7 +307,7 @@ export function getPassInfoForBooking(
     nightsConsumedBeforeThisBooking += pbNights;
   }
 
-  // 4. Calculate total nights and current day in pass for targetDateStr
+  // 4. Calculate total nights and current day in pass for targetDateStr (progressive countdown)
   const isThisBoarding = booking.serviceType === 'boarding' || isBoarding;
   const totalNightsInThisBooking = isThisBoarding 
     ? Math.max(1, calculateDaysCount(booking.startDate, booking.endDate))
@@ -284,23 +322,68 @@ export function getPassInfoForBooking(
     } else {
       currentDayInStay = Math.min(totalNightsInThisBooking, Math.max(1, calculateDaysCount(booking.startDate, targetDateStr) + 1));
     }
+  } else {
+    currentDayInStay = 1;
   }
 
-  const currentDayInPass = Math.min(totalDays, priorUnbookedDays + nightsConsumedBeforeThisBooking + currentDayInStay);
+  // Progressive countdown: nights consumed up to and including targetDateStr
+  const currentDayInPass = priorUnbookedDays + nightsConsumedBeforeThisBooking + currentDayInStay;
+  const totalConsumedOnThisDate = priorUnbookedDays + nightsConsumedBeforeThisBooking + currentDayInStay;
+  const remainingOnThisDate = totalDays - totalConsumedOnThisDate;
+
   // Total nights consumed through this entire booking:
   const totalConsumedThroughThisBooking = priorUnbookedDays + nightsConsumedBeforeThisBooking + totalNightsInThisBooking;
-  // Balance remaining after this booking completes (21 - 6 = 15):
-  const remainingAfterThisBooking = Math.max(0, totalDays - totalConsumedThroughThisBooking);
+  const remainingAfterThisBooking = totalDays - totalConsumedThroughThisBooking;
+  const bookingHasOverdraft = remainingAfterThisBooking < 0;
+
+  const isExceeded = remainingOnThisDate < 0;
+  const exceededDays = isExceeded ? Math.abs(remainingOnThisDate) : 0;
+  const statusType: 'normal' | 'low' | 'exhausted' | 'exceeded' = isExceeded
+    ? 'exceeded'
+    : remainingOnThisDate === 0
+    ? 'exhausted'
+    : remainingOnThisDate <= 2
+    ? 'low'
+    : 'normal';
+
+  let label = '';
+  let badgeColor = '';
+  let tooltipText = '';
+
+  if (statusType === 'exceeded') {
+    label = `🚨 חריגה (+${exceededDays})`;
+    badgeColor = 'bg-rose-100 text-rose-950 border-2 border-rose-500 font-black animate-pulse shadow-sm ring-1 ring-rose-400';
+    tooltipText = `🚨 חריגת כרטיסייה! ל${booking.dogName} נרכשו ${totalDays} יממות (#${matchedPass.passCode}), אך שוריינו ימים מעבר למכסה. יום זה חורג ב-${exceededDays} ${exceededDays === 1 ? 'יממה' : 'יממות'} מעבר לכרטיסייה ונדרש לגבות עליו תשלום!`;
+  } else if (statusType === 'exhausted') {
+    label = '🏁 0 נותרו (מוצה)';
+    badgeColor = 'bg-orange-100 text-orange-950 border border-orange-500 font-extrabold shadow-2xs';
+    tooltipText = `🏁 כרטיסייה #${matchedPass.passCode} מוצתה עד תום ביום זה (${totalDays} מתוך ${totalDays} נוצלו). כל שהייה נוספת תחרוג ותדרוש תשלום.`;
+  } else if (statusType === 'low') {
+    label = `⏳ ${remainingOnThisDate} ${remainingOnThisDate === 1 ? 'נותר' : 'נותרו'}`;
+    badgeColor = 'bg-amber-100 text-amber-950 border border-amber-400 font-black shadow-2xs';
+    tooltipText = `⚠️ יתרה נמוכה! נותרו ${remainingOnThisDate} יממות בלבד בכרטיסייה #${matchedPass.passCode} (יום ${currentDayInPass} מתוך ${totalDays}). מומלץ להציע ללקוח לרכוש כרטיסייה חדשה.`;
+  } else {
+    label = `🎟️ ${remainingOnThisDate} נותרו`;
+    badgeColor = 'bg-emerald-100 text-emerald-950 font-black border border-emerald-400 shadow-2xs';
+    tooltipText = `🎟️ כרטיסייה #${matchedPass.passCode}: יום ${currentDayInPass} מתוך ${totalDays} | נותרו ${remainingOnThisDate} יממות בסיום יום זה (בסיום שהייה זו יוותרו ${Math.max(0, remainingAfterThisBooking)} יממות)`;
+  }
 
   return {
     isPass: true,
     passCode: matchedPass.passCode,
     totalDays,
-    usedDays: totalConsumedThroughThisBooking,
-    remainingDays: remainingAfterThisBooking,
+    usedDays: totalConsumedOnThisDate,
+    remainingDays: remainingOnThisDate,
     dayIndex: currentDayInPass,
     isBoarding: isThisBoarding,
-    label: `🎟️ ${remainingAfterThisBooking} נותרו`
+    label,
+    statusType,
+    badgeColor,
+    tooltipText,
+    isExceeded,
+    exceededDays,
+    bookingHasOverdraft,
+    remainingAfterStay: remainingAfterThisBooking
   };
 }
 
@@ -1066,6 +1149,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                           cardClasses += 'bg-indigo-100/95 border-indigo-500 text-indigo-950 ring-2 ring-indigo-500 shadow-md scale-[1.03] z-20';
                         } else if (isDimmed) {
                           cardClasses += 'bg-white/60 border-slate-200 text-slate-400 opacity-30 hover:opacity-90';
+                        } else if (passInfo?.isExceeded) {
+                          cardClasses += 'bg-rose-50/90 border-2 border-rose-400 text-rose-950 ring-2 ring-rose-400/60 shadow-xs';
                         } else if (pairInfo.isPair) {
                           cardClasses += `${stayColors.cardBorderBg} border-r-[3.5px] border-r-indigo-500`;
                         } else {
@@ -1127,11 +1212,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               </span>
                               {passInfo && (
                                 <span 
-                                  className="text-[9px] bg-emerald-100 text-emerald-950 font-black px-1.5 py-0.5 rounded-md border border-emerald-400 flex items-center gap-0.5 shrink-0 shadow-2xs mr-1" 
-                                  title={`🎟️ כרטיסייה #${passInfo.passCode}: נותרו ${passInfo.remainingDays} מתוך ${passInfo.totalDays} ${passInfo.isBoarding ? 'יממות' : 'ימים'}`}
+                                  className={`text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shrink-0 shadow-2xs mr-1 ${passInfo.badgeColor}`} 
+                                  title={passInfo.tooltipText}
                                 >
-                                  <span>🎟️</span>
-                                  <span>{passInfo.remainingDays} נותרו</span>
+                                  <span>{passInfo.label}</span>
                                 </span>
                               )}
                             </span>
@@ -1285,6 +1369,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         chipStyle = 'bg-indigo-600 text-white ring-2 ring-indigo-300 font-black shadow-md scale-[1.04] z-20';
                       } else if (isDimmed) {
                         chipStyle = 'bg-slate-200/60 text-slate-400 opacity-30';
+                      } else if (passInfo?.isExceeded) {
+                        chipStyle = 'bg-rose-100 text-rose-950 border-rose-500 font-black animate-pulse shadow-xs';
                       } else if (pairInfo.isPair) {
                         chipStyle += ' border-r-2 border-r-indigo-500';
                       }
@@ -1309,7 +1395,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             setHoveredHousehold(null);
                           }}
                           className={`text-[10px] px-1.5 py-0.5 rounded-md font-bold truncate flex items-center justify-between border cursor-pointer hover:scale-[1.02] transition-all ${chipStyle}`}
-                          title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${pairInfo.isPair ? ` - 🔗 זוג` : ''}${passInfo ? ` - 🎟️ כרטיסייה #${passInfo.passCode} (נותרו ${passInfo.remainingDays} מתוך ${passInfo.totalDays} ימים)` : ''}${stayColors.isReleasing ? ' - משתחרר ביום זה!' : isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
+                          title={`${b.dogName} (${b.ownerName}) - ${getServiceTypeHebrew(b.serviceType)}${pairInfo.isPair ? ` - 🔗 זוג` : ''}${passInfo ? ` - 🎟️ כרטיסייה #${passInfo.passCode} (${passInfo.label})` : ''}${stayColors.isReleasing ? ' - משתחרר ביום זה!' : isEnded ? ' - הסתיים' : b.stayStatus === 'checked_in' ? ' - שוהה כעת' : ' - שוריין'}`}
                         >
                           <span className="truncate flex items-center gap-1 min-w-0">
                             {isTrainingBooking(b) ? (
@@ -1327,10 +1413,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             <span className={`text-[9px] shrink-0 ${isMatch || isHovered ? 'text-white/90 font-medium' : stayColors.ownerClass}`}>({b.ownerName})</span>
                             {passInfo && (
                               <span 
-                                className="text-[9px] bg-emerald-200 text-emerald-950 font-black px-1 rounded border border-emerald-400 shrink-0" 
-                                title={`🎟️ כרטיסייה #${passInfo.passCode}: נותרו ${passInfo.remainingDays} מתוך ${passInfo.totalDays} ${passInfo.isBoarding ? 'יממות' : 'ימים'}`}
+                                className={`text-[9px] font-black px-1 rounded shrink-0 mr-0.5 ${passInfo.badgeColor}`} 
+                                title={passInfo.tooltipText}
                               >
-                                🎟️ {passInfo.remainingDays}
+                                {passInfo.label}
                               </span>
                             )}
                           </span>
@@ -1567,10 +1653,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 </span>
                                 {passInfo && (
                                   <span 
-                                    className="text-[9px] bg-emerald-100 text-emerald-950 font-black px-1.5 py-0.5 rounded-md border border-emerald-400 shrink-0 mr-1 shadow-2xs" 
-                                    title={`🎟️ כרטיסייה #${passInfo.passCode}: נותרו ${passInfo.remainingDays} מתוך ${passInfo.totalDays} ${passInfo.isBoarding ? 'יממות' : 'ימים'}`}
+                                    className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 mr-1 shadow-2xs ${passInfo.badgeColor}`} 
+                                    title={passInfo.tooltipText}
                                   >
-                                    🎟️ {passInfo.remainingDays} נותרו
+                                    {passInfo.label}
                                   </span>
                                 )}
                               </span>
@@ -1587,9 +1673,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                             <div className="mt-1 flex items-center justify-between text-[10px] pt-1 border-t border-slate-100">
                               {passInfo ? (
-                                <span className="bg-emerald-100 text-emerald-950 border border-emerald-400 font-black px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
-                                  <span>🎟️</span>
-                                  <span>מנוי #{passInfo.passCode}: נותרו <strong>{passInfo.remainingDays}</strong> מתוך {passInfo.totalDays} ימ'</span>
+                                <span className={`border font-black px-1.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs ${passInfo.badgeColor}`}>
+                                  <span>{passInfo.statusType === 'exceeded' ? '🚨' : passInfo.statusType === 'exhausted' ? '🏁' : passInfo.statusType === 'low' ? '⏳' : '🎟️'}</span>
+                                  <span>
+                                    {passInfo.isExceeded
+                                      ? `מנוי #${passInfo.passCode}: חריגה של ${passInfo.exceededDays}+ יממות מעבר למכסה!`
+                                      : <>מנוי #{passInfo.passCode}: נותרו <strong>{passInfo.remainingDays}</strong> מתוך {passInfo.totalDays} ימ'</>}
+                                  </span>
                                 </span>
                               ) : (
                                 <span className={`px-1.5 py-0.2 rounded-md font-bold ${
@@ -1784,9 +1874,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               {getServiceTypeHebrew(booking.serviceType)}
                             </span>
                             {passInfo && (
-                              <span className="bg-emerald-100 text-emerald-950 text-[11px] font-black px-2.5 py-0.5 rounded-md border border-emerald-400 flex items-center gap-1 shadow-2xs">
-                                <span>🎟️</span>
-                                <span>כרטיסייה #{passInfo.passCode}: נותרו {passInfo.remainingDays} מתוך {passInfo.totalDays} {passInfo.isBoarding ? 'יממות' : 'ימים'}</span>
+                              <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs border ${passInfo.badgeColor}`}>
+                                <span>{passInfo.statusType === 'exceeded' ? '🚨' : passInfo.statusType === 'exhausted' ? '🏁' : passInfo.statusType === 'low' ? '⏳' : '🎟️'}</span>
+                                <span>
+                                  {passInfo.isExceeded
+                                    ? `כרטיסייה #${passInfo.passCode}: חריגה של ${passInfo.exceededDays}+ יממות מעבר למכסה!`
+                                    : `כרטיסייה #${passInfo.passCode}: נותרו ${passInfo.remainingDays} מתוך ${passInfo.totalDays} ${passInfo.isBoarding ? 'יממות' : 'ימים'}`}
+                                </span>
                               </span>
                             )}
                             {stayColors.isReleasing && (
