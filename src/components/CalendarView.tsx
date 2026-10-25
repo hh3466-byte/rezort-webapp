@@ -243,12 +243,12 @@ export function getPassInfoForBooking(
       ? 'low'
       : 'normal';
     const label = isExceeded
-      ? `🚨 חריגה: ${matchedPass.usedDays}/${totalDays} (+${exceededDays})`
+      ? `🚨 חריגה: ${matchedPass.usedDays}/${totalDays}`
       : remainingDays === 0
-      ? `🏁 0/${totalDays} נותרו`
+      ? `🏁 0/${totalDays}`
       : remainingDays <= 2
-      ? `⏳ ${remainingDays}/${totalDays} ${remainingDays === 1 ? 'נותר' : 'נותרו'}`
-      : `🎟️ ${remainingDays}/${totalDays} נותרו`;
+      ? `⏳ ${remainingDays}/${totalDays}`
+      : `🎟️ ${remainingDays}/${totalDays}`;
     const compactLabel = isExceeded
       ? `🚨 ${matchedPass.usedDays}/${totalDays}`
       : remainingDays === 0
@@ -371,22 +371,22 @@ export function getPassInfoForBooking(
   let tooltipText = '';
 
   if (statusType === 'exceeded') {
-    label = `🚨 חריגה: ${totalConsumedOnThisDate}/${totalDays} (+${exceededDays})`;
+    label = `🚨 חריגה: ${totalConsumedOnThisDate}/${totalDays}`;
     compactLabel = `🚨 ${totalConsumedOnThisDate}/${totalDays}`;
     badgeColor = 'bg-rose-100 text-rose-950 border-2 border-rose-500 font-black animate-pulse shadow-sm ring-1 ring-rose-400';
     tooltipText = `🚨 חריגת כרטיסייה! ל${booking.dogName} נרכשו ${totalDays} יממות (#${matchedPass.passCode}), אך שוריינו ימים מעבר למכסה. יום זה חורג ב-${exceededDays} ${exceededDays === 1 ? 'יממה' : 'יממות'} מעבר לכרטיסייה (${totalConsumedOnThisDate}/${totalDays}) ונדרש לגבות עליו תשלום!`;
   } else if (statusType === 'exhausted') {
-    label = `🏁 0/${totalDays} נותרו`;
+    label = `🏁 0/${totalDays}`;
     compactLabel = `🏁 0/${totalDays}`;
     badgeColor = 'bg-orange-100 text-orange-950 border border-orange-500 font-extrabold shadow-2xs';
     tooltipText = `🏁 כרטיסייה #${matchedPass.passCode} מוצתה עד תום ביום זה (${totalDays} מתוך ${totalDays} נוצלו). כל שהייה נוספת תחרוג ותדרוש תשלום.`;
   } else if (statusType === 'low') {
-    label = `⏳ ${remainingOnThisDate}/${totalDays} ${remainingOnThisDate === 1 ? 'נותר' : 'נותרו'}`;
+    label = `⏳ ${remainingOnThisDate}/${totalDays}`;
     compactLabel = `⏳ ${remainingOnThisDate}/${totalDays}`;
     badgeColor = 'bg-amber-100 text-amber-950 border border-amber-400 font-black shadow-2xs';
     tooltipText = `⚠️ יתרה נמוכה! נותרו ${remainingOnThisDate} מתוך ${totalDays} יממות בכרטיסייה #${matchedPass.passCode} (יום ${currentDayInPass} מתוך ${totalDays}). מומלץ להציע ללקוח לרכוש כרטיסייה חדשה.`;
   } else {
-    label = `🎟️ ${remainingOnThisDate}/${totalDays} נותרו`;
+    label = `🎟️ ${remainingOnThisDate}/${totalDays}`;
     compactLabel = `🎟️ ${remainingOnThisDate}/${totalDays}`;
     badgeColor = 'bg-emerald-100 text-emerald-950 font-black border border-emerald-400 shadow-2xs';
     tooltipText = `🎟️ כרטיסייה #${matchedPass.passCode}: נותרו ${remainingOnThisDate} מתוך ${totalDays} יממות בסיום יום זה (יום ${currentDayInPass} מתוך ${totalDays} | בסיום שהייה זו יוותרו ${Math.max(0, remainingAfterThisBooking)} יממות)`;
@@ -1253,7 +1253,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                     title={passInfo.tooltipText}
                                   >
                                     <span>{passInfo.compactLabel || passInfo.label}</span>
-                                    <span className="hidden xl:inline"> נותרו</span>
                                   </span>
                                 )}
                                 {stayColors.isReleasing && (

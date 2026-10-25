@@ -635,13 +635,13 @@ export function getBookingPassStayInfo(
     ? 'low'
     : 'normal';
 
-  let remainingLabel = `${remainingOnThisDate}/${totalDays} נותרו`;
+  let remainingLabel = `${remainingOnThisDate}/${totalDays}`;
   if (isExceeded) {
     remainingLabel = `חריגה (+${exceededDays}) · ${daysUsedThroughThisStay}/${totalDays}`;
   } else if (remainingOnThisDate === 0) {
-    remainingLabel = `0/${totalDays} נותרו (מוצה)`;
+    remainingLabel = `0/${totalDays} (מוצה)`;
   } else if (remainingOnThisDate <= 2) {
-    remainingLabel = `${remainingOnThisDate}/${totalDays} נותרו (עומד להסתיים)`;
+    remainingLabel = `${remainingOnThisDate}/${totalDays}`;
   }
 
   // Any future booked stays already registered in pass:
@@ -652,7 +652,7 @@ export function getBookingPassStayInfo(
 
   const displayText = isExceeded 
     ? `🚨 חריגת כרטיסייה: ${daysUsedThroughThisStay}/${totalDays}`
-    : `🎟️ כרטיסייה: ${remainingOnThisDate}/${totalDays} נותרו`;
+    : `🎟️ כרטיסייה: ${remainingOnThisDate}/${totalDays}`;
 
   const tooltipText = isExceeded
     ? `🚨 חריגת כרטיסייה #${passCode}! יום זה חורג ב-${exceededDays} יממות מעבר למכסה שנרכשה (${daysUsedThroughThisStay}/${totalDays}). נדרש לגבות תשלום נפרד!`
@@ -889,7 +889,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                     : 'bg-teal-100 text-teal-950 border border-teal-300'
                 }`}
               >
-                <span>{passInfo.isExceeded ? '🚨' : '🎟️'} בנק {passInfo.totalDays} יממות ({passInfo.remainingDays}/{passInfo.totalDays} נותרו)</span>
+                <span>{passInfo.isExceeded ? '🚨' : '🎟️'} בנק {passInfo.totalDays} יממות ({passInfo.remainingDays}/{passInfo.totalDays})</span>
               </span>
             )}
             {/* Placement / Room / Suite Location Badge (Visible for ALL dogs) */}
