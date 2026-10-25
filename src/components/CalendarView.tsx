@@ -1215,7 +1215,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             className={cardClasses}
                             title={tooltipTitle}
                           >
-                            <span className="flex items-center gap-1 truncate min-w-0 flex-1">
+                            <span className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
                               {isTrainingBooking(b) ? (
                                 <img
                                   src="/resort-official-logo.jpg"
@@ -1231,18 +1231,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               ) : (
                                 <span className={`text-[11px] shrink-0 ${isMatch ? 'text-amber-700' : isHovered ? 'text-indigo-700' : stayColors.iconClass}`}>🐾</span>
                               )}
-                              <span className="truncate text-[11px] sm:text-xs">
-                                <span className={isMatch ? 'text-amber-950 font-black' : isHovered ? 'text-indigo-950 font-black' : stayColors.dogClass}>{b.dogName}</span>{' '}
-                                <span className={isMatch ? 'text-amber-900 font-bold text-[10px]' : isHovered ? 'text-indigo-900 font-bold text-[10px]' : stayColors.ownerClass}>({b.ownerName})</span>
+                              {/* Dog name: NEVER truncated, bold and prominent */}
+                              <span className={`text-[11px] sm:text-xs font-black shrink-0 ${isMatch ? 'text-amber-950' : isHovered ? 'text-indigo-950' : stayColors.dogClass}`}>
+                                {b.dogName}
                               </span>
-                              {passInfo && (
-                                <span 
-                                  className={`text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shrink-0 shadow-2xs mr-1 ${passInfo.badgeColor}`} 
-                                  title={passInfo.tooltipText}
-                                >
-                                  <span>{passInfo.label}</span>
-                                </span>
-                              )}
+                              {/* Owner name: truncates with ellipsis if column is narrow */}
+                              <span className={`text-[10px] font-medium truncate min-w-0 opacity-80 ${isMatch ? 'text-amber-900' : isHovered ? 'text-indigo-900' : stayColors.ownerClass}`}>
+                                ({b.ownerName})
+                              </span>
                             </span>
                             {isEnded ? (
                               <span className="text-[9px] bg-slate-200 text-slate-600 font-bold px-1 py-0.2 rounded flex items-center gap-0.5 shrink-0" title="שוחרר הביתה">
@@ -1251,6 +1247,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                               </span>
                             ) : (
                               <div className="flex items-center gap-1 shrink-0">
+                                {passInfo && (
+                                  <span 
+                                    className={`text-[9px] font-black px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shrink-0 shadow-2xs ${passInfo.badgeColor}`} 
+                                    title={passInfo.tooltipText}
+                                  >
+                                    <span>{passInfo.compactLabel || passInfo.label}</span>
+                                    <span className="hidden xl:inline"> נותרו</span>
+                                  </span>
+                                )}
                                 {stayColors.isReleasing && (
                                   <span className="text-xs leading-none shrink-0" title="משתחרר ביום זה">
                                     🚪
@@ -1434,8 +1439,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                             ) : (
                               <span className="text-[10px] shrink-0">🐾</span>
                             )}
-                            <span className={`truncate ${isMatch || isHovered ? 'text-white font-black' : stayColors.dogClass}`}>{b.dogName}</span>
-                            <span className={`text-[9px] shrink-0 ${isMatch || isHovered ? 'text-white/90 font-medium' : stayColors.ownerClass}`}>({b.ownerName})</span>
+                            <span className={`font-black shrink-0 ${isMatch || isHovered ? 'text-white' : stayColors.dogClass}`}>{b.dogName}</span>
+                            <span className={`text-[9px] truncate min-w-0 opacity-80 ${isMatch || isHovered ? 'text-white/90 font-medium' : stayColors.ownerClass}`}>({b.ownerName})</span>
                             {passInfo && (
                               <span 
                                 className={`text-[9px] font-black px-1 rounded shrink-0 mr-0.5 ${passInfo.badgeColor}`} 
