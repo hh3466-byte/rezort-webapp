@@ -428,7 +428,12 @@ export interface DaycarePass {
   pricePaid: number; // e.g. 900 or 2100
   dailyRate: number; // e.g. 90 or 100
   paymentStatus: PaymentStatus;
-  paymentMethod?: PaymentMethod;
+  paymentMethod?: PaymentMethod | string;
+  paymentReference?: string; // מספר אסמכתא (Grow / Bit / העברה / קבלה)
+  paidAt?: string; // מועד ביצוע התשלום
+  sentAt?: string; // מועד שליחת הכרטיסייה ללקוח בוואטסאפ
+  sentToPhone?: string; // מספר הטלפון אליו נשלחה
+  paymentNotes?: string; // הערות גבייה / תשלום
   notes?: string;
   paymentUrl?: string;
   validFrom: string; // YYYY-MM-DD

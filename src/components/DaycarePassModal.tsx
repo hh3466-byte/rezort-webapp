@@ -143,12 +143,33 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   const [autoSentDirectly, setAutoSentDirectly] = useState(false);
 
   // Editing / Calibrating an existing pass
+  // Filter & UI states for Pass List
+  const [listFilter, setListFilter] = useState<'all' | 'paid' | 'pending' | 'unsent'>('all');
+  const [expandedDaysPassIds, setExpandedDaysPassIds] = useState<Set<string>>(new Set());
+
+  // Quick Payment & Reference Management Modal state
+  const [paymentModalPass, setPaymentModalPass] = useState<DaycarePass | null>(null);
+  const [payModalStatus, setPayModalStatus] = useState<PaymentStatus>('fully_paid');
+  const [payModalReference, setPayModalReference] = useState<string>('');
+  const [payModalMethod, setPayModalMethod] = useState<string>('Grow (אשראי / Bit)');
+  const [payModalAmount, setPayModalAmount] = useState<number | string>(0);
+  const [payModalDate, setPayModalDate] = useState<string>(getTodayStr());
+  const [payModalNotes, setPayModalNotes] = useState<string>('');
+  const [isSavingPaymentModal, setIsSavingPaymentModal] = useState<boolean>(false);
+
+  // Editing / Calibrating an existing pass
   const [editingPass, setEditingPass] = useState<DaycarePass | null>(null);
   const [editDogName, setEditDogName] = useState<string>('');
   const [editTotalDays, setEditTotalDays] = useState<number | string>(10);
   const [editUsedDays, setEditUsedDays] = useState<number | string>(0);
   const [editPricePaid, setEditPricePaid] = useState<number | string>(750);
   const [editPaymentStatus, setEditPaymentStatus] = useState<PaymentStatus>('fully_paid');
+  const [editPaymentReference, setEditPaymentReference] = useState<string>('');
+  const [editPaymentMethod, setEditPaymentMethod] = useState<string>('Grow (אשראי / Bit)');
+  const [editPaidAt, setEditPaidAt] = useState<string>('');
+  const [editSentAt, setEditSentAt] = useState<string>('');
+  const [editSentToPhone, setEditSentToPhone] = useState<string>('');
+  const [editPaymentUrl, setEditPaymentUrl] = useState<string>('');
   const [editNotes, setEditNotes] = useState<string>('');
   const [editValidUntil, setEditValidUntil] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
@@ -760,13 +781,69 @@ ${paymentLine}
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
+  // Toggle punch circles view for a card
+  const toggleDaysExpanded = (passId: string) => {
+    setExpandedDaysPassIds(prev => {
+      const next = new Set(prev);
+      if (next.has(passId)) next.delete(passId);
+      else next.add(passId);
+      return next;
+    });
+  };
+
+  // Quick Payment Reference Modal Handlers
+  const handleOpenPaymentReferenceModal = (pass: DaycarePass) => {
+    setPaymentModalPass(pass);
+    setPayModalStatus(pass.paymentStatus || 'fully_paid');
+    setPayModalReference(pass.paymentReference || '');
+    setPayModalMethod(pass.paymentMethod || 'Grow (אשראי / Bit)');
+    setPayModalAmount(pass.pricePaid || 0);
+    setPayModalDate(pass.paidAt ? pass.paidAt.slice(0, 10) : getTodayStr());
+    setPayModalNotes(pass.paymentNotes || '');
+  };
+
+  const handleSavePaymentReferenceModal = async () => {
+    if (!paymentModalPass) return;
+    setIsSavingPaymentModal(true);
+    try {
+      const isPaid = payModalStatus === 'fully_paid';
+      const nowIso = new Date().toISOString();
+      const updated: DaycarePass = {
+        ...paymentModalPass,
+        paymentStatus: payModalStatus,
+        paymentReference: payModalReference.trim() || undefined,
+        paymentMethod: payModalMethod,
+        pricePaid: typeof payModalAmount === 'number' ? payModalAmount : (parseFloat(String(payModalAmount)) || paymentModalPass.pricePaid),
+        paidAt: isPaid ? (payModalDate ? `${payModalDate}T12:00:00` : (paymentModalPass.paidAt || nowIso)) : undefined,
+        paymentNotes: payModalNotes.trim() || undefined,
+        status: isPaid ? 'active' : (paymentModalPass.status === 'active' ? 'pending_payment' : paymentModalPass.status),
+        updatedAt: nowIso
+      };
+
+      await saveDaycarePassToDb(updated);
+      const fresh = await loadStoredDaycarePasses();
+      setPassesList(fresh);
+      setPaymentModalPass(null);
+      if (isPaid) {
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
+      }
+    } catch (e: any) {
+      alert(`שגיאה בשמירת נתוני התשלום: ${e?.message || e}`);
+    } finally {
+      setIsSavingPaymentModal(false);
+    }
+  };
+
   // 1. Mark pass as Sent to customer
   const handleMarkPassAsSent = async (pass: DaycarePass) => {
     try {
+      const nowIso = new Date().toISOString();
       const updated: DaycarePass = {
         ...pass,
         status: 'sent',
-        updatedAt: new Date().toISOString()
+        sentAt: pass.sentAt || nowIso,
+        sentToPhone: pass.sentToPhone || pass.ownerPhone,
+        updatedAt: nowIso
       };
       await saveDaycarePassToDb(updated);
       setPassesList(prev => prev.map(p => p.id === pass.id ? updated : p));
@@ -778,25 +855,26 @@ ${paymentLine}
 
   // 2. Mark pass as Paid / Toggle Paid
   const handleTogglePassPaid = async (pass: DaycarePass) => {
+    if (pass.paymentStatus !== 'fully_paid') {
+      handleOpenPaymentReferenceModal(pass);
+      return;
+    }
+
+    const confirmToggle = window.confirm(`לבטל את סימון התשלום עבור כרטיסייה #${pass.passCode} של ${pass.dogName}?`);
+    if (!confirmToggle) return;
+
     try {
-      const isNowPaid = pass.paymentStatus !== 'fully_paid';
       const updated: DaycarePass = {
         ...pass,
-        paymentStatus: isNowPaid ? 'fully_paid' : 'unpaid',
-        status: isNowPaid ? 'active' : 'pending_payment',
+        paymentStatus: 'unpaid',
+        status: 'pending_payment',
+        paidAt: undefined,
         updatedAt: new Date().toISOString()
       };
       await saveDaycarePassToDb(updated);
       setPassesList(prev => prev.map(p => p.id === pass.id ? updated : p));
-      if (isNowPaid) {
-        confetti({
-          particleCount: 50,
-          spread: 60,
-          origin: { y: 0.7 }
-        });
-      }
     } catch (e: any) {
-      alert(`שגיאה בעדכון תשלום כרטיסייה: ${e?.message}`);
+      alert(`שגיאה בביטול תשלום כרטיסייה: ${e?.message}`);
     }
   };
 
@@ -924,6 +1002,12 @@ ${paymentLine}
     setEditUsedDays(pass.usedDays);
     setEditPricePaid(pass.pricePaid || 0);
     setEditPaymentStatus(pass.paymentStatus);
+    setEditPaymentReference(pass.paymentReference || '');
+    setEditPaymentMethod(pass.paymentMethod || 'Grow (אשראי / Bit)');
+    setEditPaidAt(pass.paidAt ? pass.paidAt.slice(0, 10) : '');
+    setEditSentAt(pass.sentAt ? pass.sentAt.slice(0, 10) : '');
+    setEditSentToPhone(pass.sentToPhone || pass.ownerPhone || '');
+    setEditPaymentUrl(pass.paymentUrl || '');
     setEditNotes(pass.notes || '');
     setEditValidUntil(pass.validUntil ? pass.validUntil.slice(0, 10) : '');
   };
@@ -932,11 +1016,12 @@ ${paymentLine}
     if (!editingPass) return;
     setIsSavingEdit(true);
     try {
-      const numEditTotal = typeof editTotalDays === 'number' ? editTotalDays : (parseInt(editTotalDays, 10) || 1);
-      const numEditUsed = typeof editUsedDays === 'number' ? editUsedDays : (parseInt(editUsedDays, 10) || 0);
-      const numEditPrice = typeof editPricePaid === 'number' ? editPricePaid : (parseFloat(editPricePaid) || 0);
+      const numEditTotal = typeof editTotalDays === 'number' ? editTotalDays : (parseInt(String(editTotalDays), 10) || 1);
+      const numEditUsed = typeof editUsedDays === 'number' ? editUsedDays : (parseInt(String(editUsedDays), 10) || 0);
+      const numEditPrice = typeof editPricePaid === 'number' ? editPricePaid : (parseFloat(String(editPricePaid)) || 0);
       const remaining = Math.max(0, numEditTotal - numEditUsed);
       const isCompleted = remaining === 0;
+      const nowIso = new Date().toISOString();
       const updatedPass: DaycarePass = {
         ...editingPass,
         dogName: editDogName.trim() || editingPass.dogName,
@@ -945,10 +1030,16 @@ ${paymentLine}
         pricePaid: numEditPrice,
         dailyRate: numEditTotal > 0 ? Math.round(numEditPrice / numEditTotal) : editingPass.dailyRate,
         paymentStatus: editPaymentStatus,
+        paymentReference: editPaymentReference.trim() || undefined,
+        paymentMethod: editPaymentMethod || undefined,
+        paidAt: editPaymentStatus === 'fully_paid' ? (editPaidAt ? `${editPaidAt}T12:00:00` : (editingPass.paidAt || nowIso)) : undefined,
+        sentAt: editSentAt ? `${editSentAt}T12:00:00` : editingPass.sentAt,
+        sentToPhone: editSentToPhone.trim() || editingPass.ownerPhone,
+        paymentUrl: editPaymentUrl.trim() || editingPass.paymentUrl,
         notes: editNotes,
         status: isCompleted ? 'completed' : (editingPass.status === 'completed' ? 'active' : editingPass.status),
         validUntil: editValidUntil || editingPass.validUntil,
-        updatedAt: new Date().toISOString()
+        updatedAt: nowIso
       };
       await saveDaycarePassToDb(updatedPass);
       const fresh = await loadStoredDaycarePasses();
@@ -962,8 +1053,20 @@ ${paymentLine}
     }
   };
 
-  // Filtered list of passes for search
+  // Metrics derivation
+  const paidPasses = passesList.filter(p => p.paymentStatus === 'fully_paid');
+  const pendingPasses = passesList.filter(p => p.paymentStatus !== 'fully_paid' && (p.status === 'sent' || Boolean(p.sentAt)));
+  const unsentPasses = passesList.filter(p => p.paymentStatus !== 'fully_paid' && p.status !== 'sent' && !p.sentAt);
+
+  const totalPaidRevenue = paidPasses.reduce((sum, p) => sum + (Number(p.pricePaid) || 0), 0);
+  const totalPendingRevenue = pendingPasses.reduce((sum, p) => sum + (Number(p.pricePaid) || 0), 0);
+
+  // Filtered list of passes for search & tab filter
   const filteredPasses = passesList.filter(p => {
+    if (listFilter === 'paid' && p.paymentStatus !== 'fully_paid') return false;
+    if (listFilter === 'pending' && (p.paymentStatus === 'fully_paid' || (p.status !== 'sent' && !p.sentAt))) return false;
+    if (listFilter === 'unsent' && (p.paymentStatus === 'fully_paid' || p.status === 'sent' || Boolean(p.sentAt))) return false;
+
     const q = searchQuery.trim().toLowerCase();
     if (!q) return true;
     const cleanNum = q.replace(/\D/g, '');
@@ -971,7 +1074,8 @@ ${paymentLine}
       p.passCode.toLowerCase().includes(q) ||
       p.dogName.toLowerCase().includes(q) ||
       p.ownerName.toLowerCase().includes(q) ||
-      (cleanNum && p.ownerPhone.replace(/\D/g, '').includes(cleanNum)) ||
+      Boolean(p.paymentReference && p.paymentReference.toLowerCase().includes(q)) ||
+      (Boolean(cleanNum) && p.ownerPhone.replace(/\D/g, '').includes(cleanNum)) ||
       p.ownerPhone.includes(q)
     );
   });
@@ -1730,22 +1834,91 @@ ${paymentLine}
           {activeTab === 'list' && (
             <div className="space-y-4">
               
-              {/* Search input */}
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="חיפוש לפי שם כלב, בעלים, טלפון או קוד שובר (PASS-XXXX)..."
-                  className="w-full bg-slate-50 text-slate-900 text-xs pr-9 pl-3 py-2.5 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
-                />
+              {/* Search input & Quick KPIs */}
+              <div className="space-y-2.5">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="חיפוש לפי שם כלב, בעלים, טלפון, אסמכתא או קוד שובר (PASS-XXXX)..."
+                    className="w-full bg-slate-50 text-slate-900 text-xs pr-9 pl-3 py-2.5 rounded-xl border border-slate-200 focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Filter Pills & Revenue Summary */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pt-1 pb-1">
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
+                    <button
+                      type="button"
+                      onClick={() => setListFilter('all')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${
+                        listFilter === 'all'
+                          ? 'bg-slate-900 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      הכל ({passesList.length})
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setListFilter('paid')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                        listFilter === 'paid'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-emerald-50 text-emerald-800 border border-emerald-200/80 hover:bg-emerald-100'
+                      }`}
+                    >
+                      <span>🟢 שולמו ({paidPasses.length})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setListFilter('pending')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                        listFilter === 'pending'
+                          ? 'bg-sky-600 text-white shadow-xs'
+                          : 'bg-sky-50 text-sky-800 border border-sky-200/80 hover:bg-sky-100'
+                      }`}
+                    >
+                      <span>🔵 נשלחו וממתינים ({pendingPasses.length})</span>
+                    </button>
+
+                    {unsentPasses.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setListFilter('unsent')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                          listFilter === 'unsent'
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-amber-50 text-amber-800 border border-amber-200/80 hover:bg-amber-100'
+                        }`}
+                      >
+                        <span>🟠 טרם נשלחו ({unsentPasses.length})</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Financial summary KPIs */}
+                  <div className="flex items-center gap-2 text-[11px] self-end sm:self-auto shrink-0">
+                    <span className="bg-emerald-50 border border-emerald-200 text-emerald-900 px-2.5 py-1 rounded-lg font-black shadow-2xs">
+                      נגבה: ₪{totalPaidRevenue.toLocaleString('he-IL')}
+                    </span>
+                    {totalPendingRevenue > 0 && (
+                      <span className="bg-amber-50 border border-amber-200 text-amber-900 px-2.5 py-1 rounded-lg font-black shadow-2xs">
+                        ממתין: ₪{totalPendingRevenue.toLocaleString('he-IL')}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {filteredPasses.length === 0 ? (
                 <div className="text-center py-12 text-slate-400 space-y-3">
                   <Ticket className="w-10 h-10 mx-auto stroke-1" />
-                  <p className="text-sm font-bold">לא נמצאו כרטיסיות פעילות</p>
+                  <p className="text-sm font-bold">לא נמצאו כרטיסיות מתאימות</p>
                   {searchQuery ? (
                     <div>
                       <p className="text-xs mb-2">לא נמצאה כרטיסייה עבור "{searchQuery}"</p>
@@ -1755,7 +1928,7 @@ ${paymentLine}
                           setActiveTab('create');
                           setCustomerSearchQuery(searchQuery);
                         }}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all cursor-pointer inline-flex items-center gap-1.5"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-xs"
                       >
                         <Plus className="w-4 h-4" />
                         <span>הנפק כרטיסייה חדשה עבור חיפוש זה</span>
@@ -1766,201 +1939,376 @@ ${paymentLine}
                   )}
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {filteredPasses.map(pass => {
                     const isBoarding = pass.serviceType === 'boarding';
                     const remaining = Math.max(0, pass.totalDays - pass.usedDays);
                     const isCompleted = pass.usedDays >= pass.totalDays;
+                    const isDaysExpanded = expandedDaysPassIds.has(pass.id);
+                    const isFullyPaid = pass.paymentStatus === 'fully_paid';
+                    const isSent = pass.status === 'sent' || Boolean(pass.sentAt);
 
                     return (
                       <div 
                         key={pass.id}
-                        className={`p-4 rounded-2xl border transition-all ${
+                        className={`p-4 sm:p-5 rounded-2xl border transition-all shadow-xs ${
                           isCompleted 
                             ? 'bg-slate-50 border-slate-200 opacity-75' 
                             : isBoarding
-                            ? 'bg-gradient-to-br from-indigo-50/40 via-white to-amber-50/20 border-indigo-200 shadow-2xs hover:border-indigo-400'
-                            : 'bg-white border-slate-200 shadow-2xs hover:border-emerald-300'
+                            ? 'bg-gradient-to-br from-indigo-50/30 via-white to-teal-50/20 border-indigo-200/90 hover:border-indigo-400'
+                            : pass.serviceType === 'day_training'
+                            ? 'bg-gradient-to-br from-amber-50/30 via-white to-orange-50/20 border-amber-200/90 hover:border-amber-400'
+                            : 'bg-white border-slate-200 hover:border-cyan-300'
                         }`}
                       >
+                        {/* 1. Header Row */}
                         <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-3">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg ${
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shrink-0 ${
                               isBoarding
                                 ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
                                 : pass.serviceType === 'day_training' 
-                                ? 'bg-purple-100 text-purple-800' 
-                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                                ? 'bg-amber-100 text-amber-900 border border-amber-200' 
+                                : 'bg-cyan-100 text-cyan-900 border border-cyan-200'
                             }`}>
                               {isBoarding ? '🌙' : pass.serviceType === 'day_training' ? '🦮' : '☀️'}
                             </div>
 
-                            <div>
+                            <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <h4 className="font-extrabold text-sm text-slate-900">{pass.dogName}</h4>
-                                <span className="text-xs text-slate-500 font-medium">({pass.ownerName})</span>
-                                <span className="text-[10px] font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded-md font-bold">
-                                  {pass.passCode}
+                                <h4 className="font-black text-base text-slate-900">{pass.dogName}</h4>
+                                <span className="text-xs text-slate-500 font-bold">({pass.ownerName})</span>
+                                <span className="text-[10px] font-mono bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded-md font-black border border-slate-200">
+                                  #{pass.passCode}
                                 </span>
                                 {isBoarding && (
                                   <span className="text-[10px] bg-indigo-100 text-indigo-800 border border-indigo-200 px-2 py-0.5 rounded-full font-black">
                                     בנק 21 יממות VIP ⭐
                                   </span>
                                 )}
-                                {pass.paymentStatus === 'fully_paid' ? (
-                                  <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
-                                    🟢 שולמה (פעילה)
+                                {pass.serviceType === 'day_training' && (
+                                  <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full font-black">
+                                    אילוף ביומיות 🦮
                                   </span>
-                                ) : pass.status === 'sent' ? (
-                                  <span className="text-[10px] bg-sky-100 text-sky-800 border border-sky-300 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
-                                    🔵 נשלחה (ממתין לתשלום ₪{pass.pricePaid})
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full font-black flex items-center gap-1">
-                                    🟠 הונפקה (טרם שולם ₪{pass.pricePaid})
+                                )}
+                                {pass.serviceType === 'daycare' && (
+                                  <span className="text-[10px] bg-cyan-100 text-cyan-900 border border-cyan-200 px-2 py-0.5 rounded-full font-black">
+                                    מעון יום ☀️
                                   </span>
                                 )}
                               </div>
 
-                              <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                                <span>📞 {pass.ownerPhone}</span>
+                              <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
+                                <span className="font-medium">📞 {pass.ownerPhone}</span>
                                 <span>•</span>
-                                <span>תוקף עד: {formatDateIL(pass.validUntil)}</span>
+                                <span>תוקף עד: <strong className="text-slate-700">{formatDateIL(pass.validUntil)}</strong></span>
                               </div>
                             </div>
                           </div>
 
                           {/* Remaining Badge */}
-                          <div className="text-left">
-                            <span className={`text-xs px-2.5 py-1 rounded-full font-black inline-block ${
+                          <div className="text-left shrink-0">
+                            <span className={`text-xs px-3 py-1 rounded-full font-black inline-block shadow-2xs ${
                               isCompleted 
                                 ? 'bg-slate-200 text-slate-600'
                                 : isBoarding
-                                ? 'bg-indigo-100 text-indigo-900 border border-indigo-200'
-                                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                ? 'bg-teal-100 text-teal-950 border border-teal-400'
+                                : pass.serviceType === 'day_training'
+                                ? 'bg-amber-100 text-amber-950 border border-amber-400'
+                                : 'bg-cyan-100 text-cyan-950 border border-cyan-400'
                             }`}>
                               {remaining} / {pass.totalDays} {isBoarding ? 'יממות נותרו' : 'ימים נותרו'}
                             </span>
-                            <span className="block text-[10px] text-slate-400 mt-0.5">
+                            <span className="block text-[11px] text-slate-500 font-bold mt-1 text-left">
                               ₪{pass.pricePaid} (₪{pass.dailyRate}/{isBoarding ? 'יממה' : 'יום'})
                             </span>
                           </div>
                         </div>
 
-                        {/* Visual Punch Circles */}
-                        <div className="my-3 pt-3 border-t border-slate-100">
-                          <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1.5 font-bold">
-                            <span>{isBoarding ? 'ניצול יממות הפנסיון בבנק:' : 'ניצול ימי הכרטיסייה:'}</span>
-                            <span>{pass.usedDays} נוצלו מתוך {pass.totalDays} {isBoarding ? 'יממות' : 'ימים'}</span>
-                          </div>
+                        {/* 2. Management Grid: Delivery Tracking & Payment/Reference Tracking */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-3.5">
                           
-                          <div className="flex flex-wrap gap-1.5">
-                            {Array.from({ length: pass.totalDays }).map((_, idx) => {
-                              const isUsed = idx < pass.usedDays;
-                              return (
-                                <div
-                                  key={idx}
-                                  className={`w-6 h-6 rounded-lg text-[10px] font-black flex items-center justify-center transition-all ${
-                                    isUsed
-                                      ? isBoarding ? 'bg-indigo-600 text-white shadow-2xs' : 'bg-emerald-500 text-white shadow-2xs'
-                                      : 'bg-slate-100 text-slate-400 border border-slate-200 border-dashed'
-                                  }`}
-                                  title={isUsed ? `${isBoarding ? 'יממה' : 'יום'} ${idx + 1} נוצלה` : `${isBoarding ? 'יממה' : 'יום'} ${idx + 1} פנויה`}
-                                >
-                                  {idx + 1}
+                          {/* Panel A: 📲 מעקב משלוח לוואטסאפ */}
+                          <div className="bg-sky-50/70 border border-sky-200/90 rounded-2xl p-3.5 flex flex-col justify-between space-y-2.5">
+                            <div>
+                              <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-sky-200/50">
+                                <span className="text-xs font-black text-sky-950 flex items-center gap-1.5">
+                                  <Send className="w-3.5 h-3.5 text-sky-600" />
+                                  <span>מעקב משלוח ללקוח:</span>
+                                </span>
+                                {isSent ? (
+                                  <span className="text-[10px] bg-sky-200/80 text-sky-950 border border-sky-300 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs">
+                                    <Check className="w-3 h-3 text-sky-700" />
+                                    <span>נשלח לוואטסאפ</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full font-bold">
+                                    ⏳ טרם נשלח ללקוח
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="mt-2 text-xs space-y-1.5 text-slate-600">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="text-slate-400">נמען:</span>
+                                  <span className="font-bold text-slate-800 truncate max-w-[170px]">{pass.ownerName}</span>
+                                  <span className="text-slate-500 font-mono text-[11px]">({pass.sentToPhone || pass.ownerPhone})</span>
                                 </div>
-                              );
-                            })}
+
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="text-slate-400">מועד משלוח:</span>
+                                  {pass.sentAt ? (
+                                    <span className="font-bold text-slate-800">
+                                      {formatDateIL(pass.sentAt.slice(0, 10))} {pass.sentAt.includes('T') ? pass.sentAt.slice(11, 16) : ''}
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-800 font-bold italic text-[11px]">לא תועד משלוח</span>
+                                  )}
+                                </div>
+
+                                {pass.paymentUrl && (
+                                  <div className="pt-1 flex items-center justify-between gap-1 bg-white/70 p-1.5 rounded-lg border border-sky-100">
+                                    <span className="text-[11px] text-slate-500 font-bold shrink-0">קישור Grow:</span>
+                                    <a 
+                                      href={pass.paymentUrl} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      className="text-[11px] text-sky-700 hover:text-sky-900 underline truncate font-mono max-w-[150px] font-bold"
+                                      title={pass.paymentUrl}
+                                    >
+                                      קישור תשלום מאובטח
+                                    </a>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(pass.paymentUrl!);
+                                        alert('קישור התשלום הועתק בהצלחה! 📋');
+                                      }}
+                                      className="text-slate-400 hover:text-slate-700 p-1 rounded hover:bg-slate-100 cursor-pointer"
+                                      title="העתק קישור תשלום"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-2 border-t border-sky-200/50">
+                              <button
+                                type="button"
+                                onClick={() => handleSendWhatsAppToCustomer(pass)}
+                                className="flex-1 py-1.5 px-3 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                                title="שלח שובר דיגיטלי וקישור אישי בוואטסאפ ללקוח"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                                <span>{isSent ? 'שלח שוב בוואטסאפ 📲' : 'שלח שובר בוואטסאפ 📲'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleCopyPassLink(pass)}
+                                className="py-1.5 px-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                                title="העתק קישור שובר דיגיטלי ללקוח"
+                              >
+                                <Link2 className="w-3.5 h-3.5 text-slate-500" />
+                                <span>העתק קישור</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Panel B: 🧾 מעקב תשלום ואסמכתא */}
+                          <div className={`border rounded-2xl p-3.5 flex flex-col justify-between space-y-2.5 transition-all ${
+                            isFullyPaid
+                              ? 'bg-emerald-50/70 border-emerald-200/90'
+                              : 'bg-amber-50/70 border-amber-200/90'
+                          }`}>
+                            <div>
+                              <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-200/50">
+                                <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                                  <Receipt className="w-3.5 h-3.5 text-emerald-700" />
+                                  <span>מעמד תשלום ואסמכתא:</span>
+                                </span>
+                                {isFullyPaid ? (
+                                  <span className="text-[10px] bg-emerald-200/80 text-emerald-950 border border-emerald-300 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-800" />
+                                    <span>שולם במלואו (₪{pass.pricePaid})</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] bg-amber-200/80 text-amber-950 border border-amber-300 px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-2xs">
+                                    <AlertCircle className="w-3 h-3 text-amber-800" />
+                                    <span>ממתין לתשלום (חוב ₪{pass.pricePaid})</span>
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="mt-2 text-xs space-y-1.5 text-slate-600">
+                                {/* Reference Number Row */}
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-slate-500 font-bold shrink-0">מספר אסמכתא:</span>
+                                  {pass.paymentReference ? (
+                                    <div className="inline-flex items-center gap-1.5 bg-white border border-emerald-300/80 px-2.5 py-0.5 rounded-lg shadow-2xs">
+                                      <span className="font-mono font-black text-xs text-emerald-900">
+                                        #{pass.paymentReference}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(pass.paymentReference!);
+                                          alert(`אסמכתא #${pass.paymentReference} הועתקה! 📋`);
+                                        }}
+                                        className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                                        title="העתק אסמכתא"
+                                      >
+                                        <Copy className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenPaymentReferenceModal(pass)}
+                                      className="text-amber-900 hover:text-amber-950 font-bold bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2 py-0.5 rounded-md text-[11px] cursor-pointer inline-flex items-center gap-1"
+                                      title="הזן כעת מספר אסמכתא"
+                                    >
+                                      <span>⚠️ טרם הוזנה אסמכתא [+ הזן כעת]</span>
+                                    </button>
+                                  )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-[11px] pt-0.5">
+                                  <div>
+                                    <span className="text-slate-400 block">אמצעי תשלום:</span>
+                                    <span className="font-bold text-slate-800">
+                                      {pass.paymentMethod || 'Grow (אשראי / Bit)'}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 block">מועד תשלום:</span>
+                                    <span className="font-bold text-slate-800">
+                                      {pass.paidAt ? formatDateIL(pass.paidAt.slice(0, 10)) : (isFullyPaid ? 'הוסדר' : 'ממתין')}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {pass.paymentNotes && (
+                                  <div className="text-[11px] text-slate-500 bg-white/70 p-1 rounded border border-slate-200 truncate" title={pass.paymentNotes}>
+                                    📝 {pass.paymentNotes}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-2 border-t border-slate-200/50">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenPaymentReferenceModal(pass)}
+                                className="flex-1 py-1.5 px-3 bg-white hover:bg-emerald-50 text-emerald-950 border border-emerald-300 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                                title="עדכן מספר אסמכתא, אמצעי תשלום ופרטי גבייה"
+                              >
+                                <Receipt className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>{pass.paymentReference ? 'ערוך אסמכתא ✏️' : 'הזן אסמכתא 🧾'}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePassPaid(pass)}
+                                className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                  isFullyPaid
+                                    ? 'bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300'
+                                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
+                                }`}
+                                title={isFullyPaid ? 'לחץ לשינוי סטטוס תשלום' : 'אשר קבלת תשלום והזן אסמכתא'}
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>{isFullyPaid ? 'שולם ✓' : 'אשר תשלום 💳'}</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
 
-                        {/* Usage history preview if any */}
-                        {pass.usageHistory && pass.usageHistory.length > 0 && (
-                          <div className="bg-slate-50 p-2.5 rounded-xl text-[11px] text-slate-600 space-y-1 mb-3">
-                            <span className="font-bold text-slate-700 block">היסטוריית שהיות ומימושים:</span>
-                            {pass.usageHistory.map((u, uIdx) => (
-                              <div key={uIdx} className="flex items-center justify-between">
-                                <span>
-                                  📅 {formatDateIL(u.date)}
-                                  {u.endDate && u.endDate !== u.date && ` עד ${formatDateIL(u.endDate)} (${u.daysCount || 1} יממות)`}
-                                </span>
-                                <span className="text-slate-400">{u.notes || 'שריון רגיל'}</span>
-                              </div>
-                            ))}
+                        {/* 3. Visual Punch Circles & Stay Usage History (Collapsible / Clean) */}
+                        <div className="my-2 pt-2 border-t border-slate-100">
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1 font-bold">
+                            <span className="flex items-center gap-1.5">
+                              <span>{isBoarding ? 'ניצול יממות הפנסיון בבנק:' : 'ניצול ימי הכרטיסייה:'}</span>
+                              <span className="font-black text-slate-800">
+                                {pass.usedDays || 0} נוצלו מתוך {pass.totalDays} ({remaining} פנויות)
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleDaysExpanded(pass.id)}
+                              className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold cursor-pointer flex items-center gap-0.5"
+                            >
+                              <span>{isDaysExpanded ? 'הסתר עיגולים' : 'הצג עיגולים (1-21)'}</span>
+                              {isDaysExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            </button>
                           </div>
-                        )}
-
-                        {/* Action buttons: 1. שריין ביומן (אם שולמה) / נעול (אם לא שולמה) */}
-                        <div className="flex items-center gap-2 pt-2 border-t border-slate-100 flex-wrap">
-                          {!isCompleted && (
-                            pass.paymentStatus === 'fully_paid' ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedPassForBooking(pass);
-                                  setBookingDate(getTodayStr());
-                                  setBookingEndDate(getTodayStr());
-                                }}
-                                className={`flex-1 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-w-[130px] ${
-                                  isBoarding 
-                                    ? 'bg-indigo-600 hover:bg-indigo-700' 
-                                    : 'bg-emerald-600 hover:bg-emerald-700'
-                                }`}
-                              >
-                                <CalendarDays className="w-3.5 h-3.5" />
-                                <span>{isBoarding ? 'שריין פנסיון ביומן 🌙' : 'שריין יום ביומן ☀️'}</span>
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedPassForBooking(pass);
-                                  setBookingDate(getTodayStr());
-                                  setBookingEndDate(getTodayStr());
-                                }}
-                                className={`flex-1 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-w-[130px] ${
-                                  isBoarding ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-amber-600 hover:bg-amber-700'
-                                }`}
-                                title="טרם שולם - לחיצה תאפשר אישור קליטה בהקפה עם התרעת חוב"
-                              >
-                                <CalendarDays className="w-3.5 h-3.5" />
-                                <span>{isBoarding ? 'שריין פנסיון ביומן 🌙' : 'שריין יום ביומן ☀️'}</span>
-                                <span className="text-[10px] bg-amber-950/40 text-amber-100 px-1.5 py-0.2 rounded-md font-normal">בהקפה</span>
-                              </button>
-                            )
+                          
+                          {/* Punch circles shown if expanded */}
+                          {isDaysExpanded && (
+                            <div className="flex flex-wrap gap-1.5 my-2 p-2 bg-slate-50/70 rounded-xl border border-slate-100 animate-in fade-in">
+                              {Array.from({ length: pass.totalDays }).map((_, idx) => {
+                                const isUsed = idx < pass.usedDays;
+                                return (
+                                  <div
+                                    key={idx}
+                                    className={`w-6 h-6 rounded-lg text-[10px] font-black flex items-center justify-center transition-all ${
+                                      isUsed
+                                        ? isBoarding ? 'bg-indigo-600 text-white shadow-2xs' : 'bg-emerald-500 text-white shadow-2xs'
+                                        : 'bg-white text-slate-400 border border-slate-200 border-dashed'
+                                    }`}
+                                    title={isUsed ? `${isBoarding ? 'יממה' : 'יום'} ${idx + 1} נוצלה` : `${isBoarding ? 'יממה' : 'יום'} ${idx + 1} פנויה`}
+                                  >
+                                    {idx + 1}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           )}
 
-                          {/* Button 2: נשלחה כרטיסייה */}
-                          <button
-                            type="button"
-                            onClick={() => handleMarkPassAsSent(pass)}
-                            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                              pass.status === 'sent' 
-                                ? 'bg-sky-100 text-sky-900 border border-sky-300 hover:bg-sky-200' 
-                                : 'bg-white hover:bg-sky-50 text-slate-700 hover:text-sky-800 border border-slate-200'
-                            }`}
-                            title="שלח שובר וקישור בוואטסאפ ללקוח וסמן כ'נשלחה'"
-                          >
-                            <Send className="w-3.5 h-3.5 text-sky-600" />
-                            <span>{pass.status === 'sent' ? 'נשלחה כרטיסייה ✓' : 'נשלחה כרטיסייה'}</span>
-                          </button>
+                          {/* Usage history preview if any */}
+                          {pass.usageHistory && pass.usageHistory.length > 0 && (
+                            <div className="bg-slate-50 p-2.5 rounded-xl text-[11px] text-slate-600 space-y-1 mt-2">
+                              <span className="font-bold text-slate-700 block">היסטוריית שהיות ומימושים:</span>
+                              {pass.usageHistory.map((u, uIdx) => (
+                                <div key={uIdx} className="flex items-center justify-between">
+                                  <span>
+                                    📅 {formatDateIL(u.date)}
+                                    {u.endDate && u.endDate !== u.date && ` עד ${formatDateIL(u.endDate)} (${u.daysCount || 1} יממות)`}
+                                  </span>
+                                  <span className="text-slate-400">{u.notes || 'שריון רגיל'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
-                          {/* Button 3: שולמה כרטיסייה */}
-                          <button
-                            type="button"
-                            onClick={() => handleTogglePassPaid(pass)}
-                            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                              pass.paymentStatus === 'fully_paid'
-                                ? 'bg-emerald-600 text-white shadow-xs hover:bg-emerald-700'
-                                : 'bg-amber-100 hover:bg-emerald-100 text-amber-950 hover:text-emerald-950 border border-amber-300 hover:border-emerald-400'
-                            }`}
-                            title={pass.paymentStatus === 'fully_paid' ? 'שולם במלואו (לחץ לשינוי ללא שולם)' : 'לחץ לאישור קבלת תשלום והפעלת הכרטיסייה'}
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>{pass.paymentStatus === 'fully_paid' ? 'שולמה כרטיסייה ✓' : 'שולמה כרטיסייה 💳'}</span>
-                          </button>
+                        {/* 4. Bottom Action Bar: שריין ביומן, ערוך, מחק */}
+                        <div className="flex items-center gap-2 pt-3 border-t border-slate-100 flex-wrap">
+                          {!isCompleted && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedPassForBooking(pass);
+                                setBookingDate(getTodayStr());
+                                setBookingEndDate(getTodayStr());
+                              }}
+                              className={`flex-1 py-2 text-white font-black text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer min-w-[140px] ${
+                                isBoarding 
+                                  ? 'bg-indigo-600 hover:bg-indigo-700' 
+                                  : 'bg-emerald-600 hover:bg-emerald-700'
+                              }`}
+                            >
+                              <CalendarDays className="w-3.5 h-3.5" />
+                              <span>{isBoarding ? 'שריין פנסיון ביומן 🌙' : 'שריין יום ביומן ☀️'}</span>
+                              {!isFullyPaid && (
+                                <span className="text-[10px] bg-amber-950/40 text-amber-100 px-1.5 py-0.2 rounded-md font-normal">בהקפה</span>
+                              )}
+                            </button>
+                          )}
 
-                          {/* Button 4: ערוך כרטיסייה / כיול ימים */}
+                          {/* Button: ערוך כרטיסייה / כיול ימים */}
                           <button
                             type="button"
                             onClick={() => handleOpenEditPass(pass)}
@@ -1969,16 +2317,6 @@ ${paymentLine}
                           >
                             <Pencil className="w-3.5 h-3.5 text-slate-600" />
                             <span>ערוך כרטיסייה ✏️</span>
-                          </button>
-
-                          {/* Copy link button */}
-                          <button
-                            type="button"
-                            onClick={() => handleCopyPassLink(pass)}
-                            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all cursor-pointer flex items-center gap-1 text-xs font-bold"
-                            title="העתק קישור ישיר ללקוח"
-                          >
-                            <Link2 className="w-4 h-4 text-slate-600" />
                           </button>
 
                           {/* Delete pass button */}
@@ -2320,6 +2658,174 @@ ${paymentLine}
           </div>
         )}
 
+
+        {/* Modal 4: ניהול תשלום ואסמכתא מהיר */}
+        {paymentModalPass && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-md w-full p-6 text-slate-900 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-xl shadow-2xs">
+                    🧾
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">
+                      ניהול תשלום ואסמכתא #{paymentModalPass.passCode}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-bold">
+                      {paymentModalPass.dogName} ({paymentModalPass.ownerName} - {paymentModalPass.ownerPhone})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPaymentModalPass(null)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Status Radio */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">סטטוס תשלום הכרטיסייה:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPayModalStatus('fully_paid')}
+                    className={`py-2 px-3 rounded-xl text-xs font-black border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      payModalStatus === 'fully_paid'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>שולם במלואו 🟢</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPayModalStatus('unpaid')}
+                    className={`py-2 px-3 rounded-xl text-xs font-black border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      payModalStatus === 'unpaid'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>ממתין לתשלום ⏳</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Reference Number Field */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 block">
+                  מספר אסמכתא (Grow Transaction ID / מספר קבלה / שובר):
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={payModalReference}
+                    onChange={(e) => setPayModalReference(e.target.value)}
+                    placeholder="למשל: 36202567 או grow_saar_6310 או 175543879"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  {payModalReference && (
+                    <button
+                      type="button"
+                      onClick={() => setPayModalReference('')}
+                      className="absolute left-2.5 top-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-400 block">
+                  מופיע במיילי אישור Grow / Bit / קבלה מ-Morning. מקל על איתור מהיר והנהלת חשבונות.
+                </span>
+              </div>
+
+              {/* Payment Method & Amount */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 block">אמצעי תשלום:</label>
+                  <select
+                    value={payModalMethod}
+                    onChange={(e) => setPayModalMethod(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="Grow (אשראי / Bit)">Grow (אשראי / Bit)</option>
+                    <option value="Bit ישיר">Bit ישיר</option>
+                    <option value="העברה בנקאית">העברה בנקאית</option>
+                    <option value="מזומן">מזומן</option>
+                    <option value="אחר">אחר</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 block">סכום ששולם (₪):</label>
+                  <input
+                    type="number"
+                    value={payModalAmount}
+                    onChange={(e) => setPayModalAmount(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Payment Date */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 block">תאריך ביצוע התשלום:</label>
+                <input
+                  type="date"
+                  value={payModalDate}
+                  onChange={(e) => setPayModalDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Notes */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 block">הערות תשלום / גבייה:</label>
+                <input
+                  type="text"
+                  value={payModalNotes}
+                  onChange={(e) => setPayModalNotes(e.target.value)}
+                  placeholder="הערה חופשית (למשל: שולם מראש בביט, אושר מול הלקוח)"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={isSavingPaymentModal}
+                  onClick={handleSavePaymentReferenceModal}
+                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingPaymentModal ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>שומר נתונים...</span>
+                    </>
+                  ) : (
+                    <span>שמור נתוני אסמכתא ותשלום ✓</span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPaymentModalPass(null)}
+                  className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl cursor-pointer"
+                >
+                  ביטול
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
