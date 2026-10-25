@@ -2861,6 +2861,8 @@ ${reason ? `💬 *סיבה:* ${reason}\n` : ''}
           onToggleStayStatus={handleToggleStayStatus}
           onInitiateRelease={handleInitiateRelease}
           onToggleReviewRequest={handleToggleReviewRequest}
+          onSaveBooking={handleSaveBookingForm}
+          onOpenDaycarePassModal={() => handleOpenDaycarePassModal()}
         />
       )}
 

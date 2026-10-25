@@ -396,9 +396,17 @@ export function getPassInfoForBooking(
       if (b.stayStatus === 'cancelled' || (b as any).stay_status === 'cancelled') return false;
       const bPassCode = b.daycarePassCode || (b as any).daycare_pass_code || (b as any).data?.daycarePassCode ||
                         (b.notes || '').match(/#?([A-Za-z0-9\u0590-\u05FF-]+)/i)?.[1];
-      if (bPassCode && String(bPassCode).trim().toUpperCase() === passCodeClean) return true;
+      if (bPassCode) {
+        return String(bPassCode).trim().toUpperCase() === passCodeClean;
+      }
       const bPhoneDigits = String(b.ownerPhone || (b as any).owner_phone || '').replace(/\D/g, '').slice(-7);
-      return Boolean(bPhoneDigits && phoneDigits && bPhoneDigits === phoneDigits);
+      if (!bPhoneDigits || !phoneDigits || bPhoneDigits !== phoneDigits) return false;
+      const bDog = String(b.dogName || '').trim().toLowerCase();
+      const pDog = String(matchedPass.dogName || '').trim().toLowerCase();
+      if (pDog && bDog) {
+        return pDog.includes(bDog) || bDog.includes(pDog);
+      }
+      return true;
     })
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
 

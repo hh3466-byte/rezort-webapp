@@ -33,7 +33,9 @@ import {
   Pencil,
   Receipt,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Repeat,
+  ArrowLeftRight
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -51,6 +53,7 @@ import {
   saveDaycarePassToDb, 
   deleteDaycarePassFromDb,
   deductDayFromPassInDb,
+  transferDaysBetweenPassesInDb,
   subscribeToDaycarePasses 
 } from '../services/dbService';
 import { createGrowDynamicPaymentLink } from '../services/growPaymentService';
@@ -176,6 +179,16 @@ export const DaycarePassModal: React.FC<DaycarePassModalProps> = ({
   const [editNotes, setEditNotes] = useState<string>('');
   const [editValidUntil, setEditValidUntil] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
+
+  // Transfer Days Between Passes / Dogs Modal State
+  const [transferModal, setTransferModal] = useState<{
+    isOpen: boolean;
+    sourcePassId: string;
+    targetPassId: string;
+    daysCount: number | string;
+    reason: string;
+  } | null>(null);
+  const [isSavingTransfer, setIsSavingTransfer] = useState<boolean>(false);
 
   // Form State for creating a new pass
   const [customerSearchQuery, setCustomerSearchQuery] = useState<string>('');
@@ -1056,6 +1069,110 @@ ${paymentLine}
     }
   };
 
+  // Open Transfer Modal for moving days between passes / dogs
+  const handleOpenTransferModal = (sourcePass?: DaycarePass, targetPass?: DaycarePass) => {
+    let initialSourceId = sourcePass?.id || '';
+    let initialTargetId = targetPass?.id || '';
+    let initialDays = 1;
+
+    if (sourcePass) {
+      const cleanPhone = cleanPhoneNumber(sourcePass.ownerPhone);
+      const otherPasses = passesList.filter(p => 
+        p.id !== sourcePass.id && 
+        ((cleanPhone && cleanPhoneNumber(p.ownerPhone) === cleanPhone) || p.ownerName === sourcePass.ownerName)
+      );
+
+      if (!initialTargetId && otherPasses.length > 0) {
+        // Prefer one in overdraft
+        const overdraftPass = otherPasses.find(p => (p.totalDays - p.usedDays) < 0);
+        if (overdraftPass) {
+          initialTargetId = overdraftPass.id;
+          const deficit = Math.abs(overdraftPass.totalDays - overdraftPass.usedDays);
+          const availableInSource = Math.max(1, sourcePass.totalDays - sourcePass.usedDays);
+          initialDays = Math.min(availableInSource, deficit);
+        } else {
+          initialTargetId = otherPasses[0].id;
+        }
+      }
+    } else if (passesList.length >= 2) {
+      // Find a customer with 2+ passes
+      const counts: Record<string, DaycarePass[]> = {};
+      passesList.forEach(p => {
+        const ph = cleanPhoneNumber(p.ownerPhone) || p.ownerName;
+        if (!counts[ph]) counts[ph] = [];
+        counts[ph].push(p);
+      });
+      const multi = Object.values(counts).find(list => list.length >= 2);
+      if (multi) {
+        const overdraft = multi.find(p => (p.totalDays - p.usedDays) < 0);
+        const surplus = multi.find(p => (p.totalDays - p.usedDays) > 0);
+        if (overdraft && surplus) {
+          initialSourceId = surplus.id;
+          initialTargetId = overdraft.id;
+          initialDays = Math.abs(overdraft.totalDays - overdraft.usedDays);
+        } else {
+          initialSourceId = multi[0].id;
+          initialTargetId = multi[1].id;
+        }
+      } else {
+        initialSourceId = passesList[0].id;
+        initialTargetId = passesList[1].id;
+      }
+    }
+
+    setTransferModal({
+      isOpen: true,
+      sourcePassId: initialSourceId,
+      targetPassId: initialTargetId,
+      daysCount: Math.max(1, initialDays),
+      reason: 'ניוד ימים בין כרטיסיות / כלבי המשפחה לבקשת הלקוח'
+    });
+  };
+
+  const handleExecuteTransfer = async () => {
+    if (!transferModal || !transferModal.sourcePassId || !transferModal.targetPassId) {
+      alert('נא לבחור כרטיסיית מקור וכרטיסיית יעד');
+      return;
+    }
+    if (transferModal.sourcePassId === transferModal.targetPassId) {
+      alert('לא ניתן לנייד ימים מאותה כרטיסייה לעצמה');
+      return;
+    }
+    const days = Math.max(1, Math.round(Number(transferModal.daysCount) || 1));
+    setIsSavingTransfer(true);
+    try {
+      const res = await transferDaysBetweenPassesInDb({
+        sourcePassIdOrCode: transferModal.sourcePassId,
+        targetPassIdOrCode: transferModal.targetPassId,
+        daysToTransfer: days,
+        reason: transferModal.reason,
+        transferredBy: 'shmulik'
+      });
+
+      if (!res.success || !res.sourcePass || !res.targetPass) {
+        alert(`שגיאה בביצוע הניוד: ${res.error || 'נסה שוב'}`);
+        return;
+      }
+
+      // Reload fresh passes
+      const fresh = await loadStoredDaycarePasses();
+      setPassesList(fresh);
+
+      confetti({
+        particleCount: 70,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+
+      alert(`✅ ניוד ${days} ימים בוצע בהצלחה!\n\n📤 מכרטיסייה #${res.sourcePass.passCode} (${res.sourcePass.dogName}): נותרו ${res.sourcePass.totalDays - res.sourcePass.usedDays} מתוך ${res.sourcePass.totalDays} ימים.\n📥 אל כרטיסייה #${res.targetPass.passCode} (${res.targetPass.dogName}): נותרו ${res.targetPass.totalDays - res.targetPass.usedDays} מתוך ${res.targetPass.totalDays} ימים.`);
+      setTransferModal(null);
+    } catch (err: any) {
+      alert(`שגיאה בביצוע ניוד ימים: ${err?.message || err}`);
+    } finally {
+      setIsSavingTransfer(false);
+    }
+  };
+
   // Metrics derivation
   const paidPasses = passesList.filter(p => p.paymentStatus === 'fully_paid');
   const pendingPasses = passesList.filter(p => p.paymentStatus !== 'fully_paid' && (p.status === 'sent' || Boolean(p.sentAt)));
@@ -1902,6 +2019,17 @@ ${paymentLine}
                         <span>🟠 טרם נשלחו ({unsentPasses.length})</span>
                       </button>
                     )}
+
+                    {/* Transfer Days Between Passes / Dogs Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenTransferModal()}
+                      className="px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 bg-gradient-to-r from-indigo-50 to-indigo-100/80 text-indigo-900 border border-indigo-200 hover:border-indigo-400 hover:shadow-xs shadow-2xs"
+                      title="ניוד והעברת ימים בין כרטיסיות ומכלב לכלב (עבור לקוחות עם מספר כלבים)"
+                    >
+                      <Repeat className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>ניוד ימים בין כרטיסיות / כלבים 🔄</span>
+                    </button>
                   </div>
 
                   {/* Financial summary KPIs */}
@@ -2320,6 +2448,17 @@ ${paymentLine}
                           >
                             <Pencil className="w-3.5 h-3.5 text-slate-600" />
                             <span>ערוך כרטיסייה ✏️</span>
+                          </button>
+
+                          {/* Button: ניוד ימים לכרטיסייה/כלב */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenTransferModal(pass)}
+                            className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 hover:border-indigo-300 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+                            title="ניוד ימים מכרטיסייה זו לכרטיסייה אחרת או לכלב אחר של הלקוח"
+                          >
+                            <Repeat className="w-3.5 h-3.5 text-indigo-600" />
+                            <span>ניוד ימים 🔄</span>
                           </button>
 
                           {/* Delete pass button */}
@@ -2829,6 +2968,385 @@ ${paymentLine}
             </div>
           </div>
         )}
+
+        {/* Modal 5: ניוד והעברת ימים בין כרטיסיות ומכלב לכלב */}
+        {transferModal && (() => {
+          const sourcePass = passesList.find(p => p.id === transferModal.sourcePassId);
+          const targetPass = passesList.find(p => p.id === transferModal.targetPassId);
+
+          const sourceRem = sourcePass ? sourcePass.totalDays - sourcePass.usedDays : 0;
+          const targetRem = targetPass ? targetPass.totalDays - targetPass.usedDays : 0;
+          const targetIsOverdraft = targetRem < 0;
+          const targetOverdraftDays = targetIsOverdraft ? Math.abs(targetRem) : 0;
+
+          const numDays = typeof transferModal.daysCount === 'number' 
+            ? transferModal.daysCount 
+            : (parseInt(String(transferModal.daysCount), 10) || 1);
+          const effectiveDays = Math.max(1, numDays);
+
+          // Projected after transfer
+          const projectedSourceTotal = sourcePass ? sourcePass.totalDays - effectiveDays : 0;
+          const projectedSourceRem = sourcePass ? projectedSourceTotal - sourcePass.usedDays : 0;
+          const projectedTargetTotal = targetPass ? targetPass.totalDays + effectiveDays : 0;
+          const projectedTargetRem = targetPass ? projectedTargetTotal - targetPass.usedDays : 0;
+
+          // Candidates for target pass
+          const targetCandidates = passesList.filter(p => p.id !== transferModal.sourcePassId);
+
+          // Highlight if source and target belong to same customer
+          const isSameCustomer = Boolean(
+            sourcePass && targetPass && 
+            ((cleanPhoneNumber(sourcePass.ownerPhone) && cleanPhoneNumber(sourcePass.ownerPhone) === cleanPhoneNumber(targetPass.ownerPhone)) ||
+             sourcePass.ownerName === targetPass.ownerName)
+          );
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white border border-slate-200 rounded-3xl shadow-2xl max-w-xl w-full p-5 sm:p-6 text-slate-900 space-y-4 max-h-[94vh] overflow-y-auto">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white flex items-center justify-center text-xl shadow-md">
+                      🔄
+                    </div>
+                    <div>
+                      <h3 className="text-base sm:text-lg font-black text-slate-900">
+                        ניוד ימים בין כרטיסיות ומכלב לכלב
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium">
+                        העברת ימי שהייה ואיזון מכסות בין כרטיסיות הלקוח (הגון והגיוני)
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTransferModal(null)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Info Alert */}
+                <div className="bg-indigo-50/70 border border-indigo-200 rounded-2xl p-3 text-xs text-indigo-950 flex items-start gap-2.5">
+                  <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">
+                    <strong>לקוחות עם 2 כלבים ו-2 כרטיסיות:</strong> ניתן להעביר ימי שהייה בקלות בין הכלבים והכרטיסיות. הניוד מעדכן את מכסות שני הכרטיסים במדויק ומתעד היסטוריה מלאה.
+                  </div>
+                </div>
+
+                {/* Selection Section: Source & Target */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* SOURCE PASS */}
+                  <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-700 flex items-center gap-1">
+                        <span>📤</span>
+                        <span>כרטיסיית מקור (תגרע ימים)</span>
+                      </span>
+                    </div>
+
+                    <select
+                      value={transferModal.sourcePassId}
+                      onChange={(e) => {
+                        const newSourceId = e.target.value;
+                        let newTargetId = transferModal.targetPassId;
+                        if (newTargetId === newSourceId) {
+                          const other = passesList.find(p => p.id !== newSourceId);
+                          newTargetId = other?.id || '';
+                        }
+                        setTransferModal({
+                          ...transferModal,
+                          sourcePassId: newSourceId,
+                          targetPassId: newTargetId
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      {passesList.map(p => {
+                        const rem = p.totalDays - p.usedDays;
+                        return (
+                          <option key={p.id} value={p.id}>
+                            #{p.passCode} · {p.dogName} ({p.ownerName}) [יתרה: {rem}/{p.totalDays}]
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {sourcePass && (
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 text-[11px] space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">כלב ובעלים:</span>
+                          <span className="font-bold text-slate-800">{sourcePass.dogName} ({sourcePass.ownerName})</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">סוג שירות:</span>
+                          <span className="font-bold text-slate-700">{sourcePass.serviceType === 'boarding' ? 'בנק 21 יממות פנסיון 🌙' : 'יומיות ☀️'}</span>
+                        </div>
+                        <div className="flex justify-between pt-1 border-t border-slate-100">
+                          <span className="text-slate-500">מכסה נוכחית:</span>
+                          <span className="font-black text-indigo-700">
+                            {sourceRem} נותרו מתוך {sourcePass.totalDays} ימ'
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* TARGET PASS */}
+                  <div className={`p-3.5 rounded-2xl border space-y-2 ${
+                    targetIsOverdraft ? 'bg-rose-50/70 border-rose-300' : 'bg-slate-50 border-slate-200'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-700 flex items-center gap-1">
+                        <span>📥</span>
+                        <span>כרטיסיית יעד (תקבל ימים)</span>
+                      </span>
+                      {targetIsOverdraft && (
+                        <span className="text-[10px] bg-rose-200 text-rose-950 font-black px-1.5 py-0.5 rounded-md">
+                          חריגה של {targetOverdraftDays} ימים 🚨
+                        </span>
+                      )}
+                    </div>
+
+                    <select
+                      value={transferModal.targetPassId}
+                      onChange={(e) => {
+                        setTransferModal({
+                          ...transferModal,
+                          targetPassId: e.target.value
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      {targetCandidates.map(p => {
+                        const rem = p.totalDays - p.usedDays;
+                        const isSame = Boolean(
+                          sourcePass && (
+                            (cleanPhoneNumber(sourcePass.ownerPhone) && cleanPhoneNumber(sourcePass.ownerPhone) === cleanPhoneNumber(p.ownerPhone)) ||
+                            sourcePass.ownerName === p.ownerName
+                          )
+                        );
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {isSame ? '⭐ ' : ''}#{p.passCode} · {p.dogName} ({p.ownerName}) [יתרה: {rem}/{p.totalDays}]{rem < 0 ? ' 🚨 חריגה' : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {targetPass && (
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200/80 text-[11px] space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">כלב ובעלים:</span>
+                          <span className="font-bold text-slate-800">{targetPass.dogName} ({targetPass.ownerName})</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">סוג שירות:</span>
+                          <span className="font-bold text-slate-700">{targetPass.serviceType === 'boarding' ? 'בנק 21 יממות פנסיון 🌙' : 'יומיות ☀️'}</span>
+                        </div>
+                        <div className="flex justify-between pt-1 border-t border-slate-100">
+                          <span className="text-slate-500">מכסה נוכחית:</span>
+                          <span className={`font-black ${targetIsOverdraft ? 'text-rose-700' : 'text-emerald-700'}`}>
+                            {targetRem} נותרו מתוך {targetPass.totalDays} ימ'
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Same Customer badge */}
+                {isSameCustomer && (
+                  <div className="bg-emerald-50 text-emerald-950 text-xs font-bold p-2.5 rounded-xl border border-emerald-200 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span>🐕🐕</span>
+                      <span>זוהו 2 כרטיסיות של אותו הלקוח ({sourcePass?.ownerName}) – ניוד פנים-משפחתי הגון</span>
+                    </span>
+                    <span className="text-[10px] bg-emerald-200 px-2 py-0.5 rounded-full font-black">
+                      תואם 100%
+                    </span>
+                  </div>
+                )}
+
+                {/* Overdraft Quick Balance Action */}
+                {targetIsOverdraft && (
+                  <div className="p-3 bg-gradient-to-r from-rose-50 to-amber-50 rounded-2xl border border-rose-300 flex items-center justify-between gap-3">
+                    <div className="text-xs">
+                      <span className="font-black text-rose-950 block">
+                        🚨 כרטיסיית {targetPass?.dogName} נמצאת בחריגה של {targetOverdraftDays} ימים!
+                      </span>
+                      <span className="text-slate-600 text-[11px]">
+                        בלחיצה אחת תוכל להגדיר ניוד של {targetOverdraftDays} ימים כדי לאפס את החריגה.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTransferModal({
+                          ...transferModal,
+                          daysCount: targetOverdraftDays
+                        });
+                      }}
+                      className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shrink-0 transition-all cursor-pointer shadow-xs flex items-center gap-1"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>כסה חריגה ({targetOverdraftDays} ימ') ⚡</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Quantity Input & Quick Chips */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-800 block">
+                    כמות ימים / יממות להעברה מכרטיסיית המקור ליעד:
+                  </label>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden bg-white shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = Math.max(1, effectiveDays - 1);
+                          setTransferModal({ ...transferModal, daysCount: val });
+                        }}
+                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm cursor-pointer"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        max={sourcePass ? sourcePass.totalDays : 100}
+                        value={transferModal.daysCount}
+                        onChange={(e) => setTransferModal({ ...transferModal, daysCount: e.target.value })}
+                        className="w-16 text-center font-black text-base text-slate-900 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = effectiveDays + 1;
+                          setTransferModal({ ...transferModal, daysCount: val });
+                        }}
+                        className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-sm cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* Quick selection chips */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {[1, 2, 3, 5, 7].map(num => (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => setTransferModal({ ...transferModal, daysCount: num })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all cursor-pointer ${
+                            effectiveDays === num
+                              ? 'bg-indigo-600 text-white shadow-xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          +{num} {num === 1 ? 'יום' : 'ימים'}
+                        </button>
+                      ))}
+
+                      {sourceRem > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setTransferModal({ ...transferModal, daysCount: sourceRem })}
+                          className="px-2.5 py-1 rounded-lg text-xs font-black bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 cursor-pointer"
+                        >
+                          כל היתרה ({sourceRem})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* LIVE BEFORE & AFTER PREVIEW */}
+                {sourcePass && targetPass && (
+                  <div className="bg-slate-900 text-white p-3.5 rounded-2xl space-y-2 shadow-md">
+                    <span className="text-[11px] font-black text-slate-300 block flex items-center gap-1">
+                      <span>📊</span>
+                      <span>תצוגה מקדימה של השינוי במכסות:</span>
+                    </span>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      {/* Source after */}
+                      <div className="bg-slate-800/90 p-2.5 rounded-xl border border-slate-700">
+                        <div className="font-bold text-slate-300 text-[11px] truncate">{sourcePass.dogName} (מקור):</div>
+                        <div className="mt-1 flex items-baseline gap-1.5">
+                          <span className="text-slate-400 line-through text-[11px]">{sourcePass.totalDays} ימ'</span>
+                          <span className="text-amber-400 font-black text-sm">➔ {projectedSourceTotal} ימ'</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          יתרה: {projectedSourceRem} פנויות
+                        </div>
+                      </div>
+
+                      {/* Target after */}
+                      <div className="bg-slate-800/90 p-2.5 rounded-xl border border-slate-700">
+                        <div className="font-bold text-slate-300 text-[11px] truncate">{targetPass.dogName} (יעד):</div>
+                        <div className="mt-1 flex items-baseline gap-1.5">
+                          <span className="text-slate-400 line-through text-[11px]">{targetPass.totalDays} ימ'</span>
+                          <span className="text-emerald-400 font-black text-sm">➔ {projectedTargetTotal} ימ'</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          יתרה: {projectedTargetRem} פנויות {projectedTargetRem >= 0 ? '✓ מאוזן!' : ''}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Reason / Notes */}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    סיבת הניוד (תתועד בהיסטוריית הכרטיסיות):
+                  </label>
+                  <input
+                    type="text"
+                    value={transferModal.reason}
+                    onChange={(e) => setTransferModal({ ...transferModal, reason: e.target.value })}
+                    placeholder="למשל: ניוד ימים מקצח לירדנה לבקשת הלקוח"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2.5 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    disabled={isSavingTransfer || !sourcePass || !targetPass || effectiveDays <= 0}
+                    onClick={handleExecuteTransfer}
+                    className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-teal-600 hover:from-indigo-700 hover:to-teal-700 text-white font-black text-sm rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingTransfer ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>מבצע ניוד ימים...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Repeat className="w-4 h-4" />
+                        <span>אשר ניוד {effectiveDays} ימים מ-{sourcePass?.dogName || 'מקור'} ל-{targetPass?.dogName || 'יעד'} 🔄</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTransferModal(null)}
+                    className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl cursor-pointer"
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

@@ -1710,6 +1710,116 @@ export const deductDayFromPassInDb = async (
   }
 };
 
+/**
+ * ניוד והעברת ימים בין כרטיסיות ומכלב לכלב (עבור לקוחות עם מספר כלבים / כרטיסיות)
+ * מעביר כמות ימים מבוקשת מכרטיסיית מקור לכרטיסיית יעד, ומעדכן היסטוריית שימוש והערות
+ */
+export const transferDaysBetweenPassesInDb = async (params: {
+  sourcePassIdOrCode: string;
+  targetPassIdOrCode: string;
+  daysToTransfer: number;
+  reason?: string;
+  transferredBy?: 'shmulik' | 'customer';
+}): Promise<{
+  success: boolean;
+  sourcePass?: DaycarePass;
+  targetPass?: DaycarePass;
+  error?: string;
+}> => {
+  try {
+    const { sourcePassIdOrCode, targetPassIdOrCode, daysToTransfer, reason, transferredBy = 'shmulik' } = params;
+    const cleanSource = (sourcePassIdOrCode || '').trim().toUpperCase();
+    const cleanTarget = (targetPassIdOrCode || '').trim().toUpperCase();
+
+    if (!cleanSource || !cleanTarget) {
+      return { success: false, error: 'נא לבחור כרטיסיית מקור וכרטיסיית יעד' };
+    }
+
+    if (cleanSource === cleanTarget) {
+      return { success: false, error: 'כרטיסיית המקור וכרטיסיית היעד זהות' };
+    }
+
+    const current = loadStoredDaycarePasses();
+    const source = current.find(p => p.id === sourcePassIdOrCode || p.passCode.toUpperCase() === cleanSource);
+    const target = current.find(p => p.id === targetPassIdOrCode || p.passCode.toUpperCase() === cleanTarget);
+
+    if (!source) {
+      return { success: false, error: 'כרטיסיית מקור לא נמצאה' };
+    }
+    if (!target) {
+      return { success: false, error: 'כרטיסיית יעד לא נמצאה' };
+    }
+
+    const days = Math.max(1, Math.round(Number(daysToTransfer) || 0));
+    if (days <= 0) {
+      return { success: false, error: 'מספר הימים לניוד חייב להיות לפחות 1' };
+    }
+
+    if (source.totalDays < days) {
+      return { success: false, error: `בכרטיסיית המקור (#${source.passCode}) יש רק ${source.totalDays} ימים בסה"כ, לא ניתן לנייד ${days} ימים` };
+    }
+
+    const now = new Date().toISOString();
+    const today = now.split('T')[0];
+
+    const sourceNewTotal = source.totalDays - days;
+    const targetNewTotal = target.totalDays + days;
+
+    const transferNote = reason?.trim() || `ניוד ${days} ימים בין כרטיסיות / כלבים (${source.dogName} ➔ ${target.dogName})`;
+
+    const sourceUsageEntry: PassUsageEntry = {
+      date: today,
+      daysCount: -days,
+      bookingId: '',
+      addedBy: transferredBy,
+      notes: `🔄 הועברו ${days} ימים לכרטיסייה #${target.passCode} (${target.dogName}) | ${transferNote}`,
+      timestamp: now
+    };
+
+    const targetUsageEntry: PassUsageEntry = {
+      date: today,
+      daysCount: days,
+      bookingId: '',
+      addedBy: transferredBy,
+      notes: `🔄 התקבלו ${days} ימים בניוד מכרטיסייה #${source.passCode} (${source.dogName}) | ${transferNote}`,
+      timestamp: now
+    };
+
+    // Recalculate completion status if any
+    const sourceRem = sourceNewTotal - source.usedDays;
+    const targetRem = targetNewTotal - target.usedDays;
+
+    const updatedSource: DaycarePass = {
+      ...source,
+      totalDays: sourceNewTotal,
+      status: sourceRem <= 0 && source.status === 'active' ? 'completed' : source.status,
+      notes: [source.notes, `[🔄 הועברו ${days} ימ' לכרטיסייה #${target.passCode} (${target.dogName}) בתאריך ${today}]`].filter(Boolean).join(' | '),
+      usageHistory: [...(source.usageHistory || []), sourceUsageEntry],
+      updatedAt: now
+    };
+
+    const updatedTarget: DaycarePass = {
+      ...target,
+      totalDays: targetNewTotal,
+      status: targetRem > 0 && target.status === 'completed' ? 'active' : target.status,
+      notes: [target.notes, `[🔄 התקבלו ${days} ימ' מניוד כרטיסייה #${source.passCode} (${source.dogName}) בתאריך ${today}]`].filter(Boolean).join(' | '),
+      usageHistory: [...(target.usageHistory || []), targetUsageEntry],
+      updatedAt: now
+    };
+
+    await saveDaycarePassToDb(updatedSource);
+    await saveDaycarePassToDb(updatedTarget);
+
+    return {
+      success: true,
+      sourcePass: updatedSource,
+      targetPass: updatedTarget
+    };
+  } catch (e: any) {
+    return { success: false, error: e?.message || 'שגיאה בביצוע ניוד ימים' };
+  }
+};
+
 export const subscribeToDaycarePasses = (callback: (passes: DaycarePass[]) => void): Unsubscribe => {
   callback(loadStoredDaycarePasses());
 

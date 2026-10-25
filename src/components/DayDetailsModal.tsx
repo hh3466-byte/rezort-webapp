@@ -26,7 +26,7 @@ import { getWazeNavigationUrl } from '../utils/geolocationUtils';
 import { Booking, ResortSettings, IntakeRequest, DaycarePass } from '../types';
 import { formatFullHebrewDate, getDailyBreakdown, formatDateIL, formatStayDatesDisplay, getTodayStr, isTrainingBooking, getBookingPairInfo, calculateDaysCount } from '../utils/dateUtils';
 import { getServiceTypeHebrew, generatePaymentReminderMessage, openWhatsAppMessage, cleanPhoneNumber } from '../utils/whatsappUtils';
-import { findDaycarePassByCode, findActiveDaycarePassByPhone, loadStoredDaycarePasses } from '../services/dbService';
+import { findDaycarePassByCode, findActiveDaycarePassByPhone, loadStoredDaycarePasses, transferDaysBetweenPassesInDb } from '../services/dbService';
 import { getDateShabbatOrHoliday } from '../utils/jewishCalendar';
 import { ShabbatHolidayGreetingModal } from './ShabbatHolidayGreetingModal';
 import { getPlacementDisplayName, normalizePlacementKey } from '../utils/kennelUtils';
@@ -51,6 +51,8 @@ interface DayDetailsModalProps {
   onInitiateRelease?: (booking: Booking) => void;
   onToggleReviewRequest?: (booking: Booking) => void;
   onOpenVoucher?: (data: { customerName: string; dogName: string; phone: string; staysCount?: number }) => void;
+  onSaveBooking?: (booking: Booking) => Promise<void> | void;
+  onOpenDaycarePassModal?: () => void;
   intakeRequests?: IntakeRequest[];
   focusedIntakeRequestId?: string | null;
   onApproveIntakeRequest?: (req: IntakeRequest) => void;
@@ -73,6 +75,8 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   onInitiateRelease,
   onToggleReviewRequest,
   onOpenVoucher,
+  onSaveBooking,
+  onOpenDaycarePassModal,
   intakeRequests = [],
   focusedIntakeRequestId,
   onApproveIntakeRequest,
@@ -86,6 +90,65 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
   const [isGreetingModalOpen, setIsGreetingModalOpen] = useState(false);
   const [selectedChatHistory, setSelectedChatHistory] = useState<{ phone: string; customerName: string; dogName?: string } | null>(null);
   const [selectedDocumentsBooking, setSelectedDocumentsBooking] = useState<Booking | null>(null);
+  const [isBalancingPass, setIsBalancingPass] = useState(false);
+
+  // Quick 1-click balance of an overdrawn pass using another pass of the same client
+  const handleQuickBalancePass = async (sourcePass: DaycarePass, targetPassCode: string, overdraftDays: number) => {
+    try {
+      setIsBalancingPass(true);
+      const allPasses = ((settings?.daycare_passes || settings?.daycarePasses || loadStoredDaycarePasses()) as DaycarePass[]);
+      const targetPass = allPasses.find(p => p.passCode.toUpperCase() === String(targetPassCode).toUpperCase()) ||
+                         findDaycarePassByCode(targetPassCode);
+      if (!targetPass) {
+        alert('כרטיסיית יעד לא נמצאה');
+        return;
+      }
+      const days = Math.max(1, overdraftDays);
+      const res = await transferDaysBetweenPassesInDb({
+        sourcePassIdOrCode: sourcePass.id,
+        targetPassIdOrCode: targetPass.id,
+        daysToTransfer: days,
+        reason: `איזון מהיר מחריגה ביומן: ניוד ${days} יממות מ-${sourcePass.dogName} אל ${targetPass.dogName}`
+      });
+
+      if (!res.success) {
+        alert(`שגיאה באיזון: ${res.error || 'נסה שוב'}`);
+        return;
+      }
+
+      alert(`✅ בוצע בהצלחה!\nנוידו ${days} יממות מכרטיסייה #${sourcePass.passCode} (${sourcePass.dogName}) אל כרטיסייה #${targetPass.passCode} (${targetPass.dogName}).\nהחריגה נסגרה והכרטיסייה מאוזנת! 🎉`);
+      onClose();
+    } catch (e: any) {
+      alert(`שגיאה באיזון: ${e?.message || e}`);
+    } finally {
+      setIsBalancingPass(false);
+    }
+  };
+
+  // Re-assign a booking from one pass to another pass of the same customer
+  const handleSwitchBookingPass = async (targetBooking: Booking, newPass: DaycarePass) => {
+    try {
+      if (!onSaveBooking) {
+        alert('לא ניתן לעדכן את השהייה במסך זה');
+        return;
+      }
+      const updatedBooking: Booking = {
+        ...targetBooking,
+        daycarePassCode: newPass.passCode,
+        daycarePassId: newPass.id,
+        notes: [
+          (targetBooking.notes || '').replace(/#?([A-Za-z0-9\u0590-\u05FF-]+)/i, `#${newPass.passCode}`),
+          `[הועבר לכרטיסייה #${newPass.passCode} (${newPass.dogName})]`
+        ].filter(Boolean).join(' | '),
+        updatedAt: new Date().toISOString()
+      };
+      await onSaveBooking(updatedBooking);
+      alert(`✅ השהייה שוייכה בהצלחה לכרטיסייה #${newPass.passCode} עבור ${newPass.dogName}!`);
+      onClose();
+    } catch (e: any) {
+      alert(`שגיאה בשיוך כרטיסייה: ${e?.message || e}`);
+    }
+  };
 
   // Pending requests for this date: ONLY first-time inquiries where contact has NOT been made yet (or pass reservation requests)
   const pendingRequestsForDate = React.useMemo(() => {
@@ -945,6 +1008,90 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                 </span>
               </div>
             )}
+
+            {/* Smart Multi-Pass Balancing & Reassignment for Multi-Dog / Multi-Pass Clients */}
+            {isPassStay && (() => {
+              const allPassesList = ((settings?.daycare_passes || settings?.daycarePasses || loadStoredDaycarePasses()) as DaycarePass[]);
+              const cleanPhone = cleanPhoneNumber(booking.ownerPhone);
+              const otherCustomerPasses = allPassesList.filter(p => {
+                const isSameCode = passInfo && String(p.passCode).toUpperCase() === String(passInfo.passCode).toUpperCase();
+                if (isSameCode) return false;
+                const pDigits = cleanPhoneNumber(p.ownerPhone);
+                return Boolean(
+                  (cleanPhone && pDigits && pDigits === cleanPhone) ||
+                  (booking.ownerName && p.ownerName && booking.ownerName.trim() === p.ownerName.trim())
+                );
+              });
+
+              if (otherCustomerPasses.length === 0) return null;
+
+              const surplusPass = otherCustomerPasses.find(p => (p.totalDays - p.usedDays) > 0);
+
+              return (
+                <div className="w-full mt-2 space-y-2">
+                  {/* If current pass is in overdraft and another pass has days, offer 1-click balance */}
+                  {passInfo?.isExceeded && surplusPass && (
+                    <div className="p-3 rounded-2xl bg-gradient-to-r from-indigo-50 to-teal-50 border-2 border-indigo-300 text-indigo-950 text-xs space-y-2 shadow-xs">
+                      <div className="flex items-center justify-between flex-wrap gap-1">
+                        <span className="font-black flex items-center gap-1.5">
+                          <span className="text-base">💡</span>
+                          <span>ללקוח {booking.ownerName} יש כרטיסייה נוספת: #{surplusPass.passCode} ({surplusPass.dogName})</span>
+                        </span>
+                        <span className="text-[10px] bg-indigo-200 text-indigo-950 font-black px-2 py-0.5 rounded-full">
+                          {surplusPass.totalDays - surplusPass.usedDays} ימים פנויים
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-indigo-900 leading-snug">
+                        באפשרותך לנייד {passInfo.exceededDays} {passInfo.exceededDays === 1 ? 'יממה' : 'יממות'} מכרטיסייה #{surplusPass.passCode} לכאן כדי לאפס את החריגה ולאזן את הכרטיסיות (הגון והגיוני).
+                      </p>
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          disabled={isBalancingPass}
+                          onClick={() => handleQuickBalancePass(surplusPass, passInfo.passCode, passInfo.exceededDays)}
+                          className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          <span>🔄</span>
+                          <span>{isBalancingPass ? 'מבצע ניוד...' : `נייד ${passInfo.exceededDays} ימ' וסגור חריגה ⚡`}</span>
+                        </button>
+                        {onOpenDaycarePassModal && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenDaycarePassModal()}
+                            className="py-2 px-3 bg-white hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-2xs"
+                          >
+                            <span>ניהול כרטיסיות 📋</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Switch Booking to another pass option */}
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs flex-wrap gap-2">
+                    <span className="text-slate-600 font-bold flex items-center gap-1">
+                      <span>🎟️ כרטיסייה משוייכת:</span>
+                      <strong className="font-mono text-slate-800">#{passInfo?.passCode || '8935'}</strong>
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] text-slate-500">שייך שהייה זו לכרטיסייה:</span>
+                      {otherCustomerPasses.map(op => (
+                        <button
+                          key={op.id}
+                          type="button"
+                          onClick={() => handleSwitchBookingPass(booking, op)}
+                          className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-2xs flex items-center gap-1"
+                          title={`העבר שהייה זו לכרטיסייה #${op.passCode} עבור ${op.dogName}`}
+                        >
+                          <span>🔀</span>
+                          <span>#{op.passCode} ({op.dogName})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-600 mt-1">
