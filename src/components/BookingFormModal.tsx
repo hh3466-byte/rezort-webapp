@@ -730,7 +730,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({
               </div>
               <div className="text-xs pt-2 flex items-center justify-between flex-wrap gap-2">
                 <span className={isOverdraft ? 'text-rose-900' : 'text-emerald-800'}>
-                  יתרת ימים בכרטיסייה: <strong className="text-slate-950 text-sm font-black">{remaining} מתוך {matchedPass.totalDays} {isBoarding ? 'יממות' : 'ימים'}</strong> ({matchedPass.usedDays} נוצלו)
+                  יתרת ימים בכרטיסייה: <strong className="text-slate-950 text-sm font-black">{remaining} מתוך {matchedPass.totalDays} {isBoarding ? 'יממות' : 'ימים'} ({remaining}/{matchedPass.totalDays})</strong> ({matchedPass.usedDays} נוצלו)
                 </span>
                 <span className={`text-[11px] px-2 py-0.5 rounded-md font-bold border ${
                   isOverdraft 

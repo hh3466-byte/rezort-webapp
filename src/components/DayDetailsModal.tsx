@@ -372,7 +372,7 @@ export const DayDetailsModal: React.FC<DayDetailsModalProps> = ({
                       </span>
                       {remainingDays !== null && (
                         <span className="text-[11px] text-amber-300 font-bold block mt-0.5">
-                          יתרה בכרטיסייה: {remainingDays} ימים
+                          יתרה בכרטיסייה: נותרו {remainingDays} מתוך {matchedPass?.totalDays || 21} ימים ({remainingDays}/{matchedPass?.totalDays || 21})
                         </span>
                       )}
                     </div>
@@ -635,13 +635,13 @@ export function getBookingPassStayInfo(
     ? 'low'
     : 'normal';
 
-  let remainingLabel = `${remainingOnThisDate} נותרו`;
+  let remainingLabel = `${remainingOnThisDate}/${totalDays} נותרו`;
   if (isExceeded) {
-    remainingLabel = `חריגה (+${exceededDays})`;
+    remainingLabel = `חריגה (+${exceededDays}) · ${daysUsedThroughThisStay}/${totalDays}`;
   } else if (remainingOnThisDate === 0) {
-    remainingLabel = `0 נותרו (מוצה)`;
+    remainingLabel = `0/${totalDays} נותרו (מוצה)`;
   } else if (remainingOnThisDate <= 2) {
-    remainingLabel = `${remainingOnThisDate} נותרו (עומד להסתיים)`;
+    remainingLabel = `${remainingOnThisDate}/${totalDays} נותרו (עומד להסתיים)`;
   }
 
   // Any future booked stays already registered in pass:
@@ -651,12 +651,12 @@ export function getBookingPassStayInfo(
   const passCode = matchedPass?.passCode || (booking.daycarePassCode && booking.daycarePassCode !== 'קוד' ? booking.daycarePassCode : '') || (notes.match(/#(\d+)/)?.[1]) || '';
 
   const displayText = isExceeded 
-    ? `🚨 חריגת כרטיסייה: יום ${currentDayInPass} מתוך ${totalDays}`
-    : `🎟️ כרטיסייה: יום ${currentDayInPass} מתוך ${totalDays}`;
+    ? `🚨 חריגת כרטיסייה: ${daysUsedThroughThisStay}/${totalDays}`
+    : `🎟️ כרטיסייה: ${remainingOnThisDate}/${totalDays} נותרו`;
 
   const tooltipText = isExceeded
-    ? `🚨 חריגת כרטיסייה #${passCode}! יום זה חורג ב-${exceededDays} יממות מעבר למכסה שנרכשה (${totalDays}). נדרש לגבות תשלום נפרד!`
-    : `כרטיסייה${passCode ? ` #${passCode}` : ''} | שהייה נוכחית: יום ${currentDayInStay} מתוך ${totalDaysInStay} | נותרו ${remainingOnThisDate} ימים בסיום יום זה (בסיום שהייה זו יוותרו ${Math.max(0, remainingAfterStay)} ימים)${futureDaysBooked > 0 ? ` (${netAvailableAfterFuture} פנויים לאחר שריון עתידי נוסף)` : ''}`;
+    ? `🚨 חריגת כרטיסייה #${passCode}! יום זה חורג ב-${exceededDays} יממות מעבר למכסה שנרכשה (${daysUsedThroughThisStay}/${totalDays}). נדרש לגבות תשלום נפרד!`
+    : `כרטיסייה${passCode ? ` #${passCode}` : ''} | יום ${currentDayInPass} מתוך ${totalDays} | נותרו ${remainingOnThisDate} מתוך ${totalDays} יממות בסיום יום זה (בסיום שהייה זו יוותרו ${Math.max(0, remainingAfterStay)} יממות)${futureDaysBooked > 0 ? ` (${netAvailableAfterFuture} פנויים לאחר שריון עתידי נוסף)` : ''}`;
 
   return {
     isPass: true,
@@ -889,7 +889,7 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
                     : 'bg-teal-100 text-teal-950 border border-teal-300'
                 }`}
               >
-                <span>{passInfo.isExceeded ? '🚨' : '🎟️'} בנק {passInfo.totalDays} יממות</span>
+                <span>{passInfo.isExceeded ? '🚨' : '🎟️'} בנק {passInfo.totalDays} יממות ({passInfo.remainingDays}/{passInfo.totalDays} נותרו)</span>
               </span>
             )}
             {/* Placement / Room / Suite Location Badge (Visible for ALL dogs) */}

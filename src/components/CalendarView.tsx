@@ -153,6 +153,7 @@ export interface PassInfo {
   dayIndex?: number;
   isBoarding: boolean;
   label: string;
+  compactLabel: string;
   statusType: 'normal' | 'low' | 'exhausted' | 'exceeded';
   badgeColor: string;
   tooltipText: string;
@@ -183,11 +184,21 @@ export function getPassInfoForBooking(
   if (!matchedPass && (booking.ownerPhone || bData.ownerPhone)) {
     const phone = booking.ownerPhone || bData.ownerPhone;
     const cleanPhone = String(phone).replace(/\D/g, '').slice(-7);
+    const dogNameClean = String(booking.dogName || '').trim().toLowerCase();
     if (cleanPhone.length >= 7) {
-      matchedPass = passesList.find(p => {
+      const customerPasses = passesList.filter(p => {
         const pDigits = String(p.ownerPhone || '').replace(/\D/g, '').slice(-7);
         return pDigits === cleanPhone && p.status === 'active';
       });
+      // Prefer pass matching dogName if customer has passes for multiple dogs
+      const dogPass = customerPasses.find(p => dogNameClean && String(p.dogName || '').trim().toLowerCase() === dogNameClean && (p.totalDays - p.usedDays) > 0)
+                   || customerPasses.find(p => dogNameClean && String(p.dogName || '').trim().toLowerCase() === dogNameClean);
+      if (dogPass) {
+        matchedPass = dogPass;
+      } else if (customerPasses.length > 0) {
+        // Pick the active pass that has remaining days, or latest
+        matchedPass = customerPasses.find(p => (p.totalDays - p.usedDays) > 0) || customerPasses[customerPasses.length - 1];
+      }
     }
   }
 
@@ -232,12 +243,19 @@ export function getPassInfoForBooking(
       ? 'low'
       : 'normal';
     const label = isExceeded
-      ? `🚨 חריגה (+${exceededDays})`
+      ? `🚨 חריגה: ${matchedPass.usedDays}/${totalDays} (+${exceededDays})`
       : remainingDays === 0
-      ? '🏁 0 נותרו'
+      ? `🏁 0/${totalDays} נותרו`
       : remainingDays <= 2
-      ? `⏳ ${remainingDays} ${remainingDays === 1 ? 'נותר' : 'נותרו'}`
-      : `🎟️ ${remainingDays} נותרו`;
+      ? `⏳ ${remainingDays}/${totalDays} ${remainingDays === 1 ? 'נותר' : 'נותרו'}`
+      : `🎟️ ${remainingDays}/${totalDays} נותרו`;
+    const compactLabel = isExceeded
+      ? `🚨 ${matchedPass.usedDays}/${totalDays}`
+      : remainingDays === 0
+      ? `🏁 0/${totalDays}`
+      : remainingDays <= 2
+      ? `⏳ ${remainingDays}/${totalDays}`
+      : `🎟️ ${remainingDays}/${totalDays}`;
     const badgeColor = isExceeded
       ? 'bg-rose-100 text-rose-950 border-2 border-rose-500 font-black animate-pulse'
       : remainingDays === 0
@@ -255,9 +273,10 @@ export function getPassInfoForBooking(
       dayIndex: matchedPass.usedDays,
       isBoarding,
       label,
+      compactLabel,
       statusType,
       badgeColor,
-      tooltipText: `🎟️ כרטיסייה #${matchedPass.passCode}: ${remainingDays} נותרו מתוך ${totalDays}`,
+      tooltipText: `🎟️ כרטיסייה #${matchedPass.passCode}: נותרו ${remainingDays} מתוך ${totalDays} יממות (${matchedPass.usedDays} נוצלו)`,
       isExceeded,
       exceededDays,
       bookingHasOverdraft: isExceeded,
@@ -347,25 +366,30 @@ export function getPassInfoForBooking(
     : 'normal';
 
   let label = '';
+  let compactLabel = '';
   let badgeColor = '';
   let tooltipText = '';
 
   if (statusType === 'exceeded') {
-    label = `🚨 חריגה (+${exceededDays})`;
+    label = `🚨 חריגה: ${totalConsumedOnThisDate}/${totalDays} (+${exceededDays})`;
+    compactLabel = `🚨 ${totalConsumedOnThisDate}/${totalDays}`;
     badgeColor = 'bg-rose-100 text-rose-950 border-2 border-rose-500 font-black animate-pulse shadow-sm ring-1 ring-rose-400';
-    tooltipText = `🚨 חריגת כרטיסייה! ל${booking.dogName} נרכשו ${totalDays} יממות (#${matchedPass.passCode}), אך שוריינו ימים מעבר למכסה. יום זה חורג ב-${exceededDays} ${exceededDays === 1 ? 'יממה' : 'יממות'} מעבר לכרטיסייה ונדרש לגבות עליו תשלום!`;
+    tooltipText = `🚨 חריגת כרטיסייה! ל${booking.dogName} נרכשו ${totalDays} יממות (#${matchedPass.passCode}), אך שוריינו ימים מעבר למכסה. יום זה חורג ב-${exceededDays} ${exceededDays === 1 ? 'יממה' : 'יממות'} מעבר לכרטיסייה (${totalConsumedOnThisDate}/${totalDays}) ונדרש לגבות עליו תשלום!`;
   } else if (statusType === 'exhausted') {
-    label = '🏁 0 נותרו (מוצה)';
+    label = `🏁 0/${totalDays} נותרו`;
+    compactLabel = `🏁 0/${totalDays}`;
     badgeColor = 'bg-orange-100 text-orange-950 border border-orange-500 font-extrabold shadow-2xs';
     tooltipText = `🏁 כרטיסייה #${matchedPass.passCode} מוצתה עד תום ביום זה (${totalDays} מתוך ${totalDays} נוצלו). כל שהייה נוספת תחרוג ותדרוש תשלום.`;
   } else if (statusType === 'low') {
-    label = `⏳ ${remainingOnThisDate} ${remainingOnThisDate === 1 ? 'נותר' : 'נותרו'}`;
+    label = `⏳ ${remainingOnThisDate}/${totalDays} ${remainingOnThisDate === 1 ? 'נותר' : 'נותרו'}`;
+    compactLabel = `⏳ ${remainingOnThisDate}/${totalDays}`;
     badgeColor = 'bg-amber-100 text-amber-950 border border-amber-400 font-black shadow-2xs';
-    tooltipText = `⚠️ יתרה נמוכה! נותרו ${remainingOnThisDate} יממות בלבד בכרטיסייה #${matchedPass.passCode} (יום ${currentDayInPass} מתוך ${totalDays}). מומלץ להציע ללקוח לרכוש כרטיסייה חדשה.`;
+    tooltipText = `⚠️ יתרה נמוכה! נותרו ${remainingOnThisDate} מתוך ${totalDays} יממות בכרטיסייה #${matchedPass.passCode} (יום ${currentDayInPass} מתוך ${totalDays}). מומלץ להציע ללקוח לרכוש כרטיסייה חדשה.`;
   } else {
-    label = `🎟️ ${remainingOnThisDate} נותרו`;
+    label = `🎟️ ${remainingOnThisDate}/${totalDays} נותרו`;
+    compactLabel = `🎟️ ${remainingOnThisDate}/${totalDays}`;
     badgeColor = 'bg-emerald-100 text-emerald-950 font-black border border-emerald-400 shadow-2xs';
-    tooltipText = `🎟️ כרטיסייה #${matchedPass.passCode}: יום ${currentDayInPass} מתוך ${totalDays} | נותרו ${remainingOnThisDate} יממות בסיום יום זה (בסיום שהייה זו יוותרו ${Math.max(0, remainingAfterThisBooking)} יממות)`;
+    tooltipText = `🎟️ כרטיסייה #${matchedPass.passCode}: נותרו ${remainingOnThisDate} מתוך ${totalDays} יממות בסיום יום זה (יום ${currentDayInPass} מתוך ${totalDays} | בסיום שהייה זו יוותרו ${Math.max(0, remainingAfterThisBooking)} יממות)`;
   }
 
   return {
@@ -377,6 +401,7 @@ export function getPassInfoForBooking(
     dayIndex: currentDayInPass,
     isBoarding: isThisBoarding,
     label,
+    compactLabel,
     statusType,
     badgeColor,
     tooltipText,
@@ -1416,7 +1441,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 className={`text-[9px] font-black px-1 rounded shrink-0 mr-0.5 ${passInfo.badgeColor}`} 
                                 title={passInfo.tooltipText}
                               >
-                                {passInfo.label}
+                                {passInfo.compactLabel || passInfo.label}
                               </span>
                             )}
                           </span>
@@ -1677,7 +1702,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                   <span>{passInfo.statusType === 'exceeded' ? '🚨' : passInfo.statusType === 'exhausted' ? '🏁' : passInfo.statusType === 'low' ? '⏳' : '🎟️'}</span>
                                   <span>
                                     {passInfo.isExceeded
-                                      ? `מנוי #${passInfo.passCode}: חריגה של ${passInfo.exceededDays}+ יממות מעבר למכסה!`
+                                      ? `מנוי #${passInfo.passCode}: חריגה של ${passInfo.exceededDays}+ יממות מעבר למכסה (${passInfo.totalDays})!`
                                       : <>מנוי #{passInfo.passCode}: נותרו <strong>{passInfo.remainingDays}</strong> מתוך {passInfo.totalDays} ימ'</>}
                                   </span>
                                 </span>
@@ -1878,7 +1903,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                                 <span>{passInfo.statusType === 'exceeded' ? '🚨' : passInfo.statusType === 'exhausted' ? '🏁' : passInfo.statusType === 'low' ? '⏳' : '🎟️'}</span>
                                 <span>
                                   {passInfo.isExceeded
-                                    ? `כרטיסייה #${passInfo.passCode}: חריגה של ${passInfo.exceededDays}+ יממות מעבר למכסה!`
+                                    ? `כרטיסייה #${passInfo.passCode}: חריגה של ${passInfo.exceededDays}+ יממות מעבר למכסה (${passInfo.totalDays})!`
                                     : `כרטיסייה #${passInfo.passCode}: נותרו ${passInfo.remainingDays} מתוך ${passInfo.totalDays} ${passInfo.isBoarding ? 'יממות' : 'ימים'}`}
                                 </span>
                               </span>
