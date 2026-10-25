@@ -67,7 +67,9 @@ export function getStayStatusColors(
   endDate: string, 
   todayStr: string,
   startDate?: string,
-  currentDateStr?: string
+  currentDateStr?: string,
+  passInfo?: PassInfo | { isPass?: boolean; isExceeded?: boolean; isBoarding?: boolean; statusType?: string; serviceType?: string; pass?: any } | null,
+  serviceType?: string
 ) {
   const targetDate = currentDateStr || todayStr;
 
@@ -82,6 +84,7 @@ export function getStayStatusColors(
       isCheckedIn: false,
       isBooked: false,
       isReleasing: false,
+      isPass: Boolean(passInfo?.isPass),
       dogClass: 'text-slate-400 font-bold',
       ownerClass: 'text-slate-400 font-bold text-[11px]',
       textClass: 'text-slate-400',
@@ -92,8 +95,108 @@ export function getStayStatusColors(
     };
   }
 
-  // 2. Releasing on this day (משתחרר באותו היום - כחול רויאל בולט ומודגש)
   const isReleasing = Boolean(endDate) && endDate === targetDate && stayStatus !== 'cancelled';
+  const isBooked = stayStatus === 'booked' || (stayStatus as any) === 'confirmed' || (!stayStatus && startDate && startDate > targetDate);
+  const isCheckedIn = !isBooked && (stayStatus === 'checked_in' || !startDate || startDate <= targetDate);
+
+  // 1.5. Special distinctive styling for dogs on passes of all kinds (VIP Boarding, Day Training, Daycare)
+  if (passInfo && passInfo.isPass) {
+    const isExceeded = Boolean(passInfo.isExceeded || passInfo.statusType === 'exceeded');
+    let effectiveType: 'boarding' | 'day_training' | 'daycare' = 'daycare';
+    if (passInfo.serviceType === 'boarding' || (passInfo as any).isBoarding || serviceType === 'boarding' || (passInfo as any).pass?.serviceType === 'boarding') {
+      effectiveType = 'boarding';
+    } else if (passInfo.serviceType === 'day_training' || serviceType === 'day_training' || (passInfo as any).pass?.serviceType === 'day_training') {
+      effectiveType = 'day_training';
+    } else {
+      effectiveType = 'daycare';
+    }
+
+    // A. Overdraft / Exceeded pass
+    if (isExceeded) {
+      return {
+        isEnded: false,
+        isCheckedIn,
+        isBooked,
+        isReleasing,
+        isPass: true,
+        dogClass: 'text-rose-950 font-black',
+        ownerClass: 'text-rose-900 font-black text-[11px]',
+        textClass: 'text-rose-950',
+        cardBorderBg: isReleasing
+          ? 'bg-rose-50/95 border-2 border-rose-500 hover:border-rose-600 hover:bg-rose-100/90 text-rose-950 shadow-2xs ring-2 ring-blue-500/80'
+          : 'bg-rose-50/95 border-2 border-rose-500 hover:border-rose-600 hover:bg-rose-100/90 text-rose-950 shadow-2xs ring-2 ring-rose-400/60',
+        monthChipBg: 'bg-rose-100 border-2 border-rose-500 text-rose-950 font-black animate-pulse shadow-xs',
+        iconClass: 'text-rose-600',
+        badgeLabel: isReleasing ? 'משתחרר היום (חריגת כרטיסייה)' : isBooked ? 'שוריין (חריגת כרטיסייה)' : 'שוהה (חריגת כרטיסייה)'
+      };
+    }
+
+    // B. VIP Boarding Pass (בנק 21 יממות VIP) -> פטרול טורקיז עמוק ויוקרתי (Teal)
+    if (effectiveType === 'boarding') {
+      return {
+        isEnded: false,
+        isCheckedIn,
+        isBooked,
+        isReleasing,
+        isPass: true,
+        dogClass: 'text-[#042f2e] font-black', // Deep rich teal-950
+        ownerClass: 'text-[#0f766e] font-black text-[11px]', // Teal-700
+        textClass: 'text-[#042f2e]',
+        cardBorderBg: isReleasing
+          ? 'bg-teal-50/95 border-2 border-blue-500 hover:border-blue-600 hover:bg-teal-100/90 text-[#042f2e] shadow-2xs ring-2 ring-blue-500/70'
+          : 'bg-teal-50/95 border-2 border-teal-500 hover:border-teal-600 hover:bg-teal-100/90 text-[#042f2e] shadow-2xs ring-1 ring-teal-400/60',
+        monthChipBg: isReleasing
+          ? 'bg-teal-100 border-2 border-blue-500 text-[#042f2e] font-black'
+          : 'bg-teal-100 border border-teal-500 text-[#042f2e] font-black',
+        iconClass: 'text-[#0d9488]',
+        badgeLabel: isReleasing ? 'משתחרר היום (בנק VIP)' : isBooked ? 'שוריין (בנק VIP)' : 'שוהה (בנק VIP)'
+      };
+    }
+
+    // C. Day Training Pass (כרטיסיית אילוף יום) -> זהב חם עשיר (Amber)
+    if (effectiveType === 'day_training') {
+      return {
+        isEnded: false,
+        isCheckedIn,
+        isBooked,
+        isReleasing,
+        isPass: true,
+        dogClass: 'text-[#451a03] font-black', // Deep rich amber-950
+        ownerClass: 'text-[#b45309] font-black text-[11px]', // Amber-700
+        textClass: 'text-[#451a03]',
+        cardBorderBg: isReleasing
+          ? 'bg-amber-50/95 border-2 border-blue-500 hover:border-blue-600 hover:bg-amber-100/90 text-[#451a03] shadow-2xs ring-2 ring-blue-500/70'
+          : 'bg-amber-50/95 border-2 border-amber-500 hover:border-amber-600 hover:bg-amber-100/90 text-[#451a03] shadow-2xs ring-1 ring-amber-400/60',
+        monthChipBg: isReleasing
+          ? 'bg-amber-100 border-2 border-blue-500 text-[#451a03] font-black'
+          : 'bg-amber-100 border border-amber-500 text-[#451a03] font-black',
+        iconClass: 'text-[#d97706]',
+        badgeLabel: isReleasing ? 'משתחרר היום (כרטיסיית אילוף)' : isBooked ? 'שוריין (כרטיסיית אילוף)' : 'שוהה (כרטיסיית אילוף)'
+      };
+    }
+
+    // D. Daycare Pass (כרטיסיית ימי כיף / מעון יום) -> תכלת מים עז ורענן (Cyan)
+    return {
+      isEnded: false,
+      isCheckedIn,
+      isBooked,
+      isReleasing,
+      isPass: true,
+      dogClass: 'text-[#083344] font-black', // Deep rich cyan-950
+      ownerClass: 'text-[#0e7490] font-black text-[11px]', // Cyan-700
+      textClass: 'text-[#083344]',
+      cardBorderBg: isReleasing
+        ? 'bg-cyan-50/95 border-2 border-blue-500 hover:border-blue-600 hover:bg-cyan-100/90 text-[#083344] shadow-2xs ring-2 ring-blue-500/70'
+        : 'bg-cyan-50/95 border-2 border-cyan-500 hover:border-cyan-600 hover:bg-cyan-100/90 text-[#083344] shadow-2xs ring-1 ring-cyan-400/60',
+      monthChipBg: isReleasing
+        ? 'bg-cyan-100 border-2 border-blue-500 text-[#083344] font-black'
+        : 'bg-cyan-100 border border-cyan-500 text-[#083344] font-black',
+      iconClass: 'text-[#06b6d4]',
+      badgeLabel: isReleasing ? 'משתחרר היום (כרטיסיית מעון)' : isBooked ? 'שוריין (כרטיסיית מעון)' : 'שוהה (כרטיסיית מעון)'
+    };
+  }
+
+  
   if (isReleasing) {
     return {
       isEnded: false,
@@ -110,8 +213,7 @@ export function getStayStatusColors(
     };
   }
 
-  // 3. Booked / Reserved (שוריין אך טרם נקלט בצ'ק אין) -> סגול בולט ומודגש
-  const isBooked = stayStatus === 'booked' || (stayStatus as any) === 'confirmed' || (!stayStatus && startDate && startDate > targetDate);
+  
   if (isBooked) {
     return {
       isEnded: false,
@@ -1144,7 +1246,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         const isUnpaid = !isPaid && !isDeposit && !b.isFreeStay && ((Number(b.totalPrice) || 0) > 0 || isPassUnpaid);
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, day.dateStr);
+                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, day.dateStr, passInfo, b.serviceType);
 
                         // Dog & Pair detection & connected UI styling
                         const pairInfo = getBookingPairInfo(b, dayBookings);
@@ -1381,9 +1483,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       const isDeposit = b.paymentStatus === 'deposit_paid';
                       const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                       const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                      const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, dayObj.dateStr);
                       const pairInfo = getBookingPairInfo(b, dateBookings);
                       const passInfo = getPassInfoForBooking(b, settings, dayObj.dateStr, activeBookings);
+                      const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, dayObj.dateStr, passInfo, b.serviceType);
                       const currentDogKey = `${(b.dogName || '').trim().toLowerCase()}_${(b.ownerPhone || b.ownerName || '').trim().toLowerCase()}`;
                       const isHovered = Boolean(
                         (hoveredBookingId && hoveredBookingId === b.id) ||
@@ -1613,7 +1715,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                         const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === b.id));
                         const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, day.dateStr);
+                        const passInfo = getPassInfoForBooking(b, settings, day.dateStr, activeBookings);
+                        const stayColors = getStayStatusColors(b.stayStatus, b.endDate, todayStr, b.startDate, day.dateStr, passInfo, b.serviceType);
 
                         let cardClasses = `border p-2 text-xs transition-all cursor-pointer shadow-2xs relative `;
                         if (prevSibling && nextSibling) {
@@ -1637,8 +1740,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                         } else {
                           cardClasses += stayColors.cardBorderBg;
                         }
-
-                        const passInfo = getPassInfoForBooking(b, settings, day.dateStr, activeBookings);
 
                         return (
                           <div
@@ -1840,7 +1941,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
                   const isMatch = Boolean(searchQuery.trim() && matchingBookings.some(m => m.id === booking.id));
                   const isDimmed = Boolean(searchQuery.trim() && !isMatch);
-                  const stayColors = getStayStatusColors(booking.stayStatus, booking.endDate, todayStr, booking.startDate, focusedDate);
+                  const passInfo = getPassInfoForBooking(booking, settings, focusedDate, activeBookings);
+                  const stayColors = getStayStatusColors(booking.stayStatus, booking.endDate, todayStr, booking.startDate, focusedDate, passInfo, booking.serviceType);
                   const pairInfo = getBookingPairInfo(booking, dayBreakdown.all);
                   const currentDogKey = `${(booking.dogName || '').trim().toLowerCase()}_${(booking.ownerPhone || booking.ownerName || '').trim().toLowerCase()}`;
                   const isHovered = Boolean(
@@ -1859,8 +1961,6 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                   } else {
                     cardClasses += stayColors.cardBorderBg;
                   }
-
-                  const passInfo = getPassInfoForBooking(booking, settings, focusedDate, activeBookings);
 
                   return (
                     <div

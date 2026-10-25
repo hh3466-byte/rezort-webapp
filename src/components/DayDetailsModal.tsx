@@ -724,15 +724,16 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   const remainingDebt = Math.max(0, Math.round(booking.totalPrice - booking.depositAmount));
   const roundedTotal = Math.round(booking.totalPrice || 0);
   const roundedDeposit = Math.round(booking.depositAmount || 0);
+  const passInfo = getBookingPassStayInfo(booking, settings, effectiveDate);
   const stayColors = getStayStatusColors(
     booking.stayStatus, 
     booking.endDate, 
     todayStr, 
     booking.startDate, 
-    actionType === 'departure' ? booking.endDate : todayStr
+    actionType === 'departure' ? booking.endDate : todayStr,
+    passInfo as any,
+    booking.serviceType
   );
-
-  const passInfo = getBookingPassStayInfo(booking, settings, effectiveDate);
   const isPassStay = Boolean(passInfo?.isPass);
   const isFree = !isPassStay && Boolean(booking.isFreeStay || (booking as any).is_free_stay);
 
@@ -751,14 +752,19 @@ const DogBookingCard: React.FC<DogBookingCardProps> = React.memo(({
   const isSecondaryDog = Boolean((pairInfo && pairInfo.isSecondary) || booking.linkedDogName || (booking.notes && (booking.notes.includes('שולם דרך') || booking.notes.includes('כלב שני'))));
 
   // Status color styles matching design
+  const passServiceType = (passInfo as any)?.serviceType || (passInfo as any)?.pass?.serviceType || booking.serviceType;
   let paymentBorder = isEnded 
     ? 'border-slate-200 bg-slate-50/70 text-slate-600 opacity-80' 
     : isPassStay && passInfo?.isExceeded
     ? 'border-2 border-rose-500 bg-rose-50/80 shadow-md ring-2 ring-rose-400/50'
     : isPassStay && passInfo?.statusType === 'low'
     ? 'border-amber-400 bg-amber-50/40 ring-1 ring-amber-300'
+    : isPassStay && passServiceType === 'day_training'
+    ? 'border-2 border-amber-500 bg-amber-50/60 ring-1 ring-amber-400/60'
+    : isPassStay && passServiceType === 'daycare'
+    ? 'border-2 border-cyan-500 bg-cyan-50/60 ring-1 ring-cyan-400/60'
     : isPassStay
-    ? 'border-teal-400 bg-teal-50/30'
+    ? 'border-2 border-teal-500 bg-teal-50/60 ring-1 ring-teal-400/60'
     : isFree
     ? 'border-emerald-300 bg-emerald-50/40'
     : 'border-red-300 bg-red-50/40';
