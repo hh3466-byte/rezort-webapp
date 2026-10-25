@@ -30,7 +30,10 @@ import {
   Lock,
   Sun,
   Moon,
-  Pencil
+  Pencil,
+  Receipt,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -950,7 +953,7 @@ ${paymentLine}
         totalPrice: 0, // Already prepaid / tracked via pass
         depositAmount: 0,
         paymentStatus: isPaid ? 'fully_paid' : 'unpaid',
-        paymentMethod: selectedPassForBooking.paymentMethod || 'credit',
+        paymentMethod: (selectedPassForBooking.paymentMethod as PaymentMethod) || 'credit',
         stayStatus: isToday ? 'checked_in' : 'booked',
         vaccinationValid: true,
         daycarePassId: selectedPassForBooking.id,
