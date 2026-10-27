@@ -1,20 +1,13 @@
 const fs = require('fs');
 const { createClient } = require('@supabase/supabase-js');
 
-// Load environment variables from .env
-const envContent = fs.readFileSync('.env', 'utf8');
 const env = {};
-envContent.split('\n').forEach(line => {
-  const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
-  if (match) {
-    let val = (match[2] || '').trim();
-    if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-    if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1);
-    env[match[1]] = val;
-  }
+fs.readFileSync('.env', 'utf-8').split('\n').forEach(line => {
+  const p = line.split('=');
+  if (p.length >= 2) env[p[0].trim()] = p.slice(1).join('=').trim().replace(/^['"]|['"]$/g, '');
 });
 
-const supabase = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY);
+const sb = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY);
 
 function cleanPhoneNumber(phone) {
   if (!phone) return '';
@@ -24,84 +17,78 @@ function cleanPhoneNumber(phone) {
   return cleaned;
 }
 
-async function runCleanup() {
-  console.log('Fetching settings and bookings from Supabase...');
-  const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
-  const { data: bookings } = await supabase.from('bookings').select('*');
-
-  if (!settingsRows || settingsRows.length === 0) {
-    console.error('No settings row found in DB!');
+async function run() {
+  const { data: sRows, error: sErr } = await sb.from('settings').select('*');
+  if (sErr) {
+    console.error('Settings fetch error:', sErr);
     return;
   }
+  const sRow = sRows?.[0] || {};
+  const curData = sRow.data || {};
+  const intakes = Array.isArray(curData.intakeRequests) ? curData.intakeRequests : [];
 
-  const sRow = settingsRows[0];
-  const settingsData = sRow.data || sRow;
-  const intakes = settingsData.intakeRequests || [];
+  const { data: bookings } = await sb.from('bookings').select('*');
   const activeBookings = (bookings || []).filter(b => (b.stay_status || b.stayStatus) !== 'cancelled');
 
-  console.log(`Found ${intakes.length} intake requests in DB.`);
-
-  let approvedCount = 0;
-  let abandonedCount = 0;
-  let untouchedCount = 0;
+  console.log(`Starting cleanup of ${intakes.length} intake requests...`);
+  const nowMs = Date.now();
+  let modifiedCount = 0;
 
   const updatedIntakes = intakes.map(req => {
-    const rPhone = cleanPhoneNumber(req.ownerPhone || req.owner_phone || '');
     const rDog = (req.dogName || req.dog_name || '').trim().toLowerCase();
+    const rPhone = cleanPhoneNumber(req.ownerPhone || req.owner_phone || '');
+    const cTime = req.created_at || req.createdAt || req.submittedAt;
+    const ageDays = cTime ? (nowMs - new Date(cTime).getTime()) / (1000 * 60 * 60 * 24) : 0;
 
-    // Check if there is an active matching booking in calendar
-    const matchedBooking = activeBookings.find(b => {
-      const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+    // 1. Check if there's an active booking for this intake
+    const matchingBooking = activeBookings.find(b => {
       const bDog = (b.dog_name || b.dogName || '').trim().toLowerCase();
-      const phoneMatch = bPhone && rPhone && (bPhone === rPhone || bPhone.slice(-7) === rPhone.slice(-7));
-      const dogMatch = bDog && rDog && (bDog === rDog || bDog.includes(rDog) || rDog.includes(bDog));
-      return phoneMatch || (dogMatch && phoneMatch);
+      const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
+      return (rDog && bDog && (rDog === bDog || bDog.includes(rDog) || rDog.includes(bDog))) &&
+             (rPhone && bPhone && (rPhone.slice(-7) === bPhone.slice(-7)));
     });
 
-    if (matchedBooking) {
-      approvedCount++;
+    if (matchingBooking && req.status !== 'approved') {
+      console.log(`[APPROVE] Intake ${req.id} for "${req.dogName}" matched with booking ${matchingBooking.id}. Updating status to 'approved'.`);
+      modifiedCount++;
       return {
         ...req,
         status: 'approved',
-        internalNotes: req.internalNotes || 'נקלט לשריון ביומן'
+        internalNotes: req.internalNotes ? `${req.internalNotes} | [הוזמן בהצלחה ביומן ${matchingBooking.id}]` : `[הוזמן בהצלחה ביומן ${matchingBooking.id}]`
       };
     }
 
-    // If currently pending and not matched to an active upcoming booking, mark as abandoned (archived)
-    if (req.status === 'pending' || !req.status) {
-      abandonedCount++;
+    // 2. Check if intake is older than 14 days without booking and still pending/in_progress
+    if (!matchingBooking && (req.status === 'pending' || req.status === 'in_progress') && ageDays > 14) {
+      console.log(`[ABANDON] Intake ${req.id} for "${req.dogName}" is ${Math.round(ageDays)} days old (submitted ${cTime?.slice(0, 10)}) without booking. Marking 'abandoned'.`);
+      modifiedCount++;
       return {
         ...req,
         status: 'abandoned',
-        internalNotes: req.internalNotes || 'ננטש והועבר לארכיון כהנחיית שמוליק'
+        internalNotes: req.internalNotes ? `${req.internalNotes} | [סגירה אוטומטית: שאלון ישן מעל 14 יום ללא שריון]` : `[סגירה אוטומטית: שאלון ישן מעל 14 יום ללא שריון]`
       };
     }
 
-    untouchedCount++;
     return req;
   });
 
-  console.log(`Summary: ${approvedCount} marked approved, ${abandonedCount} marked abandoned (archived), ${untouchedCount} kept existing status.`);
-
-  // Save back to settings table
-  const updatedData = {
-    ...settingsData,
-    intakeRequests: updatedIntakes
-  };
-
-  const { error } = await supabase
-    .from('settings')
-    .update({
-      data: updatedData,
+  if (modifiedCount > 0) {
+    const { error: updErr } = await sb.from('settings').update({
+      data: {
+        ...curData,
+        intakeRequests: updatedIntakes
+      },
       updated_at: new Date().toISOString()
-    })
-    .eq('id', sRow.id);
+    }).eq('id', sRow.id || 'resort_config');
 
-  if (error) {
-    console.error('Error updating settings in DB:', error);
+    if (updErr) {
+      console.error('Update failed:', updErr);
+    } else {
+      console.log(`Successfully updated ${modifiedCount} intake requests in Supabase!`);
+    }
   } else {
-    console.log('✅ Successfully updated intakeRequests in Supabase settings table!');
+    console.log('No intake requests required modification.');
   }
 }
 
-runCleanup();
+run();

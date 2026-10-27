@@ -242,6 +242,13 @@ export function formatTomorrowOverviewReport(
     // Auto-archive rule: if dates have already passed without a booking, ignore from report
     if ((rEnd && rEnd < todayStr) || (rStart && rStart < todayStr)) return false;
 
+    // Stale questionnaire rule: ignore questionnaires submitted more than 7 days ago without a booking
+    const cTime = r.createdAt || (r as any).created_at || (r as any).submittedAt;
+    if (cTime) {
+      const ageDays = (Date.now() - new Date(cTime).getTime()) / (1000 * 60 * 60 * 24);
+      if (ageDays > 7) return false;
+    }
+
     const rDog = (r.dogName || '').trim().toLowerCase();
     const rPhone = cleanPhoneNumber(r.ownerPhone || '');
     const hasBooking = activeBookings.some(b => {
@@ -332,18 +339,8 @@ export function formatTomorrowOverviewReport(
     actionBlocks.push(`⚠️ *שאלונים שאושרו אך טרם שוריינו ביומן (${approvedIntakesWithoutBooking.length}):*\n${list}`);
   }
 
-  // 4. Unassigned kennel placement
-  const unassignedKennelDogs = activeBookings.filter(b => {
-    const isStayingOrIncoming = (b.startDate <= tomorrowStr && b.endDate >= tomorrowStr) || b.startDate === tomorrowStr;
-    return isStayingOrIncoming && !b.kennelNumber && b.kennelNumber !== 0;
-  });
-  if (unassignedKennelDogs.length > 0) {
-    const list = unassignedKennelDogs.map((b, idx) => {
-      const phone = formatPhoneFormatted(b.ownerPhone || '');
-      return `${idx + 1}. 📋 *${b.dogName}* (${b.ownerName} - 📞 ${phone}) | שהייה: ${formatDateIL(b.startDate)}–${formatDateIL(b.endDate)} (ממתין לשיבוץ חדר 1–7, סוויטה 1–4, שביל או הלנה ביתית ודלי מזון)`;
-    }).join('\n');
-    actionBlocks.push(`🏠 *כלבים הממתינים לשיבוץ מיקום לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
-  }
+  // 4. Unassigned kennel placement - REMOVED from Red Lights as room allocation is dynamic and flexible
+  // (Managed directly on the board without alerting in daily reports)
 
   if (phoneAndDateIssues.length > 0) {
     const list = phoneAndDateIssues.map(issue => `• ${issue}`).join('\n');

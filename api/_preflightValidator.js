@@ -109,7 +109,12 @@ export function preflightValidateSanityReport(reportText, recipientChatId = HAGA
       .replace(/למנהל \(054-3200007\)/g, 'לחגי (054-3200007)');
   }
 
-  // 2. Validate essential markers
+  // 2. Room assignment is dynamic and flexible - MUST NOT appear in Red Lights! (Rule 4)
+  cleaned = cleaned.replace(/(?:🚨|🏠|🏨)?\s*\*?כלבים(?:\s*שוהים)?\s*(?:ללא שיבוץ|הממתינים לשיבוץ)[^\n]*\n[\s\S]*?(?=\n\n|\n(?:[🔴🚨💰📋🚪⚠️💬🏦📱])|$)/gu, '');
+  cleaned = cleaned.replace(/(?:🚨|🏠|🏨)?\s*\*?התנגשויות חדרים[^\n]*\n[\s\S]*?(?=\n\n|\n(?:[🔴🚨💰📋🚪⚠️💬🏦📱])|$)/gu, '');
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+
+  // 3. Validate essential markers
   const hasGreenSection = cleaned.includes('אירועים ירוקים');
   const hasRedSection = cleaned.includes('אורות אדומים');
   const isValidStructure = hasGreenSection && hasRedSection;
@@ -123,34 +128,15 @@ export function preflightValidateSanityReport(reportText, recipientChatId = HAGA
 
 /**
  * Validates and Auto-Heals the 19:00 Tomorrow Overview Report
- * Crucial Rule: Dogs whose stay ends on or before today (e.g. Shilgi) MUST NOT
- * appear under "כלבים שוהים הממתינים לשיבוץ מיקום לינה ודלי מזון" for tomorrow!
  */
 export function preflightValidateTomorrowReport(reportText, activeBookings = [], todayStr) {
   let cleaned = reportText;
   const modifications = [];
 
-  // Check if any dog whose endDate <= todayStr was mistakenly included in the unassigned list
-  for (const b of activeBookings) {
-    const end = b.end_date || b.endDate || '';
-    const dogName = (b.dog_name || b.dogName || '').trim();
-    if (end && end <= todayStr && dogName) {
-      // If this dog's name appears in the unassigned kennel section
-      const unassignedHeaderRegex = /🏠\s*\*כלבים(?:\s*שוהים)?\s*הממתינים לשיבוץ מיקום לינה ודלי מזון[^\n]*\n([\s\S]*?)(?=\n\n|\n[🔴🚨💰📋🚪⚠️]|$)/;
-      const match = cleaned.match(unassignedHeaderRegex);
-      if (match && match[1] && match[1].includes(dogName)) {
-        // Remove line mentioning this dog
-        const lines = match[1].split('\n').filter(line => !line.includes(dogName));
-        if (lines.length > 0) {
-          cleaned = cleaned.replace(match[1], lines.join('\n'));
-        } else {
-          // No more dogs unassigned, remove the entire section block
-          cleaned = cleaned.replace(match[0], '');
-        }
-        modifications.push(`Removed departed/ending dog "${dogName}" from tomorrow's kennel allocation list`);
-      }
-    }
-  }
+  // Room assignment is dynamic and flexible - MUST NOT appear in Red Lights / Action Blocks! (Rule 4)
+  cleaned = cleaned.replace(/(?:🚨|🏠|🏨)?\s*\*?כלבים(?:\s*שוהים)?\s*(?:ללא שיבוץ|הממתינים לשיבוץ)[^\n]*\n[\s\S]*?(?=\n\n|\n(?:[🔴🚨💰📋🚪⚠️💬🏦📱])|$)/gu, '');
+  cleaned = cleaned.replace(/(?:🚨|🏠|🏨)?\s*\*?התנגשויות חדרים[^\n]*\n[\s\S]*?(?=\n\n|\n(?:[🔴🚨💰📋🚪⚠️💬🏦📱])|$)/gu, '');
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
 
   return {
     valid: true,

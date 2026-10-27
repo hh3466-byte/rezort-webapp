@@ -325,39 +325,8 @@ export function run1830SanityAudit(
   });
 
   // ==========================================
-  // DEEP CHECK 1: Room Collisions (התנגשות חדרים)
+  // DEEP CHECK 1: Room Collisions - REMOVED from Red Lights as room allocation is dynamic
   // ==========================================
-  const currentAndFutureActive = activeBookings.filter(b => b.endDate >= todayStr && b.stayStatus !== 'checked_out');
-  for (let i = 0; i < currentAndFutureActive.length; i++) {
-    for (let j = i + 1; j < currentAndFutureActive.length; j++) {
-      const b1 = currentAndFutureActive[i];
-      const b2 = currentAndFutureActive[j];
-      if (!b1.kennelNumber || !b2.kennelNumber) continue;
-      if (b1.kennelNumber !== b2.kennelNumber) continue;
-
-      // Check date overlap
-      const hasOverlap = b1.startDate <= b2.endDate && b1.endDate >= b2.startDate;
-      if (!hasOverlap) continue;
-
-      const p1 = cleanPhoneNumber(b1.ownerPhone || '');
-      const p2 = cleanPhoneNumber(b2.ownerPhone || '');
-      const o1 = (b1.ownerName || '').trim();
-      const o2 = (b2.ownerName || '').trim();
-      const d1 = (b1.dogName || '').trim();
-      const d2 = (b2.dogName || '').trim();
-      const link1 = b1.linkedDogName || (b1 as any).linked_dog_name || '';
-      const link2 = b2.linkedDogName || (b2 as any).linked_dog_name || '';
-
-      const isSameOwner = (p1 && p2 && p1 === p2) || (o1 && o2 && o1 === o2);
-      const isLinked = (link1 && link1 === d2) || (link2 && link2 === d1);
-
-      // If different owners and not a linked pair in the same kennel
-      if (!isSameOwner && !isLinked) {
-        const kName = formatKennelName(b1.kennelNumber);
-        redLights.roomCollisions.push(`🚨 התנגשות ב${kName}: *${b1.dogName}* (${b1.ownerName}) ו-*${b2.dogName}* (${b2.ownerName}) משובצים לאותו מתחם בתאריכים חופפים (${formatDateIL(b1.startDate)}-${formatDateIL(b1.endDate)})!`);
-      }
-    }
-  }
 
   // ==========================================
   // DEEP CHECK 2: Pending Checkouts Today (שחרורים של היום שטרם נסגרו)
@@ -496,6 +465,11 @@ export function run1830SanityAudit(
   // ==========================================
   intakeRequests.filter(r => r.status === 'pending').forEach(r => {
     const sDate = r.startDate || '';
+    const cTime = r.createdAt || (r as any).created_at || (r as any).submittedAt;
+    if (cTime) {
+      const ageDays = (nowMs - new Date(cTime).getTime()) / (1000 * 60 * 60 * 24);
+      if (ageDays > 7) return;
+    }
     if (sDate >= todayStr && sDate <= in2DaysStr) {
       redLights.urgentIntakes.push(`📋 שאלון קליטה דחוף ל-48 שעות הקרובות טרם מולא: *${r.dogName}* (${r.ownerName} - 📞 ${r.ownerPhone}) | כניסה מתוכננת: ${formatDateIL(r.startDate)}`);
     }
@@ -681,6 +655,14 @@ export function run1830SanityAudit(
     const sDate = r.startDate || '';
     const eDate = r.endDate || '';
     if ((eDate && eDate < todayStr) || (sDate && sDate < todayStr)) return false;
+
+    // Stale questionnaire rule: ignore questionnaires submitted more than 7 days ago without a booking
+    const cTime = r.createdAt || (r as any).created_at || (r as any).submittedAt;
+    if (cTime) {
+      const ageDays = (nowMs - new Date(cTime).getTime()) / (1000 * 60 * 60 * 24);
+      if (ageDays > 7) return false;
+    }
+
     return true;
   });
   pendingIntakes.forEach(r => {
@@ -782,7 +764,6 @@ export function run1830SanityAudit(
     redLights.unreconciledGrowPayments.length +
     redLights.unadmittedGhostBookings.length +
     redLights.overdueUnreleasedStays.length +
-    redLights.roomCollisions.length +
     redLights.pendingCheckouts.length +
     redLights.pendingCheckins.length +
     redLights.expiredGhostBookings.length +
@@ -857,11 +838,6 @@ export function run1830SanityAudit(
     if (redLights.corruptedBookingState.length > 0) {
       parts.push(`\n⚠️ *סתירות נתונים והערות ביטול בהזמנות פעילות:*`);
       redLights.corruptedBookingState.forEach(c => parts.push(`   • ${c}`));
-    }
-
-    if (redLights.roomCollisions.length > 0) {
-      parts.push(`\n🏨 *התנגשויות חדרים / שיבוץ כפול:*`);
-      redLights.roomCollisions.forEach(r => parts.push(`   • ${r}`));
     }
 
     if (redLights.pendingCheckouts.length > 0) {

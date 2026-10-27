@@ -113,6 +113,7 @@ export const getEffectiveIntakeStatus = (r: IntakeRequest, bookings: Booking[] =
   if (r.status === 'approved') return 'approved';
   if (r.status === 'abandoned' || r.status === 'archived') return 'abandoned';
   if (hasActiveBookingForIntake(r, bookings)) return 'approved';
+  if (isIntakeRequestExpired(r, bookings)) return 'abandoned';
   return r.status;
 };
 
@@ -137,8 +138,25 @@ export const getLatestActionDateFromNotes = (notes: string): Date | null => {
 export const isIntakeRequestExpired = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
   if (r.status === 'approved' || hasActiveBookingForIntake(r, bookings)) return false;
   if (r.status === 'abandoned' || r.status === 'archived') return false;
-  // Requests actively in progress or waiting for payment are NOT auto-expired - Shmulik is actively handling them!
-  if ((r.status as string) === 'in_progress' || r.status === 'payment_requested') return false;
+
+  // Stale age rule: Questionnaires submitted more than 14 days ago without a booking are expired,
+  // unless there was a recent manual staff note within the last 14 days.
+  const createdStr = r.submittedAt || r.createdAt || (r as any).created_at;
+  if (createdStr) {
+    const createdTime = new Date(createdStr).getTime();
+    if (!isNaN(createdTime)) {
+      const ageDays = (Date.now() - createdTime) / (1000 * 60 * 60 * 24);
+      if (ageDays > 14) {
+        const latestNoteDate = r.internalNotes ? getLatestActionDateFromNotes(r.internalNotes) : null;
+        if (latestNoteDate) {
+          const noteAgeDays = (Date.now() - latestNoteDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (noteAgeDays > 14) return true;
+        } else {
+          return true;
+        }
+      }
+    }
+  }
 
   const todayStr = new Date().toISOString().split('T')[0];
   const eDate = r.endDate;
@@ -218,17 +236,17 @@ export const isIntakeRequestNew = (r: IntakeRequest, bookings: Booking[] = []): 
 export const isIntakeRequestInTreatment = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
   if (r.status === 'abandoned' || r.status === 'archived' || r.status === 'rejected') return false;
   if (isIntakeMarkedIrrelevant(r)) return false;
+  if (isIntakeRequestExpired(r, bookings)) return false;
   const effStatus = getEffectiveIntakeStatus(r, bookings);
-  if (effStatus === 'approved') return false;
+  if (effStatus === 'approved' || effStatus === 'abandoned') return false;
 
-  // 1. Explicit in_progress or payment_requested status (NEVER auto-expires!)
+  // 1. Explicit in_progress or payment_requested status (active only if not expired)
   if ((effStatus as string) === 'in_progress' || effStatus === 'payment_requested' || (r.status as string) === 'in_progress' || r.status === 'payment_requested') {
     return true;
   }
 
   // 2. Pending request that has human staff notes from Shmulik
   if (effStatus === 'pending' && hasManualStaffNotes(r.internalNotes)) {
-    if (isIntakeRequestExpired(r, bookings)) return false;
     return true;
   }
 

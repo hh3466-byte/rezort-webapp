@@ -3,7 +3,7 @@ import { Booking, Customer, ResortSettings, GrowIncomingPayment, IntakeRequest, 
 import { initialBookings, defaultSettings } from '../data/initialData';
 import { extractCustomers } from '../utils/storage';
 import { sanitizePhone, cleanPhoneNumber } from '../utils/whatsappUtils';
-import { hasActiveBookingForIntake } from '../utils/intakeUtils';
+import { hasActiveBookingForIntake, isIntakeRequestExpired } from '../utils/intakeUtils';
 
 const BOOKINGS_TABLE = 'bookings';
 const SETTINGS_TABLE = 'settings';
@@ -2130,7 +2130,7 @@ export const autoArchiveExpiredIntakes = async (
       if (r.status === 'abandoned' || r.status === 'archived' || r.status === 'approved') return r;
       if (hasActiveBookingForIntake(r, bookings)) return r;
 
-      const isExpired = (r.endDate && r.endDate <= todayStr) || (r.startDate && r.startDate < todayStr);
+      const isExpired = isIntakeRequestExpired(r, bookings);
       const isMarkedIrrelevant = r.internalNotes && (
         r.internalNotes.includes('לא רלוונטי') ||
         r.internalNotes.includes('הוסר מהרשימה') ||

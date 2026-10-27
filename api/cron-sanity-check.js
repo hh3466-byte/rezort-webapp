@@ -509,12 +509,20 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     }
   });
 
-  // Open intake requests (exclude abandoned, rejected, expired past dates, or customers already booked in calendar)
+  // Open intake requests (exclude abandoned, rejected, expired past dates, old questionnaires > 7 days, or customers already booked in calendar)
   (intakes || []).filter(r => {
     if (r.status !== 'pending') return false;
     const sDate = r.startDate || r.start_date || '';
     const eDate = r.endDate || r.end_date || '';
     if ((eDate && eDate < todayStr) || (sDate && sDate < todayStr)) return false;
+
+    // Stale questionnaire rule: ignore questionnaires submitted more than 7 days ago without a booking
+    const cTime = r.created_at || r.createdAt || r.submittedAt;
+    if (cTime) {
+      const ageDays = (nowMs - new Date(cTime).getTime()) / (1000 * 60 * 60 * 24);
+      if (ageDays > 7) return false;
+    }
+
     return true;
   }).forEach(r => {
     const rPhone = cleanPhoneNumber(r.ownerPhone || r.owner_phone || '');
@@ -580,19 +588,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     }
   }
 
-  // 7. Check for unassigned dogs (Informational only for currently checked-in dogs)
-  const unassignedKennels = [];
-  activeBookings.filter(b => {
-    const status = b.stay_status || b.stayStatus || b.status;
-    return status === 'checked_in';
-  }).forEach(b => {
-    const k = b.data?.kennelNumber ?? b.kennelNumber ?? b.kennel_number ?? b.room_id ?? b.data?.room;
-    if (!k && k !== 0) {
-      const dog = b.dog_name || b.dogName || 'כלב';
-      const owner = b.owner_name || b.ownerName || 'בעלים';
-      unassignedKennels.push(`🏠 *${dog}* (${owner}) | ממתין לשיבוץ מהיר בלוח החדרים`);
-    }
-  });
+  // Room assignment is dynamic and flexible - removed from Red Lights audit
 
   const totalGreen = greenEvents.length;
   const totalRed =
@@ -675,10 +671,6 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     if (redLights.overcapacity.length > 0) {
       parts.push(`\n⚠️ *בקרת תפוסה וקיבולת שיא:*`);
       redLights.overcapacity.forEach(r => parts.push(`   • ${r}`));
-    }
-    if (unassignedKennels.length > 0) {
-      parts.push(`\n🚨 *כלבים שוהים ללא שיבוץ תא לינה/דלי מזון (${unassignedKennels.length}):*`);
-      unassignedKennels.forEach(k => parts.push(`   • ${k}`));
     }
     if (redLights.unansweredChats.length > 0) {
       parts.push(`\n💬 *שיחות לקוחות הממתינות למענה:*`);
@@ -774,12 +766,22 @@ export default async function handler(req, res) {
 
     const { data: bookings } = await supabase.from('bookings').select('*');
     const { data: settingsRows } = await supabase.from('settings').select('*').limit(1);
-    const { data: intakes } = await supabase.from('intake_requests').select('*');
+    const { data: intakesRows } = await supabase.from('intake_requests').select('*');
     const { data: growPayments } = await supabase.from('grow_incoming_payments').select('*');
 
     const sRow = settingsRows?.[0] || {};
     const settings = { ...sRow, ...(sRow.data || {}) };
     const curData = sRow.data || {};
+
+    // Merge intakes from intake_requests table and settings.data.intakeRequests
+    const rawFromSettings = (sRow && sRow.data && Array.isArray(sRow.data.intakeRequests)) ? sRow.data.intakeRequests : [];
+    const intakeMap = new Map();
+    [...rawFromSettings, ...(intakesRows || [])].forEach(item => {
+      if (item && item.id) {
+        intakeMap.set(item.id, item);
+      }
+    });
+    const intakes = Array.from(intakeMap.values());
 
     const greenId = settings.greenApiIdInstance;
     const greenToken = settings.greenApiToken;

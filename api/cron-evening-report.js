@@ -220,6 +220,13 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
     // Auto-archive rule: if dates have already passed without a booking, ignore from report
     if ((rEnd && rEnd <= todayStr) || (rStart && rStart <= todayStr)) return false;
 
+    // Stale questionnaire rule: ignore questionnaires submitted more than 7 days ago without a booking
+    const cTime = r.created_at || r.createdAt || r.submittedAt;
+    if (cTime) {
+      const ageDays = (Date.now() - new Date(cTime).getTime()) / (1000 * 60 * 60 * 24);
+      if (ageDays > 7) return false;
+    }
+
     const rDog = (r.dogName || r.dog_name || '').trim().toLowerCase();
     const rPhone = cleanPhoneNumber(r.ownerPhone || r.owner_phone || '');
     const hasBooking = activeBookings.some(b => {
@@ -293,31 +300,8 @@ export function formatReport(managerName, bookings, settings, intakes, payments,
     actionBlocks.push(`⚠️ *שאלונים שאושרו אך טרם שוריינו ביומן (${approvedIntakesWithoutBooking.length}):*\n${list}`);
   }
 
-  // 4. Unassigned kennel placement check (חוק ברזל: חובת שיבוץ מיקום לינה)
-  // Only check dogs who are currently checked in (staying now), not future bookings waiting to arrive
-  const getPlacement = (b) => {
-    const k = b.data?.kennelNumber ?? b.kennelNumber ?? b.kennel_number ?? b.room_id ?? b.data?.room;
-    if (!k && k !== 0) return null;
-    return String(k);
-  };
-
-  const unassignedKennelDogs = activeBookings.filter(b => {
-    const status = b.stay_status || b.stayStatus || b.status;
-    const isStayingNow = status === 'checked_in';
-    const end = b.end_date || b.endDate || '';
-    const k = getPlacement(b);
-    return isStayingNow && !k && end > todayStr;
-  });
-
-  if (unassignedKennelDogs.length > 0) {
-    const list = unassignedKennelDogs.map((b, idx) => {
-      const phone = formatPhoneFormatted(b.owner_phone || b.ownerPhone || '');
-      const s = b.start_date || b.startDate;
-      const e = b.end_date || b.endDate;
-      return `${idx + 1}. 📋 *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${phone}) | שהייה: ${formatDateIL(s)}–${formatDateIL(e)} (ממתין לשיבוץ חדר 1–7, סוויטה 1–4, שביל או הלנה ביתית ודלי מזון)`;
-    }).join('\n');
-    actionBlocks.push(`🏠 *כלבים שוהים הממתינים לשיבוץ מיקום לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
-  }
+  // 4. Unassigned kennel placement - REMOVED from Red Lights as room allocation is dynamic and flexible
+  // (Managed directly on the board without alerting in daily reports)
 
   // 5. Zero Deposit bookings holding spots
   const zeroDepositUpcoming = activeBookings.filter(b => {

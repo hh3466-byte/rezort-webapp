@@ -188,6 +188,13 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
     // Auto-archive rule: if dates have already passed without a booking, ignore from report
     if ((rEnd && rEnd < todayStr) || (rStart && rStart < todayStr)) return false;
 
+    // Stale questionnaire rule: ignore questionnaires submitted more than 7 days ago without a booking
+    const cTime = r.created_at || r.createdAt || r.submittedAt;
+    if (cTime) {
+      const ageDays = (Date.now() - new Date(cTime).getTime()) / (1000 * 60 * 60 * 24);
+      if (ageDays > 7) return false;
+    }
+
     const rDog = (r.dogName || r.dog_name || '').trim().toLowerCase();
     const rPhone = cleanPhoneNumber(r.ownerPhone || r.owner_phone || '');
     const hasBooking = activeBookings.some(b => {
@@ -247,24 +254,8 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
     actionBlocks.push(`⚠️ *שאלונים שאושרו אך טרם שוריינו ביומן (${approvedIntakesWithoutBooking.length}):*\n${list}`);
   }
 
-  // 3. Unassigned kennel placement check (חוק ברזל: חובת שיבוץ מיקום לינה)
-  const unassignedKennelDogs = activeBookings.filter(b => {
-    const s = b.start_date || b.startDate;
-    const e = b.end_date || b.endDate;
-    const isStayingOrIncoming = (s <= tomorrowStr && e >= tomorrowStr) || s === tomorrowStr;
-    const k = b.kennel_number !== undefined ? b.kennel_number : b.kennelNumber;
-    return isStayingOrIncoming && (!k && k !== 0);
-  });
-
-  if (unassignedKennelDogs.length > 0) {
-    const list = unassignedKennelDogs.map((b, idx) => {
-      const phone = formatPhoneFormatted(b.owner_phone || b.ownerPhone || '');
-      const s = b.start_date || b.startDate;
-      const e = b.end_date || b.endDate;
-      return `${idx + 1}. 📋 *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${phone}) | שהייה: ${formatDateIL(s)}–${formatDateIL(e)} (ממתין לשיבוץ חדר 1–7, סוויטה 1–4, שביל או הלנה ביתית ודלי מזון)`;
-    }).join('\n');
-    actionBlocks.push(`🏠 *כלבים הממתינים לשיבוץ מיקום לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
-  }
+  // 3. Unassigned kennel placement - REMOVED from Red Lights as room allocation is dynamic and flexible
+  // (Managed directly on the board without alerting in daily reports)
 
   let extraActionSections = '';
   if (actionBlocks.length > 0) {

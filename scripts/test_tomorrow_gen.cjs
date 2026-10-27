@@ -180,24 +180,8 @@ function buildTomorrowReport(bookings, settings, intakes, todayStr) {
   // Action items / Red lights for tomorrow
   const actionBlocks = [];
 
-  // 1. Unassigned kennel placement check (חוק ברזל: חובת שיבוץ מיקום לינה)
-  const unassignedKennelDogs = activeBookings.filter(b => {
-    const s = b.start_date || b.startDate;
-    const e = b.end_date || b.endDate;
-    const isStayingOrIncoming = (s <= tomorrowStr && e >= tomorrowStr) || s === tomorrowStr;
-    const k = b.kennel_number !== undefined ? b.kennel_number : b.kennelNumber;
-    return isStayingOrIncoming && (!k && k !== 0);
-  });
+  // Room assignment is dynamic and flexible - removed per AGENTS.md Rule 4
 
-  if (unassignedKennelDogs.length > 0) {
-    const list = unassignedKennelDogs.map((b, idx) => {
-      const phone = formatPhoneFormatted(b.owner_phone || b.ownerPhone || '');
-      const s = b.start_date || b.startDate;
-      const e = b.end_date || b.endDate;
-      return `${idx + 1}. 🚨 *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName} - 📞 ${phone}) | שהייה: ${formatDateIL(s)}–${formatDateIL(e)} (חסר שיבוץ תא 1–11 או הלנה ביתית ודלי מזון!)`;
-    }).join('\n');
-    actionBlocks.push(`🏠 *כלבים ללא שיבוץ תא לינה ודלי מזון (${unassignedKennelDogs.length}):*\n${list}`);
-  }
 
   // 2. Pending intakes
   const pendingIntakes = (intakes || []).filter(r => r.status === 'pending');

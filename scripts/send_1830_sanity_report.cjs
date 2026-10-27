@@ -496,40 +496,7 @@ async function run1830Audit() {
     return d.toISOString().split('T')[0];
   })();
 
-  // 1. Room Collisions
-  const currentAndFutureActive = activeBookings.filter(b => (b.end_date || b.endDate) >= todayStr && (b.stay_status || b.stayStatus) !== 'checked_out');
-  for (let i = 0; i < currentAndFutureActive.length; i++) {
-    for (let j = i + 1; j < currentAndFutureActive.length; j++) {
-      const b1 = currentAndFutureActive[i];
-      const b2 = currentAndFutureActive[j];
-      const k1 = b1.data?.kennelNumber || b1.kennel_number || b1.kennelNumber;
-      const k2 = b2.data?.kennelNumber || b2.kennel_number || b2.kennelNumber;
-      if (!k1 || !k2 || k1 !== k2) continue;
-
-      const s1 = b1.start_date || b1.startDate;
-      const e1 = b1.end_date || b1.endDate;
-      const s2 = b2.start_date || b2.startDate;
-      const e2 = b2.end_date || b2.endDate;
-      if (s1 <= e2 && e1 >= s2) {
-        const p1 = cleanPhoneNumber(b1.owner_phone || b1.ownerPhone || '');
-        const p2 = cleanPhoneNumber(b2.owner_phone || b2.ownerPhone || '');
-        const o1 = (b1.owner_name || b1.ownerName || '').trim();
-        const o2 = (b2.owner_name || b2.ownerName || '').trim();
-        const d1 = (b1.dog_name || b1.dogName || '').trim();
-        const d2 = (b2.dog_name || b2.dogName || '').trim();
-        const link1 = b1.linked_dog_name || b1.linkedDogName || b1.data?.linkedDogName || '';
-        const link2 = b2.linked_dog_name || b2.linkedDogName || b2.data?.linkedDogName || '';
-
-        const isSameOwner = (p1 && p2 && p1 === p2) || (o1 && o2 && o1 === o2);
-        const isLinked = (link1 && link1 === d2) || (link2 && link2 === d1);
-
-        if (!isSameOwner && !isLinked) {
-          const kName = formatKennelName(k1);
-          redLights.roomCollisions.push(`🚨 התנגשות ב${kName}: *${b1.dog_name || b1.dogName}* (${b1.owner_name || b1.ownerName}) ו-*${b2.dog_name || b2.dogName}* (${b2.owner_name || b2.ownerName}) משובצים לאותו מתחם בתאריכים חופפים!`);
-        }
-      }
-    }
-  }
+  // 1. Room Collisions - REMOVED from Red Lights as room allocation is dynamic
 
   // 2. Pending Checkouts Today
   activeBookings.filter(b => (b.end_date || b.endDate) === todayStr && (b.stay_status || b.stayStatus) === 'checked_in').forEach(b => {
@@ -643,6 +610,11 @@ async function run1830Audit() {
   // 10. Urgent Intakes for Next 48h
   safeIntakes.filter(r => r.status === 'pending').forEach(r => {
     const sDate = r.startDate || r.start_date || '';
+    const cTime = r.created_at || r.createdAt || r.submittedAt;
+    if (cTime) {
+      const ageDays = (nowMs - new Date(cTime).getTime()) / (1000 * 60 * 60 * 24);
+      if (ageDays > 7) return;
+    }
     if (sDate >= todayStr && sDate <= in2DaysStr) {
       redLights.urgentIntakes.push(`📋 שאלון קליטה דחוף ל-48 שעות הקרובות טרם מולא: *${r.dogName || r.dog_name}* (${r.ownerName || r.owner_name} - 📞 ${r.ownerPhone || r.owner_phone}) | כניסה: ${formatDateIL(sDate)}`);
     }
@@ -781,8 +753,16 @@ async function run1830Audit() {
     }
   });
 
-  // Open intake questionnaires
-  safeIntakes.filter(r => r.status === 'pending').forEach(r => {
+  // Open intake questionnaires (exclude stale intakes older than 7 days)
+  safeIntakes.filter(r => {
+    if (r.status !== 'pending') return false;
+    const cTime = r.created_at || r.createdAt || r.submittedAt;
+    if (cTime) {
+      const ageDays = (nowMs - new Date(cTime).getTime()) / (1000 * 60 * 60 * 24);
+      if (ageDays > 7) return false;
+    }
+    return true;
+  }).forEach(r => {
     const rPhone = cleanPhoneNumber(r.ownerPhone || r.owner_phone || '');
     const hasActiveBooking = activeBookings.some(b => {
       const bPhone = cleanPhoneNumber(b.owner_phone || b.ownerPhone || '');
@@ -847,7 +827,6 @@ async function run1830Audit() {
     redLights.unreconciledGrowPayments.length +
     redLights.unadmittedGhostBookings.length +
     redLights.overdueUnreleasedStays.length +
-    redLights.roomCollisions.length +
     redLights.pendingCheckouts.length +
     redLights.pendingCheckins.length +
     redLights.expiredGhostBookings.length +
@@ -914,10 +893,6 @@ async function run1830Audit() {
     if (redLights.corruptedBookingState.length > 0) {
       parts.push(`\n⚠️ *סתירות נתונים והערות ביטול בהזמנות פעילות:*`);
       redLights.corruptedBookingState.forEach(c => parts.push(`   • ${c}`));
-    }
-    if (redLights.roomCollisions.length > 0) {
-      parts.push(`\n🏨 *התנגשויות חדרים / שיבוץ כפול:*`);
-      redLights.roomCollisions.forEach(r => parts.push(`   • ${r}`));
     }
     if (redLights.pendingCheckouts.length > 0) {
       parts.push(`\n🚪 *שחרורים ממתינים מהיום (טרם נסגרו):*`);

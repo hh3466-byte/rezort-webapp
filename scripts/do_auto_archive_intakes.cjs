@@ -71,14 +71,20 @@ async function autoArchivePastIntakes() {
       return (rDog && bDog && rDog === bDog && (bPhone.slice(-7) === rPhone.slice(-7) || !rPhone));
     });
 
+    const cTime = r.created_at || r.createdAt || r.submittedAt;
+    const isStale = cTime ? (Date.now() - new Date(cTime).getTime()) / (1000 * 60 * 60 * 24) > 14 : false;
     const isPast = (eDate && eDate < todayStr) || (sDate && sDate < todayStr);
 
-    if (!hasBooking && isPast) {
-      r.status = 'archived';
+    if (!hasBooking && (isPast || isStale)) {
+      r.status = 'abandoned';
       r.archivedAt = new Date().toISOString();
-      r.archiveReason = `Auto-archived: dates passed (${sDate} to ${eDate}) without booking transaction`;
+      r.archiveReason = isStale ? 'Auto-archived: stale questionnaire older than 14 days without booking' : `Auto-archived: dates passed (${sDate} to ${eDate}) without booking transaction`;
       archivedIds.add(id);
-      console.log(`Archived: ${r.dogName || r.dog_name} (${r.ownerName || r.owner_name}) - ${sDate} to ${eDate}`);
+      console.log(`Archived (${isStale ? 'stale' : 'past'}): ${r.dogName || r.dog_name} (${r.ownerName || r.owner_name}) - ${sDate} to ${eDate}`);
+    } else if (hasBooking && r.status !== 'approved') {
+      r.status = 'approved';
+      archivedIds.add(id);
+      console.log(`Approved: ${r.dogName || r.dog_name} (${r.ownerName || r.owner_name}) - matched active booking`);
     }
   });
 
