@@ -139,6 +139,11 @@ export const isIntakeRequestExpired = (r: IntakeRequest, bookings: Booking[] = [
   if (r.status === 'approved' || hasActiveBookingForIntake(r, bookings)) return false;
   if (r.status === 'abandoned' || r.status === 'archived') return false;
 
+  // Rule 29: Requests actively in treatment or waiting for payment never expire automatically due to dates passing
+  if ((r.status as string) === 'in_progress' || r.status === 'payment_requested') {
+    return false;
+  }
+
   // Stale age rule: Questionnaires submitted more than 14 days ago without a booking are expired,
   // unless there was a recent manual staff note within the last 14 days.
   const createdStr = r.submittedAt || r.createdAt || (r as any).created_at;
@@ -156,6 +161,22 @@ export const isIntakeRequestExpired = (r: IntakeRequest, bookings: Booking[] = [
         }
       }
     }
+  }
+
+  // Raw leads (from Meta Lead Ads or initial WhatsApp contact) or flexible-date inquiries
+  // do not have real stay dates yet; they only expire via the 14-day stale rule above!
+  const isRawLeadOrFlexible =
+    r.clientOrigin === 'meta_lead' ||
+    Boolean(r.id && r.id.startsWith('lead_')) ||
+    Boolean(r.dogName && r.dogName.includes('ממתין לבירור')) ||
+    Boolean(r.notes && (
+      r.notes.includes('תאריכים גמישים') ||
+      r.notes.includes('ליד מ') ||
+      r.notes.includes('פנייה חדשה מוואטסאפ')
+    ));
+
+  if (isRawLeadOrFlexible) {
+    return false;
   }
 
   const todayStr = new Date().toISOString().split('T')[0];

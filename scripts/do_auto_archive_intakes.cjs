@@ -57,7 +57,7 @@ async function autoArchivePastIntakes() {
   const archivedIds = new Set();
 
   intakeMap.forEach((r, id) => {
-    if (r.status === 'archived' || r.status === 'rejected') return;
+    if (r.status === 'archived' || r.status === 'rejected' || r.status === 'in_progress' || r.status === 'payment_requested') return;
 
     const rDog = (r.dogName || r.dog_name || '').trim().toLowerCase();
     const rPhone = cleanPhoneNumber(r.ownerPhone || r.owner_phone || '');
@@ -71,9 +71,10 @@ async function autoArchivePastIntakes() {
       return (rDog && bDog && rDog === bDog && (bPhone.slice(-7) === rPhone.slice(-7) || !rPhone));
     });
 
+    const isRawLead = r.clientOrigin === 'meta_lead' || String(r.id || '').startsWith('lead_') || (r.dogName || r.dog_name || '').includes('ממתין לבירור') || (r.notes || '').includes('ליד מ') || (r.notes || '').includes('תאריכים גמישים') || (r.notes || '').includes('פנייה חדשה מוואטסאפ');
     const cTime = r.created_at || r.createdAt || r.submittedAt;
     const isStale = cTime ? (Date.now() - new Date(cTime).getTime()) / (1000 * 60 * 60 * 24) > 14 : false;
-    const isPast = (eDate && eDate < todayStr) || (sDate && sDate < todayStr);
+    const isPast = isRawLead ? false : ((eDate && eDate < todayStr) || (sDate && sDate < todayStr));
 
     if (!hasBooking && (isPast || isStale)) {
       r.status = 'abandoned';

@@ -7,12 +7,14 @@
  * 1. Reconciles incoming Grow payments from grow_incoming_payments with Resort bookings.
  * 2. Matches any unlinked payments to open bookings/intakes by phone or name.
  * 3. Enforces Rule 22: Automatically archives checked-out stays older than 72 hours.
- * 4. Enforces Rule 6: Automatically archives expired intake requests (endDate <= today).
- * 5. Pings Grow API to verify connection health & logs sync telemetry to settings.
+ * 4. Enforces Rule 6: Automatically archives expired intake requests (endDate <= today, excluding raw leads & in_progress).
+ * 5. Actively pulls & syncs new Meta leads from the Google Sheet CSV (immune to Row 1 header shifts).
+ * 6. Pings Grow API to verify connection health & logs sync telemetry to settings.
  * =========================================================================
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { syncGoogleSheetLeads } from './lead-webhook.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ydlynqqmulojhrxbfjsc.supabase.co";
 const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
@@ -25,13 +27,6 @@ function cleanPhoneNumber(phone) {
   if (cleaned.startsWith('972')) cleaned = '0' + cleaned.slice(3);
   else if (cleaned.length === 9 && cleaned.startsWith('5')) cleaned = '0' + cleaned;
   return cleaned;
-}
-
-function getGreenApiUrl(id, endpoint, token) {
-  const cleanId = String(id || '').trim();
-  const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
-  const domain = clusterPrefix ? `${clusterPrefix}.api.greenapi.com` : 'api.greenapi.com';
-  return `https://${domain}/waInstance${cleanId}/${endpoint}/${token}`;
 }
 
 function getIsraelDateInfo() {
@@ -62,21 +57,29 @@ export default async function handler(req, res) {
     const { dateStr: todayStr, hour, minute } = getIsraelDateInfo();
     const startTime = Date.now();
 
+    // 0. Sync any new Meta leads directly from the Google Sheet CSV
+    let sheetSyncResult = { ok: false, syncedCount: 0 };
+    try {
+      sheetSyncResult = await syncGoogleSheetLeads(5);
+    } catch (sheetErr) {
+      console.warn('Google Sheet auto-sync warning:', sheetErr);
+    }
+
     // 1. Fetch recent Grow payments from last 7 days
-    const { data: recentGrowPayments, error: growErr } = await supabase
+    const { data: recentGrowPayments } = await supabase
       .from('grow_incoming_payments')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(50);
 
     // 2. Fetch active bookings
-    const { data: bookings, error: bErr } = await supabase
+    const { data: bookings } = await supabase
       .from('bookings')
       .select('*')
       .neq('stay_status', 'cancelled');
 
     // 3. Fetch active intakes
-    const { data: intakes, error: iErr } = await supabase
+    const { data: intakes } = await supabase
       .from('intake_requests')
       .select('*')
       .neq('status', 'archived');
@@ -252,12 +255,16 @@ export default async function handler(req, res) {
       }
     }
 
-    // 5. Rule 6 Enforcement: Auto-archive expired intake questionnaires (endDate <= today or startDate < today)
+    // 5. Rule 6 & Rule 29 Enforcement: Auto-archive expired intake questionnaires (excluding raw leads < 14d & in_progress)
     let autoArchivedIntakesCount = 0;
     for (const req of (intakes || [])) {
+      if (req.status === 'in_progress' || req.status === 'payment_requested') continue;
+      const isRawLead = req.clientOrigin === 'meta_lead' || String(req.id || '').startsWith('lead_') || (req.dogName || req.dog_name || '').includes('ממתין לבירור') || (req.notes || '').includes('ליד מ') || (req.notes || '').includes('תאריכים גמישים') || (req.notes || '').includes('פנייה חדשה מוואטסאפ');
+      const createdStr = req.createdAt || req.created_at || req.submittedAt;
+      const ageDays = createdStr ? (Date.now() - new Date(createdStr).getTime()) / (1000 * 60 * 60 * 24) : 0;
       const eDate = req.end_date || req.endDate;
       const sDate = req.start_date || req.startDate;
-      const isExpired = (eDate && eDate <= todayStr) || (sDate && sDate < todayStr);
+      const isExpired = isRawLead ? (ageDays > 14) : ((eDate && eDate <= todayStr) || (sDate && sDate < todayStr) || (ageDays > 14));
       if (isExpired && req.status !== 'archived' && req.status !== 'abandoned' && req.status !== 'approved') {
         try {
           await supabase.from('intake_requests').update({
@@ -296,9 +303,13 @@ export default async function handler(req, res) {
 
     if (Array.isArray(curSettingsData.intakeRequests)) {
       curSettingsData.intakeRequests = curSettingsData.intakeRequests.map(req => {
+        if (req.status === 'in_progress' || req.status === 'payment_requested') return req;
+        const isRawLead = req.clientOrigin === 'meta_lead' || String(req.id || '').startsWith('lead_') || (req.dogName || req.dog_name || '').includes('ממתין לבירור') || (req.notes || '').includes('ליד מ') || (req.notes || '').includes('תאריכים גמישים') || (req.notes || '').includes('פנייה חדשה מוואטסאפ');
+        const createdStr = req.createdAt || req.created_at || req.submittedAt;
+        const ageDays = createdStr ? (Date.now() - new Date(createdStr).getTime()) / (1000 * 60 * 60 * 24) : 0;
         const eDate = req.endDate || req.end_date;
         const sDate = req.startDate || req.start_date;
-        const isExpired = (eDate && eDate <= todayStr) || (sDate && sDate < todayStr);
+        const isExpired = isRawLead ? (ageDays > 14) : ((eDate && eDate <= todayStr) || (sDate && sDate < todayStr) || (ageDays > 14));
         const hasIrrelevantNote = req.internalNotes && (req.internalNotes.includes('לא רלוונטי') || req.internalNotes.includes('הוסר מהרשימה') || req.internalNotes.includes('בוטל'));
         
         const reqDog = (req.dogName || req.dog_name || '').trim().toLowerCase();
@@ -326,7 +337,6 @@ export default async function handler(req, res) {
     const baseUrl = 'https://rezort-webapp.vercel.app';
 
     // A. 18:30 Sanity Report
-    // Pre-flight preparation (18:20 - 18:27)
     if (hour === 18 && minute >= 20 && minute < 28) {
       try {
         console.log('[PRE-FLIGHT] Staging 18:30 Sanity Report...');
@@ -337,7 +347,6 @@ export default async function handler(req, res) {
         watchdogLogs.push({ task: '1830_preflight', error: pe.message });
       }
     }
-    // Live window & Evening Recovery (18:28 to 23:30)
     else if ((hour === 18 && minute >= 28) || (hour >= 19 && hour <= 23)) {
       const alreadySent1830 = curSettingsData.last1830SanitySentDate === todayStr;
       if (!alreadySent1830) {
@@ -353,7 +362,6 @@ export default async function handler(req, res) {
     }
 
     // B. 19:00 Tomorrow Overview
-    // Pre-flight preparation (18:50 - 18:57)
     if (hour === 18 && minute >= 50 && minute < 58) {
       try {
         console.log('[PRE-FLIGHT] Staging 19:00 Tomorrow Overview...');
@@ -364,7 +372,6 @@ export default async function handler(req, res) {
         watchdogLogs.push({ task: '1900_preflight', error: pe.message });
       }
     }
-    // Live window & Evening Recovery (18:58 to 23:30)
     else if ((hour === 18 && minute >= 58) || (hour >= 19 && hour <= 23)) {
       const alreadySent1900 = curSettingsData.lastTomorrowOverviewSentDate === todayStr;
       if (!alreadySent1900) {
@@ -380,7 +387,6 @@ export default async function handler(req, res) {
     }
 
     // C. 20:00 Daily Regards
-    // Pre-flight preparation (19:50 - 19:57)
     if (hour === 19 && minute >= 50 && minute < 58) {
       try {
         console.log('[PRE-FLIGHT] Staging 20:00 Daily Update...');
@@ -391,7 +397,6 @@ export default async function handler(req, res) {
         watchdogLogs.push({ task: '2000_preflight', error: pe.message });
       }
     }
-    // Live window & Evening Recovery (19:58 to 23:30)
     else if ((hour === 19 && minute >= 58) || (hour >= 20 && hour <= 23)) {
       const alreadySent2000 = curSettingsData.last2000DailyUpdateSentDate === todayStr;
       if (!alreadySent2000) {
@@ -416,6 +421,7 @@ export default async function handler(req, res) {
           reconciledCount,
           autoArchivedStaysCount,
           autoArchivedIntakesCount,
+          sheetLeadsSyncedCount: sheetSyncResult?.syncedCount || 0,
           growApiHealthy,
           growLatencyMs,
           durationMs: Date.now() - startTime,
@@ -431,6 +437,7 @@ export default async function handler(req, res) {
       reconciledCount,
       autoArchivedStaysCount,
       autoArchivedIntakesCount,
+      sheetSyncResult,
       growApiHealthy,
       growLatencyMs,
       durationMs: Date.now() - startTime,

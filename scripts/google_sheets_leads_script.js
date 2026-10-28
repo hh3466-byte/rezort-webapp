@@ -125,6 +125,10 @@ function processLeadsInSheet() {
     var row = data[rowIdx];
     
     var rawPhone = colMap.phone !== -1 ? String(row[colMap.phone] || "").trim() : "";
+    // הגנה מפני הזזת כותרות בגיליון ע"י פייסבוק (עמודה N / אינדקס 13 היא עמודת הטלפון של מטא)
+    if (!rawPhone && row.length > 13 && String(row[13] || "").indexOf("972") !== -1) {
+      rawPhone = String(row[13] || "").trim();
+    }
     var currentStatus = colMap.status !== -1 ? String(row[colMap.status] || "").trim() : "";
 
     // אם אין טלפון, או שהשורה כבר סומנה כנשלחה - דלג
@@ -135,6 +139,9 @@ function processLeadsInSheet() {
     var fullName = "";
     if (colMap.fullName !== -1) {
       fullName = String(row[colMap.fullName] || "").trim();
+    }
+    if (!fullName && row.length > 12 && String(row[13] || "").indexOf("972") !== -1) {
+      fullName = String(row[12] || "").trim();
     }
 
     var firstName = "";

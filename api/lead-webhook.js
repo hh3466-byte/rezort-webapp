@@ -1,10 +1,11 @@
 /**
  * =========================================================================
- * Meta / Google Sheets Lead Webhook Handler - הריזורט לכלב
+ * Meta / Google Sheets Lead Webhook & Auto-Sync Handler - הריזורט לכלב
  * Vercel Serverless Function: /api/lead-webhook
  * 
  * Logic:
- * 1. Receives incoming lead payload (from Google Sheets Apps Script, Zapier, Make, or Meta Webhook).
+ * 1. Receives incoming lead payload (from Google Sheets Apps Script, Zapier, Make, or Meta Webhook)
+ *    OR actively pulls & syncs the live Google Sheet CSV via syncGoogleSheetLeads()!
  * 2. Extracts and standardizes: First Name, Last Name, Phone Number, Source/Campaign.
  * 3. Formats Israeli phone number (e.g. 052-1234567 -> 972521234567@c.us).
  * 4. Checks 24-hour cooldown / idempotency to prevent duplicate messaging.
@@ -22,12 +23,11 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ydlynqqmulojhrxbf
 const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
 const GREEN_API_ID = "710722735421";
 const GREEN_API_TOKEN = "ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b";
+const GOOGLE_SHEET_ID = "18kDM6psejSbvpvYYj8WEzHix2HWPID6rflUk_d7xdqo";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const CLOSED_WEEKEND_HOLIDAY_MSG = `תודה על פנייתך, בחגים וסופי שבוע שירות הלקוחות שלנו סגור משעה 14:00 בשישי/ערב החג ועד למחרת השבת/או החג בשעה 09:30. כמובן שהמקום מאוייש והכלבים מקבלים טיפול מלא ומפנק. רק הבעלים שלהם צריכים להתגבר ולהתאפק עד ששרות הלקוחות יחזור לפעילות.תודה על ההבנה.`;
-
-function cleanPhoneNumber(phone) {
+export function cleanPhoneNumber(phone) {
   if (!phone) return '';
   let cleaned = String(phone).replace(/\D/g, '');
   if (cleaned.startsWith('972')) cleaned = '0' + cleaned.slice(3);
@@ -35,7 +35,7 @@ function cleanPhoneNumber(phone) {
   return cleaned;
 }
 
-function getIntlPhone(cleanLocalPhone) {
+export function getIntlPhone(cleanLocalPhone) {
   if (!cleanLocalPhone) return '';
   if (cleanLocalPhone.startsWith('0')) {
     return '972' + cleanLocalPhone.slice(1);
@@ -191,6 +191,202 @@ async function sendWhatsAppMessage(chatId, message) {
   }
 }
 
+/**
+ * Simple CSV line parser that handles quoted fields
+ */
+function parseCsvLine(line) {
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      result.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+/**
+ * Actively pulls the Google Sheet CSV and syncs any new leads from the last N days
+ * Immune to Row 1 header shifting by inspecting each row directly!
+ */
+export async function syncGoogleSheetLeads(lookbackDays = 5) {
+  try {
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=csv`;
+    const res = await fetch(csvUrl, { redirect: 'follow' });
+    if (!res.ok) {
+      return { ok: false, error: `Google Sheet HTTP ${res.status}` };
+    }
+    const csvText = await res.text();
+    const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+
+    const { data: sRow } = await supabase
+      .from('settings')
+      .select('data')
+      .eq('id', 'resort_config')
+      .single();
+    const curData = sRow?.data || {};
+    const curIntakes = Array.isArray(curData.intakeRequests) ? [...curData.intakeRequests] : [];
+    const autoReplyHistory = { ...(curData.autoReplyHistory || {}) };
+    const syncedSheetPhones = new Set(Array.isArray(curData.syncedSheetPhones) ? curData.syncedSheetPhones : []);
+
+    const cutoffMs = Date.now() - lookbackDays * 24 * 60 * 60 * 1000;
+    const newlySynced = [];
+    let modified = false;
+
+    for (const line of lines) {
+      const cols = parseCsvLine(line);
+      if (cols.length < 2) continue;
+
+      // Skip test/dummy leads or header rows
+      const firstCell = String(cols[0] || '').trim();
+      if (line.includes('<test lead:') || line.includes('נוי בודקת')) continue;
+
+      // Find phone column (either col 13 where Meta writes p:+972..., or scan first 20 cols for p:+972 / 05...)
+      let rawPhone = '';
+      let rawName = '';
+      if (cols[13] && /(?:p:)?\+?9725\d{8}|^05\d[- ]?\d{7}$/.test(String(cols[13]).trim())) {
+        rawPhone = String(cols[13]).trim();
+        rawName = String(cols[12] || '').trim();
+      } else {
+        for (let c = 0; c < Math.min(cols.length, 20); c++) {
+          const val = String(cols[c] || '').trim();
+          if (/(?:p:)?\+?9725\d{8}|^05\d[- ]?\d{7}$/.test(val)) {
+            rawPhone = val;
+            if (c > 0) rawName = String(cols[c - 1] || '').trim();
+            break;
+          }
+        }
+      }
+
+      if (!rawPhone) continue;
+      const cleanPhone = cleanPhoneNumber(rawPhone);
+      if (!cleanPhone || cleanPhone.length < 9 || !cleanPhone.startsWith('05')) continue;
+
+      // Parse created_time in col 1
+      const rawCreated = String(cols[1] || '').trim();
+      const createdDate = rawCreated ? new Date(rawCreated) : null;
+      const createdMs = createdDate && !isNaN(createdDate.getTime()) ? createdDate.getTime() : Date.now();
+      if (createdMs < cutoffMs) continue;
+
+      const campaignName = String(cols[7] || '').trim();
+      const formName = String(cols[9] || '').trim();
+      const adName = String(cols[3] || '').trim();
+      const isTraining = (campaignName + ' ' + formName + ' ' + adName).includes('אילוף');
+      const phoneNorm = cleanPhone.slice(-7);
+
+      // Check if already exists in intakeRequests
+      const existingIdx = curIntakes.findIndex(r => cleanPhoneNumber(r.ownerPhone || '').slice(-7) === phoneNorm);
+      if (existingIdx !== -1) {
+        const ex = curIntakes[existingIdx];
+        // If it was wrongly marked abandoned despite being from recent lookback window, or wrongly marked boarding when from training campaign, fix it!
+        let exChanged = false;
+        if (ex.status === 'abandoned' && (Date.now() - createdMs) < 7 * 86400000 && !(ex.internalNotes || '').includes('לא רלוונטי')) {
+          ex.status = 'pending';
+          exChanged = true;
+        }
+        if (isTraining && ex.serviceType !== 'training') {
+          ex.serviceType = 'training';
+          exChanged = true;
+        }
+        if (rawName && (!ex.ownerName || ex.ownerName === 'אבי')) {
+          ex.ownerName = rawName;
+          exChanged = true;
+        }
+        if (exChanged) {
+          curIntakes[existingIdx] = { ...ex };
+          modified = true;
+        }
+        continue;
+      }
+
+      if (syncedSheetPhones.has(cleanPhone)) continue;
+
+      const fullName = rawName || 'לקוח יקר';
+      const firstName = fullName.split(/\s+/)[0] || fullName;
+      const intlPhone = getIntlPhone(cleanPhone);
+      const chatId = `${intlPhone}@c.us`;
+
+      // Update contact in Green-API
+      await updateGreenApiContact(chatId, fullName);
+
+      // Check if we haven't sent auto-reply in last 24h
+      const lastSentMs = autoReplyHistory[cleanPhone] || 0;
+      let sendRes = { ok: false, skipped: true };
+      if (Date.now() - lastSentMs >= 24 * 60 * 60 * 1000) {
+        const msg = getIntakeFormMessage(cleanPhone, firstName, fullName);
+        sendRes = await sendWhatsAppMessage(chatId, msg);
+        autoReplyHistory[cleanPhone] = Date.now();
+      }
+
+      const createdIso = createdDate && !isNaN(createdDate.getTime()) ? createdDate.toISOString() : new Date().toISOString();
+      const startStr = new Date(Date.now() + 3 * 86400000).toISOString().substring(0, 10);
+      const endStr = new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10);
+      const leadId = `lead_${createdMs}_${cleanPhone.slice(-4)}`;
+
+      const newLeadItem = {
+        id: leadId,
+        createdAt: createdIso,
+        status: 'pending',
+        ownerName: fullName,
+        ownerPhone: cleanPhone,
+        ownerEmail: '',
+        dogName: 'ממתין לבירור בשיחה 🐶',
+        dogBreed: '',
+        dogAge: '',
+        serviceType: isTraining ? 'training' : 'boarding',
+        startDate: startStr,
+        endDate: endStr,
+        clientOrigin: 'meta_lead',
+        notes: `[📢 ליד מקמפיין ממומן במטא - ${isTraining ? 'אילוף' : 'פנסיון'}] | קמפיין: ${campaignName || formName || 'גוגל שיטס'}`,
+        internalNotes: `הליד נקלט אוטומטית מגיליון Google Sheets של הקמפיין (${firstCell}). נשלחה הודעת פתיחה עם שאלון קליטה בוואטסאפ (${sendRes.idMessage ? `מזהה: ${sendRes.idMessage}` : 'נשלח'}). ממתין לשיחה של שמוליק.`,
+        termsAccepted: false
+      };
+
+      curIntakes.unshift(newLeadItem);
+      syncedSheetPhones.add(cleanPhone);
+      newlySynced.push({ fullName, cleanPhone, serviceType: newLeadItem.serviceType, createdIso, messageSent: Boolean(sendRes.ok) });
+      modified = true;
+    }
+
+    if (modified) {
+      await supabase
+        .from('settings')
+        .update({
+          data: {
+            ...curData,
+            intakeRequests: curIntakes,
+            autoReplyHistory,
+            syncedSheetPhones: Array.from(syncedSheetPhones)
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', 'resort_config');
+    }
+
+    return {
+      ok: true,
+      syncedCount: newlySynced.length,
+      newlySynced
+    };
+  } catch (err) {
+    console.error('Error in syncGoogleSheetLeads:', err);
+    return { ok: false, error: err.message };
+  }
+}
+
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -202,13 +398,16 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // GET Health Check
+  // GET Health Check & Active Sheet Sync
   if (req.method === 'GET') {
+    const shouldSync = req.query?.sync === 'true' || req.query?.sync_sheet === 'true';
+    const syncResult = shouldSync ? await syncGoogleSheetLeads(Number(req.query?.days) || 5) : null;
     return res.status(200).json({
       ok: true,
       service: 'Resort Lead Webhook API',
       status: 'active',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      ...(syncResult ? { syncResult } : {})
     });
   }
 
@@ -260,7 +459,6 @@ export default async function handler(req, res) {
     const chatId = `${intlPhone}@c.us`;
     const source = body.source || body.campaign || body['מקור'] || body['קמפיין'] || 'Meta Lead Campaign';
     const email = body.email || body['אימייל'] || body['מייל'] || '';
-    const notes = body.notes || body['הערות'] || '';
 
     // Check Cooldown / Duplicate prevention (24 hours)
     const canSend = await canSendAutoReplyToClient(cleanPhone);
@@ -320,8 +518,9 @@ export default async function handler(req, res) {
       const exists = curIntakes.some(r => (r.ownerPhone || '').replace(/\D/g, '').includes(phoneNorm));
       if (!exists) {
         const nowIso = new Date().toISOString();
-        const todayStr = nowIso.substring(0, 10);
         const in3Days = new Date(Date.now() + 3 * 86400000).toISOString().substring(0, 10);
+        const in10Days = new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10);
+        const isTraining = (source || '').includes('אילוף') || !((source || '').includes('פנסיון'));
 
         const newLeadItem = {
           id: leadId,
@@ -333,9 +532,9 @@ export default async function handler(req, res) {
           dogName: 'ממתין לבירור בשיחה 🐶',
           dogBreed: '',
           dogAge: '',
-          serviceType: (source || '').includes('אילוף') ? 'training' : 'boarding',
-          startDate: todayStr,
-          endDate: in3Days,
+          serviceType: isTraining ? 'training' : 'boarding',
+          startDate: in3Days,
+          endDate: in10Days,
           clientOrigin: 'meta_lead',
           notes: `[📢 ליד מקמפיין ממומן במטא] | מקור: ${source}`,
           internalNotes: `הליד נקלט מקמפיין ממומן. נשלח שאלון קליטה אישי בוואטסאפ (${sendResult.idMessage ? `מזהה הודעה: ${sendResult.idMessage}` : 'נשלח'}). ממתין לשיחה של שמוליק.`,

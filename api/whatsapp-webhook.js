@@ -118,11 +118,14 @@ async function registerIncomingLeadToIntakeRequests(cleanPhone, senderName, inco
     }
 
     const nowIso = new Date().toISOString();
-    const todayStr = nowIso.substring(0, 10);
     const in3Days = new Date(Date.now() + 3 * 86400000).toISOString().substring(0, 10);
+    const in10Days = new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10);
 
-    const displayName = senderName ? senderName.trim().replace(/^\[חדש\]\s*/, '') : 'פנייה חדשה מוואטסאפ';
+    const fullNameMatch = incomingText.match(/Full name:\s*([^\n\r]+)/i);
+    const extractedName = fullNameMatch ? fullNameMatch[1].replace(/Phone number:.*/i, '').trim() : '';
+    const displayName = extractedName || (senderName ? senderName.trim().replace(/^\[חדש\]\s*/, '') : 'פנייה חדשה מוואטסאפ');
     const isMetaLead = incomingText.includes('השלמתי את הטופס') || incomingText.includes('Full name');
+    const isTrainingLead = incomingText.includes('אילוף') || (isMetaLead && !incomingText.includes('פנסיון'));
 
     const leadId = `lead_${Date.now()}_${phoneNorm.slice(-4)}`;
     const newLeadItem = {
@@ -134,12 +137,12 @@ async function registerIncomingLeadToIntakeRequests(cleanPhone, senderName, inco
       dogName: 'ממתין לבירור בשיחה 🐶',
       dogBreed: '',
       dogAge: '',
-      serviceType: incomingText.includes('אילוף') ? 'training' : 'boarding',
-      startDate: todayStr,
-      endDate: in3Days,
+      serviceType: isTrainingLead ? 'training' : 'boarding',
+      startDate: in3Days,
+      endDate: in10Days,
       clientOrigin: isMetaLead ? 'meta_lead' : 'new',
       notes: isMetaLead
-        ? `[📢 ליד ממודעת פייסבוק/אינסטגרם] | ${incomingText.slice(0, 200)}`
+        ? `[📢 ליד ממודעת פייסבוק/אינסטגרם - ${isTrainingLead ? 'אילוף' : 'פנסיון'}] | ${incomingText.slice(0, 200)}`
         : `[💬 פנייה חדשה מוואטסאפ] | ${incomingText.slice(0, 200)}`,
       internalNotes: isMetaLead
         ? `הלקוח השלים טופס מודעה ראשוני בפייסבוק/אינסטגרם. נשלחה הודעה עם קישור לשאלון. יש ליצור קשר טלפוני לתיאום.`
