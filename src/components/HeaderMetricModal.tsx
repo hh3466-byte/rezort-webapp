@@ -49,6 +49,7 @@ import {
   formatManagerReceiptQuery,
   detectTrainerPaymentAnomalies,
   syncTrainerReceiptsFromWhatsAppChat,
+  readAndCompressReceiptFile,
   isRealTrainingBooking,
   TrainerAnomaly,
   HILA_TRAINER_INFO 
@@ -322,6 +323,46 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
     }
     setTrainerActionFeedback('✅ הקבלה סומנה כשולמה בביט והסטטוס סונכרן');
     setTimeout(() => setTrainerActionFeedback(null), 4000);
+  };
+
+  const handleQuickAttachFile = async (
+    receiptId: string,
+    field: 'receiptImageUrl' | 'bitConfirmationImageUrl',
+    file?: File
+  ) => {
+    if (!file) return;
+    try {
+      const dataUrl = await readAndCompressReceiptFile(file);
+      const updatedReceipts = trainerReceipts.map(r => {
+        if (r.id === receiptId) {
+          const isBit = field === 'bitConfirmationImageUrl';
+          return {
+            ...r,
+            [field]: dataUrl,
+            ...(isBit ? {
+              paymentConfirmationUrl: dataUrl,
+              isPaidActually: true,
+              paidDate: r.paidDate || new Date().toISOString().substring(0, 10),
+              status: 'paid' as const,
+            } : {}),
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return r;
+      });
+      setTrainerReceipts(updatedReceipts);
+      saveTrainerReceipts(updatedReceipts);
+
+      const targetRcpt = updatedReceipts.find(r => r.id === receiptId);
+      setTrainerActionFeedback(
+        field === 'bitConfirmationImageUrl'
+          ? `✅ צילום אישור ביט צורף לקבלה ${targetRcpt?.receiptNumber || ''} ונשמר בענן!`
+          : `✅ קובץ הקבלה צורף לקבלה ${targetRcpt?.receiptNumber || ''} ונשמר בענן!`
+      );
+      setTimeout(() => setTrainerActionFeedback(null), 5000);
+    } catch (err: any) {
+      alert(err?.message || 'שגיאה בהעלאת הקובץ');
+    }
   };
 
   const handleGraduateDog = (bookingId: string) => {
@@ -1615,12 +1656,25 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 flex-wrap shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedReceiptForEdit(undefined);
+                      setIsTrainerReceiptModalOpen(true);
+                    }}
+                    className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer border border-indigo-400/30"
+                    title="העלאת קבלה חדשה מהילה או צילום אישור העברה בביט"
+                  >
+                    <span>📤</span>
+                    <span>+ העלאת קבלה / אישור ביט</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => handleSyncHilaReceipts(false)}
                     disabled={isSyncingHilaChat}
-                    className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                    className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
                     title="סנכרון יזום של קבלות ואישורי ביט מוואטסאפ הילה"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncingHilaChat ? 'animate-spin' : ''}`} />
@@ -1664,13 +1718,24 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
 
               {/* Receipts List */}
               <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <h4 className="font-black text-sm text-slate-900 flex items-center gap-2">
                     <span>📑 פירוט קבלות של הילה</span>
                     <span className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-bold">
                       {trainerReceipts.length}
                     </span>
                   </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedReceiptForEdit(undefined);
+                      setIsTrainerReceiptModalOpen(true);
+                    }}
+                    className="bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 font-bold text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <span>📤</span>
+                    <span>+ קבלה חדשה / העלאת מסמך</span>
+                  </button>
                 </div>
 
                 {trainerReceipts.length === 0 ? (
@@ -1721,8 +1786,8 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                         </div>
 
                         {/* Actions */}
-                        <div className="flex items-center gap-2 shrink-0 justify-end pt-1 md:pt-0">
-                          {rcpt.receiptImageUrl && (
+                        <div className="flex items-center gap-2 flex-wrap shrink-0 justify-end pt-1 md:pt-0">
+                          {rcpt.receiptImageUrl ? (
                             <button
                               type="button"
                               onClick={() => setReceiptImagePreview({ url: rcpt.receiptImageUrl!, title: `קבלה ${rcpt.receiptNumber} - ${rcpt.rawLineText || 'הילה קירזנר'}` })}
@@ -1732,18 +1797,52 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                               <span>👁️</span>
                               <span>צפה בקבלה</span>
                             </button>
+                          ) : (
+                            <label
+                              className="bg-indigo-50/70 hover:bg-indigo-100 text-indigo-800 border border-dashed border-indigo-300 font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                              title="העלה צילום או PDF של הקבלה"
+                            >
+                              <span>📤</span>
+                              <span>צרף קבלה</span>
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                className="hidden"
+                                onChange={e => {
+                                  handleQuickAttachFile(rcpt.id, 'receiptImageUrl', e.target.files?.[0]);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
                           )}
 
-                          {rcpt.bitConfirmationImageUrl && (
+                          {(rcpt.bitConfirmationImageUrl || rcpt.paymentConfirmationUrl) ? (
                             <button
                               type="button"
-                              onClick={() => setReceiptImagePreview({ url: rcpt.bitConfirmationImageUrl!, title: `אישור ביט - קבלה ${rcpt.receiptNumber} (${rcpt.bitConfirmationNumber || 'אישור תשלום'})` })}
+                              onClick={() => setReceiptImagePreview({ url: (rcpt.bitConfirmationImageUrl || rcpt.paymentConfirmationUrl)!, title: `אישור ביט - קבלה ${rcpt.receiptNumber} (${rcpt.bitConfirmationNumber || 'אישור תשלום'})` })}
                               className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
                               title="צפה בצילום מסך אישור הביט"
                             >
                               <span>📱</span>
                               <span>אישור ביט</span>
                             </button>
+                          ) : (
+                            <label
+                              className="bg-emerald-50/80 hover:bg-emerald-100 text-emerald-900 border border-dashed border-emerald-400 font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                              title="העלה צילום מסך של אישור העברה בביט"
+                            >
+                              <span>📎</span>
+                              <span>צרף אישור ביט</span>
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                className="hidden"
+                                onChange={e => {
+                                  handleQuickAttachFile(rcpt.id, 'bitConfirmationImageUrl', e.target.files?.[0]);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
                           )}
 
                           {!rcpt.isPaidActually && (
@@ -1765,7 +1864,7 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
                               setIsTrainerReceiptModalOpen(true);
                             }}
                             className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs px-2.5 py-1.5 rounded-lg cursor-pointer flex items-center gap-1"
-                            title="ערוך קבלה"
+                            title="ערוך קבלה או החלף מסמכים"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                             <span>ערוך</span>
@@ -2482,11 +2581,19 @@ export const HeaderMetricModal: React.FC<HeaderMetricModalProps> = ({
             </div>
 
             <div className="p-4 overflow-y-auto flex items-center justify-center bg-slate-100 min-h-[300px]">
-              <img
-                src={receiptImagePreview.url}
-                alt={receiptImagePreview.title}
-                className="max-h-[70vh] w-auto rounded-xl shadow-md object-contain border border-slate-300"
-              />
+              {receiptImagePreview.url.startsWith('data:application/pdf') || receiptImagePreview.url.toLowerCase().endsWith('.pdf') ? (
+                <iframe
+                  src={receiptImagePreview.url}
+                  title={receiptImagePreview.title}
+                  className="w-full h-[70vh] rounded-xl border border-slate-300 bg-white"
+                />
+              ) : (
+                <img
+                  src={receiptImagePreview.url}
+                  alt={receiptImagePreview.title}
+                  className="max-h-[70vh] w-auto rounded-xl shadow-md object-contain border border-slate-300"
+                />
+              )}
             </div>
           </div>
         </div>

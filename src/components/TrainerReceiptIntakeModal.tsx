@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   X, Check, AlertTriangle, Send, FileText, 
-  Calendar, CheckCircle, Clock, Plus, Trash2,
-  GraduationCap
+  CheckCircle, Clock, Plus, Trash2,
+  GraduationCap, Upload, Image as ImageIcon
 } from 'lucide-react';
 import { Booking, TrainerReceipt, TrainerStageType } from '../types';
 import { 
   HILA_TRAINER_INFO, 
   parseHilaReceiptText, 
   formatManagerReceiptQuery,
-  normalizeDogName 
+  normalizeDogName,
+  readAndCompressReceiptFile
 } from '../utils/trainerPaymentUtils';
 
 interface TrainerReceiptIntakeModalProps {
@@ -33,12 +34,18 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
 }) => {
   if (!isOpen) return null;
 
-  const [receiptNumber, setReceiptNumber] = useState(existingReceipt?.receiptNumber || '20056');
-  const [receiptDate, setReceiptDate] = useState(existingReceipt?.receiptDate || new Date().toISOString().substring(0, 10));
+  const todayDefault = new Date().toISOString().substring(0, 10);
+  const [receiptNumber, setReceiptNumber] = useState(existingReceipt?.receiptNumber || '');
+  const [receiptDate, setReceiptDate] = useState(existingReceipt?.receiptDate || todayDefault);
   const [paymentMethod, setPaymentMethod] = useState(existingReceipt?.paymentMethod || 'ביט');
   const [receiptImageUrl, setReceiptImageUrl] = useState(existingReceipt?.receiptImageUrl || '');
-  const [rawText, setRawText] = useState(existingReceipt?.rawLineText || 'גוי תשלום 2/3 + תיאן תשלום 1/3');
-  
+  const [rawText, setRawText] = useState(existingReceipt?.rawLineText || '');
+  const [isUploadingReceiptFile, setIsUploadingReceiptFile] = useState(false);
+  const [isUploadingBitFile, setIsUploadingBitFile] = useState(false);
+
+  const receiptFileInputRef = useRef<HTMLInputElement>(null);
+  const bitFileInputRef = useRef<HTMLInputElement>(null);
+
   // Allocations list
   const [allocations, setAllocations] = useState<{
     bookingId: string;
@@ -46,24 +53,71 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
     stage: TrainerStageType;
     amount: number;
   }[]>(
-    existingReceipt?.allocations || [
-      { bookingId: '', dogName: "ג'וי", stage: '2/3', amount: 500 },
-      { bookingId: '', dogName: 'תיאו (תיאן)', stage: '1/3', amount: 500 },
-    ]
+    existingReceipt?.allocations && existingReceipt.allocations.length > 0
+      ? existingReceipt.allocations
+      : [
+          {
+            bookingId: trainingBookings[0]?.id || '',
+            dogName: trainingBookings[0]?.dogName || '',
+            stage: '1/3',
+            amount: 500,
+          },
+        ]
   );
 
   // Is Actually Paid Status
-  const [isPaidActually, setIsPaidActually] = useState(existingReceipt?.isPaidActually ?? false);
-  const [paidDate, setPaidDate] = useState(existingReceipt?.paidDate || new Date().toISOString().substring(0, 10));
+  const [isPaidActually, setIsPaidActually] = useState(existingReceipt?.isPaidActually ?? true);
+  const [paidDate, setPaidDate] = useState(existingReceipt?.paidDate || todayDefault);
+  const [bitConfirmationNumber, setBitConfirmationNumber] = useState(existingReceipt?.bitConfirmationNumber || '');
   const [paymentConfirmationNotes, setPaymentConfirmationNotes] = useState(existingReceipt?.paymentConfirmationNotes || '');
-  const [paymentConfirmationUrl, setPaymentConfirmationUrl] = useState(existingReceipt?.paymentConfirmationUrl || '');
-  
+  const [paymentConfirmationUrl, setPaymentConfirmationUrl] = useState(
+    existingReceipt?.bitConfirmationImageUrl || existingReceipt?.paymentConfirmationUrl || ''
+  );
+
   // WhatsApp Notification Status
   const [querySent, setQuerySent] = useState(existingReceipt?.managerQuerySent ?? false);
   const [isSendingQuery, setIsSendingQuery] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const totalCalculated = allocations.reduce((sum, a) => sum + (Number(a.amount) || 0), 0);
+
+  const handleUploadReceiptFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingReceiptFile(true);
+    try {
+      const dataUrl = await readAndCompressReceiptFile(file);
+      setReceiptImageUrl(dataUrl);
+      // Try extracting 5-digit receipt number from filename if receiptNumber is empty
+      const numInName = file.name.match(/\b(20\d{3})\b/);
+      if (numInName && !receiptNumber) {
+        setReceiptNumber(numInName[1]);
+      }
+      setToastMessage(`✅ קובץ הקבלה "${file.name}" הועלה וצורף בהצלחה!`);
+      setTimeout(() => setToastMessage(null), 4000);
+    } catch {
+      setToastMessage('⚠️ שגיאה בטעינת קובץ הקבלה');
+    } finally {
+      setIsUploadingReceiptFile(false);
+    }
+  };
+
+  const handleUploadBitFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingBitFile(true);
+    try {
+      const dataUrl = await readAndCompressReceiptFile(file);
+      setPaymentConfirmationUrl(dataUrl);
+      setIsPaidActually(true);
+      setToastMessage(`✅ צילום אישור התשלום בביט ("${file.name}") הועלה וצורף בהצלחה!`);
+      setTimeout(() => setToastMessage(null), 4000);
+    } catch {
+      setToastMessage('⚠️ שגיאה בטעינת קובץ אישור הביט');
+    } finally {
+      setIsUploadingBitFile(false);
+    }
+  };
 
   // Trigger quick text parse
   const handleParseText = () => {
@@ -121,6 +175,8 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
       allocations,
       isPaidActually,
       paidDate: isPaidActually ? paidDate : undefined,
+      bitConfirmationNumber: bitConfirmationNumber.trim() || undefined,
+      bitConfirmationImageUrl: paymentConfirmationUrl || undefined,
       paymentConfirmationNotes,
       paymentConfirmationUrl,
       managerQuerySent: true,
@@ -135,7 +191,7 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
     setIsSendingQuery(true);
     try {
       if (greenApiId && greenApiToken) {
-        const phone = HILA_TRAINER_INFO.managerNotificationPhone; // 0543200007
+        const phone = HILA_TRAINER_INFO.managerNotificationPhone;
         const chatId = `972${phone.startsWith('0') ? phone.slice(1) : phone}@c.us`;
         const clusterPrefix = greenApiId.replace(/\D/g, '').substring(0, 4);
         const host = clusterPrefix ? `https://${clusterPrefix}.api.greenapi.com` : 'https://7107.api.greenapi.com';
@@ -146,15 +202,13 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
         });
         if (res.ok) {
           setQuerySent(true);
-          setToastMessage('השאילתה נשלחה בהצלחה לוואטסאפ של המנהל (054-3200007)!');
+          setToastMessage('השאילתה נשלחה בהצלחה לוואטסאפ של חגי (054-3200007)!');
         } else {
-          // Open WhatsApp web link as fallback
           const waUrl = `https://wa.me/972${phone.slice(1)}?text=${encodeURIComponent(messageText)}`;
           window.open(waUrl, '_blank');
           setQuerySent(true);
         }
       } else {
-        // Fallback to wa.me link
         const phone = HILA_TRAINER_INFO.managerNotificationPhone;
         const waUrl = `https://wa.me/972${phone.slice(1)}?text=${encodeURIComponent(messageText)}`;
         window.open(waUrl, '_blank');
@@ -173,7 +227,7 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
 
   const handleSave = () => {
     const finalReceipt: TrainerReceipt = {
-      id: existingReceipt?.id || `rcpt-${Date.now()}`,
+      id: existingReceipt?.id || `receipt-${receiptNumber.trim() || Date.now()}`,
       receiptNumber: receiptNumber.trim() || 'קבלה',
       receiptDate,
       totalAmount: totalCalculated,
@@ -183,6 +237,8 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
       allocations,
       isPaidActually,
       paidDate: isPaidActually ? paidDate : undefined,
+      bitConfirmationNumber: bitConfirmationNumber.trim() || undefined,
+      bitConfirmationImageUrl: paymentConfirmationUrl || undefined,
       paymentConfirmationNotes,
       paymentConfirmationUrl,
       managerQuerySent: querySent,
@@ -210,13 +266,13 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-black text-purple-950 flex items-center gap-2">
-                <span>קליטת קבלה מהילה המאלפת</span>
+                <span>{existingReceipt ? `עריכת קבלה ${existingReceipt.receiptNumber} והעלאת מסמכים` : 'העלאת קבלה / מסמך חדש מהילה המאלפת'}</span>
                 <span className="text-xs font-semibold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full border border-purple-200">
                   {HILA_TRAINER_INFO.businessName} (ע.פ {HILA_TRAINER_INFO.dealerNumber})
                 </span>
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                סיווג אוטומטי של כלבים ושלבי תשלום (1/3, 2/3, 3/3) וסנכרון מול אישור התשלום
+                העלאת תמונת קבלה / PDF, צילום אישור העברה בביט ושיוך לכלבים
               </p>
             </div>
           </div>
@@ -239,17 +295,146 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
         {/* Form Body */}
         <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs sm:text-sm">
 
+          {/* Section 0: Direct File Upload Boxes for Receipt & Bit Confirmation */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Upload Box 1: Hila's Receipt Image / PDF */}
+            <div className="border-2 border-dashed border-indigo-300 bg-indigo-50/40 rounded-2xl p-3 flex flex-col justify-between gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4 text-indigo-600" />
+                  <span>📄 קובץ הקבלה מהילה (תמונה / PDF)</span>
+                </span>
+                {receiptImageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setReceiptImageUrl('')}
+                    className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                  >
+                    הסר קובץ
+                  </button>
+                )}
+              </div>
+
+              {receiptImageUrl ? (
+                <div className="flex items-center gap-2.5 bg-white p-2 rounded-xl border border-indigo-200">
+                  {receiptImageUrl.startsWith('data:application/pdf') || receiptImageUrl.toLowerCase().endsWith('.pdf') ? (
+                    <div className="w-12 h-12 rounded-lg bg-indigo-100 text-indigo-800 flex items-center justify-center font-black text-xs shrink-0">
+                      PDF
+                    </div>
+                  ) : (
+                    <img
+                      src={receiptImageUrl}
+                      alt="תצוגת קבלה"
+                      className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold text-emerald-800">✓ קובץ קבלה מצורף</div>
+                    <button
+                      type="button"
+                      onClick={() => receiptFileInputRef.current?.click()}
+                      className="text-[11px] text-indigo-700 font-bold hover:underline cursor-pointer"
+                    >
+                      החלף קובץ מהמחשב / נייד
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => receiptFileInputRef.current?.click()}
+                  disabled={isUploadingReceiptFile}
+                  className="w-full py-3 px-3 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-indigo-900 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 text-indigo-600" />
+                  <span>{isUploadingReceiptFile ? 'מעלה קובץ...' : 'בחר קובץ קבלה (תמונה / PDF)'}</span>
+                </button>
+              )}
+
+              <input
+                ref={receiptFileInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={handleUploadReceiptFile}
+                className="hidden"
+              />
+            </div>
+
+            {/* Upload Box 2: Bit Transfer Confirmation Screenshot / PDF */}
+            <div className="border-2 border-dashed border-emerald-300 bg-emerald-50/40 rounded-2xl p-3 flex flex-col justify-between gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                  <Upload className="w-4 h-4 text-emerald-600" />
+                  <span>📱 צילום אישור העברה בביט</span>
+                </span>
+                {paymentConfirmationUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setPaymentConfirmationUrl('')}
+                    className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                  >
+                    הסר קובץ
+                  </button>
+                )}
+              </div>
+
+              {paymentConfirmationUrl ? (
+                <div className="flex items-center gap-2.5 bg-white p-2 rounded-xl border border-emerald-200">
+                  {paymentConfirmationUrl.startsWith('data:application/pdf') || paymentConfirmationUrl.toLowerCase().endsWith('.pdf') ? (
+                    <div className="w-12 h-12 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-xs shrink-0">
+                      PDF
+                    </div>
+                  ) : (
+                    <img
+                      src={paymentConfirmationUrl}
+                      alt="אישור ביט"
+                      className="w-12 h-12 rounded-lg object-cover border border-slate-200 shrink-0"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold text-emerald-800">✓ צילום אישור ביט מצורף</div>
+                    <button
+                      type="button"
+                      onClick={() => bitFileInputRef.current?.click()}
+                      className="text-[11px] text-emerald-700 font-bold hover:underline cursor-pointer"
+                    >
+                      החלף צילום אישור ביט
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => bitFileInputRef.current?.click()}
+                  disabled={isUploadingBitFile}
+                  className="w-full py-3 px-3 bg-white hover:bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-emerald-900 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 text-emerald-600" />
+                  <span>{isUploadingBitFile ? 'מעלה קובץ...' : 'העלה צילום מסך אישור ביט'}</span>
+                </button>
+              )}
+
+              <input
+                ref={bitFileInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={handleUploadBitFile}
+                className="hidden"
+              />
+            </div>
+          </div>
+
           {/* Section 1: Raw text input & auto classification */}
           <div className="bg-purple-50/60 border border-purple-200/80 rounded-2xl p-3.5 space-y-2">
             <label className="block text-xs font-black text-purple-900">
-              ✍️ מה הילה כתבה בקבלה / בוואטסאפ (זיהוי אוטומטי):
+              ✍️ פירוט השירות בקבלה (מה הילה כתבה בקבלה):
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={rawText}
                 onChange={e => setRawText(e.target.value)}
-                placeholder="למשל: גוי תשלום 2/3 + תיאן תשלום 1/3"
+                placeholder="למשל: הפרש תהליך אלקטרוני ליאו + שעתיים עבודת פנסיון"
                 className="flex-1 bg-white border border-purple-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-purple-400"
               />
               <button
@@ -260,9 +445,6 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
                 סווג אוטומטית
               </button>
             </div>
-            <p className="text-[11px] text-purple-700 font-medium">
-              המערכת מזהה אוטומטית את שם הכלב, שלב התשלום (1/3, 2/3, 3/3) ומחשבת ₪500 לכל שלב.
-            </p>
           </div>
 
           {/* Section 2: General Receipt Details */}
@@ -275,7 +457,7 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
                 type="text"
                 value={receiptNumber}
                 onChange={e => setReceiptNumber(e.target.value)}
-                placeholder="20056"
+                placeholder="למשל: 20070"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-black text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-400"
               />
             </div>
@@ -307,25 +489,11 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
             </div>
           </div>
 
-          {/* Receipt image link or upload */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-600 mb-1">
-              📷 קישור / תמונת הקבלה (אופציונלי):
-            </label>
-            <input
-              type="text"
-              value={receiptImageUrl}
-              onChange={e => setReceiptImageUrl(e.target.value)}
-              placeholder="כתובת תמונה או צילום מוואטסאפ..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-400"
-            />
-          </div>
-
           {/* Section 3: Dog Allocations */}
           <div className="border border-slate-200 rounded-2xl p-3 sm:p-4 bg-slate-50/50 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                <span>🐕 שיוך כלבים ושלבי תשלום בקבלה</span>
+                <span>🐕 שיוך כלבים ושורות תשלום בקבלה</span>
                 <span className="text-[11px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
                   סה״כ: ₪{totalCalculated.toLocaleString('he-IL')}
                 </span>
@@ -336,7 +504,7 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
                 className="text-xs font-bold text-purple-700 hover:text-purple-900 bg-white border border-purple-200 hover:border-purple-300 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>הוסף שורת כלב</span>
+                <span>הוסף שורה</span>
               </button>
             </div>
 
@@ -348,19 +516,19 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
                 >
                   {/* Dog Name */}
                   <div className="flex-1 min-w-[140px]">
-                    <span className="text-[10px] font-bold text-slate-500 block mb-0.5">שם הכלב</span>
+                    <span className="text-[10px] font-bold text-slate-500 block mb-0.5">שם הכלב / פירוט שורה</span>
                     <input
                       type="text"
                       value={alloc.dogName}
                       onChange={e => handleUpdateAllocation(idx, 'dogName', e.target.value)}
-                      placeholder="שם הכלב באילוף..."
+                      placeholder="שם הכלב או פירוט שירות..."
                       list="training-dogs-datalist"
                       className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800"
                     />
                   </div>
 
                   {/* Stage */}
-                  <div className="w-32">
+                  <div className="w-36">
                     <span className="text-[10px] font-bold text-slate-500 block mb-0.5">שלב תשלום</span>
                     <select
                       value={alloc.stage}
@@ -370,7 +538,7 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
                       <option value="1/3">תשלום 1/3 (ראשון)</option>
                       <option value="2/3">תשלום 2/3 (אמצע)</option>
                       <option value="3/3">תשלום 3/3 (סוף תשלום)</option>
-                      <option value="custom">מותאם אישית</option>
+                      <option value="custom">תוספת / מותאם אישית</option>
                     </select>
                   </div>
 
@@ -423,7 +591,7 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
                   ❓ האם שולם להילה בפועל, וכמה?
                 </span>
                 <p className="text-[11px] text-slate-600 font-medium mt-0.5">
-                  הילה שולחת לעיתים קבלה מראש מתוך אמון. בחר האם התשלום כבר בוצע בביט, או שכרגע הקבלה ממתינה לתשלום:
+                  בחר האם התשלום כבר הועבר בביט, או שהקבלה ממתינה לתשלום:
                 </p>
               </div>
             </div>
@@ -443,7 +611,7 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
                   <Check className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="text-xs font-black">✅ שולם בפועל כעת בביט</div>
+                  <div className="text-xs font-black">✅ שולם בפועל בביט</div>
                   <div className="text-[10px] text-slate-500">העברתי להילה את הכסף והחשבון סגור</div>
                 </div>
               </button>
@@ -471,7 +639,7 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
             {/* Payment Details when Paid */}
             {isPaidActually && (
               <div className="pt-2 border-t border-indigo-100 space-y-2 animate-in fade-in">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div>
                     <span className="text-[10px] font-bold text-slate-600 block mb-0.5">תאריך ביצוע התשלום</span>
                     <input
@@ -482,25 +650,25 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold text-slate-600 block mb-0.5">אסמכתא / הערת תשלום</span>
+                    <span className="text-[10px] font-bold text-slate-600 block mb-0.5">מספר אישור ביט (אופציונלי)</span>
+                    <input
+                      type="text"
+                      value={bitConfirmationNumber}
+                      onChange={e => setBitConfirmationNumber(e.target.value)}
+                      placeholder="למשל: 1007-8856-48416"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-mono text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-600 block mb-0.5">הערת תשלום</span>
                     <input
                       type="text"
                       value={paymentConfirmationNotes}
                       onChange={e => setPaymentConfirmationNotes(e.target.value)}
-                      placeholder="הועבר בביט / העברה בנקאית..."
+                      placeholder="הועבר בביט..."
                       className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-800"
                     />
                   </div>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-600 block mb-0.5">צילום אישור תשלום ביט (אופציונלי לתיוק)</span>
-                  <input
-                    type="text"
-                    value={paymentConfirmationUrl}
-                    onChange={e => setPaymentConfirmationUrl(e.target.value)}
-                    placeholder="קישור לתמונת אישור ביט מוואטסאפ..."
-                    className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-800"
-                  />
                 </div>
               </div>
             )}
@@ -519,10 +687,10 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-3">
             <div>
               <span className="text-xs font-bold text-slate-800 block">
-                📱 שליחת שאילתה מיידית למנהל ({HILA_TRAINER_INFO.managerNotificationPhone})
+                📱 שליחת הודעת תיעוד לוואטסאפ ({HILA_TRAINER_INFO.managerNotificationPhone})
               </span>
               <p className="text-[11px] text-slate-500 font-medium">
-                שולח הודעת וואטסאפ: "האם שולם וכמה?" כדי שתוכל להשיב או לשלוח אישור תשלום ביט
+                שולח סיכום של הקבלה והתשלום לוואטסאפ לתיוק
               </p>
             </div>
             <button
@@ -532,7 +700,7 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
               className="bg-green-600 hover:bg-green-700 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-2xs cursor-pointer transition-colors"
             >
               <Send className="w-3.5 h-3.5" />
-              <span>{querySent ? 'שלח שאילתה שוב' : 'שלח שאילתה לוואטסאפ'}</span>
+              <span>{querySent ? 'שלח שוב לוואטסאפ' : 'שלח לוואטסאפ'}</span>
             </button>
           </div>
 
@@ -557,7 +725,7 @@ export const TrainerReceiptIntakeModal: React.FC<TrainerReceiptIntakeModalProps>
               className="px-5 py-2 text-xs font-black text-white bg-purple-600 hover:bg-purple-700 rounded-xl shadow-md transition-colors cursor-pointer flex items-center gap-1.5"
             >
               <Check className="w-4 h-4" />
-              <span>שמור קבלה ועדכן כלבים</span>
+              <span>שמור קבלה ומסמכים</span>
             </button>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { Booking, TrainerPaymentStage, TrainerReceipt, TrainerStageType, TrainerReceiptAllocation } from '../types';
 import { getTodayStr } from './dateUtils';
+import { supabase } from './supabase';
 
 export const HILA_TRAINER_INFO = {
   name: 'הילה קירזנר',
@@ -76,6 +77,37 @@ export function isRealTrainingBooking(b: Booking): boolean {
  * Seed initial receipts with receipt 20056 (paid) and receipt 20057 for Luna (received 22/09)
  */
 const INITIAL_TRAINER_RECEIPTS: TrainerReceipt[] = [
+  {
+    id: 'receipt-20070',
+    receiptNumber: '20070',
+    receiptDate: '2026-10-28',
+    totalAmount: 600,
+    paymentMethod: 'ביט',
+    rawLineText: 'הפרש תהליך אלקטרוני ליאו (₪500) + שעתיים עבודת פנסיון 28.10 (₪100)',
+    receiptImageUrl: 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/c46835dc-b8bc-4b6c-813c-7457fe9d24fa.jpg',
+    paymentConfirmationNotes: 'שולם בביט ₪600 להילה ב-28.10.2026 (הפרש השלמה לתהליך אלקטרוני ליאו ₪500 + שעתיים פנסיון 28.10 ₪100)',
+    allocations: [
+      {
+        bookingId: 'b-1791271522477',
+        dogName: 'ליאו (לי דלויה) - השלמה לתהליך אלקטרוני',
+        stage: 'custom',
+        amount: 500,
+      },
+      {
+        bookingId: '',
+        dogName: 'שעתיים עבודת פנסיון 28.10',
+        stage: 'custom',
+        amount: 100,
+      },
+    ],
+    isPaidActually: true,
+    paidDate: '2026-10-28',
+    managerQuerySent: true,
+    managerQuerySentAt: '2026-10-28T17:37:39Z',
+    status: 'paid',
+    createdAt: '2026-10-28T17:37:39Z',
+    updatedAt: '2026-10-28T17:40:00Z',
+  },
   {
     id: 'receipt-20064',
     receiptNumber: '20064',
@@ -314,9 +346,20 @@ export function getTrainerReceipts(): TrainerReceipt[] {
         .filter(r => {
           const num = String(r.receiptNumber || '');
           // Keep only official numeric receipts (20056, 20057, 20061, 20064, etc.) and discard random hex message IDs
-          return num === '20056' || num === '20057' || num === '20061' || num === '20064' || (/^\d{4,6}$/.test(num) && !/^[A-F0-9]{5,}$/i.test(num));
+          return num === '20070' || num === '20056' || num === '20057' || num === '20061' || num === '20064' || (/^\d{4,6}$/.test(num) && !/^[A-F0-9]{5,}$/i.test(num)) || Boolean(r.receiptImageUrl || r.bitConfirmationImageUrl || r.paymentConfirmationUrl);
         })
         .map(r => {
+          if (r.id === 'receipt-20070' || r.receiptNumber === '20070') {
+            return {
+              ...r,
+              isPaidActually: true,
+              paid: true,
+              status: 'paid' as const,
+              paidDate: r.paidDate || '2026-10-28',
+              rawLineText: r.rawLineText || 'הפרש תהליך אלקטרוני ליאו (₪500) + שעתיים עבודת פנסיון 28.10 (₪100)',
+              receiptImageUrl: r.receiptImageUrl || 'https://do-media-7107.fra1.digitaloceanspaces.com/710722735421/c46835dc-b8bc-4b6c-813c-7457fe9d24fa.jpg',
+            };
+          }
           if (r.id === 'receipt-20064' || r.receiptNumber === '20064') {
             return {
               ...r,
@@ -356,12 +399,18 @@ export function getTrainerReceipts(): TrainerReceipt[] {
           return r;
         });
 
-      // Ensure all standard initial receipts (20064, 20061, 20057, 20056) exist
+      // Ensure all standard initial receipts (20070, 20064, 20061, 20057, 20056, etc.) exist
       for (const initR of INITIAL_TRAINER_RECEIPTS) {
         if (!cleaned.some(r => r.receiptNumber === initR.receiptNumber || r.id === initR.id)) {
-          cleaned.unshift(initR);
+          cleaned.push(initR);
         }
       }
+      // Sort newest first by receiptDate and receiptNumber
+      cleaned.sort((a, b) => {
+        const dCmp = String(b.receiptDate || '').localeCompare(String(a.receiptDate || ''));
+        if (dCmp !== 0) return dCmp;
+        return (Number(b.receiptNumber) || 0) - (Number(a.receiptNumber) || 0);
+      });
       return cleaned;
     }
     return INITIAL_TRAINER_RECEIPTS;
@@ -371,15 +420,82 @@ export function getTrainerReceipts(): TrainerReceipt[] {
 }
 
 /**
- * Saves all trainer receipts to local storage
+ * Saves all trainer receipts to local storage and syncs to Supabase settings
  */
 export function saveTrainerReceipts(receipts: TrainerReceipt[]): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
     localStorage.setItem(TRAINER_RECEIPTS_STORAGE_KEY, JSON.stringify(receipts));
+    // Also persist to Supabase settings.data.trainerReceipts asynchronously
+    (async () => {
+      try {
+        const { data: sRow } = await supabase.from('settings').select('data').eq('id', 'resort_config').maybeSingle();
+        if (sRow && sRow.data) {
+          await supabase.from('settings').update({
+            data: { ...sRow.data, trainerReceipts: receipts },
+            updated_at: new Date().toISOString()
+          }).eq('id', 'resort_config');
+        }
+      } catch (err) {
+        console.warn('Could not sync trainerReceipts to Supabase:', err);
+      }
+    })();
   } catch (e) {
     console.error('Failed to save trainer receipts:', e);
   }
+}
+
+/**
+ * Reads an uploaded image or PDF file and returns a Data URL (compressing large images so they store cleanly).
+ */
+export function readAndCompressReceiptFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = String(e.target?.result || '');
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDim = 1400;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            if (w > h) {
+              h = Math.round((h * maxDim) / w);
+              w = maxDim;
+            } else {
+              w = Math.round((w * maxDim) / h);
+              h = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(dataUrl);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        } catch {
+          resolve(dataUrl);
+        }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 /**
@@ -765,6 +881,49 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
     }
 
     const currentReceipts = getTrainerReceipts();
+    try {
+      const { data: settingsRow } = await supabase
+        .from('settings')
+        .select('data')
+        .eq('id', 'main')
+        .single();
+      const cloudReceipts: TrainerReceipt[] = settingsRow?.data?.trainerReceipts || [];
+      if (Array.isArray(cloudReceipts) && cloudReceipts.length > 0) {
+        let mergedCloud = false;
+        for (const cr of cloudReceipts) {
+          const idx = currentReceipts.findIndex(r => r.id === cr.id || (r.receiptNumber && r.receiptNumber === cr.receiptNumber));
+          if (idx === -1) {
+            currentReceipts.push(cr);
+            mergedCloud = true;
+          } else {
+            const localR = currentReceipts[idx];
+            if (!localR.bitConfirmationImageUrl && cr.bitConfirmationImageUrl) {
+              localR.bitConfirmationImageUrl = cr.bitConfirmationImageUrl;
+              mergedCloud = true;
+            }
+            if (!localR.receiptImageUrl && cr.receiptImageUrl) {
+              localR.receiptImageUrl = cr.receiptImageUrl;
+              mergedCloud = true;
+            }
+            if (!localR.bitConfirmationNumber && cr.bitConfirmationNumber) {
+              localR.bitConfirmationNumber = cr.bitConfirmationNumber;
+              mergedCloud = true;
+            }
+          }
+        }
+        if (mergedCloud) {
+          currentReceipts.sort((a, b) => {
+            const dateCmp = (b.receiptDate || '').localeCompare(a.receiptDate || '');
+            if (dateCmp !== 0) return dateCmp;
+            return (Number(b.receiptNumber) || 0) - (Number(a.receiptNumber) || 0);
+          });
+          localStorage.setItem(TRAINER_RECEIPTS_STORAGE_KEY, JSON.stringify(currentReceipts));
+        }
+      }
+    } catch {
+      // Ignore cloud read error
+    }
+
     const existingIds = new Set(currentReceipts.map(r => r.id));
     const existingReceiptNumbers = new Set(currentReceipts.map(r => r.receiptNumber).filter(Boolean));
 
@@ -828,7 +987,19 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
         ];
       }
 
-      // Only process messages with a valid official receipt number (e.g. 20056, 20057, 20058, 20064)
+      // Special detection for Receipt 20070 (Leo electronic collar supplement 500 + 2h boarding 100 sent 28/10)
+      if (msgId === '3EB065C384E4E496154B12' || imgUrl.includes('c46835dc-b8bc-4b6c-813c-7457fe9d24fa') || text.includes('20070')) {
+        receiptNumber = '20070';
+        detectedTotal = 600;
+        rawLineText = 'הפרש תהליך אלקטרוני ליאו (₪500) + שעתיים עבודת פנסיון 28.10 (₪100)';
+        const leoBk = trainingBookings.find(b => normalizeDogName(b.dogName).includes('ליאו'));
+        customAllocations = [
+          { bookingId: leoBk?.id || 'b-1791271522477', dogName: 'ליאו (לי דלויה) - השלמה לתהליך אלקטרוני', stage: 'custom', amount: 500 },
+          { bookingId: '', dogName: 'שעתיים עבודת פנסיון 28.10', stage: 'custom', amount: 100 }
+        ];
+      }
+
+      // Only process messages with a valid official receipt number (e.g. 20056, 20057, 20058, 20064, 20070)
       if (!receiptNumber || !/^\d{4,6}$/.test(receiptNumber)) {
         continue;
       }
@@ -840,7 +1011,7 @@ export async function syncTrainerReceiptsFromWhatsAppChat(
         continue;
       }
 
-      const isReceiptAlreadySettled = receiptNumber === '20056' || receiptNumber === '20057' || receiptNumber === '20064';
+      const isReceiptAlreadySettled = receiptNumber === '20056' || receiptNumber === '20057' || receiptNumber === '20064' || receiptNumber === '20070';
       const matchedBooking = dogName ? trainingBookings.find(b => normalizeDogName(b.dogName) === normalizeDogName(dogName)) : undefined;
 
       const finalAllocations: TrainerReceiptAllocation[] = customAllocations || (dogName ? [
