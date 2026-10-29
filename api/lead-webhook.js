@@ -320,13 +320,13 @@ export async function syncGoogleSheetLeads(lookbackDays = 5) {
       const intlPhone = getIntlPhone(cleanPhone);
       const chatId = `${intlPhone}@c.us`;
 
-      // Update contact in Green-API
-      await updateGreenApiContact(chatId, fullName);
-
-      // Check if we haven't sent auto-reply in last 24h
+      // Check if we haven't sent auto-reply in last 24h AND lead is recent (within last 72h, never spam old historical leads)
+      const isRecentForAutoWhatsApp = (Date.now() - createdMs) <= 72 * 60 * 60 * 1000;
+      const isOlderThan7Days = (Date.now() - createdMs) > 7 * 24 * 60 * 60 * 1000;
       const lastSentMs = autoReplyHistory[cleanPhone] || 0;
       let sendRes = { ok: false, skipped: true };
-      if (Date.now() - lastSentMs >= 24 * 60 * 60 * 1000) {
+      if (isRecentForAutoWhatsApp && Date.now() - lastSentMs >= 24 * 60 * 60 * 1000) {
+        await updateGreenApiContact(chatId, fullName);
         const msg = getIntakeFormMessage(cleanPhone, firstName, fullName);
         sendRes = await sendWhatsAppMessage(chatId, msg);
         autoReplyHistory[cleanPhone] = Date.now();
@@ -340,7 +340,7 @@ export async function syncGoogleSheetLeads(lookbackDays = 5) {
       const newLeadItem = {
         id: leadId,
         createdAt: createdIso,
-        status: 'pending',
+        status: isOlderThan7Days ? 'abandoned' : 'pending',
         ownerName: fullName,
         ownerPhone: cleanPhone,
         ownerEmail: '',
@@ -482,8 +482,10 @@ export async function auditGoogleSheetsLeadsHealth(existingIntakes = [], existin
 
       // Find phone across all columns
       const phoneCellRegex = /^(?:p:)?(?:\+?972|0)5\d[- ]?\d{7}$/;
+      const foreignPhoneRegex = /^(?:p:)?\+(?!972)\d{7,15}$/;
       let rawPhone = '';
       let rawName = '';
+      let isForeignPhone = false;
       for (let c = 0; c < cols.length; c++) {
         const val = String(cols[c] || '').trim();
         if (phoneCellRegex.test(val)) {
@@ -491,10 +493,18 @@ export async function auditGoogleSheetsLeadsHealth(existingIntakes = [], existin
           if (c > 0) rawName = String(cols[c - 1] || '').trim();
           break;
         }
+        if (foreignPhoneRegex.test(val)) {
+          isForeignPhone = true;
+        }
       }
 
       const createdDate = secondCell ? new Date(secondCell) : null;
       const createdMs = createdDate && !isNaN(createdDate.getTime()) ? createdDate.getTime() : 0;
+
+      // Skip foreign non-Israeli phone numbers cleanly (e.g. +970, +7, +32)
+      if (!rawPhone && isForeignPhone) {
+        continue;
+      }
 
       // If this row looks like a real Meta lead (starts with l: or has valid created_time) but has NO recognizable phone number!
       if (!rawPhone) {

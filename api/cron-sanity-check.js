@@ -820,6 +820,15 @@ export default async function handler(req, res) {
 
     const chats = (greenId && greenToken) ? await fetchGreenApiChats(greenId, greenToken, 80) : [];
 
+    // Check Trainer Hila (Halodog) pending receipts & recent WhatsApp messages from Hila (972526908943@c.us)
+    const trainerReceipts = Array.isArray(curData.trainerReceipts) ? curData.trainerReceipts : [];
+    const unpaidHilaReceipts = trainerReceipts.filter(r => r && r.isPaidActually === false);
+    if (unpaidHilaReceipts.length > 0 && leadSheetAudit && Array.isArray(leadSheetAudit.issues)) {
+      unpaidHilaReceipts.forEach(r => {
+        leadSheetAudit.issues.push(`🐾 קבלה של הילה המאלפת ממתינה לתשלום בביט: קבלה מס׳ *${r.receiptNumber}* על סך ₪${r.totalAmount} (${r.rawLineText || 'אילוף'})`);
+      });
+    }
+
     const { totalGreen, totalRed, reportText } = run1830SanityAudit(
       bookings || [],
       settings,
