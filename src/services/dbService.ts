@@ -448,6 +448,7 @@ export const subscribeToSettings = (
   onError?: (error: Error) => void
 ): Unsubscribe => {
   let isSubscribed = true;
+  let lastSettingsSignature = '';
 
   const fetchSettings = async () => {
     try {
@@ -459,13 +460,14 @@ export const subscribeToSettings = (
 
       if (error && error.code !== 'PGRST116') {
         console.warn('Supabase fetch settings error (using local cache):', error.message);
-        if (isSubscribed) onData(getLocalSettings());
+        if (isSubscribed && !lastSettingsSignature) onData(getLocalSettings());
         if (onError) onError(new Error(error.message));
         return;
       }
 
       if (data) {
-        const extraData = (data.data && typeof data.data === 'object') ? data.data : {};
+        const rawExtraData = (data.data && typeof data.data === 'object') ? data.data : {};
+        const { intakeRequests: _ir, vouchers: _v, whatsapp_sync: _ws, autoReplyHistory: _arh, ...extraData } = rawExtraData;
         const rawTraining = data.default_daily_rate_training ?? data.defaultDailyRateTraining ?? extraData.defaultDailyRateTraining;
         const validTrainingRate = (rawTraining && Number(rawTraining) >= 1000) ? Number(rawTraining) : 6500;
         const maxCap = data.max_capacity ?? data.maxCapacity ?? extraData.maxCapacity ?? defaultSettings.maxCapacity;
@@ -506,28 +508,32 @@ export const subscribeToSettings = (
         }
 
         // Sync cloud deletedBookingIds to local storage so this device never restores them
-        if (Array.isArray(extraData.deletedBookingIds) && extraData.deletedBookingIds.length > 0) {
+        if (Array.isArray(rawExtraData.deletedBookingIds) && rawExtraData.deletedBookingIds.length > 0) {
           try {
             const set = getDeletedBookingIds();
-            for (const dId of extraData.deletedBookingIds) {
+            for (const dId of rawExtraData.deletedBookingIds) {
               set.add(dId);
             }
             localStorage.setItem(DELETED_BOOKINGS_KEY, JSON.stringify(Array.from(set)));
           } catch (e) {}
         }
 
-        try {
-          localStorage.setItem('dog_resort_settings', JSON.stringify(settingsData));
-          localStorage.removeItem('shmulik_dog_resort_settings_v2');
-        } catch (e) {}
-        if (isSubscribed) onData(settingsData);
+        const newSig = JSON.stringify(settingsData);
+        if (newSig !== lastSettingsSignature) {
+          lastSettingsSignature = newSig;
+          try {
+            localStorage.setItem('dog_resort_settings', newSig);
+            localStorage.removeItem('shmulik_dog_resort_settings_v2');
+          } catch (e) {}
+          if (isSubscribed) onData(settingsData);
+        }
       } else {
         const local = getLocalSettings();
-        if (isSubscribed) onData(local);
+        if (isSubscribed && !lastSettingsSignature) onData(local);
       }
     } catch (err: any) {
       console.warn('Failed to fetch settings from Supabase:', err?.message || err);
-      if (isSubscribed) onData(getLocalSettings());
+      if (isSubscribed && !lastSettingsSignature) onData(getLocalSettings());
     }
   };
 
@@ -1277,8 +1283,9 @@ export const deleteIntakeRequestFromDb = async (id: string): Promise<void> => {
 export const subscribeToIntakeRequests = (
   callback: (requests: IntakeRequest[]) => void
 ): Unsubscribe => {
-  // Always emit local data first
-  callback(loadStoredIntakeRequests());
+  const initialLocal = loadStoredIntakeRequests();
+  let lastIntakesSignature = JSON.stringify(initialLocal);
+  callback(initialLocal);
 
   const fetchRequests = async () => {
     try {
@@ -1290,14 +1297,16 @@ export const subscribeToIntakeRequests = (
 
       if (sRow?.data?.intakeRequests && Array.isArray(sRow.data.intakeRequests)) {
         const list: IntakeRequest[] = sRow.data.intakeRequests;
-        localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, JSON.stringify(list));
-        callback(list);
+        const sig = JSON.stringify(list);
+        if (sig !== lastIntakesSignature) {
+          lastIntakesSignature = sig;
+          localStorage.setItem(LOCAL_INTAKE_REQUESTS_KEY, sig);
+          callback(list);
+        }
         return;
       }
-
-      callback(loadStoredIntakeRequests());
     } catch (e) {
-      callback(loadStoredIntakeRequests());
+      // keep existing state on transient network error
     }
   };
 

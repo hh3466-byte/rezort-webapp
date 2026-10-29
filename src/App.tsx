@@ -326,13 +326,6 @@ export default function App() {
       autoArchiveExpiredIntakes(requests, bookingsRef.current);
     });
 
-    // Actively pull & sync any new Meta leads from the Google Sheet CSV on mount and every 5 minutes
-    const triggerSheetLeadsSync = () => {
-      fetch('/api/lead-webhook?sync=true&days=5').catch(() => {});
-    };
-    triggerSheetLeadsSync();
-    const sheetSyncInterval = setInterval(triggerSheetLeadsSync, 5 * 60 * 1000);
-
     const unsubFeedingReminders = initFeedingReminderScheduler(
       () => bookingsRef.current,
       (event) => {
@@ -351,7 +344,6 @@ export default function App() {
       unsubGrowPayments();
       unsubIntake();
       unsubFeedingReminders();
-      clearInterval(sheetSyncInterval);
     };
   }, []);
 

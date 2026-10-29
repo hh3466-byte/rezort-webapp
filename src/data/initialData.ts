@@ -4,7 +4,7 @@ export const defaultSettings: ResortSettings = {
   resortName: 'הריזורט לכלב - פנסיון, אילוף ושיקום התנהגותי',
   managerName: 'שמוליק',
   managerPhone: '054-8765888',
-  maxCapacity: 16,
+  maxCapacity: 11,
   defaultDailyRateBoarding: 180,
   defaultDailyRateIsolation: 230,
   defaultDailyRateTraining: 6500, // תהליך אילוף מלא (מחיר כולל)

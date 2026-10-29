@@ -76,15 +76,18 @@ interface IntakeRequestsModalProps {
 
 export { calculateBoardingRate, type BoardingRateOptions } from '../utils/pricingUtils';
 
-// Subcomponent: Live Calendar & Available Spots for Requested Dates
+// Subcomponent: Live Calendar & Available Spots for Requested Dates (Memoized to prevent re-renders on typing)
 const RequestedDatesCalendar: React.FC<{
   startDate: string;
   endDate: string;
   serviceType: string;
   bookings?: Booking[];
   settings: ResortSettings;
-}> = ({ startDate, endDate, serviceType, bookings = [], settings }) => {
-  const activeBookings = (bookings || []).filter(b => b.stayStatus !== 'cancelled');
+}> = React.memo(({ startDate, endDate, serviceType, bookings = [], settings }) => {
+  const activeBookings = React.useMemo(
+    () => (bookings || []).filter(b => b.stayStatus !== 'cancelled'),
+    [bookings]
+  );
 
   const daysList = React.useMemo(() => {
     if (!startDate) return [];
@@ -102,26 +105,28 @@ const RequestedDatesCalendar: React.FC<{
     return list;
   }, [startDate, endDate, serviceType]);
 
-  if (daysList.length === 0) return null;
+  const dayStats = React.useMemo(() => {
+    const max = settings.maxCapacity || 11;
+    return daysList.map(dStr => {
+      const dayBookings = getBookingsForDate(activeBookings, dStr);
+      const count = dayBookings.length;
+      const free = Math.max(0, max - count);
+      const isFull = count >= max;
+      const percent = Math.min(100, Math.round((count / max) * 100));
+      return {
+        dateStr: dStr,
+        dayName: getDayNameHebrew(dStr),
+        dayBookings,
+        count,
+        max,
+        free,
+        isFull,
+        percent
+      };
+    });
+  }, [daysList, activeBookings, settings.maxCapacity]);
 
-  const dayStats = daysList.map(dStr => {
-    const dayBookings = getBookingsForDate(activeBookings, dStr);
-    const count = dayBookings.length;
-    const max = settings.maxCapacity || 25;
-    const free = Math.max(0, max - count);
-    const isFull = count >= max;
-    const percent = Math.min(100, Math.round((count / max) * 100));
-    return {
-      dateStr: dStr,
-      dayName: getDayNameHebrew(dStr),
-      dayBookings,
-      count,
-      max,
-      free,
-      isFull,
-      percent
-    };
-  });
+  if (daysList.length === 0) return null;
 
   const minFree = Math.min(...dayStats.map(s => s.free));
   const hasFullDays = dayStats.some(s => s.isFull);
@@ -137,7 +142,7 @@ const RequestedDatesCalendar: React.FC<{
 
         <div>
           {hasFullDays ? (
-            <span className="inline-flex items-center gap-1 text-[11px] font-black bg-red-100 text-red-800 border border-red-300 px-2.5 py-0.5 rounded-lg shadow-2xs animate-pulse">
+            <span className="inline-flex items-center gap-1 text-[11px] font-black bg-red-100 text-red-800 border border-red-300 px-2.5 py-0.5 rounded-lg shadow-2xs">
               <span>⚠️ שים לב: ישנם ימים בתפוסה מלאה!</span>
             </span>
           ) : minFree <= 2 ? (
@@ -152,12 +157,12 @@ const RequestedDatesCalendar: React.FC<{
         </div>
       </div>
 
-      {/* Days Strip / Grid with Pulsing and Blinking Borders */}
+      {/* Days Strip / Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
         {dayStats.map((st) => (
           <div
             key={st.dateStr}
-            className={`rounded-xl p-2.5 text-xs flex flex-col justify-between transition-all ${
+            className={`rounded-xl p-2.5 text-xs flex flex-col justify-between ${
               st.isFull
                 ? 'pulse-border-red bg-red-50/90 text-red-950 shadow-sm'
                 : 'pulse-border-green bg-emerald-50/40 text-slate-800 shadow-xs'
@@ -181,7 +186,7 @@ const RequestedDatesCalendar: React.FC<{
               {/* Progress bar */}
               <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
-                  className={`h-full rounded-full transition-all ${
+                  className={`h-full rounded-full ${
                     st.isFull ? 'bg-red-500' : st.count > st.max * 0.7 ? 'bg-amber-500' : 'bg-emerald-500'
                   }`}
                   style={{ width: `${st.percent}%` }}
@@ -213,7 +218,7 @@ const RequestedDatesCalendar: React.FC<{
       </div>
     </div>
   );
-};
+});
 
 export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   requests,

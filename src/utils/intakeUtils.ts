@@ -204,8 +204,10 @@ export const isIntakeMarkedIrrelevant = (r: IntakeRequest): boolean => {
 export const hasManualStaffNotes = (internalNotes?: string): boolean => {
   if (!internalNotes || !internalNotes.trim()) return false;
   const cleaned = internalNotes
+    .replace(/הליד נקלט אוטומטית[^\n|]*/g, '')
     .replace(/הליד נקלט מקמפיין[^\n|]*/g, '')
     .replace(/הלקוח השלים טופס מודעה[^\n|]*/g, '')
+    .replace(/ממתין לשיחה של שמוליק\.?/g, '')
     .replace(/פנייה ראשונית בוואטסאפ[^\n|]*/g, '')
     .replace(/\[📢 ליד מקמפיין[^\]]*\]/g, '')
     .replace(/\[💬 פנייה חדשה מוואטסאפ[^\]]*\]/g, '')

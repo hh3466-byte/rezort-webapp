@@ -1,29 +1,30 @@
-const GREEN_API_ID = '710722735421';
-const GREEN_API_TOKEN = 'ddcba65cfbbd48b1a70e87a9a20036b92b2d17d220d44d299b';
-const cleanId = GREEN_API_ID.replace(/\D/g, '');
-const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '';
-const domain = clusterPrefix ? clusterPrefix + '.api.greenapi.com' : 'api.greenapi.com';
-const url = `https://${domain}/waInstance${cleanId}/getChatHistory/${GREEN_API_TOKEN}`;
+const { createClient } = require('@supabase/supabase-js');
+const url = 'https://ydlynqqmulojhrxbfjsc.supabase.co';
+const key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ';
+const supabase = createClient(url, key);
 
-async function check() {
-  const resp = await fetch(url, {
+async function getChat() {
+  const { data: s } = await supabase.from('settings').select('*').limit(1);
+  const greenApiId = s[0].data?.greenApiIdInstance?.trim();
+  const greenApiToken = s[0].data?.greenApiToken?.trim();
+
+  const clusterPrefix = greenApiId.substring(0, 4);
+  const host = `https://${clusterPrefix}.api.greenapi.com`;
+
+  const res = await fetch(`${host}/waInstance${greenApiId}/getChatHistory/${greenApiToken}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chatId: '972546474151@c.us',
-      count: 20
-    })
+    body: JSON.stringify({ chatId: '972546474151@c.us', count: 100 })
   });
-  const hist = await resp.json();
-  if (Array.isArray(hist)) {
-    console.log('Last messages with Shani:');
-    hist.slice(0, 15).reverse().forEach(m => {
-      const who = m.type === 'outgoing' ? 'RESORT' : 'SHANI';
-      const text = m.textMessage || m.caption || m.extendedTextMessage?.text || m.typeMessage || '';
-      console.log(`[${who}] ${text.replace(/\n/g, ' ')}`);
-    });
-  } else {
-    console.log('Hist response:', hist);
-  }
+  const data = await res.json();
+  console.log('Messages with Shani count:', data?.length);
+  (data || []).reverse().forEach(m => {
+    const text = m.textMessage || m.extendedTextMessage?.text || m.caption || '';
+    const sender = m.type === 'outgoing' ? 'RESORT' : 'SHANI';
+    const date = new Date(m.timestamp * 1000).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
+    if (text) {
+      console.log(`[${date}] ${sender}: ${text}`);
+    }
+  });
 }
-check();
+getChat();

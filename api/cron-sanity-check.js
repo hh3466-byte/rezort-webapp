@@ -387,10 +387,11 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     redLights.expiredGhostBookings.push(`👻 שריון עבר שלא נסגר ולא מומש: *${b.dog_name || b.dogName}* (${b.owner_name || b.ownerName}) | תאריכים ${formatDateIL(b.start_date || b.startDate)}-${formatDateIL(b.end_date || b.endDate)} עברו, נדרש שחרור או ארכיון.`);
   });
 
-  // Overcapacity Alert (Peak capacity 15 dogs - strictly checked_in dogs!)
+  // Overcapacity Alert (Standard full capacity is 11 dogs; pairs from same home or home_stay at Shmulik's house can exceed it)
   const stayingToday = activeBookings.filter(b => (b.start_date || b.startDate) <= todayStr && (b.end_date || b.endDate) >= todayStr && (b.stay_status || b.stayStatus) === 'checked_in');
-  if (stayingToday.length >= 15) {
-    redLights.overcapacity.push(`⚠️ תפוסת שיא בריזורט: *${stayingToday.length} כלבים* שוהים כעת (תפוסה מלאה / קיבולת שיא: 15 כלבים)!`);
+  const stayingInKennelsToday = stayingToday.filter(b => (b.data?.kennelNumber || b.kennelNumber) !== 'home_stay');
+  if (stayingInKennelsToday.length > 11) {
+    redLights.overcapacity.push(`⚠️ חריגה מתפוסה מלאה סטנדרטית בריזורט: *${stayingInKennelsToday.length} כלבים* שוהים במתחם (הגבול העליון הסטנדרטי: 11 כלבים)!`);
   }
 
   // Reconcile recent bookings
