@@ -272,6 +272,54 @@ async function runSanity() {
     issuesFound++;
   }
 
+  // 10. Google Sheets Meta Leads Mandatory Audit
+  try {
+    console.log(`[10] בקרת גיליון לידים ממומנים (Google Sheets - Meta Leads):`);
+    const csvUrl = 'https://docs.google.com/spreadsheets/d/18kDM6psejSbvpvYYj8WEzHix2HWPID6rflUk_d7xdqo/export?format=csv';
+    const res = await fetch(csvUrl, { redirect: 'follow' });
+    if (!res.ok) {
+      console.error(`    ❌ תקלת גישה לגיליון Google Sheets: HTTP ${res.status}`);
+      issuesFound++;
+    } else {
+      const csvText = await res.text();
+      const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+      const { data: sRow } = await supabase.from('settings').select('data').eq('id', 'resort_config').single();
+      const curIntakes = sRow?.data?.intakeRequests || [];
+      const cutoffMs = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      let totalLeadsInSheet = 0;
+      let missingLeadsCount = 0;
+
+      const phoneCellRegex = /^(?:p:)?(?:\+?972|0)5\d[- ]?\d{7}$/;
+      for (const line of lines) {
+        if (line.includes('<test lead:') || line.includes('נוי בודקת')) continue;
+        const cols = line.split(',').map(c => c.replace(/^"|"$/g, '').trim());
+        const rawPhoneCell = cols.find(c => phoneCellRegex.test(c));
+        if (!rawPhoneCell) continue;
+        let digits = rawPhoneCell.replace(/\D/g, '');
+        if (digits.startsWith('972')) digits = '0' + digits.slice(3);
+        if (!digits.startsWith('05') || digits.length < 10) continue;
+
+        totalLeadsInSheet++;
+        const createdMs = cols[1] ? new Date(cols[1]).getTime() : 0;
+        if (createdMs >= cutoffMs) {
+          const phoneNorm = digits.slice(-7);
+          const exists = curIntakes.some(r => String(r.ownerPhone || '').replace(/\D/g, '').slice(-7) === phoneNorm);
+          if (!exists) {
+            console.error(`    ❌ ליד בגיליון Google Sheets חסר במערכת: טלפון ${digits} (תאריך: ${cols[1]?.slice(0, 10) || 'לא ידוע'})`);
+            missingLeadsCount++;
+            issuesFound++;
+          }
+        }
+      }
+      if (missingLeadsCount === 0) {
+        console.log(`    ✓ גיליון Google Sheets תקין ונגיש (${totalLeadsInSheet} לידים אומתו, 0 לידים חסרים ב-Supabase).`);
+      }
+    }
+  } catch (err) {
+    console.error('❌ חריגה בבדיקת גיליון הלידים:', err.message);
+    issuesFound++;
+  }
+
   console.log('\n====================================================');
   if (issuesFound === 0) {
     console.log('   סיכום: מערכת 100% בריאה, יציבה ותקינה ללא תקלות!');

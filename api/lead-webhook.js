@@ -254,16 +254,17 @@ export async function syncGoogleSheetLeads(lookbackDays = 5) {
       const firstCell = String(cols[0] || '').trim();
       if (line.includes('<test lead:') || line.includes('נוי בודקת')) continue;
 
-      // Find phone column (either col 13 where Meta writes p:+972..., or scan first 20 cols for p:+972 / 05...)
+      // Find phone column across ALL columns (either col 13 where Meta writes p:+972..., or scan all cols for p:+972 / 05...)
+      const phoneCellRegex = /^(?:p:)?(?:\+?972|0)5\d[- ]?\d{7}$/;
       let rawPhone = '';
       let rawName = '';
-      if (cols[13] && /(?:p:)?\+?9725\d{8}|^05\d[- ]?\d{7}$/.test(String(cols[13]).trim())) {
+      if (cols[13] && phoneCellRegex.test(String(cols[13]).trim())) {
         rawPhone = String(cols[13]).trim();
         rawName = String(cols[12] || '').trim();
       } else {
-        for (let c = 0; c < Math.min(cols.length, 20); c++) {
+        for (let c = 0; c < cols.length; c++) {
           const val = String(cols[c] || '').trim();
-          if (/(?:p:)?\+?9725\d{8}|^05\d[- ]?\d{7}$/.test(val)) {
+          if (phoneCellRegex.test(val)) {
             rawPhone = val;
             if (c > 0) rawName = String(cols[c - 1] || '').trim();
             break;
@@ -384,6 +385,169 @@ export async function syncGoogleSheetLeads(lookbackDays = 5) {
   } catch (err) {
     console.error('Error in syncGoogleSheetLeads:', err);
     return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * Mandatory Daily Sanity Check Audit for the Google Sheets Meta Leads File
+ * 1. Auto-syncs any missed leads from the sheet first.
+ * 2. Verifies sheet accessibility, row structure, and 100% sync presence in Supabase.
+ */
+export async function auditGoogleSheetsLeadsHealth(existingIntakes = [], existingBookings = [], lookbackDays = 30) {
+  const issues = [];
+  let totalSheetLeads = 0;
+  let recentSheetLeads = 0;
+  let autoHealedCount = 0;
+  const missingLeads = [];
+  const unparseableRows = [];
+
+  try {
+    // Step 1: Run auto-sync first so any new lead is immediately pulled into Supabase
+    const syncRes = await syncGoogleSheetLeads(lookbackDays);
+    if (!syncRes.ok) {
+      issues.push(`🚨 תקלת גישה או סנכרון לגיליון הלידים (Google Sheets): ${syncRes.error || 'שגיאה לא ידועה'}`);
+      return {
+        healthy: false,
+        totalSheetLeads: 0,
+        recentSheetLeads: 0,
+        autoHealedCount: 0,
+        missingLeads,
+        unparseableRows,
+        issues
+      };
+    }
+    autoHealedCount = syncRes.syncedCount || 0;
+
+    // Step 2: Re-fetch latest intakes from Supabase if auto-healed, or combine with existingIntakes
+    let currentIntakes = Array.isArray(existingIntakes) ? [...existingIntakes] : [];
+    if (autoHealedCount > 0 || currentIntakes.length === 0) {
+      try {
+        const { data: sRow } = await supabase
+          .from('settings')
+          .select('data')
+          .eq('id', 'resort_config')
+          .single();
+        if (sRow?.data?.intakeRequests) {
+          currentIntakes = sRow.data.intakeRequests;
+        }
+      } catch (_) {}
+    }
+
+    // Step 3: Fetch and audit the Google Sheet CSV directly
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEET_ID}/export?format=csv`;
+    const res = await fetch(csvUrl, { redirect: 'follow' });
+    if (!res.ok) {
+      issues.push(`🚨 גיליון הלידים של מטא (Google Sheets) אינו זמין! קוד שגיאה: HTTP ${res.status}`);
+      return {
+        healthy: false,
+        totalSheetLeads,
+        recentSheetLeads,
+        autoHealedCount,
+        missingLeads,
+        unparseableRows,
+        issues
+      };
+    }
+
+    const csvText = await res.text();
+    const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length === 0) {
+      issues.push(`🚨 גיליון הלידים של מטא (Google Sheets) חזר ריק לחלוטין!`);
+      return {
+        healthy: false,
+        totalSheetLeads: 0,
+        recentSheetLeads: 0,
+        autoHealedCount,
+        missingLeads,
+        unparseableRows,
+        issues
+      };
+    }
+
+    const cutoffMs = Date.now() - lookbackDays * 24 * 60 * 60 * 1000;
+    const recent7DaysMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+    for (let rowIdx = 0; rowIdx < lines.length; rowIdx++) {
+      const line = lines[rowIdx];
+      if (line.includes('<test lead:') || line.includes('נוי בודקת')) continue;
+
+      const cols = parseCsvLine(line);
+      if (cols.length < 2) continue;
+
+      // Skip header rows
+      const firstCell = String(cols[0] || '').trim();
+      const secondCell = String(cols[1] || '').trim();
+      const isHeaderRow = firstCell.toLowerCase() === 'id' || secondCell.toLowerCase() === 'created_time' || line.includes('phone_number,');
+      if (isHeaderRow && !firstCell.startsWith('l:')) continue;
+
+      // Find phone across all columns
+      const phoneCellRegex = /^(?:p:)?(?:\+?972|0)5\d[- ]?\d{7}$/;
+      let rawPhone = '';
+      let rawName = '';
+      for (let c = 0; c < cols.length; c++) {
+        const val = String(cols[c] || '').trim();
+        if (phoneCellRegex.test(val)) {
+          rawPhone = val;
+          if (c > 0) rawName = String(cols[c - 1] || '').trim();
+          break;
+        }
+      }
+
+      const createdDate = secondCell ? new Date(secondCell) : null;
+      const createdMs = createdDate && !isNaN(createdDate.getTime()) ? createdDate.getTime() : 0;
+
+      // If this row looks like a real Meta lead (starts with l: or has valid created_time) but has NO recognizable phone number!
+      if (!rawPhone) {
+        if (firstCell.startsWith('l:') || (createdMs > cutoffMs)) {
+          const rowDateStr = secondCell ? secondCell.slice(0, 10) : `שורה ${rowIdx + 1}`;
+          unparseableRows.push(rowDateStr);
+          issues.push(`🚨 שורת ליד בגיליון Google Sheets (${rowDateStr}, מזהה ${firstCell || 'ללא'}) חסרה מספר טלפון תקין או שהעמודות השתבשו!`);
+        }
+        continue;
+      }
+
+      const cleanPhone = cleanPhoneNumber(rawPhone);
+      if (!cleanPhone || cleanPhone.length < 9 || !cleanPhone.startsWith('05')) continue;
+
+      totalSheetLeads++;
+      if (createdMs >= recent7DaysMs) {
+        recentSheetLeads++;
+      }
+
+      // Verify that every lead from the last lookbackDays exists in intakeRequests or bookings
+      if (createdMs >= cutoffMs) {
+        const phoneNorm = cleanPhone.slice(-7);
+        const inIntakes = currentIntakes.some(r => cleanPhoneNumber(r.ownerPhone || r.owner_phone || '').slice(-7) === phoneNorm);
+        const inBookings = (existingBookings || []).some(b => cleanPhoneNumber(b.ownerPhone || b.owner_phone || '').slice(-7) === phoneNorm);
+
+        if (!inIntakes && !inBookings) {
+          const leadDate = secondCell ? secondCell.slice(0, 10) : 'לא ידוע';
+          missingLeads.push({ name: rawName || 'ליד', phone: cleanPhone, date: leadDate });
+          issues.push(`🚨 ליד מגיליון Google Sheets לא נקלט במערכת: *${rawName || 'לקוח'}* (📞 ${cleanPhone}, מתאריך ${leadDate}) אינו מופיע בשאלוני הקליטה או ביומן!`);
+        }
+      }
+    }
+
+    return {
+      healthy: issues.length === 0,
+      totalSheetLeads,
+      recentSheetLeads,
+      autoHealedCount,
+      missingLeads,
+      unparseableRows,
+      issues
+    };
+  } catch (err) {
+    issues.push(`🚨 שגיאה בבדיקת גיליון הלידים (Google Sheets): ${err.message}`);
+    return {
+      healthy: false,
+      totalSheetLeads,
+      recentSheetLeads,
+      autoHealedCount,
+      missingLeads,
+      unparseableRows,
+      issues
+    };
   }
 }
 

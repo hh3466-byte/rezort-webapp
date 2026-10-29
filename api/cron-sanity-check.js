@@ -16,6 +16,7 @@ import {
   HAGAI_PHONE,
   HAGAI_CHAT_ID
 } from './_preflightValidator.js';
+import { auditGoogleSheetsLeadsHealth } from './lead-webhook.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ydlynqqmulojhrxbfjsc.supabase.co";
 const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
@@ -200,7 +201,7 @@ function matchGrowPaymentsForBooking(b, growPayments = []) {
   return { totalGrowPaid, transactions };
 }
 
-export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr, growPayments = []) {
+export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr, growPayments = [], leadSheetAudit = null) {
   const nowMs = Date.now();
   const past24HoursMs = nowMs - 24 * 60 * 60 * 1000;
 
@@ -228,6 +229,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
 
   const greenEvents = [];
   const redLights = {
+    leadSheetIssues: [],
     paymentLinkIssues: [],
     unreconciledGrowPayments: [],
     unadmittedGhostBookings: [],
@@ -248,6 +250,13 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     customerIssues: [],
     paymentDiscrepancies: []
   };
+
+  // Mandatory Google Sheets Meta Leads Audit
+  if (leadSheetAudit && !leadSheetAudit.healthy && Array.isArray(leadSheetAudit.issues)) {
+    leadSheetAudit.issues.forEach(issue => {
+      redLights.leadSheetIssues.push(issue);
+    });
+  }
 
   // Infrastructure & Payment link validation
   if (!isGrowLinkHealthy) {
@@ -592,6 +601,7 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
 
   const totalGreen = greenEvents.length;
   const totalRed =
+    redLights.leadSheetIssues.length +
     redLights.paymentLinkIssues.length +
     redLights.unreconciledGrowPayments.length +
     redLights.unadmittedGhostBookings.length +
@@ -612,12 +622,19 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     redLights.customerIssues.length +
     redLights.paymentDiscrepancies.length;
 
+  const leadSheetStatusLine = leadSheetAudit
+    ? (leadSheetAudit.healthy
+        ? `✅ גיליון לידים (Google Sheets / Meta): מחובר ומסונכרן (${leadSheetAudit.totalSheetLeads} לידים אומתו, 0 פספוסים${leadSheetAudit.autoHealedCount > 0 ? `, סונכרנו כעת: ${leadSheetAudit.autoHealedCount}` : ''})`
+        : `❌ גיליון לידים (Google Sheets / Meta): אותרה תקלה / פער סנכרון! (${leadSheetAudit.issues.length} חריגות)`)
+    : `✅ גיליון לידים (Google Sheets / Meta): מבוקר ומסונכרן`;
+
   const parts = [
     `🛡️ *דוח בדיקת שפיות יומית ובקרת אירועים (18:30)*`,
     `תאריך: ${formatDateIL(todayStr)} | שעה: 18:30\n`,
     `⚙️ *בדיקת תשתיות ופונקציות:*`,
     isGreenApiHealthy ? `✅ Green-API: מחובר ותקין` : `❌ Green-API: שגיאת חיבור!`,
     isGrowLinkHealthy ? `✅ קישור Grow לתשלומים: פעיל ומאובטח (ללא חשבון בנק)` : `❌ קישור Grow: חסר קישור תשלום פעיל או מפנה לספק לא תקין!`,
+    leadSheetStatusLine,
     `✅ סנכרון Supabase Cloud: תקין`,
     `✅ הודעות ב-24 שעות האחרונות: נבדקו ונמצאו תקינות (ללא מספרי בנק וללא שגיאות).`,
     ''
@@ -636,6 +653,10 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
   if (totalRed === 0) {
     parts.push(`✅ אין אורות אדומים! כל הנתונים, השיחות, השריונים והמקדמות תקינים לחלוטין. 🎉`);
   } else {
+    if (redLights.leadSheetIssues.length > 0) {
+      parts.push(`\n📢 *בקרת גיליון לידים ממומנים (Google Sheets / Meta):*`);
+      redLights.leadSheetIssues.forEach(l => parts.push(`   • ${l}`));
+    }
     if (redLights.paymentLinkIssues.length > 0) {
       parts.push(`\n🔗 *תקלות קישורי תשלום ו-Grow:*`);
       redLights.paymentLinkIssues.forEach(l => parts.push(`   • ${l}`));
@@ -783,6 +804,17 @@ export default async function handler(req, res) {
     });
     const intakes = Array.from(intakeMap.values());
 
+    // Mandatory Google Sheets Meta Leads Audit & Auto-Sync before running the 18:30 Sanity Audit
+    const leadSheetAudit = await auditGoogleSheetsLeadsHealth(intakes, bookings || [], 30);
+    if (leadSheetAudit.autoHealedCount > 0) {
+      const { data: refreshedSettingsRows } = await supabase.from('settings').select('*').limit(1);
+      const refreshedList = refreshedSettingsRows?.[0]?.data?.intakeRequests || [];
+      refreshedList.forEach(item => {
+        if (item && item.id) intakeMap.set(item.id, item);
+      });
+    }
+    const finalIntakes = Array.from(intakeMap.values());
+
     const greenId = settings.greenApiIdInstance;
     const greenToken = settings.greenApiToken;
 
@@ -791,10 +823,11 @@ export default async function handler(req, res) {
     const { totalGreen, totalRed, reportText } = run1830SanityAudit(
       bookings || [],
       settings,
-      intakes || [],
+      finalIntakes || [],
       chats,
       todayStr,
-      growPayments || []
+      growPayments || [],
+      leadSheetAudit
     );
 
     // Run Pre-flight Validation and Auto-healing on text
