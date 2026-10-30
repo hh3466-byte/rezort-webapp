@@ -735,7 +735,14 @@ export function enrichChatWithSystemData(
     const verifiedName = matchedBooking.ownerName?.trim();
     const cleanDog = (matchedBooking.dogName || '').trim();
     const hasRealDog = Boolean(cleanDog && !cleanDog.includes('ממתין לבירור') && cleanDog !== 'כלב');
-    const formattedDogFirst = hasRealDog && verifiedName ? `${cleanDog} (${verifiedName})` : (verifiedName || cleanDog);
+    const hasEverCheckedIn = bookings.some(b => {
+      if (b.stayStatus === 'cancelled') return false;
+      const bClean = cleanPhoneNumber(b.ownerPhone);
+      const isSameClient = bClean && (bClean === normalizedPhone || bClean.includes(normalizedPhone) || normalizedPhone.includes(bClean));
+      return isSameClient && (b.stayStatus === 'checked_in' || b.stayStatus === 'checked_out' || b.stayStatus === 'completed');
+    });
+    const newPrefix = hasEverCheckedIn ? '' : 'NEW ';
+    const formattedDogFirst = hasRealDog && verifiedName ? `${newPrefix}${cleanDog} (${verifiedName})` : `${newPrefix}${verifiedName || cleanDog}`;
     const displayName = manualName || formattedDogFirst || rawPushName || cleanPhone;
     return {
       ...chat,
@@ -759,7 +766,7 @@ export function enrichChatWithSystemData(
     const verifiedName = matchedIntake.ownerName?.trim();
     const cleanDog = (matchedIntake.dogName || '').trim();
     const hasRealDog = Boolean(cleanDog && !cleanDog.includes('ממתין לבירור') && cleanDog !== 'כלב');
-    const formattedDogFirst = hasRealDog && verifiedName ? `${cleanDog} (${verifiedName})` : verifiedName;
+    const formattedDogFirst = hasRealDog && verifiedName ? `NEW ${cleanDog} (${verifiedName})` : `NEW ${verifiedName}`;
     const displayName = manualName || formattedDogFirst || rawPushName || cleanPhone;
     return {
       ...chat,

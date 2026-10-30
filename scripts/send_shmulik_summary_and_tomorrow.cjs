@@ -409,7 +409,8 @@ function formatTomorrowOverviewReport(
     extraActionSections = '\n\n' + actionBlocks.join('\n\n');
   }
 
-  return `📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾
+  return `🤖 *הודעת מערכת:*
+📋 *מה קורה מחר? סקירה יומית לשמוליק – הריזורט לכלב* 🐾
 📅 יום ${dayName}, ${formattedDate}
 
 🟢 *כניסות מחר (${incomingDogs.length}):*

@@ -1176,7 +1176,9 @@ export default async function handler(req, res) {
             pendingForShmulik = ` (לתשומת לבך: נותרה יתרה לתשלום ₪${total - paid})`;
           }
         }
-        replyText = `טופל ✅${pendingForShmulik}`;
+        replyText = `🤖 *הודעת מערכת:*\nטופל ✅${pendingForShmulik}`;
+      } else if (replyText && cleanPhone.includes('506336896') && !replyText.startsWith('🤖')) {
+        replyText = `🤖 *הודעת מערכת:*\n${replyText}`;
       }
       if (replyText) {
         await sendWhatsAppMessage(chatId, replyText);

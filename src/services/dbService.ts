@@ -685,6 +685,15 @@ export const saveBookingToDb = async (booking: Booking): Promise<void> => {
     throw err;
   }
 
+  // 2. When a dog is checked in for the first time (or already stayed), remove NEW prefix from phone contact -> "שם הכלב (שם הבעלים)"
+  if (
+    updatedBooking.ownerPhone &&
+    updatedBooking.dogName &&
+    (updatedBooking.stayStatus === 'checked_in' || updatedBooking.stayStatus === 'checked_out' || updatedBooking.stayStatus === 'completed')
+  ) {
+    saveOrUpdateGreenApiContact(updatedBooking.ownerPhone, updatedBooking.ownerName, updatedBooking.dogName, false).catch(() => {});
+  }
+
   // Also refresh customers list in Supabase
   try {
     const all = getAllExistingLocalBookings();
@@ -1080,9 +1089,16 @@ export const loadStoredIntakeRequests = (): IntakeRequest[] => {
  */
 export const saveIntakeRequestToDb = async (request: IntakeRequest): Promise<void> => {
   try {
-    // 1. Update local storage & sync phone contact as "שם הכלב (שם הבעלים)"
+    // 1. Update local storage & sync phone contact as "NEW שם הכלב (שם הבעלים)" (or without NEW if dog already stayed at resort)
     if (request.ownerPhone && request.dogName && !request.dogName.includes('ממתין לבירור')) {
-      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, false).catch(() => {});
+      const reqPhoneSuffix = cleanPhoneNumber(request.ownerPhone).slice(-7);
+      const localBookings = getAllExistingLocalBookings();
+      const hasStayedBefore = localBookings.some(b => {
+        if (!b.ownerPhone || b.stayStatus === 'cancelled') return false;
+        const bSuffix = cleanPhoneNumber(b.ownerPhone).slice(-7);
+        return bSuffix === reqPhoneSuffix && (b.stayStatus === 'checked_in' || b.stayStatus === 'checked_out' || b.stayStatus === 'completed');
+      });
+      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, !hasStayedBefore).catch(() => {});
     }
     const current = loadStoredIntakeRequests();
     const phoneSuffix = request.ownerPhone ? cleanPhoneNumber(request.ownerPhone).slice(-7) : '';
@@ -1183,9 +1199,16 @@ export const updateIntakeRequestStatusInDb = async (
   internalNotes?: string
 ): Promise<void> => {
   try {
-    // 1. Update local storage & sync phone contact as "שם הכלב (שם הבעלים)"
+    // 1. Update local storage & sync phone contact as "NEW שם הכלב (שם הבעלים)" (or without NEW if dog already stayed at resort)
     if (request.ownerPhone && request.dogName && !request.dogName.includes('ממתין לבירור')) {
-      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, false).catch(() => {});
+      const reqPhoneSuffix = cleanPhoneNumber(request.ownerPhone).slice(-7);
+      const localBookings = getAllExistingLocalBookings();
+      const hasStayedBefore = localBookings.some(b => {
+        if (!b.ownerPhone || b.stayStatus === 'cancelled') return false;
+        const bSuffix = cleanPhoneNumber(b.ownerPhone).slice(-7);
+        return bSuffix === reqPhoneSuffix && (b.stayStatus === 'checked_in' || b.stayStatus === 'checked_out' || b.stayStatus === 'completed');
+      });
+      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, !hasStayedBefore).catch(() => {});
     }
     const current = loadStoredIntakeRequests();
     const updated = current.map(r => {
@@ -1358,9 +1381,16 @@ export const findVoucherByCode = (code: string): DigitalVoucher | null => {
 
 export const saveVoucherToDb = async (voucher: DigitalVoucher): Promise<void> => {
   try {
-    // 1. Update local storage & sync phone contact as "שם הכלב (שם הבעלים)"
+    // 1. Update local storage & sync phone contact as "NEW שם הכלב (שם הבעלים)" (or without NEW if dog already stayed at resort)
     if (request.ownerPhone && request.dogName && !request.dogName.includes('ממתין לבירור')) {
-      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, false).catch(() => {});
+      const reqPhoneSuffix = cleanPhoneNumber(request.ownerPhone).slice(-7);
+      const localBookings = getAllExistingLocalBookings();
+      const hasStayedBefore = localBookings.some(b => {
+        if (!b.ownerPhone || b.stayStatus === 'cancelled') return false;
+        const bSuffix = cleanPhoneNumber(b.ownerPhone).slice(-7);
+        return bSuffix === reqPhoneSuffix && (b.stayStatus === 'checked_in' || b.stayStatus === 'checked_out' || b.stayStatus === 'completed');
+      });
+      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, !hasStayedBefore).catch(() => {});
     }
     const current = loadStoredVouchers();
     const updated = [voucher, ...current.filter(v => v.id !== voucher.id && v.code.toUpperCase() !== voucher.code.toUpperCase())];
@@ -1584,9 +1614,16 @@ export const findActiveDaycarePassByPhoneAsync = async (phone: string): Promise<
 
 export const saveDaycarePassToDb = async (pass: DaycarePass): Promise<void> => {
   try {
-    // 1. Update local storage & sync phone contact as "שם הכלב (שם הבעלים)"
+    // 1. Update local storage & sync phone contact as "NEW שם הכלב (שם הבעלים)" (or without NEW if dog already stayed at resort)
     if (request.ownerPhone && request.dogName && !request.dogName.includes('ממתין לבירור')) {
-      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, false).catch(() => {});
+      const reqPhoneSuffix = cleanPhoneNumber(request.ownerPhone).slice(-7);
+      const localBookings = getAllExistingLocalBookings();
+      const hasStayedBefore = localBookings.some(b => {
+        if (!b.ownerPhone || b.stayStatus === 'cancelled') return false;
+        const bSuffix = cleanPhoneNumber(b.ownerPhone).slice(-7);
+        return bSuffix === reqPhoneSuffix && (b.stayStatus === 'checked_in' || b.stayStatus === 'checked_out' || b.stayStatus === 'completed');
+      });
+      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, !hasStayedBefore).catch(() => {});
     }
     const current = loadStoredDaycarePasses();
     const updated = [pass, ...current.filter(p => p.id !== pass.id && p.passCode.toUpperCase() !== pass.passCode.toUpperCase())];

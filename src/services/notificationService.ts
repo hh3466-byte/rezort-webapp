@@ -348,8 +348,14 @@ export async function sendGreenApiDirectMessage(
 
   const chatId = `${intlPhone}@c.us`;
 
+  // If sending to Shmulik (050-6336896), prepend "🤖 *הודעת מערכת:*" so he clearly identifies it as a system message
+  let finalMessage = message;
+  if (intlPhone.endsWith('506336896') && !finalMessage.startsWith('🤖 *הודעת מערכת:*')) {
+    finalMessage = `🤖 *הודעת מערכת:*\n${finalMessage}`;
+  }
+
   // Anti-duplicate protection: Ignore identical duplicate sends within 45 seconds
-  if (isRecentDuplicate(chatId, message)) {
+  if (isRecentDuplicate(chatId, finalMessage)) {
     console.warn(`[Anti-Flood] Blocked duplicate identical message to ${chatId}`);
     return { success: true };
   }
@@ -389,7 +395,7 @@ export async function sendGreenApiDirectMessage(
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, message }),
+        body: JSON.stringify({ chatId, message: finalMessage }),
         signal: controller.signal
       });
       clearTimeout(timeoutId);
@@ -583,14 +589,14 @@ export async function saveOrUpdateGreenApiContact(
   }
   const chatId = `${intlPhone}@c.us`;
 
-  const cleanOwner = (ownerName || '').replace(/^(\[חדש\]|🆕)\s*/, '').trim();
-  const rawDog = (dogName || '').replace(/^[()]+|[()]+$/g, '').trim();
+  const cleanOwner = (ownerName || '').replace(/^(NEW|\[חדש\]|🆕)\s*/i, '').trim();
+  const rawDog = (dogName || '').replace(/^(NEW|\[חדש\]|🆕)\s*/i, '').replace(/^[()]+|[()]+$/g, '').trim();
   const hasRealDogName = Boolean(rawDog && !rawDog.includes('ממתין לבירור') && rawDog !== 'כלב');
 
-  // Format: Once dogName is extracted from the form, always file as "שם הכלב (שם הבעלים)"
+  // Format: "NEW שם הכלב (שם הבעלים)" for new customers, and "שם הכלב (שם הבעלים)" once checked in for the first time
   const firstName = hasRealDogName
-    ? rawDog
-    : (isNew ? `[חדש] ${cleanOwner}` : cleanOwner);
+    ? (isNew ? `NEW ${rawDog}` : rawDog)
+    : (isNew ? `NEW ${cleanOwner}` : cleanOwner);
   const lastName = hasRealDogName && cleanOwner ? `(${cleanOwner})` : '';
 
   const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '7107';

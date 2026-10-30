@@ -167,7 +167,7 @@ async function updateGreenApiContact(chatId, fullName) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chatId,
-        firstName: `[חדש] ${fullName || ''}`.trim(),
+        firstName: `NEW ${fullName || ''}`.trim(),
         lastName: '',
         saveInAddressbook: true
       }),
