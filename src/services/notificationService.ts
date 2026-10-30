@@ -587,9 +587,9 @@ export async function saveOrUpdateGreenApiContact(
   const rawDog = (dogName || '').replace(/^[()]+|[()]+$/g, '').trim();
   const hasRealDogName = Boolean(rawDog && !rawDog.includes('ממתין לבירור') && rawDog !== 'כלב');
 
-  // Format: "שם הכלב (שם הבעלים)" (or "[חדש] שם הכלב (שם הבעלים)" for new intake)
+  // Format: Once dogName is extracted from the form, always file as "שם הכלב (שם הבעלים)"
   const firstName = hasRealDogName
-    ? (isNew ? `[חדש] ${rawDog}` : rawDog)
+    ? rawDog
     : (isNew ? `[חדש] ${cleanOwner}` : cleanOwner);
   const lastName = hasRealDogName && cleanOwner ? `(${cleanOwner})` : '';
 

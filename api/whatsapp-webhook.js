@@ -1165,9 +1165,18 @@ export default async function handler(req, res) {
 
       console.log('--- Manager AI Command Triggered ---', { senderPhone: cleanPhone, cleanCommand });
       let replyText = await handleManagerAICommand(chatId, cleanCommand || trimmed || 'שלום', incomingFileUrl);
-      // Rule 4: For Shmulik (050-6336896), keep action/update confirmations concise ("טופל ✅")
+      // Rule 4: For Shmulik (050-6336896), keep action/update confirmations concise ("טופל ✅"), adding a brief note only if Shmulik still needs to handle something
       if (replyText && cleanPhone.includes('506336896') && (replyText.includes('הפנייה טופלה ועודכנה') || replyText.includes('סטטוס השהייה עודכן'))) {
-        replyText = 'טופל ✅';
+        const payMatch = replyText.match(/סטטוס תשלום:\*?\s*₪(\d+)\s*מתוך\s*₪(\d+)/);
+        let pendingForShmulik = '';
+        if (payMatch) {
+          const paid = parseInt(payMatch[1], 10);
+          const total = parseInt(payMatch[2], 10);
+          if (total > paid) {
+            pendingForShmulik = ` (לתשומת לבך: נותרה יתרה לתשלום ₪${total - paid})`;
+          }
+        }
+        replyText = `טופל ✅${pendingForShmulik}`;
       }
       if (replyText) {
         await sendWhatsAppMessage(chatId, replyText);

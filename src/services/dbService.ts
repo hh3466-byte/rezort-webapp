@@ -4,6 +4,7 @@ import { initialBookings, defaultSettings } from '../data/initialData';
 import { extractCustomers } from '../utils/storage';
 import { sanitizePhone, cleanPhoneNumber } from '../utils/whatsappUtils';
 import { hasActiveBookingForIntake, isIntakeRequestExpired } from '../utils/intakeUtils';
+import { saveOrUpdateGreenApiContact } from './notificationService';
 
 const BOOKINGS_TABLE = 'bookings';
 const SETTINGS_TABLE = 'settings';
@@ -1079,7 +1080,10 @@ export const loadStoredIntakeRequests = (): IntakeRequest[] => {
  */
 export const saveIntakeRequestToDb = async (request: IntakeRequest): Promise<void> => {
   try {
-    // 1. Update local storage
+    // 1. Update local storage & sync phone contact as "שם הכלב (שם הבעלים)"
+    if (request.ownerPhone && request.dogName && !request.dogName.includes('ממתין לבירור')) {
+      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, false).catch(() => {});
+    }
     const current = loadStoredIntakeRequests();
     const phoneSuffix = request.ownerPhone ? cleanPhoneNumber(request.ownerPhone).slice(-7) : '';
     const updated = [
@@ -1164,6 +1168,9 @@ export const saveIntakeRequestToDb = async (request: IntakeRequest): Promise<voi
     }
   } catch (e) {
     console.warn('saveIntakeRequestToDb error:', e);
+    if (request.ownerPhone && request.dogName && !request.dogName.includes('ממתין לבירור')) {
+      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, false).catch(() => {});
+    }
   }
 };
 
@@ -1176,7 +1183,10 @@ export const updateIntakeRequestStatusInDb = async (
   internalNotes?: string
 ): Promise<void> => {
   try {
-    // 1. Update local storage
+    // 1. Update local storage & sync phone contact as "שם הכלב (שם הבעלים)"
+    if (request.ownerPhone && request.dogName && !request.dogName.includes('ממתין לבירור')) {
+      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, false).catch(() => {});
+    }
     const current = loadStoredIntakeRequests();
     const updated = current.map(r => {
       if (r.id === id) {
@@ -1348,7 +1358,10 @@ export const findVoucherByCode = (code: string): DigitalVoucher | null => {
 
 export const saveVoucherToDb = async (voucher: DigitalVoucher): Promise<void> => {
   try {
-    // 1. Update local storage
+    // 1. Update local storage & sync phone contact as "שם הכלב (שם הבעלים)"
+    if (request.ownerPhone && request.dogName && !request.dogName.includes('ממתין לבירור')) {
+      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, false).catch(() => {});
+    }
     const current = loadStoredVouchers();
     const updated = [voucher, ...current.filter(v => v.id !== voucher.id && v.code.toUpperCase() !== voucher.code.toUpperCase())];
     localStorage.setItem(LOCAL_VOUCHERS_KEY, JSON.stringify(updated));
@@ -1571,7 +1584,10 @@ export const findActiveDaycarePassByPhoneAsync = async (phone: string): Promise<
 
 export const saveDaycarePassToDb = async (pass: DaycarePass): Promise<void> => {
   try {
-    // 1. Update local storage
+    // 1. Update local storage & sync phone contact as "שם הכלב (שם הבעלים)"
+    if (request.ownerPhone && request.dogName && !request.dogName.includes('ממתין לבירור')) {
+      saveOrUpdateGreenApiContact(request.ownerPhone, request.ownerName, request.dogName, false).catch(() => {});
+    }
     const current = loadStoredDaycarePasses();
     const updated = [pass, ...current.filter(p => p.id !== pass.id && p.passCode.toUpperCase() !== pass.passCode.toUpperCase())];
     localStorage.setItem(LOCAL_DAYCARE_PASSES_KEY, JSON.stringify(updated));
