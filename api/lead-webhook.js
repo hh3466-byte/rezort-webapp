@@ -78,11 +78,26 @@ function getIntakeFormMessage(phone, firstName, fullName) {
   const greeting = firstName ? `שלום ${firstName}! ` : 'שלום! ';
 
   return `${greeting}תודה שפניתם לריזורט לכלב! 🐾🐶
-כדי שנוכל לבדוק זמינות, להתאים את השירות המדויק לכלבכם ולחסוך לכם זמן יקר, אנא מלאו שאלון קליטה קצר (דקה אחת בלבד):
+אנחנו נמצאים כרגע במתחם עם הכלבים. כדי שהפנייה שלכם תועבר ישירות לשמוליק לבדיקת זמינות בתאריכים שלכם ולשיחת התאמה, אנא מלאו עכשיו את שאלון הקליטה הקצר (פחות מדקה):
 👉 \u200E${link}
 
-⏰ *שימו לב:* אנחנו נמצאים כרגע במתחם ומטפלים במסירות בכלבים, ולא נשכח אתכם! 🐾
-מיד שנתפנה נעבור על פרטי השאלון ונחזור אליכם לשיחה בנוגע לתשובות לתיאום סופי. 🐕🤍`;
+⏰ *חשוב:* מיד עם שליחת השאלון הפרטים יופיעו אצל שמוליק ונחזור אליכם טלפונית לתיאום סופי! 🐕🤍
+שמוליק וצוות הריזורט לכלב`;
+}
+
+function getQuestionnaireReminderMessage(phone, firstName, fullName) {
+  const cleanPhone = cleanPhoneNumber(phone);
+  const nameParam = fullName ? `&name=${encodeURIComponent(fullName.trim())}` : '';
+  const phoneParam = cleanPhone ? `&phone=${encodeURIComponent(cleanPhone)}` : '';
+  const link = `https://rezort-webapp.vercel.app/?request=true${phoneParam}${nameParam}`;
+  const greeting = firstName ? `היי ${firstName}! ` : 'היי! ';
+
+  return `${greeting}ראינו שפנית אלינו בפייסבוק/אינסטגרם לגבי הריזורט לכלב, אך טרם התקבל שאלון ההתאמה הקצר שלך 🐾🐶
+כדי שהבקשה תועבר לשמוליק לבדיקת מקום פנוי ולשיחה אישית, נשמח שתשלים/י אותו כאן (לוקח פחות מדקה):
+👉 \u200E${link}
+
+תודה רבה,
+שמוליק וצוות הריזורט לכלב 🐕🤍`;
 }
 
 function getClosedHoursNewLeadMessage(phone, firstName, fullName) {
@@ -309,6 +324,33 @@ export async function syncGoogleSheetLeads(lookbackDays = 5) {
         if (exChanged) {
           curIntakes[existingIdx] = { ...ex };
           modified = true;
+        }
+
+        // Rule 6: One-time gentle follow-up reminder during business hours (after 3h-24h) if lead hasn't filled out the questionnaire yet!
+        const ageMs = Date.now() - createdMs;
+        const isUnfilled = String(ex.dogName || '').includes('ממתין לבירור');
+        if (isUnfilled && ex.status === 'pending' && !ex.questionnaireReminderSentAt && ageMs >= 3 * 3600 * 1000 && ageMs <= 24 * 3600 * 1000) {
+          const now = new Date();
+          const ilDateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+          const ilTimeStr = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' });
+          const [hh, mm] = ilTimeStr.split(':').map(Number);
+          const mins = hh * 60 + mm;
+          const ilDay = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' })).getDay();
+          const isOpenHours = (ilDay >= 0 && ilDay <= 4 && mins >= 9 * 60 && mins <= 19 * 60) || (ilDay === 5 && mins >= 9 * 60 && mins <= 13 * 60 + 30);
+          const isHoliday = await checkIsShabbatOrHoliday(ilDateStr);
+          if (isOpenHours && !isHoliday) {
+            const fullName = ex.ownerName || rawName || '';
+            const firstName = fullName.split(/\s+/)[0] || '';
+            const chatId = `${getIntlPhone(cleanPhone)}@c.us`;
+            const remMsg = getQuestionnaireReminderMessage(cleanPhone, firstName, fullName);
+            const remRes = await sendWhatsAppMessage(chatId, remMsg);
+            curIntakes[existingIdx] = {
+              ...curIntakes[existingIdx],
+              questionnaireReminderSentAt: new Date().toISOString(),
+              internalNotes: `${curIntakes[existingIdx].internalNotes || ''} [נשלחה תזכורת אוטומטית למילוי שאלון: ${remRes.idMessage || 'נשלח'}]`.trim()
+            };
+            modified = true;
+          }
         }
         continue;
       }

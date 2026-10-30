@@ -584,11 +584,14 @@ export async function saveOrUpdateGreenApiContact(
   const chatId = `${intlPhone}@c.us`;
 
   const cleanOwner = (ownerName || '').replace(/^(\[חדש\]|🆕)\s*/, '').trim();
-  const cleanDog = (dogName || '').replace(/^[()]+|[()]+$/g, '').trim();
+  const rawDog = (dogName || '').replace(/^[()]+|[()]+$/g, '').trim();
+  const hasRealDogName = Boolean(rawDog && !rawDog.includes('ממתין לבירור') && rawDog !== 'כלב');
 
-  // Prefix [חדש] for new leads, clean name for confirmed/returning
-  const firstName = isNew ? `[חדש] ${cleanOwner}` : cleanOwner;
-  const lastName = cleanDog ? `(${cleanDog})` : '';
+  // Format: "שם הכלב (שם הבעלים)" (or "[חדש] שם הכלב (שם הבעלים)" for new intake)
+  const firstName = hasRealDogName
+    ? (isNew ? `[חדש] ${rawDog}` : rawDog)
+    : (isNew ? `[חדש] ${cleanOwner}` : cleanOwner);
+  const lastName = hasRealDogName && cleanOwner ? `(${cleanOwner})` : '';
 
   const clusterPrefix = cleanId.length >= 4 ? cleanId.slice(0, 4) : '7107';
   const addUrl = `https://${clusterPrefix}.api.greenapi.com/waInstance${cleanId}/addContact/${cleanTok}`;

@@ -189,12 +189,22 @@ export const isIntakeRequestExpired = (r: IntakeRequest, bookings: Booking[] = [
 };
 
 /**
- * Checks if notes indicate Shmulik marked this request as cancelled / not relevant / removed
+ * Checks if notes indicate Shmulik marked this request as cancelled / not relevant / removed / archived
  */
 export const isIntakeMarkedIrrelevant = (r: IntakeRequest): boolean => {
   if (!r.internalNotes) return false;
   const n = r.internalNotes;
-  return n.includes('לא רלוונטי') || n.includes('הוסר מהרשימה') || n.includes('בוטל') || n.includes('הסר');
+  return n.includes('לא רלוונטי') || n.includes('הוסר מהרשימה') || n.includes('בוטל') || n.includes('הסר') || n.includes('הועבר לארכיון');
+};
+
+/**
+ * Checks if this record is a raw Facebook/Instagram/WhatsApp lead where the customer
+ * has NOT yet filled out the intake questionnaire (dogName is still placeholder).
+ * Rule: Only completed questionnaires (or explicit callbacks) enter Shmulik's 'new' queue!
+ */
+export const isUnfilledLeadPlaceholder = (r: IntakeRequest): boolean => {
+  const dog = (r.dogName || '').trim();
+  return dog.includes('ממתין לבירור') || (r.id?.startsWith('lead_') && (!dog || dog === 'כלב'));
 };
 
 /**
@@ -211,10 +221,11 @@ export const hasManualStaffNotes = (internalNotes?: string): boolean => {
     .replace(/פנייה ראשונית בוואטסאפ[^\n|]*/g, '')
     .replace(/\[📢 ליד מקמפיין[^\]]*\]/g, '')
     .replace(/\[💬 פנייה חדשה מוואטסאפ[^\]]*\]/g, '')
-    .replace(/\[תזכורת מעקב[^\]]*\]/g, '')
     .replace(/\[הועבר לארכיון[^\]]*\]/g, '')
+    .replace(/\[שוחזר מהארכיון[^\]]*\]/g, '')
     .replace(/\[מזהה הודעה:[^\]]*\]/g, '')
     .replace(/\[נשלח שאלון[^\]]*\]/g, '')
+    .replace(/\[נשלחה תזכורת אוטומטית[^\]]*\]/g, '')
     .replace(/\[נשלח קישור לתשלום Grow\]/g, '')
     .replace(/תיאום הגעה מתוך כרטיסייה[^\n|]*/g, '')
     .replace(/שריון מתוך כרטיסייה[^\n|]*/g, '')
@@ -232,24 +243,25 @@ export const hasManualStaffNotes = (internalNotes?: string): boolean => {
 export const isUnansweredIntakeRequest = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
   if (r.status === 'approved' || hasActiveBookingForIntake(r, bookings)) return false;
   if (r.status === 'rejected') return false;
-  return r.status === 'abandoned' || r.status === 'archived';
+  return r.status === 'abandoned' || r.status === 'archived' || isIntakeMarkedIrrelevant(r);
 };
 
 /**
  * Is this a brand new intake questionnaire waiting for initial review by Shmulik?
  * Remains in 'new' until Shmulik adds manual notes, changes status to in_progress, sends payment, or archives/approves it.
+ * Unfilled Meta/WhatsApp leads that haven't completed the questionnaire do NOT appear here until filled!
  */
 export const isIntakeRequestNew = (r: IntakeRequest, bookings: Booking[] = []): boolean => {
   if (r.status === 'abandoned' || r.status === 'archived' || r.status === 'rejected') return false;
   if ((r.status as string) === 'in_progress' || r.status === 'payment_requested') return false;
   if (isIntakeMarkedIrrelevant(r)) return false;
   if (isIntakeRequestExpired(r, bookings)) return false;
+  // Rule 1: The moment Shmulik writes/marks anything in internalNotes, it moves out of 'new' into 'in_progress'!
+  if (hasManualStaffNotes(r.internalNotes)) return false;
+  // Rule 6: Unfilled leads (where customer hasn't filled out the questionnaire yet) wait until completed!
+  if (isUnfilledLeadPlaceholder(r)) return false;
   const effStatus = getEffectiveIntakeStatus(r, bookings);
-  // Pass bookings that are pending are always considered brand new for Shmulik to approve!
-  if (effStatus === 'pending' && (r.daycarePassCode || (r.notes && (r.notes.includes('כרטיסיי') || r.notes.includes('בנק'))))) {
-    return true;
-  }
-  return effStatus === 'pending' && !hasManualStaffNotes(r.internalNotes);
+  return effStatus === 'pending';
 };
 
 /**
@@ -263,13 +275,16 @@ export const isIntakeRequestInTreatment = (r: IntakeRequest, bookings: Booking[]
   const effStatus = getEffectiveIntakeStatus(r, bookings);
   if (effStatus === 'approved' || effStatus === 'abandoned') return false;
 
-  // 1. Explicit in_progress or payment_requested status (active only if not expired)
-  if ((effStatus as string) === 'in_progress' || effStatus === 'payment_requested' || (r.status as string) === 'in_progress' || r.status === 'payment_requested') {
+  // 1. Any request where Shmulik wrote/marked something in the notes box (except archive/reject) is in treatment!
+  if (hasManualStaffNotes(r.internalNotes)) {
     return true;
   }
 
-  // 2. Pending request that has human staff notes from Shmulik
-  if (effStatus === 'pending' && hasManualStaffNotes(r.internalNotes)) {
+  // Unfilled lead placeholders without manual notes from Shmulik do not clutter 'in_progress'
+  if (isUnfilledLeadPlaceholder(r)) return false;
+
+  // 2. Explicit in_progress or payment_requested status (active only if not expired)
+  if ((effStatus as string) === 'in_progress' || effStatus === 'payment_requested' || (r.status as string) === 'in_progress' || r.status === 'payment_requested') {
     return true;
   }
 

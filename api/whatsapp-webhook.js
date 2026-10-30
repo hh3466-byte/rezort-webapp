@@ -109,17 +109,49 @@ async function registerIncomingLeadToIntakeRequests(cleanPhone, senderName, inco
     const curIntakes = Array.isArray(curData.intakeRequests) ? curData.intakeRequests : [];
 
     const phoneNorm = cleanPhone.replace(/\D/g, '').slice(-7);
-    if (!phoneNorm || phoneNorm.length < 6) return;
-
-    // Check if an intake request or lead for this phone already exists
-    const exists = curIntakes.some(r => (r.ownerPhone || '').replace(/\D/g, '').includes(phoneNorm));
-    if (exists) {
-      return;
-    }
+    if (!phoneNorm || phoneNorm.length < 6) return { isCompletedIntake: false, reopenedFromArchive: false };
 
     const nowIso = new Date().toISOString();
     const in3Days = new Date(Date.now() + 3 * 86400000).toISOString().substring(0, 10);
     const in10Days = new Date(Date.now() + 10 * 86400000).toISOString().substring(0, 10);
+
+    // Check if an intake request or lead for this phone already exists
+    const existingIdx = curIntakes.findIndex(r => (r.ownerPhone || '').replace(/\D/g, '').includes(phoneNorm));
+    if (existingIdx !== -1) {
+      const ex = curIntakes[existingIdx];
+      const intNotes = String(ex.internalNotes || '');
+      const isMarkedIrrelevant = intNotes.includes('לא רלוונטי') || intNotes.includes('הוסר מהרשימה') || intNotes.includes('בוטל') || intNotes.includes('הסר') || intNotes.includes('הועבר לארכיון');
+      const isArchived = ex.status === 'abandoned' || ex.status === 'archived' || ex.status === 'rejected' || isMarkedIrrelevant;
+
+      // Rule 2: If a customer who was archived messages again, pull them out of the archive and move to 'new' (שאלונים לבדיקה)!
+      if (isArchived) {
+        const cleanDog = (ex.dogName || '').includes('ממתין לבירור')
+          ? `כלב (${ex.ownerName || senderName || 'פנה שוב'})`
+          : (ex.dogName || 'כלב');
+        curIntakes[existingIdx] = {
+          ...ex,
+          status: 'pending',
+          dogName: cleanDog,
+          startDate: ex.startDate && ex.startDate >= nowIso.substring(0, 10) ? ex.startDate : in3Days,
+          endDate: ex.endDate && ex.endDate >= in3Days ? ex.endDate : in10Days,
+          notes: `${ex.notes ? ex.notes + ' | ' : ''}[💬 פנה מחדש בוואטסאפ: ${(incomingText || '').slice(0, 120)}]`,
+          internalNotes: '',
+          createdAt: nowIso
+        };
+        await supabase
+          .from('settings')
+          .update({
+            data: { ...curData, intakeRequests: curIntakes },
+            updated_at: nowIso
+          })
+          .eq('id', 'resort_config');
+        console.log(`♻️ Reopened archived intake ${ex.id} (${ex.ownerName}) to 'new' (שאלונים לבדיקה) on new incoming message`);
+        return { isCompletedIntake: !(ex.dogName || '').includes('ממתין לבירור'), reopenedFromArchive: true };
+      }
+
+      const isCompleted = !(ex.dogName || '').includes('ממתין לבירור') && !String(ex.id || '').startsWith('lead_');
+      return { isCompletedIntake: isCompleted, reopenedFromArchive: false };
+    }
 
     const fullNameMatch = incomingText.match(/Full name:\s*([^\n\r]+)/i);
     const extractedName = fullNameMatch ? fullNameMatch[1].replace(/Phone number:.*/i, '').trim() : '';
@@ -145,7 +177,7 @@ async function registerIncomingLeadToIntakeRequests(cleanPhone, senderName, inco
         ? `[📢 ליד ממודעת פייסבוק/אינסטגרם - ${isTrainingLead ? 'אילוף' : 'פנסיון'}] | ${incomingText.slice(0, 200)}`
         : `[💬 פנייה חדשה מוואטסאפ] | ${incomingText.slice(0, 200)}`,
       internalNotes: isMetaLead
-        ? `הלקוח השלים טופס מודעה ראשוני בפייסבוק/אינסטגרם. נשלחה הודעה עם קישור לשאלון. יש ליצור קשר טלפוני לתיאום.`
+        ? `הלקוח השלים טופס מודעה ראשוני בפייסבוק/אינסטגרם. נשלחה הודעה עם קישור לשאלון.`
         : `פנייה ראשונית בוואטסאפ. נשלחה הודעה עם קישור לשאלון.`,
       termsAccepted: false
     };
@@ -161,8 +193,10 @@ async function registerIncomingLeadToIntakeRequests(cleanPhone, senderName, inco
       .eq('id', 'resort_config');
 
     console.log(`✅ Registered new lead ${leadId} (${displayName} - ${cleanPhone}) to intakeRequests`);
+    return { isCompletedIntake: false, reopenedFromArchive: false };
   } catch (err) {
     console.warn('Error in registerIncomingLeadToIntakeRequests:', err);
+    return { isCompletedIntake: false, reopenedFromArchive: false };
   }
 }
 
@@ -1130,7 +1164,11 @@ export default async function handler(req, res) {
         .trim();
 
       console.log('--- Manager AI Command Triggered ---', { senderPhone: cleanPhone, cleanCommand });
-      const replyText = await handleManagerAICommand(chatId, cleanCommand || trimmed || 'שלום', incomingFileUrl);
+      let replyText = await handleManagerAICommand(chatId, cleanCommand || trimmed || 'שלום', incomingFileUrl);
+      // Rule 4: For Shmulik (050-6336896), keep action/update confirmations concise ("טופל ✅")
+      if (replyText && cleanPhone.includes('506336896') && (replyText.includes('הפנייה טופלה ועודכנה') || replyText.includes('סטטוס השהייה עודכן'))) {
+        replyText = 'טופל ✅';
+      }
       if (replyText) {
         await sendWhatsAppMessage(chatId, replyText);
       }
@@ -1164,7 +1202,8 @@ export default async function handler(req, res) {
   const isWeekdayNight = (israelDay >= 0 && israelDay <= 4) && (timeInMinutes >= 19 * 60 + 30 || timeInMinutes < 8 * 60 + 30);
   const isClosedHours = isWeekendClosed || isHolidayClosed || isWeekdayNight;
 
-  // 6. Check client status (Pass holder / Existing client vs New lead)
+  // 6. Check client status (Pass holder / Existing client vs New lead) and reopen if archived!
+  const leadReg = await registerIncomingLeadToIntakeRequests(cleanPhone, senderName, incomingText);
   const activePass = await getActivePassByPhone(cleanPhone);
   const isExisting = activePass ? true : await isExistingClient(phoneSuffix);
 
@@ -1201,21 +1240,24 @@ ${activePass.validUntil ? `⏳ *תוקף הכרטיסייה:* עד ${formatDateI
     }
   }
 
+  // Rule 5: Check if this is clearly an interested new lead asking about our services without a completed questionnaire
+  const isInterestedLeadInquiry = !isExisting && !leadReg.isCompletedIntake && /(?:פנסיון|אילוף|כלב|גורה?|מחיר|כמה עולה|זמינות|מקום|פרטים|שלום|היי|בוקר טוב|צהריים טובים|ערב טוב|אשמח|רוצה|מעוניי)/i.test(incomingText);
+
   // 7. Weekend / Holiday Closed Hours: Send EXACTLY ONE notice per 24 hours
   if (isClosedHours) {
     const canSend = await canSendAutoReplyToClient(cleanPhone);
-    if (!canSend) {
+    if (!canSend && !isInterestedLeadInquiry) {
       console.log('--- Cooldown active in closed hours (Silent) ---', { cleanPhone, isExisting });
       return res.status(200).json({ ok: true, reason: 'closed_hours_cooldown_active', cleanPhone });
     }
 
     if (isExisting) {
-      console.log('--- Sending single closed hours notice to existing client ---', { cleanPhone });
-      await sendWhatsAppMessage(chatId, CLOSED_WEEKEND_HOLIDAY_MSG);
-    } else {
+      if (canSend) {
+        console.log('--- Sending single closed hours notice to existing client ---', { cleanPhone });
+        await sendWhatsAppMessage(chatId, CLOSED_WEEKEND_HOLIDAY_MSG);
+      }
+    } else if (canSend) {
       console.log('--- Sending single closed hours notice + intake link to new lead ---', { cleanPhone });
-      // Register lead to intakeRequests so it appears in CRM immediately
-      await registerIncomingLeadToIntakeRequests(cleanPhone, senderName, incomingText);
       await sendWhatsAppMessage(chatId, getClosedHoursNewLeadMessage(cleanPhone, senderName));
     }
 
@@ -1229,7 +1271,7 @@ ${activePass.validUntil ? `⏳ *תוקף הכרטיסייה:* עד ${formatDateI
     return res.status(200).json({ ok: true, handled: 'existing_client_open_hours_silent', phoneSuffix });
   }
 
-  // New lead in business hours: Send EXACTLY ONE intake questionnaire per 24h
+  // New lead in business hours: Send intake questionnaire politely
   const canSend = await canSendAutoReplyToClient(cleanPhone);
   if (!canSend) {
     console.log('--- Cooldown active for lead in business hours (Silent) ---', { cleanPhone });
@@ -1237,8 +1279,6 @@ ${activePass.validUntil ? `⏳ *תוקף הכרטיסייה:* עד ${formatDateI
   }
 
   console.log('--- Sending intake form to new client lead in business hours ---', { cleanPhone, senderName });
-  // Register lead to intakeRequests so it appears in CRM immediately
-  await registerIncomingLeadToIntakeRequests(cleanPhone, senderName, incomingText);
   await sendWhatsAppMessage(chatId, getIntakeFormMessage(cleanPhone, senderName));
 
   return res.status(200).json({

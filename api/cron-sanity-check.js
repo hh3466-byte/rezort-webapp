@@ -519,9 +519,39 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
     }
   });
 
-  // Open intake requests (exclude abandoned, rejected, expired past dates, old questionnaires > 7 days, or customers already booked in calendar)
+  // Open intake requests (exclude abandoned, rejected, in_progress, unfilled lead placeholders, expired past dates, old questionnaires > 7 days, or customers already booked in calendar)
   (intakes || []).filter(r => {
     if (r.status !== 'pending') return false;
+    const dogName = String(r.dogName || r.dog_name || '').trim();
+    // Rule 6: Unfilled Facebook/Instagram leads (where the customer hasn't filled out the questionnaire yet) do not go to Shmulik or Red Lights until completed!
+    if (dogName.includes('ממתין לבירור') || (String(r.id || '').startsWith('lead_') && (!dogName || dogName === 'כלב'))) return false;
+
+    // Rule 1: If Shmulik already wrote a note in internalNotes, it is in treatment (in_progress) or archived, not a pending unreviewed questionnaire!
+    const intNotes = String(r.internalNotes || r.internal_notes || '');
+    if (intNotes.includes('לא רלוונטי') || intNotes.includes('הוסר מהרשימה') || intNotes.includes('בוטל') || intNotes.includes('הסר') || intNotes.includes('הועבר לארכיון')) return false;
+    const cleanedManual = intNotes
+      .replace(/הליד נקלט אוטומטית[^\n|]*/g, '')
+      .replace(/הליד נקלט מקמפיין[^\n|]*/g, '')
+      .replace(/הלקוח השלים טופס מודעה[^\n|]*/g, '')
+      .replace(/ממתין לשיחה של שמוליק\.?/g, '')
+      .replace(/פנייה ראשונית בוואטסאפ[^\n|]*/g, '')
+      .replace(/\[📢 ליד מקמפיין[^\]]*\]/g, '')
+      .replace(/\[💬 פנייה חדשה מוואטסאפ[^\]]*\]/g, '')
+      .replace(/\[הועבר לארכיון[^\]]*\]/g, '')
+      .replace(/\[שוחזר מהארכיון[^\]]*\]/g, '')
+      .replace(/\[מזהה הודעה:[^\]]*\]/g, '')
+      .replace(/\[נשלח שאלון[^\]]*\]/g, '')
+      .replace(/\[נשלחה תזכורת אוטומטית[^\]]*\]/g, '')
+      .replace(/\[נשלח קישור לתשלום Grow\]/g, '')
+      .replace(/תיאום הגעה מתוך כרטיסייה[^\n|]*/g, '')
+      .replace(/שריון מתוך כרטיסייה[^\n|]*/g, '')
+      .replace(/בקשת שריון[^\n|]*/g, '')
+      .replace(/\[🎟️[^\]]*\]/g, '')
+      .replace(/כרטיסייה[^\n|]*/g, '')
+      .replace(/[|\s\-\:\.\,]+/g, '')
+      .trim();
+    if (cleanedManual.length > 0) return false;
+
     const sDate = r.startDate || r.start_date || '';
     const eDate = r.endDate || r.end_date || '';
     if ((eDate && eDate < todayStr) || (sDate && sDate < todayStr)) return false;

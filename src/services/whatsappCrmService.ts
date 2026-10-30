@@ -732,13 +732,16 @@ export function enrichChatWithSystemData(
   });
 
   if (matchedBooking) {
-    const verifiedName = manualName || matchedBooking.ownerName?.trim();
-    const displayName = verifiedName || rawPushName || cleanPhone;
+    const verifiedName = matchedBooking.ownerName?.trim();
+    const cleanDog = (matchedBooking.dogName || '').trim();
+    const hasRealDog = Boolean(cleanDog && !cleanDog.includes('ממתין לבירור') && cleanDog !== 'כלב');
+    const formattedDogFirst = hasRealDog && verifiedName ? `${cleanDog} (${verifiedName})` : (verifiedName || cleanDog);
+    const displayName = manualName || formattedDogFirst || rawPushName || cleanPhone;
     return {
       ...chat,
       name: displayName,
       whatsappPushName: rawPushName && rawPushName !== displayName ? rawPushName : undefined,
-      isCustomName: Boolean(manualName || (verifiedName && verifiedName !== rawPushName)),
+      isCustomName: Boolean(manualName || (formattedDogFirst && formattedDogFirst !== rawPushName)),
       cleanPhone,
       classification: 'customer_with_booking',
       matchedDogName: matchedBooking.dogName,
@@ -753,13 +756,16 @@ export function enrichChatWithSystemData(
   });
 
   if (matchedIntake) {
-    const verifiedName = manualName || matchedIntake.ownerName?.trim();
-    const displayName = verifiedName || rawPushName || cleanPhone;
+    const verifiedName = matchedIntake.ownerName?.trim();
+    const cleanDog = (matchedIntake.dogName || '').trim();
+    const hasRealDog = Boolean(cleanDog && !cleanDog.includes('ממתין לבירור') && cleanDog !== 'כלב');
+    const formattedDogFirst = hasRealDog && verifiedName ? `${cleanDog} (${verifiedName})` : verifiedName;
+    const displayName = manualName || formattedDogFirst || rawPushName || cleanPhone;
     return {
       ...chat,
       name: displayName,
       whatsappPushName: rawPushName && rawPushName !== displayName ? rawPushName : undefined,
-      isCustomName: Boolean(manualName || (verifiedName && verifiedName !== rawPushName)),
+      isCustomName: Boolean(manualName || (formattedDogFirst && formattedDogFirst !== rawPushName)),
       cleanPhone,
       classification: 'intake_submitted',
       matchedDogName: matchedIntake.dogName,

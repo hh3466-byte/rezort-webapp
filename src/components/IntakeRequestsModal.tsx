@@ -500,11 +500,15 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   const getRequestAgeHours = (r: IntakeRequest) => getIntakeRequestAgeHours(r);
   const isUnansweredRequest = (r: IntakeRequest) => isUnansweredIntakeRequest(r, bookings);
   const isReqNew = (r: IntakeRequest) => {
-    if (optimisticStatuses[r.id] === 'abandoned') return false;
+    const opt = optimisticStatuses[r.id];
+    if (opt === 'abandoned' || opt === 'rejected' || opt === 'in_progress' || opt === 'payment_requested') return false;
+    if (opt === 'pending') return true;
     return isIntakeRequestNew(r, bookings);
   };
   const isReqInTreatment = (r: IntakeRequest) => {
-    if (optimisticStatuses[r.id] === 'abandoned') return false;
+    const opt = optimisticStatuses[r.id];
+    if (opt === 'abandoned' || opt === 'rejected' || opt === 'pending') return false;
+    if (opt === 'in_progress' || opt === 'payment_requested') return true;
     return isIntakeRequestInTreatment(r, bookings);
   };
 
@@ -552,6 +556,56 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
     if (filter !== 'abandoned' && filter !== 'all' && effectiveStatus === 'abandoned') return false;
     return true;
   });
+
+  const handleRestoreFromArchiveToNew = (req: IntakeRequest) => {
+    setOptimisticStatuses(prev => ({ ...prev, [req.id]: 'pending' }));
+    setNotesInputs(prev => ({ ...prev, [req.id]: '' }));
+
+    const todayIso = new Date().toISOString().substring(0, 10);
+    const in3Days = addDays(todayIso, 3);
+    const in7Days = addDays(todayIso, 7);
+    const validStart = req.startDate && req.startDate >= todayIso ? req.startDate : in3Days;
+    const validEnd = req.endDate && req.endDate >= validStart ? req.endDate : in7Days;
+    const cleanDogName = (req.dogName || '').includes('ממתין לבירור')
+      ? `כלב (${req.ownerName || 'לבדיקה'})`
+      : (req.dogName || 'כלב');
+
+    const updated: IntakeRequest = {
+      ...req,
+      status: 'pending',
+      dogName: cleanDogName,
+      startDate: validStart,
+      endDate: validEnd,
+      internalNotes: '',
+      createdAt: new Date().toISOString()
+    };
+
+    if (onSaveRequest) {
+      Promise.resolve(onSaveRequest(updated)).catch(err => {
+        console.warn('Error restoring intake to new:', err);
+      });
+    } else {
+      Promise.resolve(onUpdateStatus(req.id, 'pending', '')).catch(err => {
+        console.warn('Error restoring intake to new:', err);
+      });
+    }
+  };
+
+  // Rule 2: When Shmulik searches for an archived customer in the search bar, automatically pull them out of archive into 'new' (שאלונים לבדיקה)
+  const autoRestoredRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 3 || filter === 'abandoned') return;
+    if (filteredRequests.length > 0 && filteredRequests.length <= 2) {
+      filteredRequests.forEach(r => {
+        const isArchived = r.status === 'abandoned' || r.status === 'archived' || getEffectiveStatus(r) === 'abandoned';
+        if (isArchived && !autoRestoredRef.current.has(r.id)) {
+          autoRestoredRef.current.add(r.id);
+          handleRestoreFromArchiveToNew(r);
+        }
+      });
+    }
+  }, [searchQuery, filteredRequests.length]);
 
   const handleAbandonIntake = (req: IntakeRequest) => {
     // 1. Instant optimistic update - removes card immediately from view with 0ms latency
@@ -779,15 +833,17 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
 
     setNotesInputs(prev => ({ ...prev, [req.id]: updatedNotes }));
 
-    const shouldAbandon = Boolean(isAbandon || tag.includes('לא רלוונטי') || tag.includes('הסר') || tag.includes('בוטל') || tag.includes('הוסר מהרשימה'));
+    const shouldAbandon = Boolean(isAbandon || tag.includes('לא רלוונטי') || tag.includes('הסר') || tag.includes('בוטל') || tag.includes('הוסר מהרשימה') || tag.includes('ארכיון'));
+    const shouldReject = Boolean(tag.includes('דחה') || tag.includes('נדחה'));
 
-    if (shouldAbandon) {
+    if (shouldAbandon || shouldReject) {
+      const targetStatus: IntakeRequestStatus = shouldReject ? 'rejected' : 'abandoned';
       // Instant optimistic update: removes card from active tabs in 0ms!
-      setOptimisticStatuses(prev => ({ ...prev, [req.id]: 'abandoned' }));
+      setOptimisticStatuses(prev => ({ ...prev, [req.id]: targetStatus }));
 
       const updated: IntakeRequest = {
         ...req,
-        status: 'abandoned',
+        status: targetStatus,
         internalNotes: updatedNotes
       };
 
@@ -798,10 +854,10 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
         if (onSaveRequest) {
           await onSaveRequest(updated);
         } else {
-          await onUpdateStatus(req.id, 'abandoned', updatedNotes);
+          await onUpdateStatus(req.id, targetStatus, updatedNotes);
         }
       } catch (err) {
-        console.warn('Error archiving intake via quick note:', err);
+        console.warn('Error archiving/rejecting intake via quick note:', err);
         setOptimisticStatuses(prev => {
           const next = { ...prev };
           delete next[req.id];
@@ -810,12 +866,16 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
       }
       return;
     }
+
+    // Rule 1: Any other note immediately moves the questionnaire from 'new' (לבדיקה) to 'in_progress' (בתהליך)!
+    const nextStatus: IntakeRequestStatus = (req.status === 'payment_requested' || req.status === 'approved') ? req.status : 'in_progress';
+    setOptimisticStatuses(prev => ({ ...prev, [req.id]: nextStatus }));
     
     try {
       if (onSaveRequest) {
-        await onSaveRequest({ ...req, internalNotes: updatedNotes });
+        await onSaveRequest({ ...req, status: nextStatus, internalNotes: updatedNotes });
       } else {
-        await onUpdateStatus(req.id, req.status, updatedNotes);
+        await onUpdateStatus(req.id, nextStatus, updatedNotes);
       }
       setSavedNoteSuccess(prev => ({ ...prev, [req.id]: true }));
       setTimeout(() => setSavedNoteSuccess(prev => ({ ...prev, [req.id]: false })), 2500);
@@ -853,12 +913,28 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
   };
 
   const handleSaveFreeTextNote = async (req: IntakeRequest) => {
-    const text = notesInputs[req.id] !== undefined ? notesInputs[req.id] : (req.internalNotes || '');
+    const text = (notesInputs[req.id] !== undefined ? notesInputs[req.id] : (req.internalNotes || '')).trim();
+    if (text === (req.internalNotes || '').trim()) return;
+
+    const shouldAbandon = text.includes('לא רלוונטי') || text.includes('הסר') || text.includes('בוטל') || text.includes('הוסר מהרשימה') || text.includes('ארכיון');
+    const shouldReject = text.includes('דחה') || text.includes('נדחה');
+    const nextStatus: IntakeRequestStatus = shouldReject
+      ? 'rejected'
+      : shouldAbandon
+      ? 'abandoned'
+      : text.length > 0
+      ? ((req.status === 'payment_requested' || req.status === 'approved') ? req.status : 'in_progress')
+      : req.status;
+
+    if (text.length > 0) {
+      setOptimisticStatuses(prev => ({ ...prev, [req.id]: nextStatus }));
+    }
+
     try {
       if (onSaveRequest) {
-        await onSaveRequest({ ...req, internalNotes: text });
+        await onSaveRequest({ ...req, status: nextStatus, internalNotes: text });
       } else {
-        await onUpdateStatus(req.id, req.status, text);
+        await onUpdateStatus(req.id, nextStatus, text);
       }
       setSavedNoteSuccess(prev => ({ ...prev, [req.id]: true }));
       setTimeout(() => setSavedNoteSuccess(prev => ({ ...prev, [req.id]: false })), 2500);
@@ -2212,15 +2288,15 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                       {/* Action buttons depending on status */}
                       {(req.status === 'abandoned' || req.status === 'archived') ? (
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Restore / Reopen to active treatment */}
+                          {/* Restore / Reopen to 'new' (שאלונים לבדיקה) */}
                           <button
                             type="button"
-                            onClick={() => onUpdateStatus(req.id, 'pending')}
+                            onClick={() => handleRestoreFromArchiveToNew(req)}
                             className="bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer shadow-xs"
-                            title="שחזר את שאלון הקליטה מהארכיון לטיפול פעיל"
+                            title="הוצא מהארכיון והעבר לשאלונים לבדיקה"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
-                            <span>שחזר לטיפול פעיל 🟢</span>
+                            <span>העבר לשאלונים לבדיקה 🟢</span>
                           </button>
 
                           {/* Permanent Deletion */}
@@ -2254,12 +2330,12 @@ export const IntakeRequestsModal: React.FC<IntakeRequestsModalProps> = ({
                           {/* Restore / Reopen */}
                           <button
                             type="button"
-                            onClick={() => onUpdateStatus(req.id, 'pending')}
+                            onClick={() => handleRestoreFromArchiveToNew(req)}
                             className="bg-slate-100 hover:bg-slate-200 active:scale-98 text-slate-700 border border-slate-300 font-bold px-2.5 py-1.5 rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
-                            title="החזר את הבקשה לסטטוס ממתין לבדיקה"
+                            title="החזר את הבקשה לשאלונים לבדיקה"
                           >
                             <RotateCcw className="w-3.5 h-3.5 text-slate-600" />
-                            <span>שחזר</span>
+                            <span>החזר לבדיקה</span>
                           </button>
 
                           {/* Permanent Deletion */}
