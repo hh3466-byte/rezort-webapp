@@ -783,14 +783,21 @@ export function run1830SanityAudit(bookings, settings, intakes, chats, todayStr,
   if (Array.isArray(growPayments)) {
     growPayments.forEach(p => {
       const pDate = p.created_at || '';
-      if (pDate.startsWith(currentMonthPrefix) && p.status !== 'dismissed' && p.status !== 'refunded') {
-        totalAccumulatedForNextMonth += Number(p.amount) || 0;
+      const validStatuses = ['completed', 'reconciled', 'approved'];
+      if (pDate.startsWith(currentMonthPrefix) && validStatuses.includes(String(p.status || '').toLowerCase())) {
+        let amt = Number(p.amount) || 0;
+        // For multi-installment non-discount transactions (e.g. 2 installments of ₪400), only 1 installment enters in the next month's payout
+        if (String(p.payment_method || '').includes('2 תשלומים של ₪400')) {
+          amt = 400;
+        }
+        totalAccumulatedForNextMonth += amt;
       }
     });
   }
+  const estimatedNetAfterGrowFee = totalAccumulatedForNextMonth * 0.9625;
 
   parts.push(`\n🏦 *תזרים בנקאי עתידי (Grow - סה״כ מכלל העסקים):*`);
-  parts.push(`ב-10 לחודש הבא (${nextPayoutDate}), ייכנס לבנק ${Math.round(totalAccumulatedForNextMonth).toLocaleString()} שקלים`);
+  parts.push(`ב-10 לחודש הבא (${nextPayoutDate}), ייכנס לבנק כ-${Math.round(estimatedNetAfterGrowFee).toLocaleString()} שקלים נטו (${Math.round(totalAccumulatedForNextMonth).toLocaleString()} ₪ ברוטו לפני עמלת סליקה ותשלומים)`);
 
   parts.push(`\n📱 *דוח זה הופק ונשלח ישירות לחגי (${MANAGER_PHONE}) כהוראת ברזל.*`);
 
