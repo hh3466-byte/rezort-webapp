@@ -15,7 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { syncGoogleSheetLeads } from './lead-webhook.js';
-import { runForgottenLeadsApologyCampaign } from './cron-forgotten-leads-apology.js';
+import { runForgottenLeadsApologyCampaign } from './_forgottenLeadsApology.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ydlynqqmulojhrxbfjsc.supabase.co";
 const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
@@ -55,6 +55,13 @@ function getIsraelDateInfo() {
 
 export default async function handler(req, res) {
   try {
+    if (req.query?.task === 'forgotten-leads-apology') {
+      const dryRun = req.query?.dryRun === 'true';
+      const force = req.query?.force === 'true';
+      const apolResult = await runForgottenLeadsApologyCampaign({ dryRun, force });
+      return res.status(200).json(apolResult);
+    }
+
     const { dateStr: todayStr, hour, minute } = getIsraelDateInfo();
     const startTime = Date.now();
 

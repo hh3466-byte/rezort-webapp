@@ -21,10 +21,6 @@
     {
       "path": "/api/cron-weekly-marketing",
       "schedule": "0 5 * * 0"
-    },
-    {
-      "path": "/api/cron-forgotten-leads-apology",
-      "schedule": "0 14 1 11 *"
     }
   ],
   "headers": [
