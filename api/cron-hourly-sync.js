@@ -15,6 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { syncGoogleSheetLeads } from './lead-webhook.js';
+import { runForgottenLeadsApologyCampaign } from './cron-forgotten-leads-apology.js';
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://ydlynqqmulojhrxbfjsc.supabase.co";
 const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlkbHlucXFtdWxvamhyeGJmanNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1MTMxNDIsImV4cCI6MjEwMzA4OTE0Mn0.FbnWI1tIP6r52hKOK--yENROgLZFHJbH4dK0MrrgiIQ";
@@ -408,6 +409,17 @@ export default async function handler(req, res) {
         } catch (we) {
           watchdogLogs.push({ task: '2000_daily_update_live', error: we.message });
         }
+      }
+    }
+
+    // D. Sunday 16:00 Forgotten Leads Apology & 6-Month VIP Voucher Campaign
+    if ((todayStr === '2026-11-01' && hour >= 16) && !curSettingsData.forgottenLeadsApologySentAt) {
+      try {
+        console.log('[WATCHDOG] Dispatching Sunday 16:00 Forgotten Leads Apology Campaign...');
+        const apolRes = await runForgottenLeadsApologyCampaign({ dryRun: false });
+        watchdogLogs.push({ task: 'forgotten_leads_apology_1600', status: apolRes.ok ? 'sent' : 'failed', sentCount: apolRes.sentCount });
+      } catch (ae) {
+        watchdogLogs.push({ task: 'forgotten_leads_apology_1600', error: ae.message });
       }
     }
 
